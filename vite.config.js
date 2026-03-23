@@ -6,10 +6,6 @@ export default defineConfig({
   server: { port: 3000 },
   build: {
     outDir: 'dist',
-    // Aumenta il limite di warning per il bundle grande
     chunkSizeWarningLimit: 2000,
-  },
-  optimizeDeps: {
-    exclude: ['pdfjs-dist']
   }
 })

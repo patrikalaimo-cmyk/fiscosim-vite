@@ -264,3 +264,9 @@ a{color:var(--gold);text-decoration:none}
 .cont-sidebar-item:hover{background:rgba(200,164,94,.06)}
 .cont-sidebar-item.active{background:rgba(200,164,94,.1);border-left-color:var(--gold);color:var(--gold)}
 .cont-main{padding:1.5rem;overflow-y:auto}
+
+/* AI Badge pulse animation */
+@keyframes aiBadgePulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.7;transform:scale(1.02)}
+}

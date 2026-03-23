@@ -90,30 +90,47 @@ RISPONDI SOLO con JSON valido (senza markdown):
   "note": "eventuali note"
 }`;
 
-    // Chiamata a Gemini
+    // Build message content based on file type
+    const isXML = (mimeType || '').includes('xml') || (filename || '').toLowerCase().endsWith('.xml');
+    const isPDF = (mimeType || '') === 'application/pdf' || (filename || '').toLowerCase().endsWith('.pdf');
+    
+    let messageContent;
+    if (isXML) {
+      // XML: decode base64 and send as text
+      const xmlText = Buffer.from(fileBase64, 'base64').toString('utf-8');
+      messageContent = [
+        { type: 'text', text: `Ecco il contenuto XML della fattura elettronica:\n\n${xmlText.substring(0, 15000)}\n\n${systemPrompt}` }
+      ];
+    } else if (isPDF) {
+      // PDF: send as document with beta header
+      messageContent = [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } },
+        { type: 'text', text: systemPrompt }
+      ];
+    } else {
+      // Other: try as text
+      try {
+        const textContent = Buffer.from(fileBase64, 'base64').toString('utf-8');
+        messageContent = [{ type: 'text', text: `File: ${filename}\n\n${textContent.substring(0, 10000)}\n\n${systemPrompt}` }];
+      } catch(e) {
+        return res.status(400).json({ error: 'Formato file non supportato. Usa PDF o XML.' });
+      }
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01',
+        ...(isPDF ? { 'anthropic-beta': 'pdfs-2024-09-25' } : {})
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
         messages: [{
           role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: mimeType || 'application/pdf',
-                data: fileBase64
-              }
-            },
-            { type: 'text', text: systemPrompt }
-          ]
+          content: messageContent
         }]
       })
     });

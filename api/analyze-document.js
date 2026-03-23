@@ -103,7 +103,7 @@ Rispondi SOLO con il JSON, nessun testo prima o dopo.`;
       const xmlContent = Buffer.from(fileBase64, 'base64').toString('utf-8');
       
       requestBody = {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 2048,
         system: systemPrompt,
         messages: [
@@ -114,43 +114,40 @@ Rispondi SOLO con il JSON, nessun testo prima o dopo.`;
         ]
       };
     } else {
-      // Per PDF e immagini, usa il formato document
-      // Claude supporta: image/jpeg, image/png, image/gif, image/webp, application/pdf
+      // Per PDF e immagini
       let mediaType = mimeType || 'application/pdf';
+      const isPDF = mediaType === 'application/pdf';
+      const isImage = mediaType.startsWith('image/');
+      
+      const fileContent = isPDF
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
+        : isImage
+        ? { type: 'image', source: { type: 'base64', media_type: mediaType, data: fileBase64 } }
+        : { type: 'text', text: `File non riconosciuto: ${filename}` };
       
       requestBody = {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 2048,
         system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'document',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType,
-                  data: fileBase64
-                }
-              },
-              {
-                type: 'text',
-                text: 'Analizza questo documento ed estrai i dati. Rispondi SOLO con il JSON.'
-              }
-            ]
-          }
-        ]
+        messages: [{
+          role: 'user',
+          content: [
+            fileContent,
+            { type: 'text', text: 'Analizza questo documento ed estrai i dati. Rispondi SOLO con il JSON.' }
+          ]
+        }]
       };
     }
 
     // Chiamata a Claude API
+    const isPDFRequest = (mimeType || '').includes('pdf');
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        ...(isPDFRequest ? { 'anthropic-beta': 'pdfs-2024-09-25' } : {})
       },
       body: JSON.stringify(requestBody)
     });
