@@ -33,6 +33,7 @@ import { ModuloAdempimenti }      from './modules/adempimenti'
 import { ModuloAgenda }           from './modules/agenda'
 import { ModuloCU }               from './modules/cu'
 import { ModuloSimulatore }       from './modules/simulatore'
+import { AIChat}                  from './components/AIChat'
 
 // Login (inline - piccolo)
 import { Login }                  from './modules/login'
@@ -94,6 +95,7 @@ function App() {
       <div className="app">
         <AIBadge />
         <TestModeBadge />
+        <AIChat />
 
         {showGuida && <GuidaModuliModal onClose={() => setShowGuida(false)} />}
 

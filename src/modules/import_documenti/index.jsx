@@ -4,7 +4,7 @@ import { useAIStatus } from '../../context/AIStatusContext'
 import { TagInput } from '../../shared/components'
 import { TIPO_DOC_LABEL, TIPO_DOC_COLOR, MODULO_DEST_LABEL, STATO_DOC_LABEL, STATO_DOC_COLOR } from '../../shared/constants'
 import { shouldUseAI, routeDocument } from '../../core/workflow'
-import { extractTextFromPDFBrowser, loadScript } from '../../shared/utils'
+import { extractTextFromPDFBrowser, analyzeDocumentWithVision, loadScript } from '../../shared/utils'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 const todayStr = () => new Date().toISOString().split('T')[0]
@@ -16,6 +16,7 @@ export function ModuloImportDocumenti({ruolo}){
   const [loading,setLoading]=useState(true);
   const [uploading,setUploading]=useState(false);
   const [analyzing,setAnalyzing]=useState(false);
+  const [anaNESDoc,setAnaNESDoc]=useState(null); // doc da importare come anagrafica NES
   const [uploadProgress,setUploadProgress]=useState(null);
   const [selectedDoc,setSelectedDoc]=useState(null);
   const [filtroStato,setFiltroStato]=useState('tutti');
@@ -127,24 +128,27 @@ export function ModuloImportDocumenti({ruolo}){
         }]).select().single();
         if(dbErr)throw dbErr;
 
+        // 3a. Riconoscimento locale deterministico: ANA NES
+        const isAnaNES = file.name.toUpperCase().startsWith('ANA') && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.csv'));
+        if(isAnaNES){
+          await sb.from('documenti_import').update({
+            tipo_documento: 'anagrafica_nes',
+            confidence: 0.99,
+            ai_summary: 'Anagrafica NES — import clienti',
+            modulo_destinazione: 'clienti',
+            stato: 'classified'
+          }).eq('id', docRecord.id);
+          ai.setAI('done','Classificazione locale ANA NES','local');
+          continue;
+        }
+
         // 3. Se AI attiva, analizza con AI
         console.log('[DocHub] aiEnabled:', aiEnabled);
         if(aiEnabled){
           ai.setAI('processing','Classificazione documento','ai');
           setAnalyzing(true);
-          const base64=await fileToBase64(file);
-          const analyzeRes=await fetch('/api/analyze-document',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({
-              fileBase64:base64,
-              filename:file.name,
-              mimeType:file.type
-            })
-          });
-          
-          if(analyzeRes.ok){
-            const{analysis}=await analyzeRes.json();
+          const analysis = await analyzeDocumentWithVision(file, 'generico');
+          if(analysis){
           
             // 4. Trova cliente matching (robusto)
             let clienteMatch=null;
@@ -244,6 +248,12 @@ export function ModuloImportDocumenti({ruolo}){
   };
 
   const processaDocumento=async(docId,modulo)=>{
+    // Gestione speciale: anagrafica NES
+    if(modulo==='__ana_nes__'){
+      const{data:doc}=await sb.from('documenti_import').select('*').eq('id',docId).single();
+      if(doc){setAnaNESDoc(doc);setSelectedDoc(null);}
+      return;
+    }
     // Get the full document data
     const{data:doc}=await sb.from('documenti_import').select('*').eq('id',docId).single();
     
@@ -316,6 +326,12 @@ export function ModuloImportDocumenti({ruolo}){
 
   return(
     <div className="page">
+      {anaNESDoc&&<ModalImportAnagraficaNES
+        doc={anaNESDoc}
+        aiEnabled={aiEnabled}
+        onComplete={()=>{setAnaNESDoc(null);caricaDati();window.dispatchEvent(new CustomEvent('fiscosim:navigate',{detail:{modulo:'clienti'}}));}}
+        onClose={()=>setAnaNESDoc(null)}
+      />}
       {selectedDoc&&<DocDetailModal doc={selectedDoc} clienti={clienti} onAssegna={assegnaCliente} onProcessa={processaDocumento} onClose={()=>setSelectedDoc(null)} getClienteNome={getClienteNome}/>}
       
       {/* Modal Conferma Fatture Massive */}
@@ -672,11 +688,13 @@ function DocDetailModal({doc,clienti,onAssegna,onProcessa,onClose,getClienteNome
 
   const analysis=doc.ai_raw_response||{};
   const isAnagrafica=tipoDocumento==='anagrafica_cliente';
+  const isAnaNES=doc.tipo_documento==='anagrafica_nes'||tipoDocumento==='anagrafica_nes';
   const datiAnag=analysis.dati_anagrafici||{};
   const datiEstrattiDisponibili=Object.keys(datiAnag).length>0||(doc.cf_estratto||doc.piva_estratta);
 
   // Tutti i tipi documento disponibili
   const TIPI_DOCUMENTO = {
+    anagrafica_nes: "📋 Anagrafica NES (import multiplo clienti)",
     anagrafica_cliente: "📋 Anagrafica Cliente (nuovo cliente studio)",
     fattura_attiva: "📤 Fattura Attiva (emessa)",
     fattura_passiva: "📥 Fattura Passiva (ricevuta)",
@@ -698,6 +716,7 @@ function DocDetailModal({doc,clienti,onAssegna,onProcessa,onClose,getClienteNome
   // Aggiorna il modulo suggerito in base al tipo documento
   const getModuloSuggerito = (tipo) => {
     const mapping = {
+      anagrafica_nes: 'clienti',
       anagrafica_cliente: 'clienti',
       fattura_attiva: 'fatture',
       fattura_passiva: 'fatture',
@@ -1026,7 +1045,11 @@ function DocDetailModal({doc,clienti,onAssegna,onProcessa,onClose,getClienteNome
             </button>
           )}
           {!isAnagrafica&&selCliente&&doc.stato!=='processed'&&doc.stato!=='manual_pending'&&<button className="btn-sec" onClick={()=>onAssegna(doc.id,selCliente)}>👤 Assegna</button>}
-          {doc.stato!=='processed'&&doc.stato!=='manual_pending'&&<button className="btn" onClick={()=>onProcessa(doc.id,selModulo)}>✓ Elabora</button>}
+          {doc.stato!=='processed'&&doc.stato!=='manual_pending'&&(
+            isAnaNES
+              ? <button className="btn" style={{background:'var(--cy)'}} onClick={()=>{onClose();/* parent apre ModalImportAnagraficaNES */onProcessa(doc.id,'__ana_nes__');}}>📋 Importa Clienti NES</button>
+              : <button className="btn" onClick={()=>onProcessa(doc.id,selModulo)}>✓ Elabora</button>
+          )}
         </div>
       </div>
     </div>
@@ -1034,3 +1057,328 @@ function DocDetailModal({doc,clienti,onAssegna,onProcessa,onClose,getClienteNome
 }
 
 // ─── MODULO EXPORT DATI (HUB CENTRALIZZATO) ──────────────────
+
+// ─── PARSER ANAGRAFICA NES (ANA760 e simili) ─────────────────────────────────
+// pdfjs estrae il testo con i label prima e i valori dopo, senza \f tra pagine.
+// Strategia: split su "ANAGRAFICA SOCIETA'" per isolare ogni blocco cliente,
+// poi cerca P.IVA inline e Rag.Soc. come prima riga-valore dopo il label.
+function parseAnagraficaNES(testo) {
+  // Split per blocco cliente (ogni pagina inizia con "ANAGRAFICA SOCIETA'")
+  const SKIP_KW = /DATI|SEDE|RECAPITI|DOMICILIO|TIPO|STATO|NATURA|GESTIONE|REGIMI|VISTO|PREFER|IMU|IRAP|REDDITI|VERSAM|CONSOL|CALCOL|PUBBLICA|INVIO|RICEZIONE|BLOCC|SINDACI|COLLABORA|IMPOSTA/;
+  
+  // Splitta su ogni occorrenza di ANAGRAFICA SOCIETA'
+  const blocchi = testo.split(/(?=ANAGRAFICA SOCIETA')/);
+  const clienti = [];
+  const seen = new Set();
+
+  for (const blocco of blocchi) {
+    // Salta blocchi rappresentante e sindaci
+    if (blocco.includes("ANAGRAFICA SOCIETA' - RAPPRESENTANTE")) continue;
+    if (!blocco.includes("ANAGRAFICA SOCIETA'")) continue;
+    if (/Cod\.Anag\.|SINDACI/.test(blocco)) continue;
+
+    const lines = blocco.split('\n').map(l => l.trim()).filter(Boolean);
+
+    // P.IVA: appare inline "Partita iva : 06562351004"
+    let piva = '';
+    const mPiva = blocco.match(/Partita iva\s*:\s*(\d{11})/);
+    if (mPiva) piva = mPiva[1];
+
+    // CF: prima sequenza da 11 cifre nel blocco
+    let cf = '';
+    const mCf = blocco.match(/\b(\d{11})\b/);
+    if (mCf) cf = mCf[1];
+
+    const key = piva || cf;
+    if (!key || seen.has(key)) continue;
+
+    // Rag.Soc.: il valore è una riga isolata, NON inline con il label
+    // Cerca "Rag.Soc.:" poi prende la prima riga-valore successiva
+    let rag_soc = '';
+    const ragIdx = lines.findIndex(l => l === 'Rag.Soc.:');
+    if (ragIdx >= 0) {
+      for (let i = ragIdx + 1; i < Math.min(ragIdx + 50, lines.length); i++) {
+        const l = lines[i];
+        if (!l || l.includes(':') && !l.match(/^[A-Z&.\s'-]+:/)) continue;
+        // Match su suffissi societari
+        if (/S\.?R\.?L|S\.?P\.?A|SNC|SAS|SRLS|GROUP|SERVICE|IMMOBIL|INVEST|CONSUL|STUDIO|COSTRUZ|HOLDING|TRADING|SOCIETA|ONLUS|COOP|ASSOCIAZ|FONDAZ/i.test(l)) {
+          rag_soc = l; break;
+        }
+        // Riga tutta maiuscola, non numero puro, non keyword
+        if (l.length > 4 && !(/^\d+$/.test(l)) && l === l.toUpperCase() && !SKIP_KW.test(l) && !l.includes(':')) {
+          rag_soc = l; break;
+        }
+      }
+    }
+
+    if (!rag_soc) continue;
+    seen.add(key);
+
+    // Indirizzo: cerca "VIA/CORSO/PIAZZA..." 
+    let indirizzo = '';
+    const mInd = blocco.match(/\b(VIA|CORSO|PIAZZA|VIALE|LARGO|VICOLO|STRADA)\b[^\n]+/);
+    if (mInd) indirizzo = mInd[0].trim().substring(0, 80);
+
+    // Tipo cliente da natura giuridica
+    const natM = blocco.match(/Societ[aà] a responsabilit[aà] limitata|S\.?R\.?L\b|S\.?N\.?C\b|S\.?A\.?S\b/i);
+    const nat = (natM?.[0] || '').toLowerCase();
+    let tipo_cliente = 'ordinario';
+    if (/limit|srl|srls/.test(nat)) tipo_cliente = 'srl';
+    else if (/snc|sas/.test(nat)) tipo_cliente = 'snc';
+
+    clienti.push({
+      ragione_sociale: rag_soc,
+      partita_iva:     piva || cf,
+      codice_fiscale:  cf || piva,
+      indirizzo,
+      email:    null,
+      telefono: null,
+      tipo_cliente,
+      attivo: true,
+    });
+  }
+  return clienti;
+}
+
+
+// ─── PARSER ANAGRAFICA NES DA CSV ────────────────────────────────────────────
+// Formato: CSV punto-e-virgola, encoding latin-1 (gestito dal browser con TextDecoder)
+// Colonne: Codice;Denominazione;Codice fiscale;Alias;Tipo società;...
+function parseCsvAnagraficaNES(testo) {
+  const lines = testo.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+  const header = lines[0].split(';').map(h => h.trim());
+  const idx = {
+    codice:    header.findIndex(h => /^codice$/i.test(h)),
+    denom:     header.findIndex(h => /denominazione/i.test(h)),
+    cf:        header.findIndex(h => /codice.fisc/i.test(h)),
+    tipo:      header.findIndex(h => /tipo.societ/i.test(h)),
+  };
+  const clienti = [];
+  const seen = new Set();
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(';');
+    const denom = (cols[idx.denom] || '').trim();
+    if (!denom) continue;
+    // CF: padda a 11 cifre con zero iniziale se mancante
+    const cfRaw = (cols[idx.cf] || '').trim().replace(/\D/g, '');
+    const cf = cfRaw ? cfRaw.padStart(11, '0') : '';
+    if (!cf || seen.has(cf)) continue;
+    seen.add(cf);
+    const tipo_raw = (cols[idx.tipo] || '').toLowerCase();
+    let tipo_cliente = 'ordinario';
+    if (/s\.?r\.?l|srls|spa|s\.?p\.?a/.test(denom.toLowerCase()) || tipo_raw.includes('760')) tipo_cliente = 'srl';
+    else if (/snc|sas|s\.?n\.?c|s\.?a\.?s/.test(denom.toLowerCase())) tipo_cliente = 'snc';
+    clienti.push({
+      ragione_sociale: denom,
+      nome: denom,          // NOT NULL constraint — usa ragione_sociale come fallback
+      cognome: '',
+      partita_iva:     cf,
+      codice_fiscale:  cf,
+      codice_cliente:  (cols[idx.codice] || '').trim() || null,
+      tipo_cliente,
+      attivo: true,
+    });
+  }
+  return clienti;
+}
+
+// ─── MODAL IMPORT ANAGRAFICA NES ─────────────────────────────────────────────
+function ModalImportAnagraficaNES({ doc, onComplete, onClose, aiEnabled=true }) {
+  const [clienti, setClienti]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [sel, setSel]           = useState(new Set());
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [done, setDone]         = useState(null); // {inseriti, saltati}
+  const [manualMode, setManualMode] = useState(false); // AI OFF + PDF
+  const [manualForm, setManualForm] = useState({ ragione_sociale:'', partita_iva:'', codice_fiscale:'', tipo_cliente:'srl' });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setProgress('Download file...');
+        const { data: blob, error: dlErr } = await sb.storage
+          .from('documenti').download(doc.file_path);
+        if (dlErr) throw dlErr;
+        const file = new File([blob], doc.filename, { type: blob.type || 'application/pdf' });
+        const isCsv = doc.filename?.toLowerCase().endsWith('.csv');
+        let trovati = [];
+        if (isCsv) {
+          // CSV: parsing deterministico locale (veloce, zero costi)
+          setProgress('Parsing CSV anagrafica NES...');
+          const decoder = new TextDecoder('windows-1252');
+          const testo = decoder.decode(await blob.arrayBuffer());
+          trovati = parseCsvAnagraficaNES(testo);
+        } else if (aiEnabled) {
+          // PDF/Immagine + AI ON: Claude vision legge il layout visivamente
+          const result = await analyzeDocumentWithVision(file, 'anagrafica_nes', setProgress);
+          trovati = (result.clienti || []).map(c => ({
+            ragione_sociale: c.ragione_sociale || '',
+            partita_iva:     (c.partita_iva || c.codice_fiscale || '').replace(/\D/g,'').padStart(11,'0'),
+            codice_fiscale:  (c.codice_fiscale || c.partita_iva || '').replace(/\D/g,'').padStart(11,'0'),
+            indirizzo:       c.indirizzo || '',
+            tipo_cliente:    c.tipo_cliente || 'ordinario',
+            attivo: true,
+          })).filter(c => c.ragione_sociale && c.partita_iva.length >= 11)
+          .map(c => ({ ...c, nome: c.ragione_sociale, cognome: '' }));
+        }
+        // AI OFF + PDF: non possiamo estrarre automaticamente — mostra form manuale
+        if (!trovati.length && !isCsv && !aiEnabled) {
+          setManualMode(true);
+          setLoading(false);
+          return;
+        }
+        if (!trovati.length) throw new Error('Nessun cliente trovato. Verifica che sia un\'esportazione ANA NES (PDF, immagine o CSV).');
+        setClienti(trovati);
+        setSel(new Set(trovati.map((_, i) => i))); // seleziona tutti di default
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+        setProgress('');
+      }
+    })();
+  }, []);
+
+  const toggleSel = (i) => setSel(p => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  const toggleAll = () => setSel(p => p.size === clienti.length ? new Set() : new Set(clienti.map((_, i) => i)));
+
+  const importa = async () => {
+    setImporting(true);
+    try {
+      // Carica P.IVA già esistenti per evitare duplicati
+      const { data: esistenti } = await sb.from('clienti')
+        .select('partita_iva,codice_fiscale').eq('attivo', true);
+      const pivaSet = new Set((esistenti || []).map(c => (c.partita_iva || '').replace(/\s/g, '')));
+      const cfSet   = new Set((esistenti || []).map(c => (c.codice_fiscale || '').replace(/\s/g, '')));
+
+      const daInserire = clienti
+        .filter((_, i) => sel.has(i))
+        .filter(c => {
+          const piva = (c.partita_iva || '').replace(/\s/g, '');
+          const cf   = (c.codice_fiscale || '').replace(/\s/g, '');
+          return !pivaSet.has(piva) && !cfSet.has(cf);
+        });
+
+      const saltati = sel.size - daInserire.length;
+
+      if (daInserire.length) {
+        const BATCH = 100;
+        for (let i = 0; i < daInserire.length; i += BATCH) {
+          setProgress(`Inserimento ${Math.min(i + BATCH, daInserire.length)}/${daInserire.length}...`);
+          const { error: insErr } = await sb.from('clienti').insert(daInserire.slice(i, i + BATCH));
+          if (insErr) throw insErr;
+        }
+      }
+
+      // Marca documento come processato
+      await sb.from('documenti_import').update({ stato: 'processed' }).eq('id', doc.id);
+      setDone({ inseriti: daInserire.length, saltati });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setImporting(false);
+      setProgress('');
+    }
+  };
+
+  return (
+    <div className="overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 680 }}>
+        <div className="modal-hdr">
+          <div className="modal-drag" />
+          <div className="modal-title">📋 Import Anagrafica NES</div>
+          <div className="modal-sub">{doc.filename}</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--mu)' }}>
+              ⏳ {progress || 'Analisi in corso...'}
+            </div>
+          )}
+          {manualMode && (
+            <div>
+              <div className="alert alert-info" style={{marginBottom:'1rem',fontSize:'.8rem'}}>
+                ⚠️ <strong>AI disattivata</strong> — inserisci manualmente i dati del cliente dal PDF.
+                Puoi aggiungere più clienti uno alla volta.
+              </div>
+              <div className="form-grid">
+                <div className="fg full"><label>Ragione Sociale *</label>
+                  <input value={manualForm.ragione_sociale} onChange={e=>setManualForm(p=>({...p,ragione_sociale:e.target.value}))} placeholder="Es. ROSSI S.R.L."/></div>
+                <div className="fg"><label>Partita IVA</label>
+                  <input value={manualForm.partita_iva} onChange={e=>setManualForm(p=>({...p,partita_iva:e.target.value}))} placeholder="11 cifre"/></div>
+                <div className="fg"><label>Codice Fiscale</label>
+                  <input value={manualForm.codice_fiscale} onChange={e=>setManualForm(p=>({...p,codice_fiscale:e.target.value}))} placeholder="11 o 16 caratteri"/></div>
+                <div className="fg"><label>Tipo</label>
+                  <select value={manualForm.tipo_cliente} onChange={e=>setManualForm(p=>({...p,tipo_cliente:e.target.value}))}>
+                    <option value="srl">S.r.l.</option>
+                    <option value="snc">SNC/SAS</option>
+                    <option value="ordinario">Ordinario</option>
+                    <option value="forfettario">Forfettario</option>
+                  </select>
+                </div>
+              </div>
+              <button className="btn-sec" style={{marginTop:'.75rem'}} onClick={()=>{
+                if(!manualForm.ragione_sociale)return;
+                const c={...manualForm, partita_iva:manualForm.partita_iva||manualForm.codice_fiscale, codice_fiscale:manualForm.codice_fiscale||manualForm.partita_iva, attivo:true};
+                setClienti(p=>[...p,c]);
+                setSel(p=>new Set([...p,p.size]));
+                setManualForm({ragione_sociale:'',partita_iva:'',codice_fiscale:'',tipo_cliente:'srl'});
+              }}>+ Aggiungi cliente</button>
+              {clienti.length>0&&<div style={{marginTop:'.5rem',fontSize:'.75rem',color:'var(--cy)'}}>✓ {clienti.length} clienti aggiunti</div>}
+            </div>
+          )}
+          {error && <div className="alert alert-error">{error}</div>}
+          {done && (
+            <div className="alert alert-success" style={{ fontSize: '.9rem' }}>
+              ✅ Completato — <strong>{done.inseriti}</strong> clienti inseriti,{' '}
+              <strong>{done.saltati}</strong> già presenti (saltati).
+              <div style={{ marginTop: '.75rem' }}>
+                <button className="btn" onClick={onComplete}>Vai ai Clienti</button>
+              </div>
+            </div>
+          )}
+          {(!loading || manualMode) && !done && clienti.length > 0 && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.75rem' }}>
+                <span style={{ fontSize: '.8rem', color: 'var(--mu)' }}>
+                  <strong style={{ color: 'var(--gold)' }}>{clienti.length}</strong> clienti trovati ·{' '}
+                  <span style={{ cursor: 'pointer', color: 'var(--cy)' }} onClick={toggleAll}>
+                    {sel.size === clienti.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
+                  </span>
+                </span>
+                <span style={{ fontSize: '.75rem', color: 'var(--mu)' }}>{sel.size} selezionati</span>
+              </div>
+              <div style={{ maxHeight: 380, overflow: 'auto', border: '1px solid var(--bd)', borderRadius: 8 }}>
+                {clienti.map((c, i) => (
+                  <div key={i} onClick={() => toggleSel(i)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.45rem .75rem', borderBottom: '1px solid rgba(33,40,58,.35)', cursor: 'pointer', background: sel.has(i) ? 'rgba(200,164,94,.06)' : 'transparent' }}>
+                    <div style={{ width: 14, height: 14, borderRadius: 3, border: `1.5px solid ${sel.has(i) ? 'var(--gold)' : 'var(--bd2)'}`, background: sel.has(i) ? 'var(--gold)' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {sel.has(i) && <span style={{ color: '#0d1117', fontSize: '.5rem', fontWeight: 900 }}>✓</span>}
+                    </div>
+                    <span style={{ flex: 1, fontSize: '.8rem', fontWeight: 500 }}>{c.ragione_sociale}</span>
+                    <span style={{ fontSize: '.7rem', color: 'var(--mu)', fontFamily: 'monospace' }}>{c.partita_iva}</span>
+                    <span className={`bdg ${c.tipo_cliente === 'srl' ? 'bdg-pu' : c.tipo_cliente === 'snc' ? 'bdg-green' : 'bdg-blue'}`} style={{ fontSize: '.55rem' }}>{c.tipo_cliente.toUpperCase()}</span>
+                  </div>
+                ))}
+              </div>
+              {progress && <div style={{ marginTop: '.5rem', fontSize: '.75rem', color: 'var(--mu)' }}>⏳ {progress}</div>}
+              {error && <div className="alert alert-error" style={{ marginTop: '.5rem' }}>{error}</div>}
+            </>
+          )}
+        </div>
+        {(!loading || manualMode) && !done && clienti.length > 0 && (
+          <div className="modal-foot">
+            <button className="btn-sec" onClick={onClose}>Annulla</button>
+            <button className="btn" disabled={importing || !sel.size} onClick={importa}>
+              {importing ? '⏳ Importo...' : `📥 Importa ${sel.size} clienti`}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

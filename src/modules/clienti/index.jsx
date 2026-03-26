@@ -128,6 +128,144 @@ export function ModuloClienti(){
   );
 }
 
+
+// ─── MODAL NUOVO/MODIFICA CLIENTE ────────────────────────────
+function ClienteModal({mode, data, onSave, onClose, saving, err}){
+  const [form,setForm]=useState({...data});
+  const up=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const isNew=mode==='new';
+
+  const handleSave=()=>{
+    if(!form.nome&&!form.ragione_sociale){alert('Inserisci almeno il nome o la ragione sociale.');return;}
+    onSave(form);
+  };
+
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:580}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">{isNew?'➕ Nuovo Cliente':'✏️ Modifica Cliente'}</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {err&&<div className="alert alert-error" style={{marginBottom:'1rem'}}>{err}</div>}
+          <div className="form-grid">
+            <div className="fg"><label>Nome</label><input value={form.nome||''} onChange={e=>up('nome',e.target.value)} placeholder="Nome"/></div>
+            <div className="fg"><label>Cognome</label><input value={form.cognome||''} onChange={e=>up('cognome',e.target.value)} placeholder="Cognome"/></div>
+            <div className="fg full"><label>Ragione Sociale</label><input value={form.ragione_sociale||''} onChange={e=>up('ragione_sociale',e.target.value)} placeholder="Per società e ditte"/></div>
+            <div className="fg"><label>Tipo Cliente</label>
+              <select value={form.tipo_cliente||'forfettario'} onChange={e=>up('tipo_cliente',e.target.value)}>
+                {TIPO_CLIENTE.map(t=><option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
+              </select>
+            </div>
+            <div className="fg"><label>Codice Cliente</label><input value={form.codice_cliente||''} onChange={e=>up('codice_cliente',e.target.value)} placeholder="Es. CLI001"/></div>
+            <div className="fg"><label>Partita IVA</label><input value={form.partita_iva||''} onChange={e=>up('partita_iva',e.target.value)} placeholder="IT12345678901"/></div>
+            <div className="fg"><label>Codice Fiscale</label><input value={form.codice_fiscale||''} onChange={e=>up('codice_fiscale',e.target.value)} placeholder="RSSMRA80A01H501Z"/></div>
+            <div className="fg"><label>Email</label><input type="email" value={form.email||''} onChange={e=>up('email',e.target.value)} placeholder="email@esempio.it"/></div>
+            <div className="fg"><label>Telefono</label><input value={form.telefono||''} onChange={e=>up('telefono',e.target.value)} placeholder="+39 06 12345678"/></div>
+            <div className="fg full"><label>Indirizzo</label><input value={form.indirizzo||''} onChange={e=>up('indirizzo',e.target.value)} placeholder="Via Roma 1, 00100 Roma"/></div>
+            <div className="fg full"><label>Note</label><textarea value={form.note||''} onChange={e=>up('note',e.target.value)} rows={2} placeholder="Note interne" style={{resize:'vertical'}}/></div>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Annulla</button>
+          <button className="btn" disabled={saving} onClick={handleSave}>{saving?'⏳ Salvo...':'💾 Salva'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODAL INVIO EMAIL ────────────────────────────────────────
+function SendMailModal({cliente, onClose}){
+  const [oggetto,setOggetto]=useState('');
+  const [testo,setTesto]=useState('');
+  const [sending,setSending]=useState(false);
+  const send=async()=>{
+    if(!oggetto||!testo){alert('Compila oggetto e testo.');return;}
+    setSending(true);
+    try{
+      await sb.from('notifiche_clienti').insert([{cliente_id:cliente.id,tipo:'email',oggetto,testo,stato:'da_inviare'}]);
+      alert("Email accodata per l'invio.");onClose();
+    }catch(e){alert('Errore: '+e.message);}
+    finally{setSending(false);}
+  };
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:500}}>
+        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">📧 Invia Email a {cliente.ragione_sociale||cliente.nome}</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <div className="form-grid">
+            <div className="fg full"><label>Oggetto</label><input value={oggetto} onChange={e=>setOggetto(e.target.value)} placeholder="Oggetto email"/></div>
+            <div className="fg full"><label>Testo</label><textarea value={testo} onChange={e=>setTesto(e.target.value)} rows={6} placeholder="Testo email..." style={{resize:'vertical'}}/></div>
+          </div>
+        </div>
+        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={sending} onClick={send}>{sending?'⏳ Invio...':'📤 Invia'}</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODAL GESTIONE MODULI SINGOLO CLIENTE ────────────────────
+function ModuliModal({cliente, onSave, onClose}){
+  const [moduli,setModuli]=useState(cliente.moduli_attivi||MODULI_DEFAULT);
+  const [saving,setSaving]=useState(false);
+  const toggle=id=>setModuli(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const save=async()=>{setSaving(true);await onSave(cliente.id,moduli);setSaving(false);onClose();};
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400}}>
+        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">⚙️ Moduli — {cliente.ragione_sociale||cliente.nome}</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <div style={{display:'flex',flexDirection:'column',gap:'.5rem'}}>
+            {MODULI_DISPONIBILI.map(m=>(
+              <div key={m.id} onClick={()=>toggle(m.id)} style={{display:'flex',alignItems:'center',gap:'.75rem',padding:'.65rem .9rem',borderRadius:8,border:`1.5px solid ${moduli.includes(m.id)?'var(--gold)':'var(--bd)'}`,background:moduli.includes(m.id)?'rgba(200,164,94,.08)':'transparent',cursor:'pointer',transition:'all .15s'}}>
+                <span style={{fontSize:'1.1rem'}}>{m.ico}</span>
+                <span style={{fontWeight:500,color:moduli.includes(m.id)?'var(--gold)':'var(--mu)'}}>{m.label}</span>
+                <span style={{marginLeft:'auto',fontSize:'.75rem',color:moduli.includes(m.id)?'var(--gold)':'var(--bd2)'}}>{moduli.includes(m.id)?'✓ Attivo':'—'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={saving} onClick={save}>{saving?'⏳...':'💾 Salva'}</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODAL GESTIONE MODULI BULK ───────────────────────────────
+function ModuliBulkModal({clienti, onSave, onClose}){
+  const [moduli,setModuli]=useState(MODULI_DEFAULT);
+  const [saving,setSaving]=useState(false);
+  const toggle=id=>setModuli(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const save=async()=>{
+    setSaving(true);
+    for(const c of clienti) await onSave(c.id,moduli);
+    setSaving(false);onClose();
+  };
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400}}>
+        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">⚙️ Moduli per {clienti.length} clienti</div><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div className="modal-body">
+          <div className="alert alert-info" style={{marginBottom:'1rem',fontSize:'.8rem'}}>I moduli selezionati verranno applicati a tutti i {clienti.length} clienti selezionati.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:'.5rem'}}>
+            {MODULI_DISPONIBILI.map(m=>(
+              <div key={m.id} onClick={()=>toggle(m.id)} style={{display:'flex',alignItems:'center',gap:'.75rem',padding:'.65rem .9rem',borderRadius:8,border:`1.5px solid ${moduli.includes(m.id)?'var(--gold)':'var(--bd)'}`,background:moduli.includes(m.id)?'rgba(200,164,94,.08)':'transparent',cursor:'pointer',transition:'all .15s'}}>
+                <span style={{fontSize:'1.1rem'}}>{m.ico}</span>
+                <span style={{fontWeight:500,color:moduli.includes(m.id)?'var(--gold)':'var(--mu)'}}>{m.label}</span>
+                <span style={{marginLeft:'auto',fontSize:'.75rem',color:moduli.includes(m.id)?'var(--gold)':'var(--bd2)'}}>{moduli.includes(m.id)?'✓':'—'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={saving} onClick={save}>{saving?'⏳ Salvo...':'💾 Applica a tutti'}</button></div>
+      </div>
+    </div>
+  );
+}
+
 // ─── IVA IMPORT (PDF / Excel via Claude AI) ──────────────────
 async function estraiDatiIVADaPDF(base64, mimeType, useAI=true) {
   if(!useAI)return null; // Caller will show manual input form

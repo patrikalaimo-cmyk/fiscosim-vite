@@ -100,7 +100,7 @@ export function ModuloContabilita({ruolo}){
     if(!societaAttiva)return;
     const[{data:docs},{data:pc},{data:cc},{data:ci},{data:reg},{data:pn},{data:perc},{data:cli}]=await Promise.all([
       sb.from('documenti_contabilita').select('*').eq('societa_id',societaAttiva.id).order('created_at',{ascending:false}),
-      sb.from('piano_conti').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').limit(5000),
+      (async()=>{const PAGE=1000;let all=[],from=0;while(true){const{data,error}=await sb.from('piano_conti').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').range(from,from+PAGE-1);if(error)throw error;all=[...all,...(data||[])];if(!data||data.length<PAGE)break;from+=PAGE;}return{data:all,error:null};})(),
       sb.from('causali_contabili').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').limit(2000),
       sb.from('causali_iva').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').limit(2000),
       sb.from('regole_automatiche').select('*').eq('societa_id',societaAttiva.id).eq('attiva',true).order('priorita'),
@@ -1765,6 +1765,90 @@ function ModalNuovaSocieta({onSave,onClose}){
 // ─── MODAL IMPORT PDF ────────────────────────────────────────
 // ─── BROWSER-SIDE PDF TEXT EXTRACTION + DETERMINISTIC PARSER ───
 // Piano dei conti: parsed entirely in the browser, zero API calls
+
+// ─── DETERMINISTIC PARSER: PIANO CONTI DA EXCEL NES ───────────
+// Formato colonne Excel NES: Codice, Descrizione, Mastro, Mastrino, Conto, Sottoconto, ...Tipo, Natura conto
+// Questo parser è deterministico al 100%: legge le colonne direttamente, niente regex su testo
+function parsePianoContiFromExcel(workbook){
+  const XLSX = window._XLSX; // SheetJS già caricato
+  const sheetName = workbook.SheetNames[0];
+  const ws = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+  if(!rows.length) return [];
+
+  const accounts = [];
+  const seen = new Set();
+
+  for(let i=1; i<rows.length; i++){
+    const r = rows[i];
+    if(!r || !r[2]) continue; // mastro obbligatorio
+
+    const mastro    = String(r[2]).trim();
+    const mastrino  = r[3]!=null ? String(r[3]).trim().padStart(2,'0') : null;
+    const conto     = r[4]!=null ? String(r[4]).trim().padStart(2,'0') : null;
+    const sottoconto= r[5]!=null ? String(r[5]).trim().padStart(4,'0') : null;
+    const descrizione = r[1] ? String(r[1]).trim() : null;
+    if(!descrizione) continue;
+
+    let codice, level;
+    if(mastro && !mastrino)                           { codice=mastro;                                    level=1; }
+    else if(mastro && mastrino && !conto)             { codice=`${mastro} ${mastrino}`;                   level=2; }
+    else if(mastro && mastrino && conto && !sottoconto){ codice=`${mastro} ${mastrino} ${conto}`;         level=3; }
+    else if(sottoconto)                               { codice=`${mastro} ${mastrino} ${conto} ${sottoconto}`; level=4; }
+    else continue;
+
+    codice = codice.trim();
+    if(seen.has(codice)) continue;
+    seen.add(codice);
+
+    const tipoExcel  = r[7] ? String(r[7]).toLowerCase() : '';
+    const naturaExcel= r[8] ? String(r[8]).toLowerCase() : '';
+    const tipoSogg   = r[12]? String(r[12]).toLowerCase(): '';
+
+    const fd = parseInt(mastro);
+    let tipo='patrimoniale', natura='attivo', sezione='dare';
+    if(tipoExcel.includes('economic'))    { tipo='economico'; }
+    if(naturaExcel.includes('passiv'))    { natura='passivo'; sezione='avere'; }
+    else if(naturaExcel.includes('ricav')){ natura='ricavo';  sezione='avere'; tipo='economico'; }
+    else if(naturaExcel.includes('cost')) { natura='costo';   sezione='dare';  tipo='economico'; }
+    else if(fd===1)                       { natura='attivo';  sezione='dare'; }
+    else if(fd===2)                       { natura='passivo'; sezione='avere'; }
+    else if(fd===3)                       { natura='ricavo';  sezione='avere'; tipo='economico'; }
+    else if(fd<=5)                        { natura='costo';   sezione='dare';  tipo='economico'; }
+    else                                  { natura='ordine';  tipo='ordine'; }
+
+    const du = descrizione.toUpperCase();
+    const is_cliente   = /^1 02 (10|15|20)/.test(codice) && level===4;
+    const is_forn_it   = /^2 03 (07|08)/.test(codice) && level===4;
+    const is_forn_ext  = /^2 03 09/.test(codice) && level===4;
+    const is_prof      = /^2 03 10/.test(codice) && level===4 || tipoSogg.includes('profes');
+    const is_fornitore = is_forn_it || is_forn_ext || is_prof;
+    const is_banca     = /^1 02 60/.test(codice) && level===4 && /BANCA|C\/C|CRED.*COOPER|CREDEM|POSTA\s+C\/C/i.test(du);
+    const is_cassa     = /^1 02 60/.test(codice) && level===4 && /CASSA\s+(CONTANTI|ASSEGNI|VALORI)/i.test(du);
+
+    let anagrafica_tipo = null;
+    if(is_prof)                                          anagrafica_tipo='professionista';
+    else if(is_cliente && codice.startsWith('1 02 10'))  anagrafica_tipo='cliente_estero';
+    else if(is_cliente)                                  anagrafica_tipo='cliente_italia';
+    else if(is_forn_ext)                                 anagrafica_tipo='fornitore_estero';
+    else if(is_forn_it)                                  anagrafica_tipo='fornitore_italia';
+
+    const parts = codice.split(' ');
+    accounts.push({
+      codice,
+      codice_mastro: parts[0]||null,
+      codice_conto: level>=3 ? `${parts[0]} ${parts[1]} ${parts[2]}` : null,
+      codice_sottoconto: level>=4 ? codice : null,
+      descrizione, tipo, natura, sezione, livello: level,
+      is_cliente:!!is_cliente, is_fornitore:!!is_fornitore,
+      is_banca:!!is_banca, is_cassa:!!is_cassa,
+      is_iva: /IVA\s+(NS|CREDITO|DEBITO|SOSPESO|VENDITE)/i.test(du),
+      anagrafica_tipo, attivo: true
+    });
+  }
+  return accounts;
+}
+
 function parsePianoContiFromText(text){
   // Il testo da pdfjs browser arriva senza newline tra i record — tutto su una riga.
   // Formato: "1 ATTIVITA'1 CREDITI V/SOCI001 SOCI C/SOTTOSCRIZIONE00 01..."
@@ -1951,6 +2035,80 @@ function parseCausaliContabiliFromText(text){
   return items;
 }
 
+
+// ─── DETERMINISTIC PARSER: CAUSALI CONTABILI DA EXCEL NES ─────
+// Colonne: 0=Codice, 1=Descrizione, 2=Descr.tabulati, 3=Tipo causale, 6=Cod.registro IVA
+function parseCausaliContabiliFromExcel(workbook){
+  const XLSX = window._XLSX;
+  const ws = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+  const items = []; const seen = new Set();
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    const codice=(r[0]||'').toString().trim().toUpperCase();
+    const descrizione=(r[1]||'').toString().trim();
+    if(!codice||!descrizione)continue;
+    if(seen.has(codice))continue; seen.add(codice);
+    const disattivato=(r[27]||'').toString().trim().toUpperCase()==='T';
+    if(disattivato)continue;
+    const tipoRaw=(r[3]||'').toString().toLowerCase();
+    let tipo='generico';
+    if(/vendita|cessione|fattura.att/i.test(tipoRaw)||/fattura.att/i.test(descrizione))tipo='vendite';
+    else if(/acquist|fattura.pass/i.test(tipoRaw)||/acquist/i.test(descrizione))tipo='acquisti';
+    else if(/paga|incasso|banca|cassa/i.test(descrizione))tipo='finanziario';
+    else if(/giro|rettific|storno/i.test(descrizione))tipo='rettifica';
+    else if(/stipend|salari|person/i.test(descrizione))tipo='personale';
+    else if(/ammort/i.test(descrizione))tipo='ammortamento';
+    else if(/autofattura/i.test(tipoRaw))tipo='acquisti';
+    const codice_registro_iva=(r[6]||null)?.toString().trim()||null;
+    items.push({codice, descrizione, tipo, codice_registro_iva, attivo:true});
+  }
+  return items;
+}
+
+
+// ─── DETERMINISTIC PARSER: CAUSALI IVA DA EXCEL NES ──────────
+// Colonne: 0=Codice, 1=Descrizione, 2=%imposta, 3=Operazione, 7=Detraibile, 8=%indetraibilità
+function parseCausaliIvaFromExcel(workbook){
+  const XLSX = window._XLSX;
+  const ws = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+  const items = []; const seen = new Set();
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    const codice=(r[0]||'').toString().trim().toUpperCase();
+    const descrizione=(r[1]||'').toString().trim();
+    if(!codice||!descrizione)continue;
+    if(seen.has(codice))continue; seen.add(codice);
+    const aliquota=parseFloat(r[2])||0;
+    const operazione=(r[3]||'').toString().toLowerCase();
+    const detraibileRaw=(r[7]||'').toString().trim().toUpperCase();
+    const percIndetr=parseFloat(r[8])||0;
+    const detraibile=detraibileRaw==='T';
+    const percentuale_detraibilita=detraibile?(100-percIndetr):0;
+    let tipo='imponibile';
+    if(/non.imp|esportaz/i.test(operazione)||/non.imp/i.test(descrizione))tipo='non_imponibile';
+    else if(/esent/i.test(operazione)||/esent/i.test(descrizione))tipo='esente';
+    else if(/esclu|fuori.campo/i.test(operazione)||/esclu/i.test(descrizione))tipo='escluso';
+    let regime='normale';
+    if(/intra|cee/i.test(descrizione))regime='acquisto_cee';
+    else if(/reverse|autof/i.test(descrizione))regime='reverse_charge';
+    let codice_natura_fe=null;
+    if(tipo==='escluso')codice_natura_fe='N1';
+    else if(tipo==='non_imponibile')codice_natura_fe='N3';
+    else if(tipo==='esente')codice_natura_fe='N4';
+    // natura IVA PA col 44
+    const naturaPa=(r[44]||'').toString().trim()||null;
+    if(naturaPa)codice_natura_fe=naturaPa;
+    items.push({
+      codice, descrizione, aliquota, tipo, regime,
+      detraibile, percentuale_detraibilita, codice_natura_fe,
+      include_liquidazione:true, include_dichiarazione:true, attivo:true
+    });
+  }
+  return items;
+}
+
 function ModalImportPDF({tipo,societaId,onComplete,onClose}){
   const [file,setFile]=useState(null);
   const [loading,setLoading]=useState(false);
@@ -1968,14 +2126,66 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
   };
   const cfg=tipi[tipo];
 
-  const handleFile=(f)=>{if(f&&f.type==='application/pdf'){setFile(f);setResult(null);setError(null);}};
+  const handleFile=(f)=>{if(f&&(f.type==='application/pdf'||f.name?.endsWith('.xlsx')||f.name?.endsWith('.xls'))){setFile(f);setResult(null);setError(null);}};
 
   const handleUpload=async()=>{
     if(!file)return;
     setLoading(true);setError(null);
     ai.setAI('processing','Import '+cfg.title,'local');
     try{
-      // 1. Estrai testo nel browser (leggero, zero costi)
+      // BRANCH EXCEL: se file è xlsx, usa parser Excel diretto (solo piano_conti)
+      if(tipo==='piano_conti'&&(file.name?.endsWith('.xlsx')||file.name?.endsWith('.xls'))){
+        setProgress('Caricamento Excel...');
+        // Carica SheetJS se non già presente
+        if(!window._XLSX){
+          await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>{window._XLSX=window.XLSX;res();};s.onerror=rej;document.head.appendChild(s);});
+        }
+        const ab=await file.arrayBuffer();
+        const wb=window._XLSX.read(ab,{type:'array'});
+        setProgress('Parsing Excel...');
+        const parsed=parsePianoContiFromExcel(wb);
+        if(!parsed.length)throw new Error('Nessun conto trovato nel file Excel.');
+        setProgress('Controllo duplicati...');
+        const{data:esistenti}=await sb.from(cfg.table).select('codice').eq('societa_id',societaId).eq('attivo',true);
+        const esistentiSet=new Set((esistenti||[]).map(r=>r.codice?.toString().trim()));
+        const nuovi=parsed.filter(r=>!esistentiSet.has(r.codice?.toString().trim()));
+        const duplicati=parsed.filter(r=>esistentiSet.has(r.codice?.toString().trim()));
+        const stats={
+          mastri:nuovi.filter(i=>i.livello===1).length,
+          gruppi:nuovi.filter(i=>i.livello===2).length,
+          conti:nuovi.filter(i=>i.livello===3).length,
+          sottoconti:nuovi.filter(i=>i.livello===4).length,
+          clienti:nuovi.filter(i=>i.is_cliente).length,
+          fornitori:nuovi.filter(i=>i.is_fornitore).length,
+          banche:nuovi.filter(i=>i.is_banca).length,
+        };
+        setResult({parsed,nuovi,duplicati,stats,method:'excel'});
+        setLoading(false);setProgress('');
+        ai.setAI('done','Import '+cfg.title,'local');
+        return;
+      }
+      // BRANCH EXCEL causali contabili e IVA
+      if((tipo==='causali'||tipo==='causali_iva')&&(file.name?.endsWith('.xlsx')||file.name?.endsWith('.xls'))){
+        setProgress('Caricamento Excel...');
+        if(!window._XLSX){
+          await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>{window._XLSX=window.XLSX;res();};s.onerror=rej;document.head.appendChild(s);});
+        }
+        const ab=await file.arrayBuffer();
+        const wb=window._XLSX.read(ab,{type:'array'});
+        setProgress('Parsing Excel...');
+        const parsed=tipo==='causali_iva'?parseCausaliIvaFromExcel(wb):parseCausaliContabiliFromExcel(wb);
+        if(!parsed.length)throw new Error('Nessuna causale trovata nel file Excel.');
+        setProgress('Controllo duplicati...');
+        const{data:esistenti}=await sb.from(cfg.table).select('codice').eq('societa_id',societaId).eq('attivo',true);
+        const esistentiSet=new Set((esistenti||[]).map(r=>r.codice?.toString().trim()));
+        const nuovi=parsed.filter(r=>!esistentiSet.has(r.codice?.toString().trim()));
+        const duplicati=parsed.filter(r=>esistentiSet.has(r.codice?.toString().trim()));
+        setResult({parsed,nuovi,duplicati,stats:null,method:'excel'});
+        setLoading(false);setProgress('');
+        ai.setAI('done','Import '+cfg.title,'local');
+        return;
+      }
+      // 1. Estrai testo nel browser (leggero, zero costi) — BRANCH PDF
       setProgress('Estrazione testo dal PDF...');
       const text=await extractTextFromPDFBrowser(file);
       console.log('TESTO ESTRATTO lunghezza:', text?.length, 'chars');
@@ -2072,7 +2282,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
         <div className="modal-hdr">
           <div className="modal-drag"/>
           <div className="modal-title">{cfg.icon} Import {cfg.title}</div>
-          <div className="modal-sub">Parsing locale · zero costi AI</div>
+          <div className="modal-sub">PDF o Excel NES · parsing locale · zero costi AI</div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -2084,7 +2294,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
                 onDragLeave={()=>setDrag(false)}
                 onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0]);}}
                 onClick={()=>fileRef.current.click()}>
-                <input ref={fileRef} type="file" accept=".pdf" hidden onChange={e=>handleFile(e.target.files[0])}/>
+                <input ref={fileRef} type="file" accept='.pdf,.xlsx,.xls' hidden onChange={e=>handleFile(e.target.files[0])}/>
                 <div className="upload-zone-ico">📄</div>
                 <div className="upload-zone-t">{file?file.name:'Trascina PDF qui o clicca'}</div>
                 <div className="upload-zone-s">NES · BLUENEXT · PROFIS e altri formati contabili</div>
