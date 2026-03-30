@@ -122,6 +122,12 @@ export const STATO_DOC_COLOR = {
 // Navigazione app
 export const NAV = [
   {
+    section: 'AI AGENT',
+    items: [
+      { id: 'ai_agent', ico: '🤖', label: 'FiscoSim AI' }
+    ]
+  },
+  {
     section: 'STUDIO',
     items: [
       { id: 'dashboard',    ico: '🏠', label: 'Dashboard' },
@@ -135,7 +141,7 @@ export const NAV = [
   {
     section: 'DOCUMENT HUB',
     items: [
-      { id: 'import_documenti',    ico: '📁', label: 'Import Documenti' },
+      { id: 'import_unificato',    ico: '📁', label: 'Import Documenti' },
       { id: 'export_dati',         ico: '📤', label: 'Export Dati' },
       { id: 'fatture_ade',         ico: '📥', label: 'Fatture Massive ADE' },
       { id: 'lettura_mail',        ico: '📧', label: 'Lettura Mail' },
@@ -158,7 +164,9 @@ export const NAV = [
       { id: 'f24',          ico: '📋', label: 'Gestione F24' },
       { id: 'simulatore',   ico: '📊', label: 'Simulatore Fiscale' },
       { id: 'ammortamenti', ico: '🏢', label: 'Ammortamenti' },
-      { id: 'cu',           ico: '📜', label: 'Certificazioni Uniche' }
+      { id: 'cu',           ico: '📜', label: 'Certificazioni Uniche' },
+      { id: 'revisione_dich', ico: '🔍', label: 'Revisione Dichiarativi' },
+      { id: 'agecon',          ico: '⚡', label: 'AgeCon — Avvisi ADE' }
     ]
   },
   {
@@ -183,6 +191,7 @@ export const PERMESSI_MODULI = [
   { id: 'import_documenti', label: 'Import Documenti',     ico: '📁', hasSoloAssegnati: false },
   { id: 'dashboard',        label: 'Dashboard',            ico: '🏠', hasSoloAssegnati: false },
   { id: 'cu',               label: 'Certificazioni Uniche',ico: '📜', hasSoloAssegnati: false },
+  { id: 'revisione_dich',  label: 'Revisione Dichiarativi', ico: '🔍', hasSoloAssegnati: false },
   { id: 'deleghe',          label: 'Deleghe Uniche',       ico: '🔑', hasSoloAssegnati: false },
   { id: 'richieste_fatture',label: 'Richieste Fatture',    ico: '📡', hasSoloAssegnati: false },
   { id: 'impostazioni',     label: 'Impostazioni Studio',  ico: '⚙️', hasSoloAssegnati: false }

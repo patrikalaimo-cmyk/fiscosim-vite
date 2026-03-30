@@ -1,4 +1,5 @@
 import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeterministico } from '../../shared/utils/fatture'
+import { trace } from '../../core/debug/trace'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
 import { useAIStatus } from '../../context/AIStatusContext'
@@ -179,6 +180,7 @@ export function ModuloContabilita({ruolo}){
           :causaliContabili.find(c=>/FC|fatt.*cli/i.test(c.codice+c.descrizione));
 
         // 1. Create prima nota header
+        trace('DB', { action: 'INSERT prima_nota', doc_id: doc.id })
         const{data:pn,error:pnErr}=await sb.from('prima_nota').insert([{
           societa_id:societaAttiva.id,
           data_registrazione:doc.data_documento||new Date().toISOString().slice(0,10),
@@ -696,12 +698,420 @@ function ImportFattureView({societaId,onComplete}){
 }
 
 // ─── PIANO CONTI VIEW ────────────────────────────────────────
+
+// ─── MODAL NUOVO CONTO ───────────────────────────────────────
+function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
+  const MASTRI = [
+    {codice:'1',label:'1 — Attività'},
+    {codice:'2',label:'2 — Passività'},
+    {codice:'3',label:'3 — Ricavi'},
+    {codice:'4',label:'4 — Costi'},
+    {codice:'5',label:'5 — Costi diversi'},
+    {codice:'6',label:'6 — Conti d\'ordine'},
+  ];
+
+  // Livelli del piano conti per scegliere dove inserire
+  const nodiFiglio = (parentCodice) =>
+    pianoConti.filter(c=>c.codice.startsWith(parentCodice+' ')&&c.codice.split(' ').length===parentCodice.split(' ').length+1);
+
+  const [mastro,setMastro]   = useState('1');
+  const [parentCode,setParentCode] = useState('');
+  const [descrizione,setDesc] = useState('');
+  const [saving,setSaving]   = useState(false);
+
+  // Calcola prossimo codice disponibile
+  const calcolaCodice = async (parent) => {
+    const livello = parent.split(' ').length + 1;
+    const {data} = await sb.from('piano_conti')
+      .select('codice').eq('societa_id',societaId).eq('attivo',true)
+      .like('codice', parent+' %')
+      .eq('livello', livello)
+      .order('codice',{ascending:false}).limit(1);
+    if(!data?.length){
+      if(livello===2) return `${parent} 00`;
+      if(livello===3) return `${parent} 00`;
+      return `${parent} 0001`;
+    }
+    const lastParts = data[0].codice.trim().split(' ');
+    const lastNum = parseInt(lastParts[lastParts.length-1])||0;
+    const pad = livello===4?4:2;
+    return `${parent} ${String(lastNum+1).padStart(pad,'0')}`;
+  };
+
+  const handleSave = async () => {
+    if(!descrizione.trim()) return alert('Inserisci la descrizione');
+    const parent = parentCode || mastro;
+    setSaving(true);
+    const codice = await calcolaCodice(parent);
+    const parts = codice.trim().split(' ');
+    const livello = parts.length;
+    const fd = parseInt(mastro);
+    let tipo='patrimoniale', natura='attivo', sezione='dare';
+    if(fd===3){tipo='economico';natura='ricavo';sezione='avere';}
+    else if(fd<=5){tipo='economico';natura='costo';sezione='dare';}
+    else if(fd===6){tipo='ordine';natura='ordine';}
+    else if(fd===2){natura='passivo';sezione='avere';}
+    await onSave({
+      codice: codice.trim(),
+      codice_mastro: parts[0]||null,
+      codice_conto: livello>=3?`${parts[0]} ${parts[1]} ${parts[2]}`:null,
+      codice_sottoconto: livello>=4?codice.trim():null,
+      descrizione: descrizione.trim(),
+      tipo, natura, sezione, livello,
+    });
+    setSaving(false);
+  };
+
+  // Lista conti del mastro scelto per scegliere il parent
+  const contiFiglio = pianoConti.filter(c=>c.codice.startsWith(mastro+' ')&&c.livello<=3).sort((a,b)=>a.codice.localeCompare(b.codice));
+
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">➕ Nuovo Conto</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-grid">
+            <div className="fg full"><label>Descrizione *</label>
+              <input value={descrizione} onChange={e=>setDesc(e.target.value)} autoFocus placeholder="Es. Spese telefoniche"/>
+            </div>
+            <div className="fg"><label>Mastro (sezione)</label>
+              <select value={mastro} onChange={e=>{setMastro(e.target.value);setParentCode('');}}>
+                {MASTRI.map(m=><option key={m.codice} value={m.codice}>{m.label}</option>)}
+              </select>
+            </div>
+            <div className="fg"><label>Inserisci sotto (opzionale)</label>
+              <select value={parentCode} onChange={e=>setParentCode(e.target.value)}>
+                <option value="">— Direttamente sotto il mastro {mastro} —</option>
+                {contiFiglio.map(c=><option key={c.id} value={c.codice}>{c.codice} — {c.descrizione}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{marginTop:'.75rem',padding:'.6rem .8rem',background:'var(--s2)',borderRadius:7,fontSize:'.75rem',color:'var(--mu)'}}>
+            ℹ️ Il codice verrà calcolato automaticamente come progressivo nell'area selezionata
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Annulla</button>
+          <button className="btn" disabled={saving||!descrizione} onClick={handleSave}>{saving?'⏳ Salvo...':'💾 Crea conto'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODAL NUOVA CAUSALE (contabile o IVA) ───────────────────
+function ModalNuovaCausale({tipo, societaId, onSave, onClose}){
+  const isIva = tipo==='iva';
+  const [form,setForm] = useState(isIva
+    ? {codice:'',descrizione:'',aliquota:22,regime_iva:'Imponibile',tipo_trattamento:'Normale',detraibile:true,percentuale_indetraibilita:0,include_liquidazione:true,attivo:true}
+    : {codice:'',descrizione:'',tipo:'generico',attivo:true}
+  );
+  const [saving,setSaving] = useState(false);
+  const up = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const handleSave = async () => {
+    if(!form.codice||!form.descrizione) return alert('Codice e descrizione obbligatori');
+    setSaving(true);
+    await onSave(form);
+    setSaving(false);
+  };
+
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:500}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">➕ Nuova {isIva?'Causale IVA':'Causale Contabile'}</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-grid">
+            <div className="fg"><label>Codice *</label>
+              <input value={form.codice} onChange={e=>up('codice',e.target.value.toUpperCase())} placeholder={isIva?'es. A22':'es. VEN'} autoFocus/>
+            </div>
+            <div className="fg full"><label>Descrizione *</label>
+              <input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} placeholder="Descrizione causale"/>
+            </div>
+            {isIva&&<>
+              <div className="fg"><label>Aliquota %</label>
+                <input type="number" value={form.aliquota} onChange={e=>up('aliquota',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/>
+              </div>
+              <div className="fg"><label>Regime IVA</label>
+                <select value={form.regime_iva} onChange={e=>up('regime_iva',e.target.value)}>
+                  <option value="Imponibile">Imponibile</option>
+                  <option value="Non imponibile">Non imponibile</option>
+                  <option value="Esente">Esente</option>
+                  <option value="Escluso">Escluso</option>
+                </select>
+              </div>
+              <div className="fg"><label>% Indetraibilità</label>
+                <input type="number" value={form.percentuale_indetraibilita} onChange={e=>up('percentuale_indetraibilita',parseFloat(e.target.value)||0)} min={0} max={100}/>
+              </div>
+            </>}
+            {!isIva&&<>
+              <div className="fg"><label>Tipo</label>
+                <select value={form.tipo} onChange={e=>up('tipo',e.target.value)}>
+                  <option value="generico">Generico</option>
+                  <option value="vendite">Vendite</option>
+                  <option value="acquisti">Acquisti</option>
+                  <option value="finanziario">Finanziario</option>
+                  <option value="rettifica">Rettifica/Storno</option>
+                  <option value="personale">Personale</option>
+                  <option value="ammortamento">Ammortamento</option>
+                </select>
+              </div>
+            </>}
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Annulla</button>
+          <button className="btn" disabled={saving||!form.codice||!form.descrizione} onClick={handleSave}>{saving?'⏳ Salvo...':'💾 Crea causale'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODAL IMPORT ANAGRAFICA NES → PIANO DEI CONTI ──────────
+// Parser Excel NES clienti/fornitori → aggiorna/crea conti in piano_conti
+function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, onClose}){
+  const [file,setFile]         = useState(null);
+  const [loading,setLoading]   = useState(false);
+  const [progress,setProgress] = useState('');
+  const [preview,setPreview]   = useState(null); // {aggiornati, nuovi, records}
+  const [importing,setImporting]= useState(false);
+  const [done,setDone]         = useState(null);
+  const fileRef = useRef();
+
+  const parseExcelAnagrafica = async (file) => {
+    if(!window._XLSX){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload=()=>{window._XLSX=window.XLSX;res();};s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    const ab = await file.arrayBuffer();
+    const wb = window._XLSX.read(ab,{type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = window._XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+    if(!rows.length) return [];
+
+    const header = rows[0].map(h=>(h||'').toString().toLowerCase().trim());
+    // Detecta se è clienti o fornitori dal header
+    const isClienti = header.some(h=>h.includes('soggetto iva differita'));
+
+    const idx = {
+      codice:      header.findIndex(h=>h==='codice'),
+      ragSoc:      header.findIndex(h=>h==='ragione sociale'),
+      ragSoc2:     header.findIndex(h=>h.includes('ragione sociale aggiuntiva')),
+      indirizzo:   header.findIndex(h=>h==='indirizzo'),
+      cap:         header.findIndex(h=>h==='cap'),
+      citta:       header.findIndex(h=>h==="città"),
+      provincia:   header.findIndex(h=>h==='provincia'),
+      nazione:     header.findIndex(h=>h==='nazione'),
+      cf:          header.findIndex(h=>h.includes('codice fiscale')),
+      piva:        header.findIndex(h=>h.includes('partita iva')||h.includes('partita iva')),
+      iso:         header.findIndex(h=>h==='codice iso'),
+      pec:         header.findIndex(h=>h.includes('pec')),
+      codDest:     header.findIndex(h=>h.includes('codice destinatario')),
+      splitPayment:header.findIndex(h=>h.includes('split payment')||h.includes('iva differita')),
+      spesometro:  header.findIndex(h=>h.includes('includi in spesometro')),
+      esterometro: header.findIndex(h=>h.includes('includi in esterometro')),
+      b2b:         header.findIndex(h=>h.includes('elettronica b2b')),
+      nome:        header.findIndex(h=>h==='nome'),
+      cognome:     header.findIndex(h=>h==='cognome'),
+      soggOpera:   header.findIndex(h=>h.includes('soggetto operazione')),
+      tipoContr:   header.findIndex(h=>h.includes('tipo controparte')),
+      gruppoIva:   header.findIndex(h=>h.includes('gruppo iva')),
+    };
+
+    const g = (row,i) => i>=0&&row[i]!=null ? String(row[i]).trim() : '';
+    const bool = (row,i) => i>=0 ? ['s','si','1','true','x'].includes(String(row[i]||'').toLowerCase()) : false;
+
+    const records = [];
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i];
+      const codice = g(r,idx.codice);
+      if(!codice) continue;
+      // Codice NES = numerico, converti in formato "1 02 20 0171"
+      // Formato NES: 102200171 → 1 02 20 0171
+      const nesCode = codice.replace(/\D/g,'');
+      let codicePiano = null;
+      if(nesCode.length>=9){
+        codicePiano = `${nesCode[0]} ${nesCode.substring(1,3)} ${nesCode.substring(3,5)} ${nesCode.substring(5).padStart(4,'0')}`;
+      } else if(nesCode.length>=7){
+        codicePiano = `${nesCode[0]} ${nesCode.substring(1,3)} ${nesCode.substring(3,5)} ${nesCode.substring(5).padStart(4,'0')}`;
+      }
+
+      records.push({
+        codice_nes: codice,
+        codice_piano: codicePiano,
+        descrizione:      g(r,idx.ragSoc),
+        rag_sociale_2:    g(r,idx.ragSoc2),
+        indirizzo:        g(r,idx.indirizzo),
+        cap:              g(r,idx.cap),
+        citta:            g(r,idx.citta),
+        provincia:        g(r,idx.provincia),
+        nazione:          g(r,idx.nazione)||'Italia',
+        codice_iso:       g(r,idx.iso)||'IT',
+        codice_fiscale:   g(r,idx.cf).replace(/\s/g,''),
+        partita_iva:      g(r,idx.piva).replace(/\s/g,''),
+        anagrafica_piva:  g(r,idx.piva).replace(/\s/g,''),
+        anagrafica_cf:    g(r,idx.cf).replace(/\s/g,''),
+        email_pec:        g(r,idx.pec),
+        codice_dest_efat: g(r,idx.codDest),
+        split_payment:    bool(r,idx.splitPayment),
+        includi_spesometro: bool(r,idx.spesometro),
+        includi_esterometro:bool(r,idx.esterometro),
+        richiede_efat_b2b:  bool(r,idx.b2b),
+        soggetto_operaz:  g(r,idx.soggOpera),
+        tipo_controparte: g(r,idx.tipoContr),
+        partecipa_gruppo_iva: bool(r,idx.gruppoIva),
+      });
+    }
+    return records;
+  };
+
+  const handleFile = async (f) => {
+    if(!f) return;
+    setFile(f);
+    setLoading(true);
+    setProgress('Lettura Excel...');
+    try{
+      const records = await parseExcelAnagrafica(f);
+      // Confronta con piano conti esistente per codice NES
+      const codicePianoMap = {};
+      for(const c of pianoConti) codicePianoMap[c.codice] = c;
+
+      const aggiornati = records.filter(r=>r.codice_piano&&codicePianoMap[r.codice_piano]);
+      const nuovi      = records.filter(r=>r.codice_piano&&!codicePianoMap[r.codice_piano]);
+      setPreview({aggiornati,nuovi,records});
+    }catch(e){ alert('Errore: '+e.message); }
+    setLoading(false);
+    setProgress('');
+  };
+
+  const importa = async () => {
+    if(!preview) return;
+    setImporting(true);
+    let ok=0, err=0;
+
+    // Aggiorna conti esistenti
+    for(const rec of preview.aggiornati){
+      const {error} = await sb.from('piano_conti').update({
+        rag_sociale_2:    rec.rag_sociale_2||null,
+        indirizzo:        rec.indirizzo||null,
+        cap:              rec.cap||null,
+        citta:            rec.citta||null,
+        provincia:        rec.provincia||null,
+        nazione:          rec.nazione||null,
+        codice_iso:       rec.codice_iso||null,
+        codice_fiscale:   rec.codice_fiscale||null,
+        partita_iva:      rec.partita_iva||null,
+        anagrafica_piva:  rec.anagrafica_piva||null,
+        anagrafica_cf:    rec.anagrafica_cf||null,
+        email_pec:        rec.email_pec||null,
+        codice_dest_efat: rec.codice_dest_efat||null,
+        split_payment:    rec.split_payment,
+        includi_spesometro: rec.includi_spesometro,
+        includi_esterometro: rec.includi_esterometro,
+        richiede_efat_b2b: rec.richiede_efat_b2b,
+        soggetto_operaz:  rec.soggetto_operaz||null,
+        tipo_controparte: rec.tipo_controparte||null,
+        partecipa_gruppo_iva: rec.partecipa_gruppo_iva,
+      }).eq('codice',rec.codice_piano).eq('societa_id',societaId);
+      error ? err++ : ok++;
+    }
+
+    setDone({aggiornati:ok,errori:err,nuovi:preview.nuovi.length});
+    setImporting(false);
+  };
+
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:640}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">👥 Import Anagrafica NES → Piano dei Conti</div>
+          <div className="modal-sub">Aggiorna CF, P.IVA, indirizzo, PEC, split payment dai file Excel NES</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {!file&&(
+            <>
+              <div className="alert alert-info" style={{marginBottom:'1rem',fontSize:'.8rem'}}>
+                Carica il file Excel <strong>Anagrafica Clienti</strong> o <strong>Anagrafica Fornitori</strong> esportato da NES.<br/>
+                Il sistema farà <strong>UPDATE</strong> sui conti già presenti nel piano (match per codice NES).
+              </div>
+              <div className="upload-zone" onClick={()=>fileRef.current.click()} style={{cursor:'pointer'}}>
+                <div className="upload-zone-ico">📊</div>
+                <div className="upload-zone-t">Carica Excel NES</div>
+                <div className="upload-zone-s">Anagraficaclienti.xlsx o Anagraficafornitori.xlsx</div>
+              </div>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls" hidden onChange={e=>handleFile(e.target.files?.[0])}/>
+            </>
+          )}
+          {loading&&<div style={{textAlign:'center',padding:'1.5rem',color:'var(--mu)'}}>⏳ {progress}</div>}
+          {done&&(
+            <div className="alert alert-success">
+              ✅ Completato — <strong>{done.aggiornati}</strong> conti aggiornati, <strong>{done.errori}</strong> errori
+              {done.nuovi>0&&<div style={{marginTop:'.3rem',fontSize:'.8rem'}}>ℹ️ {done.nuovi} codici NES non trovati nel piano dei conti (conti non ancora importati)</div>}
+              <div style={{marginTop:'.75rem'}}><button className="btn" onClick={onComplete}>✓ Chiudi</button></div>
+            </div>
+          )}
+          {preview&&!done&&(
+            <>
+              <div style={{display:'flex',gap:'.75rem',marginBottom:'1rem',flexWrap:'wrap'}}>
+                <div style={{flex:1,padding:'.75rem',background:'rgba(52,194,122,.08)',border:'1px solid rgba(52,194,122,.3)',borderRadius:8,textAlign:'center'}}>
+                  <div style={{fontWeight:700,fontSize:'1.2rem',color:'#34c27a'}}>{preview.aggiornati.length}</div>
+                  <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Conti da aggiornare</div>
+                </div>
+                <div style={{flex:1,padding:'.75rem',background:'rgba(251,146,60,.08)',border:'1px solid rgba(251,146,60,.3)',borderRadius:8,textAlign:'center'}}>
+                  <div style={{fontWeight:700,fontSize:'1.2rem',color:'#fb923c'}}>{preview.nuovi.length}</div>
+                  <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Codici non trovati nel piano</div>
+                </div>
+              </div>
+              <div style={{maxHeight:280,overflow:'auto',border:'1px solid var(--bd)',borderRadius:8}}>
+                {preview.aggiornati.slice(0,50).map((r,i)=>(
+                  <div key={i} style={{display:'flex',gap:'.5rem',padding:'.4rem .75rem',borderBottom:'1px solid rgba(33,40,58,.3)',fontSize:'.78rem'}}>
+                    <code style={{color:'var(--gold)',minWidth:90,flexShrink:0}}>{r.codice_piano}</code>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.descrizione}</span>
+                    <span style={{fontSize:'.7rem',color:'var(--mu)',flexShrink:0}}>{r.partita_iva||r.codice_fiscale}</span>
+                    {r.split_payment&&<span className="bdg bdg-gold" style={{fontSize:'.55rem'}}>SP</span>}
+                  </div>
+                ))}
+                {preview.aggiornati.length>50&&<div style={{padding:'.5rem',textAlign:'center',fontSize:'.72rem',color:'var(--mu)'}}>...e altri {preview.aggiornati.length-50}</div>}
+              </div>
+            </>
+          )}
+        </div>
+        {preview&&!done&&(
+          <div className="modal-foot">
+            <button className="btn-sec" onClick={onClose}>Annulla</button>
+            <button className="btn" disabled={importing||!preview.aggiornati.length} onClick={importa}>
+              {importing?'⏳ Aggiorno...':'✅ Aggiorna '+preview.aggiornati.length+' conti'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
   const [search,setSearch]=useState('');
   const [sel,setSel]=useState(new Set());
   const [open,setOpen]=useState(new Set()); // nodi espansi
   const [deleting,setDeleting]=useState(false);
-  const [editConto,setEditConto]=useState(null); // {id, codice, descrizione, ...}
+  const [editConto,setEditConto]=useState(null);
+  const [nuovoConto,setNuovoConto]=useState({open:false});
+  const [importAnagrafica,setImportAnagrafica]=useState(false); // {id, codice, descrizione, ...}
 
   // Costruisce albero da array flat
   const tree=useMemo(()=>{
@@ -862,6 +1272,8 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
   return(
     <div>
       {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{await sb.from('piano_conti').update(updates).eq('id',editConto.id);setEditConto(null);onRefresh();}} onClose={()=>setEditConto(null)}/>}
+      {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{const{error}=await sb.from('piano_conti').insert([{...rec,societa_id:societaId,attivo:true}]);if(error){alert('Errore: '+error.message);return;}setNuovoConto({open:false});onRefresh();}} onClose={()=>setNuovoConto({open:false})}/>}
+      {importAnagrafica&&<ModalImportAnagraficaNESPianoConti societaId={societaId} pianoConti={pianoConti} onComplete={()=>{setImportAnagrafica(false);onRefresh();}} onClose={()=>setImportAnagrafica(false)}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
           <div style={{fontSize:'1.1rem',fontWeight:700}}>🗂️ Piano dei Conti</div>
@@ -869,7 +1281,9 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
         </div>
         <div style={{display:'flex',gap:'.5rem'}}>
           {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?'⏳':'🗑'} Elimina ({sel.size})</button>}
-          <button className="btn" onClick={onImport}>📤 Import PDF</button>
+          <button className="btn-sec" onClick={()=>setNuovoConto({open:true})}>➕ Nuovo conto</button>
+          <button className="btn-sec" onClick={()=>setImportAnagrafica(true)}>👥 Import Anagrafica</button>
+          <button className="btn" onClick={onImport}>📤 Import PDF/Excel</button>
           {pianoConti.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?'⏳':'🗑'} Elimina tutto ({pianoConti.length})</button>}
         </div>
       </div>
@@ -891,42 +1305,361 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
 }
 
 // ─── MODAL EDIT CONTO ────────────────────────────────────────
+
+// ─── CODICI ISO NAZIONI ──────────────────────────────────────
+const ISO_NAZIONI = [
+  ['IT','Italia'],['DE','Germania'],['FR','Francia'],['ES','Spagna'],['GB','Regno Unito'],
+  ['AT','Austria'],['BE','Belgio'],['BG','Bulgaria'],['CY','Cipro'],['HR','Croazia'],
+  ['DK','Danimarca'],['EE','Estonia'],['FI','Finlandia'],['GR','Grecia'],['HU','Ungheria'],
+  ['IE','Irlanda'],['LV','Lettonia'],['LT','Lituania'],['LU','Lussemburgo'],['MT','Malta'],
+  ['NL','Paesi Bassi'],['PL','Polonia'],['PT','Portogallo'],['CZ','Rep. Ceca'],['RO','Romania'],
+  ['SK','Slovacchia'],['SI','Slovenia'],['SE','Svezia'],['CH','Svizzera'],['NO','Norvegia'],
+  ['US','Stati Uniti'],['CN','Cina'],['JP','Giappone'],['BR','Brasile'],['AR','Argentina'],
+  ['RU','Russia'],['TR','Turchia'],['AE','Emirati Arabi'],['SA','Arabia Saudita'],
+  ['IN','India'],['AU','Australia'],['CA','Canada'],['MX','Messico'],['ZA','Sud Africa'],
+];
+
+// ─── SELETTORE CONTROPARTITA (piano dei conti) ───────────────
+function SelettoreContropartita({value, onChange, societaId}){
+  const [open,setOpen]=useState(false);
+  const [search,setSearch]=useState('');
+  const [conti,setConti]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const ref=useRef();
+
+  useEffect(()=>{
+    if(!open||!societaId) return;
+    setLoading(true);
+    sb.from('piano_conti').select('id,codice,descrizione,livello')
+      .eq('societa_id',societaId).eq('attivo',true)
+      .order('codice').limit(3000) // tutto il piano conti, nessun filtro livello
+      .then(({data})=>{ setConti(data||[]); setLoading(false); });
+  },[open,societaId]);
+
+  useEffect(()=>{
+    if(!open) return;
+    const handleClick=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown',handleClick);
+    return ()=>document.removeEventListener('mousedown',handleClick);
+  },[open]);
+
+  const filtered=search
+    ? conti.filter(c=>(c.codice+' '+c.descrizione).toLowerCase().includes(search.toLowerCase())).slice(0,50)
+    : conti.slice(0,50);
+
+  const label=value?conti.find(c=>c.codice===value||c.id===value)?.let?.(c=>`${c.codice} — ${c.descrizione}`)||value:'-- Nessuna contropartita --';
+
+  return(
+    <div ref={ref} style={{position:'relative'}}>
+      <div onClick={()=>setOpen(p=>!p)}
+        style={{background:'var(--s1)',border:`1px solid ${open?'var(--gold)':'var(--bd)'}`,borderRadius:7,padding:'.45rem .7rem',cursor:'pointer',fontSize:'.8rem',color:value?'var(--tx)':'var(--mu)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:'.4rem'}}>
+        <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{label}</span>
+        <span style={{color:'var(--mu)',fontSize:'.65rem',flexShrink:0}}>{open?'▲':'▼'}</span>
+      </div>
+      {open&&(
+        <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:200,background:'var(--s1)',border:'1px solid var(--bd)',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.4)',marginTop:2,maxHeight:300,display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'.5rem .6rem',borderBottom:'1px solid var(--bd)'}}>
+            <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
+              placeholder="🔍 Cerca per codice o descrizione..."
+              style={{width:'100%',background:'var(--s2)',border:'1px solid var(--bd)',borderRadius:5,padding:'.35rem .55rem',fontSize:'.78rem',color:'var(--tx)'}}/>
+          </div>
+          <div style={{overflow:'auto',flex:1}}>
+            <div onClick={()=>{onChange('');setOpen(false);}}
+              style={{padding:'.4rem .7rem',cursor:'pointer',fontSize:'.75rem',color:'var(--mu)',borderBottom:'1px solid var(--bd)'}}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.04)'}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              -- Nessuna contropartita --
+            </div>
+            {loading?<div style={{padding:'.75rem',fontSize:'.75rem',color:'var(--mu)',textAlign:'center'}}>⏳ Caricamento...</div>
+              :filtered.map(c=>(
+              <div key={c.id} onClick={()=>{onChange(c.codice);setOpen(false);}}
+                style={{padding:'.4rem .7rem',cursor:'pointer',display:'flex',gap:'.5rem',alignItems:'center',borderBottom:'1px solid rgba(33,40,58,.3)',background:value===c.codice?'rgba(200,164,94,.08)':'transparent'}}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.04)'}
+                onMouseLeave={e=>e.currentTarget.style.background=value===c.codice?'rgba(200,164,94,.08)':'transparent'}>
+                <code style={{fontSize:'.7rem',color:'var(--gold)',minWidth:80,flexShrink:0}}>{c.codice}</code>
+                <span style={{fontSize:'.75rem',color:'var(--tx)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.descrizione}</span>
+              </div>
+            ))}
+            {!loading&&filtered.length===0&&<div style={{padding:'.75rem',fontSize:'.75rem',color:'var(--mu)',textAlign:'center'}}>Nessun risultato</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TAB ANAGRAFICA (estratta per leggibilità) ───────────────
+function AnagraficaTab({form, up, conto, B}){
+  // Causali IVA della società corrente (caricate lazy)
+  const [causaliIva,setCausaliIva]=useState([]);
+  useEffect(()=>{
+    if(!conto.societa_id) return;
+    sb.from('causali_iva').select('id,codice,descrizione,aliquota')
+      .eq('societa_id',conto.societa_id).eq('attivo',true).order('codice').limit(200)
+      .then(({data})=>setCausaliIva(data||[]));
+  },[conto.societa_id]);
+
+  return(
+    <>
+      <div className="form-grid">
+        <div className="fg full"><label>Ragione Sociale 2</label><input value={form.rag_sociale_2} onChange={e=>up('rag_sociale_2',e.target.value)}/></div>
+        <div className="fg full"><label>Indirizzo</label><input value={form.indirizzo} onChange={e=>up('indirizzo',e.target.value)}/></div>
+        <div className="fg"><label>CAP</label><input value={form.cap} onChange={e=>up('cap',e.target.value)} maxLength={5}/></div>
+        <div className="fg"><label>Città</label><input value={form.citta} onChange={e=>up('citta',e.target.value)}/></div>
+        <div className="fg"><label>Provincia</label><input value={form.provincia} onChange={e=>up('provincia',e.target.value)} maxLength={2} placeholder="RM"/></div>
+
+        {/* Codice ISO — dropdown nazioni */}
+        <div className="fg">
+          <label>Nazione (ISO)</label>
+          <select value={form.codice_iso||'IT'} onChange={e=>{up('codice_iso',e.target.value);up('nazione',ISO_NAZIONI.find(n=>n[0]===e.target.value)?.[1]||e.target.value);}}>
+            {ISO_NAZIONI.map(([cod,nome])=><option key={cod} value={cod}>{cod} — {nome}</option>)}
+          </select>
+        </div>
+
+        <div className="fg"><label>Codice Fiscale</label><input value={form.codice_fiscale} onChange={e=>up('codice_fiscale',e.target.value.toUpperCase())}/></div>
+        <div className="fg"><label>Partita IVA</label><input value={form.partita_iva} onChange={e=>up('partita_iva',e.target.value)}/></div>
+
+        <div className="fg"><label>Tipo soggetto</label>
+          <select value={form.tipo_soggetto} onChange={e=>up('tipo_soggetto',e.target.value)}>
+            <option value="Privato">Privato</option>
+            <option value="Persona fisica">Persona fisica</option>
+            <option value="Normale">Normale (Società/Ditta)</option>
+            <option value="Dogana">Dogana</option>
+            <option value="Estero">Estero</option>
+          </select>
+        </div>
+
+        <div className="fg"><label>Tipo controparte</label>
+          <select value={form.tipo_controparte} onChange={e=>up('tipo_controparte',e.target.value)}>
+            <option value="1 = Persona fisica">1 = Persona fisica</option>
+            <option value="2 = Persona giuridica">2 = Persona giuridica</option>
+          </select>
+        </div>
+
+        <div className="fg"><label>Soggetto operaz.</label>
+          <select value={form.soggetto_operaz} onChange={e=>up('soggetto_operaz',e.target.value)}>
+            <option value="">-- Non specificato --</option>
+            <option value="1">1 = Non titolare P.IVA</option>
+            <option value="2">2 = Titolare P.IVA</option>
+          </select>
+        </div>
+
+        {/* Aliquota IVA — dropdown causali IVA */}
+        <div className="fg">
+          <label>Aliquota IVA predefinita</label>
+          <select value={form.aliquota_iva||''} onChange={e=>up('aliquota_iva',e.target.value)}>
+            <option value="">-- Standard (da causale) --</option>
+            {causaliIva.map(c=><option key={c.id} value={c.codice}>{c.codice} — {c.descrizione}{c.aliquota?` (${c.aliquota}%)`:''}</option>)}
+          </select>
+        </div>
+
+        {/* Tipo pagamento — dropdown fisso */}
+        <div className="fg">
+          <label>Tipo pagamento</label>
+          <select value={form.tipo_pagamento||''} onChange={e=>up('tipo_pagamento',e.target.value)}>
+            <option value="">-- Non specificato --</option>
+            <option value="Incasso">Incasso (cliente)</option>
+            <option value="Pagamento">Pagamento (fornitore)</option>
+            <option value="Rimessa diretta">Rimessa diretta</option>
+            <option value="Bonifico">Bonifico bancario</option>
+            <option value="Ri.Ba.">Ri.Ba.</option>
+            <option value="RID">RID / SDD</option>
+            <option value="Assegno">Assegno</option>
+            <option value="Contanti">Contanti</option>
+          </select>
+        </div>
+
+        {/* Contropartita — selettore piano dei conti */}
+        <div className="fg full">
+          <label>Contropartita predefinita
+            <span style={{fontSize:'.68rem',color:'var(--mu)',marginLeft:'.5rem',fontWeight:400}}>
+              conto proposto automaticamente nelle registrazioni di questo {form.is_cliente?'cliente':'fornitore'}
+            </span>
+          </label>
+          <SelettoreContropartita
+            value={form.contropartita}
+            onChange={v=>up('contropartita',v)}
+            societaId={conto.societa_id}
+          />
+        </div>
+
+        <div className="fg"><label>Banca</label><input value={form.banca} onChange={e=>up('banca',e.target.value)}/></div>
+        <div className="fg"><label>Regime fiscale</label>
+          <select value={form.regime_fiscale} onChange={e=>up('regime_fiscale',e.target.value)}>
+            <option value="">-- Non specificato --</option>
+            <option value="RF01">RF01 - Ordinario</option>
+            <option value="RF02">RF02 - Minimi</option>
+            <option value="RF04">RF04 - Agricoltura</option>
+            <option value="RF05">RF05 - Sali e tabacchi</option>
+            <option value="RF10">RF10 - Agriturismo</option>
+            <option value="RF19">RF19 - Forfettario</option>
+            <option value="RF18">RF18 - Altro</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Toggle Split Payment evidenziato */}
+      <div style={{marginTop:'1.25rem',background:'rgba(200,164,94,.06)',border:'1px solid rgba(200,164,94,.2)',borderRadius:8,padding:'.75rem 1rem'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'.4rem'}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:'.82rem',color:'var(--gold)'}}>🏛 Split Payment</div>
+            <div style={{fontSize:'.72rem',color:'var(--mu)',marginTop:'.15rem'}}>
+              L'IVA di questo cliente viene trattenuta dalla PA e non versata al fornitore (art. 17-ter DPR 633/72)
+            </div>
+          </div>
+          <div onClick={()=>up('split_payment',!form.split_payment)}
+            style={{width:40,height:22,borderRadius:11,background:form.split_payment?'var(--gold)':'var(--bd2)',position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0}}>
+            <div style={{width:16,height:16,borderRadius:8,background:'#fff',position:'absolute',top:3,left:form.split_payment?21:3,transition:'left .2s'}}/>
+          </div>
+        </div>
+        {form.split_payment&&(
+          <div style={{fontSize:'.72rem',color:'#fb923c',marginTop:'.3rem',padding:'.35rem .6rem',background:'rgba(251,146,60,.08)',borderRadius:5}}>
+            ⚡ Attivo — nella liquidazione IVA l'imposta di questo cliente sarà dedotta dall'IVA a debito come "IVA Split Payment"
+          </div>
+        )}
+      </div>
+
+      {/* Altri toggle */}
+      <div style={{marginTop:'1rem',display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+        <B k="consumatore_finale" lbl="Consumatore finale (B2C, no P.IVA)"/>
+        <B k="includi_spesometro" lbl="Includi spesometro"/>
+        <B k="soggetto_riepilogativo" lbl="Soggetto riepilogativo"/>
+        <B k="proc_concorsuale" lbl="Procedura concorsuale"/>
+        <B k="includi_esterometro" lbl="Includi esterometro"/>
+        <B k="partecipa_gruppo_iva" lbl="Partecipa gruppo IVA"/>
+      </div>
+    </>
+  );
+}
+
 function ModalEditConto({conto,onSave,onClose}){
+  const [tab,setTab]=useState('generale');
+  const B=({k,lbl})=>(<div style={{display:'flex',alignItems:'center',gap:'.5rem',cursor:'pointer',marginTop:'.35rem'}} onClick={()=>up(k,!form[k])}>
+    <div style={{width:28,height:16,borderRadius:8,background:form[k]?'var(--gold)':'var(--bd2)',position:'relative',transition:'background .2s',flexShrink:0}}>
+      <div style={{width:12,height:12,borderRadius:6,background:'#fff',position:'absolute',top:2,left:form[k]?14:2,transition:'left .2s'}}/>
+    </div><span style={{fontSize:'.78rem',color:'var(--mu)'}}>{lbl}</span>
+  </div>);
   const [form,setForm]=useState({
+    // Generale
     descrizione:conto.descrizione||'',
     tipo:conto.tipo||'patrimoniale',
     natura:conto.natura||'',
+    sezione:conto.sezione||'dare',
     is_cliente:conto.is_cliente||false,
     is_fornitore:conto.is_fornitore||false,
     is_banca:conto.is_banca||false,
     is_cassa:conto.is_cassa||false,
     is_professionista:conto.is_professionista||false,
+    attivo:conto.attivo!==false,
     note:conto.note||'',
+    // Anagrafica — nomi colonna DB (migration Opus)
+    rag_sociale_2:conto.rag_sociale_2||'',
+    indirizzo:conto.indirizzo||'',
+    cap:conto.cap||'',
+    citta:conto.citta||'',
+    provincia:conto.provincia||'',
+    nazione:conto.nazione||'Italia',
+    codice_iso:conto.codice_iso||'IT',
+    codice_fiscale:conto.codice_fiscale||'',
+    partita_iva:conto.partita_iva||'',
+    tipo_soggetto:conto.tipo_soggetto||'Privato',
+    contropartita:conto.contropartita||'',
+    tipo_pagamento:conto.tipo_pagamento||'',
+    banca:conto.banca||'',
+    aliquota_iva:conto.aliquota_iva||'',
+    soggetto_operaz:conto.soggetto_operaz||'',
+    tipo_controparte:conto.tipo_controparte||'1 = Persona fisica',
+    regime_fiscale:conto.regime_fiscale||'',
+    email_pec:conto.email_pec||'',
+    codice_dest_efat:conto.codice_dest_efat||'',
+    consumatore_finale:conto.consumatore_finale||false,
+    includi_spesometro:conto.includi_spesometro??true,
+    soggetto_riepilogativo:conto.soggetto_riepilogativo||false,
+    split_payment:conto.split_payment||false,
+    proc_concorsuale:conto.proc_concorsuale||false,
+    richiede_efat_b2b:conto.richiede_efat_b2b||false,
+    singola_ft_elettronica:conto.singola_ft_elettronica||false,
+    includi_esterometro:conto.includi_esterometro||false,
+    partecipa_gruppo_iva:conto.partecipa_gruppo_iva||false,
   });
   const [saving,setSaving]=useState(false);
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
   const save=async()=>{setSaving(true);await onSave(form);setSaving(false);};
+  const TABS=[['generale','⚙️ Generale'],['anagrafica','👤 Anagrafica'],['fattura','🧾 Fattura Elett.']];
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:480}}>
-        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">✏️ Modifica Conto</div><div className="modal-sub"><code style={{fontSize:'.8rem',color:'var(--gold)'}}>{conto.codice}</code></div><button className="modal-close" onClick={onClose}>✕</button></div>
-        <div className="modal-body">
-          <div className="form-grid">
-            <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
-            <div className="fg"><label>Tipo</label><select value={form.tipo} onChange={e=>up('tipo',e.target.value)}><option value="patrimoniale">Patrimoniale</option><option value="economico">Economico</option><option value="ordine">D'ordine</option></select></div>
-            <div className="fg"><label>Natura</label><select value={form.natura} onChange={e=>up('natura',e.target.value)}><option value="attivo">Attivo</option><option value="passivo">Passivo</option><option value="ricavo">Ricavo</option><option value="costo">Costo</option><option value="ordine">Ordine</option></select></div>
-            <div className="fg full"><label>Note</label><input value={form.note} onChange={e=>up('note',e.target.value)} placeholder="Note opzionali"/></div>
-          </div>
-          <div style={{marginTop:'1rem'}}>
-            <div style={{fontSize:'.72rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--mu)',marginBottom:'.5rem'}}>Tipo anagrafica</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:'.5rem'}}>
-              {[['is_cliente','👤 Cliente'],['is_fornitore','🏭 Fornitore'],['is_banca','🏦 Banca/C/C'],['is_cassa','💵 Cassa'],['is_professionista','👔 Professionista']].map(([k,l])=>(
-                <div key={k} onClick={()=>up(k,!form[k])} style={{padding:'.35rem .75rem',borderRadius:20,border:`1.5px solid ${form[k]?'var(--gold)':'var(--bd)'}`,background:form[k]?'rgba(200,164,94,.12)':'transparent',cursor:'pointer',fontSize:'.78rem',color:form[k]?'var(--gold)':'var(--mu)',transition:'all .15s'}}>{l}</div>
-              ))}
-            </div>
-          </div>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">✏️ Modifica Conto</div>
+          <div className="modal-sub"><code style={{fontSize:'.8rem',color:'var(--gold)'}}>{conto.codice}</code> · Livello {conto.livello}</div>
+          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'⏳ Salvo...':'💾 Salva'}</button></div>
+        <div style={{display:'flex',borderBottom:'1px solid var(--bd)',padding:'0 1.25rem'}}>
+          {TABS.map(([id,lbl])=>(
+            <div key={id} onClick={()=>setTab(id)} style={{padding:'.5rem .85rem',fontSize:'.78rem',fontWeight:tab===id?700:400,color:tab===id?'var(--gold)':'var(--mu)',borderBottom:tab===id?'2px solid var(--gold)':'2px solid transparent',cursor:'pointer'}}>{lbl}</div>
+          ))}
+        </div>
+        <div className="modal-body" style={{maxHeight:'65vh',overflowY:'auto'}}>
+
+          {tab==='generale'&&<>
+            <div className="form-grid">
+              <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
+              <div className="fg"><label>Tipo</label>
+                <select value={form.tipo} onChange={e=>up('tipo',e.target.value)}>
+                  <option value="patrimoniale">Patrimoniale</option>
+                  <option value="economico">Economico</option>
+                  <option value="ordine">D'ordine</option>
+                </select>
+              </div>
+              <div className="fg"><label>Natura</label>
+                <select value={form.natura} onChange={e=>up('natura',e.target.value)}>
+                  <option value="attivo">Attivo</option>
+                  <option value="passivo">Passivo</option>
+                  <option value="ricavo">Ricavo</option>
+                  <option value="costo">Costo</option>
+                  <option value="ordine">Ordine</option>
+                </select>
+              </div>
+              <div className="fg"><label>Sezione</label>
+                <select value={form.sezione} onChange={e=>up('sezione',e.target.value)}>
+                  <option value="dare">Dare</option>
+                  <option value="avere">Avere</option>
+                </select>
+              </div>
+              <div className="fg full"><label>Note</label><input value={form.note} onChange={e=>up('note',e.target.value)}/></div>
+            </div>
+            <div style={{marginTop:'1rem'}}>
+              <div style={{fontSize:'.72rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--mu)',marginBottom:'.5rem'}}>Tipo anagrafica</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:'.5rem'}}>
+                {[['is_cliente','👤 Cliente'],['is_fornitore','🏭 Fornitore'],['is_banca','🏦 Banca/C/C'],['is_cassa','💵 Cassa'],['is_professionista','👔 Professionista']].map(([k,l])=>(
+                  <div key={k} onClick={()=>up(k,!form[k])} style={{padding:'.3rem .7rem',borderRadius:20,border:`1.5px solid ${form[k]?'var(--gold)':'var(--bd)'}`,background:form[k]?'rgba(200,164,94,.12)':'transparent',cursor:'pointer',fontSize:'.78rem',color:form[k]?'var(--gold)':'var(--mu)'}}>{l}</div>
+                ))}
+              </div>
+            </div>
+            <div style={{marginTop:'1rem',display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="attivo" lbl="Conto attivo"/>
+            </div>
+          </>}
+
+          {tab==='anagrafica'&&<AnagraficaTab form={form} up={up} conto={conto} B={B}/>}
+
+          {tab==='fattura'&&<>
+            <div className="form-grid">
+              <div className="fg full"><label>Email PEC</label><input value={form.email_pec} onChange={e=>up('email_pec',e.target.value)} type="email" placeholder="email@pec.it"/></div>
+              <div className="fg full"><label>Codice destinatario fattura elettronica</label><input value={form.codice_dest_efat} onChange={e=>up('codice_dest_efat',e.target.value.toUpperCase())} maxLength={7} placeholder="7 caratteri"/></div>
+            </div>
+            <div style={{marginTop:'1rem',display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="richiede_efat_b2b" lbl="Richiede fattura elettronica B2B"/>
+              <B k="singola_ft_elettronica" lbl="Singola fattura elettronica"/>
+            </div>
+          </>}
+
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Annulla</button>
+          <button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'⏳ Salvo...':'💾 Salva'}</button>
+        </div>
       </div>
     </div>
   );
@@ -937,6 +1670,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
   const [sel,setSel]=useState(new Set());
   const [deleting,setDeleting]=useState(false);
   const [editCausale,setEditCausale]=useState(null);
+  const [nuovaCausale,setNuovaCausale]=useState(false);
 
   const toggleSel=(id)=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const toggleAll=()=>setSel(sel.size===causali.length?new Set():new Set(causali.map(c=>c.id)));
@@ -963,6 +1697,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
   return(
     <div>
       {editCausale&&<ModalEditCausale causale={editCausale} tipo={tipo} onSave={async(updates)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';await sb.from(table).update(updates).eq('id',editCausale.id);setEditCausale(null);onRefresh();}} onClose={()=>setEditCausale(null)}/>}
+      {nuovaCausale&&<ModalNuovaCausale tipo={tipo} societaId={societaId} onSave={async(rec)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const{error}=await sb.from(table).insert([{...rec,societa_id:societaId,attivo:true}]);if(error){alert('Errore: '+error.message);return;}setNuovaCausale(false);onRefresh();}} onClose={()=>setNuovaCausale(false)}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
           <div style={{fontSize:'1.1rem',fontWeight:700}}>{tipo==='contabili'?'📋 Causali Contabili':'💧 Causali IVA'}</div>
@@ -970,7 +1705,8 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
         </div>
         <div style={{display:'flex',gap:'.5rem'}}>
           {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?'⏳':'🗑'} Elimina ({sel.size})</button>}
-          <button className="btn" onClick={onImport}>📤 Import PDF</button>
+          <button className="btn-sec" onClick={()=>setNuovaCausale(true)}>➕ Nuova causale</button>
+          <button className="btn" onClick={onImport}>📤 Import PDF/Excel</button>
           {causali.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?'⏳':'🗑'} Elimina tutto ({causali.length})</button>}
         </div>
       </div>
@@ -1020,50 +1756,390 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
 // ─── MODAL EDIT CAUSALE ──────────────────────────────────────
 function ModalEditCausale({causale,tipo,onSave,onClose}){
   const isIva=tipo==='iva';
-  const [form,setForm]=useState(
-    isIva?{
-      codice:causale.codice||'',
-      descrizione:causale.descrizione||'',
-      aliquota:causale.aliquota??0,
-      tipo:causale.tipo||'imponibile',
-      regime:causale.regime||'normale',
-      detraibile:causale.detraibile??true,
-      percentuale_detraibilita:causale.percentuale_detraibilita??100,
-      include_liquidazione:causale.include_liquidazione??true,
-      note:causale.note||'',
-    }:{
-      codice:causale.codice||'',
-      descrizione:causale.descrizione||'',
-      tipo:causale.tipo||'',
-      note:causale.note||'',
-    }
-  );
+  const [tab,setTab]=useState('principale');
+  const B=({k,lbl,small})=>(<div style={{display:'flex',alignItems:'center',gap:'.4rem',cursor:'pointer',marginTop:'.3rem'}} onClick={()=>up(k,!form[k])}>
+    <div style={{width:26,height:14,borderRadius:7,background:form[k]?'var(--gold)':'var(--bd2)',position:'relative',flexShrink:0}}>
+      <div style={{width:10,height:10,borderRadius:5,background:'#fff',position:'absolute',top:2,left:form[k]?14:2,transition:'left .15s'}}/>
+    </div>
+    <span style={{fontSize:small?'.72rem':'.78rem',color:'var(--mu)'}}>{lbl}</span>
+  </div>);
+
+  const [form,setForm]=useState(isIva?{
+    // Principali
+    codice:causale.codice||'',
+    descrizione:causale.descrizione||'',
+    percentuale_imposta:causale.aliquota??causale.percentuale_imposta??0,
+    regime_iva:causale.regime_iva||'Imponibile',
+    percentuale_compensazione:causale.percentuale_compensazione??0,
+    tipo_trattamento:causale.tipo_trattamento||'Normale',
+    // Detraibilità
+    nota_di_variazione:causale.nota_di_variazione||false,
+    detraibile:causale.detraibile??true,
+    percentuale_indetraibilita:causale.percentuale_indetraibilita??0,
+    // Volume e plafond
+    volume_affari:causale.volume_affari||false,
+    volume_affari_plafond:causale.volume_affari_plafond||false,
+    concorre_plafond:causale.concorre_plafond||false,
+    utilizzo_plafond_interno:causale.utilizzo_plafond_interno||false,
+    utilizzo_plafond_import:causale.utilizzo_plafond_import||false,
+    monte_acquisti:causale.monte_acquisti||false,
+    // Operazioni
+    operazione_attiva:causale.operazione_attiva||false,
+    cessione_intra:causale.cessione_intra||false,
+    operazione_passiva:causale.operazione_passiva||false,
+    acquisto_intra:causale.acquisto_intra||false,
+    // Liquidazione / dichiarazione
+    op_attive_spesometro:causale.op_attive_spesometro||false,
+    op_passive_spesometro:causale.op_passive_spesometro??true,
+    op_attive_liquidazione:causale.op_attive_liquidazione||false,
+    op_passive_liquidazione:causale.op_passive_liquidazione||false,
+    reverse_charge:causale.reverse_charge||false,
+    incluso_quadro_vt:causale.incluso_quadro_vt||false,
+    imponibile_quadro_vt:causale.imponibile_quadro_vt||false,
+    imposta_quadro_vt:causale.imposta_quadro_vt||false,
+    op_esenti_prorata:causale.op_esenti_prorata||false,
+    volume_affari_prorata:causale.volume_affari_prorata||false,
+    ripartizione_acquisti:causale.ripartizione_acquisti||false,
+    no_riparto_spese_acc:causale.no_riparto_spese_acc||false,
+    acquisto_soggetti_minimi:causale.acquisto_soggetti_minimi||false,
+    acquisti_art17_c2:causale.acquisti_art17_c2||false,
+    no_calcolo_bolli:causale.no_calcolo_bolli||false,
+    acquisti_regime_forfetario:causale.acquisti_regime_forfetario||false,
+    // Reverse charge settori
+    oro_argento:causale.oro_argento||false,
+    rottami_recupero:causale.rottami_recupero||false,
+    subappalto_edile:causale.subappalto_edile||false,
+    fabbricati_strumentali:causale.fabbricati_strumentali||false,
+    telefoni_cellulari:causale.telefoni_cellulari||false,
+    prodotti_elettronici:causale.prodotti_elettronici||false,
+    servizi_pulizia:causale.servizi_pulizia||false,
+    demolizione:causale.demolizione||false,
+    installazione_impianti:causale.installazione_impianti||false,
+    completamento_edifici:causale.completamento_edifici||false,
+    trasf_quote:causale.trasf_quote||false,
+    trasf_unita_certif:causale.trasf_unita_certif||false,
+    gas_energia:causale.gas_energia||false,
+    // E-fattura
+    natura_aliquota_iva_pa:causale.natura_aliquota_iva_pa||'',
+    codice_efat_passive:causale.codice_efat_passive||false,
+    codice_efat_attive:causale.codice_efat_attive||false,
+    aliquota_ventilazione_no_acq:causale.aliquota_ventilazione_no_acq||false,
+    note:causale.note||'',
+  }:{
+    // Causali contabili
+    codice:causale.codice||'',
+    descrizione:causale.descrizione||'',
+    descrizione_tabulati:causale.descrizione_tabulati||'',
+    tipo_causale:causale.tipo_causale||'Movimento di generale',
+    operazione_partite:causale.operazione_partite||'Ignora',
+    tipo_pagamento:causale.tipo_pagamento||'',
+    codice_registro_iva:causale.codice_registro_iva||'',
+    protocollo_numerazione:causale.protocollo_numerazione??0,
+    segno_registro_iva:causale.segno_registro_iva||'',
+    codice_aliquota_iva:causale.codice_aliquota_iva||'',
+    op_ritenute:causale.op_ritenute||'Ignora',
+    tipo_documento:causale.tipo_documento||'',
+    data_documento:causale.data_documento||'Facoltativo',
+    numero_documento:causale.numero_documento||'Facoltativo',
+    tipo_doc_comunicaz_ft:causale.tipo_doc_comunicaz_ft||'',
+    tipo_doc_ft_elettroniche:causale.tipo_doc_ft_elettroniche||'',
+    conto_iva_esig_differita:causale.conto_iva_esig_differita||'',
+    registro_iva_differita:causale.registro_iva_differita||'',
+    registro_iva_cee:causale.registro_iva_cee||'',
+    protocollo_iva_cee:causale.protocollo_iva_cee??0,
+    segno_iva_registro_cee:causale.segno_iva_registro_cee||'',
+    // Flag booleani
+    trascina_descrizione:causale.trascina_descrizione??true,
+    trascina_sbilancio:causale.trascina_sbilancio||false,
+    data_competenza:causale.data_competenza||false,
+    rateo_risconti:causale.rateo_risconti||false,
+    disattivato:causale.disattivato||false,
+    integrazione_documento:causale.integrazione_documento||false,
+    causale_giro_iva_cassa:causale.causale_giro_iva_cassa||false,
+    competenza_iva_anno_prec:causale.competenza_iva_anno_prec||false,
+    causale_standard_efat:causale.causale_standard_efat||false,
+    ventilazione_corrispettivi:causale.ventilazione_corrispettivi||false,
+    esclusa_integrazioni:causale.esclusa_integrazioni||false,
+    note:causale.note||'',
+  });
   const [saving,setSaving]=useState(false);
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
   const save=async()=>{setSaving(true);await onSave(form);setSaving(false);};
+
+  const TABS_IVA=[['principale','📋 Principale'],['operazioni','📊 Operazioni'],['rc','🔄 Rev. Charge'],['efat','🧾 E-Fattura']];
+  const TABS_CONT=[['principale','📋 Principale'],['iva','💧 IVA'],['flags','⚙️ Flag'],['cee','🌍 CEE/Differita']];
+  const TABS=isIva?TABS_IVA:TABS_CONT;
+
+  const TD_OPTIONS=[
+    {v:'',l:'-- Non specificato --'},
+    {v:'TD01',l:'TD01 - Fattura'},{v:'TD04',l:'TD04 - Nota di credito'},
+    {v:'TD07',l:'TD07 - Fattura semplificata'},{v:'TD08',l:'TD08 - Nota credito semplificata'},
+    {v:'TD09',l:'TD09 - Nota debito'},{v:'TD10',l:'TD10 - Fattura acquisto intra beni'},
+    {v:'TD11',l:'TD11 - Fattura acquisto intra servizi'},
+    {v:'TD16',l:'TD16 - Integrazione reverse charge'},{v:'TD17',l:'TD17 - Autofattura acquisto servizi'},
+    {v:'TD18',l:'TD18 - Integrazione acquisto beni intra'},{v:'TD19',l:'TD19 - Integrazione acquisto beni art.17'},
+    {v:'TD20',l:'TD20 - Autofattura regolarizzazione'},{v:'TD21',l:'TD21 - Autofattura splafonamento'},
+    {v:'TD24',l:'TD24 - Fattura differita beni'},{v:'TD25',l:'TD25 - Fattura differita servizi'},
+    {v:'TD26',l:'TD26 - Cessione beni ammortizzabili'},{v:'TD27',l:'TD27 - Autofattura autoconsumo'},
+  ];
+
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:480}}>
-        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">✏️ {isIva?'Causale IVA':'Causale Contabile'}</div><button className="modal-close" onClick={onClose}>✕</button></div>
-        <div className="modal-body">
-          <div className="form-grid">
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">✏️ {isIva?'Causale IVA':'Causale Contabile'}</div>
+          <div className="modal-sub"><code style={{color:'var(--gold)'}}>{causale.codice}</code></div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:'flex',borderBottom:'1px solid var(--bd)',padding:'0 1.25rem'}}>
+          {TABS.map(([id,lbl])=>(
+            <div key={id} onClick={()=>setTab(id)} style={{padding:'.5rem .75rem',fontSize:'.75rem',fontWeight:tab===id?700:400,color:tab===id?'var(--gold)':'var(--mu)',borderBottom:tab===id?'2px solid var(--gold)':'2px solid transparent',cursor:'pointer'}}>{lbl}</div>
+          ))}
+        </div>
+        <div className="modal-body" style={{maxHeight:'65vh',overflowY:'auto'}}>
+
+          {/* ── CAUSALE IVA ── */}
+          {isIva&&tab==='principale'&&<div className="form-grid">
             <div className="fg"><label>Codice</label><input value={form.codice} onChange={e=>up('codice',e.target.value.toUpperCase())} style={{fontFamily:'monospace'}}/></div>
             <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
-            {isIva&&<>
-              <div className="fg"><label>Aliquota %</label><input type="number" value={form.aliquota} onChange={e=>up('aliquota',parseFloat(e.target.value)||0)} min={0} max={100}/></div>
-              <div className="fg"><label>Tipo IVA</label><select value={form.tipo} onChange={e=>up('tipo',e.target.value)}><option value="imponibile">Imponibile</option><option value="non_imponibile">Non imponibile</option><option value="esente">Esente</option><option value="escluso">Escluso</option></select></div>
-              <div className="fg"><label>Regime</label><select value={form.regime} onChange={e=>up('regime',e.target.value)}><option value="normale">Normale</option><option value="acquisto_cee">Acquisto CEE/Intracom</option><option value="reverse_charge">Reverse Charge</option><option value="split_payment">Split Payment</option></select></div>
-              <div className="fg"><label>Detraibilità %</label><input type="number" value={form.percentuale_detraibilita} onChange={e=>up('percentuale_detraibilita',parseFloat(e.target.value)||0)} min={0} max={100}/></div>
-            </>}
-            {!isIva&&<div className="fg"><label>Tipo</label><input value={form.tipo} onChange={e=>up('tipo',e.target.value)} placeholder="es. acquisto, vendita..."/></div>}
+            <div className="fg"><label>% Imposta</label><input type="number" value={form.percentuale_imposta} onChange={e=>up('aliquota',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
+            <div className="fg"><label>% Indetraibilità</label><input type="number" value={form.percentuale_indetraibilita} onChange={e=>up('percentuale_indetraibilita',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
+            <div className="fg"><label>% Compensazione</label><input type="number" value={form.percentuale_compensazione} onChange={e=>up('percentuale_compensazione',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
+            <div className="fg"><label>Regime IVA</label>
+              <select value={form.regime_iva} onChange={e=>up('regime_iva',e.target.value)}>
+                <option value="Imponibile">Imponibile</option>
+                <option value="Esente">Esente</option>
+                <option value="Non imponibile">Non imponibile</option>
+                <option value="Escluso">Escluso</option>
+              </select>
+            </div>
+            <div className="fg"><label>Tipo trattamento</label>
+              <select value={form.tipo_trattamento} onChange={e=>up('tipo_trattamento',e.target.value)}>
+                <option value="Normale">Normale</option>
+                <option value="Acquisto Cee">Acquisto CEE</option>
+              </select>
+            </div>
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="detraibile" lbl="Detraibile"/>
+              <B k="nota_di_variazione" lbl="Nota di variazione"/>
+              <B k="no_calcolo_bolli" lbl="Non calcolare bolli"/>
+              <B k="acquisto_soggetti_minimi" lbl="Acquisto sogg. minimi"/>
+              <B k="acquisti_art17_c2" lbl="Acquisti art. 17 c.2"/>
+              <B k="acquisti_regime_forfetario" lbl="Regime forfetario"/>
+            </div>
             <div className="fg full"><label>Note</label><input value={form.note} onChange={e=>up('note',e.target.value)}/></div>
-          </div>
-          {isIva&&<div className="tgl-row" style={{marginTop:'.75rem'}} onClick={()=>up('include_liquidazione',!form.include_liquidazione)}>
-            <div className={'tgl'+(form.include_liquidazione?' on':'')}/>
-            <span className="tgl-lbl">Includi in liquidazione IVA</span>
           </div>}
+
+          {isIva&&tab==='operazioni'&&<div className="form-grid">
+            <div className="fg full" style={{fontSize:'.75rem',fontWeight:600,color:'var(--mu)',textTransform:'uppercase',letterSpacing:'.05em'}}>Operazioni e liquidazione</div>
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="operazione_attiva" lbl="Operazione attiva"/>
+              <B k="operazione_passiva" lbl="Operazione passiva"/>
+              <B k="cessione_intra" lbl="Cessione intra"/>
+              <B k="acquisto_intra" lbl="Acquisto intra"/>
+              <B k="op_attive_liquidazione" lbl="Op. attive liquidazione"/>
+              <B k="op_passive_liquidazione" lbl="Op. passive liquidazione"/>
+              <B k="op_attive_spesometro" lbl="Op. attive spesometro"/>
+              <B k="op_passive_spesometro" lbl="Op. passive spesometro"/>
+              <B k="reverse_charge" lbl="Reverse charge"/>
+            </div>
+            <div className="fg full" style={{fontSize:'.75rem',fontWeight:600,color:'var(--mu)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:'.5rem'}}>Volume d'affari e plafond</div>
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="volume_affari" lbl="Volume d'affari"/>
+              <B k="volume_affari_plafond" lbl="Vol. affari plafond"/>
+              <B k="concorre_plafond" lbl="Concorre plafond"/>
+              <B k="utilizzo_plafond_interno" lbl="Utilizzo plafond interno"/>
+              <B k="utilizzo_plafond_import" lbl="Utilizzo plafond import"/>
+              <B k="monte_acquisti" lbl="Monte acquisti"/>
+              <B k="volume_affari_prorata" lbl="Vol. affari pro-rata"/>
+              <B k="op_esenti_prorata" lbl="Op. esenti pro-rata"/>
+              <B k="ripartizione_acquisti" lbl="Ripartizione acquisti"/>
+              <B k="no_riparto_spese_acc" lbl="No riparto spese access."/>
+            </div>
+            <div className="fg full" style={{fontSize:'.75rem',fontWeight:600,color:'var(--mu)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:'.5rem'}}>Quadri dichiarazione</div>
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="incluso_quadro_vt" lbl="Incluso quadro VT"/>
+              <B k="imponibile_quadro_vt" lbl="Imponibile quadro VT"/>
+              <B k="imposta_quadro_vt" lbl="Imposta quadro VT"/>
+            </div>
+          </div>}
+
+          {isIva&&tab==='rc'&&<div className="form-grid">
+            <div className="fg full" style={{fontSize:'.75rem',color:'var(--mu)',marginBottom:'.5rem'}}>Settori con regime reverse charge specifico</div>
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="oro_argento" lbl="Oro ind. / Argento puro"/>
+              <B k="rottami_recupero" lbl="Rottami e materiali recupero"/>
+              <B k="subappalto_edile" lbl="Subappalto edile"/>
+              <B k="fabbricati_strumentali" lbl="Fabbricati strumentali"/>
+              <B k="telefoni_cellulari" lbl="Telefoni cellulari"/>
+              <B k="prodotti_elettronici" lbl="Prodotti elettronici"/>
+              <B k="servizi_pulizia" lbl="Servizi pulizia"/>
+              <B k="demolizione" lbl="Demolizione"/>
+              <B k="installazione_impianti" lbl="Installazione impianti"/>
+              <B k="completamento_edifici" lbl="Completamento edifici"/>
+              <B k="trasf_quote" lbl="Trasf. quote"/>
+              <B k="trasf_unita_certif" lbl="Trasf. unità e certif."/>
+              <B k="gas_energia" lbl="Gas ed energia elettrica"/>
+            </div>
+          </div>}
+
+          {isIva&&tab==='efat'&&<div className="form-grid">
+            <div className="fg full"><label>Natura aliquota IVA PA</label>
+              <select value={form.natura_aliquota_iva_pa} onChange={e=>up('natura_aliquota_iva_pa',e.target.value)}>
+                <option value="">-- Nessuna --</option>
+                <option value="N1">N1 - Escluse ex art.15</option>
+                <option value="N2.1">N2.1 - Non soggette art.7</option>
+                <option value="N2.2">N2.2 - Non soggette altri casi</option>
+                <option value="N3.1">N3.1 - Non imponibili esportazioni</option>
+                <option value="N3.2">N3.2 - Non imponibili CEE beni</option>
+                <option value="N3.3">N3.3 - Non imponibili CEE servizi</option>
+                <option value="N3.4">N3.4 - Non imponibili assimilate</option>
+                <option value="N3.5">N3.5 - Non imponibili dichiarazioni intento</option>
+                <option value="N3.6">N3.6 - Non imponibili altre</option>
+                <option value="N4">N4 - Esenti</option>
+                <option value="N5">N5 - Regime del margine</option>
+                <option value="N6.1">N6.1 - RC rottami</option>
+                <option value="N6.2">N6.2 - RC edilizia</option>
+                <option value="N6.3">N6.3 - RC sub-appalto</option>
+                <option value="N6.4">N6.4 - RC cessione fabbricati</option>
+                <option value="N6.5">N6.5 - RC cellulari</option>
+                <option value="N6.6">N6.6 - RC prodotti elettronici</option>
+                <option value="N6.7">N6.7 - RC gas/energia</option>
+                <option value="N6.8">N6.8 - RC GNL</option>
+                <option value="N6.9">N6.9 - RC altri casi</option>
+                <option value="N7">N7 - IVA assolta in altro stato UE</option>
+              </select>
+            </div>
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="codice_efat_passive" lbl="Includi in e-fat passive"/>
+              <B k="codice_efat_attive" lbl="Includi in e-fat attive"/>
+              <B k="aliquota_ventilazione_no_acq" lbl="Ventilazione senza acquisti"/>
+            </div>
+          </div>}
+
+          {/* ── CAUSALE CONTABILE ── */}
+          {!isIva&&tab==='principale'&&<div className="form-grid">
+            <div className="fg"><label>Codice</label><input value={form.codice} onChange={e=>up('codice',e.target.value.toUpperCase())} style={{fontFamily:'monospace'}}/></div>
+            <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
+            <div className="fg full"><label>Descrizione per tabulati</label><input value={form.descrizione_tabulati} onChange={e=>up('descrizione_tabulati',e.target.value)} placeholder="Descrizione breve per stampe NES"/></div>
+            <div className="fg"><label>Tipo causale</label>
+              <select value={form.tipo_causale} onChange={e=>up('tipo_causale',e.target.value)}>
+                <option value="Movimento di generale">Movimento di generale</option>
+                <option value="Doc. Iva normale">Doc. IVA normale</option>
+                <option value="Doc. Iva esig. differita">Doc. IVA esig. differita</option>
+                <option value="Autofattura">Autofattura</option>
+                <option value="Doc. Corrispettivo">Doc. Corrispettivo</option>
+                <option value="Doc. Iva Acq. CEE">Doc. IVA Acq. CEE</option>
+                <option value="Movimento sola Iva">Movimento sola IVA</option>
+                <option value="Pag./inc. Iva esig. diff.">Pag./Inc. IVA esig. diff.</option>
+              </select>
+            </div>
+            <div className="fg"><label>Operazione partite</label>
+              <select value={form.operazione_partite} onChange={e=>up('operazione_partite',e.target.value)}>
+                <option value="Ignora">Ignora</option>
+                <option value="Apre">Apre</option>
+                <option value="Chiude">Chiude</option>
+              </select>
+            </div>
+            <div className="fg"><label>Tipo documento</label>
+              <select value={form.tipo_documento} onChange={e=>up('tipo_documento',e.target.value)}>
+                <option value="">-- Non specificato --</option>
+                <option value="Fattura">Fattura</option>
+                <option value="Autofattura">Autofattura</option>
+                <option value="Doc. Iva normale">Doc. IVA normale</option>
+                <option value="Doc. Iva esig. differita">Doc. IVA esig. differita</option>
+                <option value="Movimento di generale">Movimento di generale</option>
+              </select>
+            </div>
+            <div className="fg"><label>Gestione partite</label>
+              <select value={form.operazione_partite} onChange={e=>up('operazione_partite',e.target.value)}>
+                <option value="Ignora">Ignora</option>
+                <option value="Apre">Apre</option>
+                <option value="Chiude">Chiude</option>
+              </select>
+            </div>
+            <div className="fg"><label>Op. ritenute</label>
+              <select value={form.op_ritenute} onChange={e=>up('op_ritenute',e.target.value)}>
+                <option value="Ignora">Ignora</option>
+                <option value="Documento">Documento</option>
+                <option value="Pagamento">Pagamento</option>
+              </select>
+            </div>
+            <div className="fg"><label>Data documento</label>
+              <select value={form.data_documento} onChange={e=>up('data_documento',e.target.value)}>
+                <option value="Facoltativo">Facoltativo</option>
+                <option value="Obbligatorio">Obbligatorio</option>
+              </select>
+            </div>
+            <div className="fg"><label>Numero documento</label>
+              <select value={form.numero_documento} onChange={e=>up('numero_documento',e.target.value)}>
+                <option value="Facoltativo">Facoltativo</option>
+                <option value="Obbligatorio">Obbligatorio</option>
+              </select>
+            </div>
+            <div className="fg"><label>Tipo pag.</label><input value={form.tipo_pagamento} onChange={e=>up('tipo_pagamento',e.target.value)} placeholder="es. Rimessa diretta"/></div>
+            <div className="fg full"><label>Note</label><input value={form.note} onChange={e=>up('note',e.target.value)}/></div>
+          </div>}
+
+          {!isIva&&tab==='iva'&&<div className="form-grid">
+            <div className="fg"><label>Registro IVA</label><input value={form.codice_registro_iva} onChange={e=>up('codice_registro_iva',e.target.value)} placeholder="es. 01, 02" style={{fontFamily:'monospace'}}/></div>
+            <div className="fg"><label>Protocollo numerazione</label><input type="number" value={form.protocollo_numerazione} onChange={e=>up('protocollo_numerazione',parseInt(e.target.value)||0)} min={0}/></div>
+            <div className="fg"><label>Segno registro IVA</label>
+              <select value={form.segno_registro_iva} onChange={e=>up('segno_registro_iva',e.target.value)}>
+                <option value="">-- --</option>
+                <option value="Somma">Somma</option>
+                <option value="Sottrae">Sottrae</option>
+              </select>
+            </div>
+            <div className="fg"><label>Codice aliquota IVA</label><input value={form.codice_aliquota_iva} onChange={e=>up('codice_aliquota_iva',e.target.value.toUpperCase())} placeholder="es. A1IW" style={{fontFamily:'monospace'}}/></div>
+            <div className="fg"><label>TD comunicaz. fatture</label>
+              <select value={form.tipo_doc_comunicaz_ft} onChange={e=>up('tipo_doc_comunicaz_ft',e.target.value)}>
+                {TD_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </div>
+            <div className="fg"><label>TD fatture elettroniche</label>
+              <select value={form.tipo_doc_ft_elettroniche} onChange={e=>up('tipo_doc_ft_elettroniche',e.target.value)}>
+                {TD_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </div>
+            <div className="fg full"><label>Conto IVA esig. differita</label><input value={form.conto_iva_esig_differita} onChange={e=>up('conto_iva_esig_differita',e.target.value)} placeholder="es. 600000011" style={{fontFamily:'monospace'}}/></div>
+            <div className="fg"><label>Registro IVA differita</label><input value={form.registro_iva_differita} onChange={e=>up('registro_iva_differita',e.target.value)}/></div>
+          </div>}
+
+          {!isIva&&tab==='flags'&&<div className="form-grid">
+            <div className="fg full" style={{display:'flex',gap:'1.5rem',flexWrap:'wrap'}}>
+              <B k="trascina_descrizione" lbl="Trascina descrizione aggiuntiva"/>
+              <B k="trascina_sbilancio" lbl="Trascina sbilancio"/>
+              <B k="data_competenza" lbl="Data competenza"/>
+              <B k="rateo_risconti" lbl="Rateo/Risconti"/>
+              <B k="disattivato" lbl="Disattivato"/>
+              <B k="integrazione_documento" lbl="Integrazione documento"/>
+              <B k="causale_giro_iva_cassa" lbl="Causale giro IVA per cassa"/>
+              <B k="competenza_iva_anno_prec" lbl="Competenza IVA anno prec."/>
+              <B k="causale_standard_efat" lbl="Causale standard Efat"/>
+              <B k="ventilazione_corrispettivi" lbl="Ventilazione corrispettivi"/>
+              <B k="esclusa_integrazioni" lbl="Esclusa da integrazioni/autofatture"/>
+            </div>
+          </div>}
+
+          {!isIva&&tab==='cee'&&<div className="form-grid">
+            <div className="fg"><label>Registro IVA CEE</label><input value={form.registro_iva_cee} onChange={e=>up('registro_iva_cee',e.target.value)} placeholder="es. 02" style={{fontFamily:'monospace'}}/></div>
+            <div className="fg"><label>Protocollo IVA CEE</label><input type="number" value={form.protocollo_iva_cee} onChange={e=>up('protocollo_iva_cee',parseInt(e.target.value)||0)} min={0}/></div>
+            <div className="fg"><label>Segno registro CEE</label>
+              <select value={form.segno_iva_registro_cee} onChange={e=>up('segno_iva_registro_cee',e.target.value)}>
+                <option value="">-- --</option>
+                <option value="Somma">Somma</option>
+                <option value="Sottrae">Sottrae</option>
+              </select>
+            </div>
+          </div>}
+
         </div>
-        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'⏳ Salvo...':'💾 Salva'}</button></div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Annulla</button>
+          <button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'⏳ Salvo...':'💾 Salva'}</button>
+        </div>
       </div>
     </div>
   );
@@ -1326,7 +2402,125 @@ function RegistrateView({documenti}){
 // ─── MODAL BULK EDIT ─────────────────────────────────────────
 function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
   const [contoId,setContoId]=useState('');
-  const [causaleIva,setCausaleIva]=useState('');
+  const [causaleIva,setCausaleIva]=useState(doc.causale_iva||'');
+  // causaleIva per riga multi-aliquota: { [aliquota]: causale_id }
+  const [causaliPerRiga,setCausaliPerRiga]=useState({});
+
+  // ── getCausaleIVA: priorità anagrafica → fallback per aliquota ──
+  // Estrae numero intero da aliquota: "22.00" → 22, "10%" → 10
+  function extractAliquota(value) {
+    if(!value) return null
+    const m = String(value).match(/\d+/)
+    return m ? parseInt(m[0]) : null
+  }
+
+  const getCausaleIVA = ({aliquota, natura, contoFornitore, causaliIva}) => {
+    if(!causaliIva?.length) return ''
+
+    const aliquotaNum = extractAliquota(aliquota)
+    const nat = (natura||'').toLowerCase()
+
+    // PRIORITÀ 1: aliquota_iva predefinita nel conto fornitore
+    if(contoFornitore?.aliquota_iva) {
+      const defNum = extractAliquota(contoFornitore.aliquota_iva)
+      if(defNum!=null) {
+        const m = causaliIva.find(c => extractAliquota(c.descrizione||c.codice) === defNum)
+        if(m) return m.id
+      }
+    }
+
+    // Trova per natura 0%
+    if(aliquotaNum === 0 || aliquotaNum == null) {
+      let match = null
+      const norm = s => (s||'').toLowerCase()
+      if(nat.includes('n6')||nat.includes('n7')||nat.includes('rev'))
+        match = causaliIva.find(c=>norm(c.descrizione).includes('reverse')||norm(c.descrizione).includes('inversione'))
+      else if(nat.includes('esente')||nat.includes('n4'))
+        match = causaliIva.find(c=>norm(c.descrizione).includes('esente'))
+      else if(nat.includes('escl')||nat.includes('n2'))
+        match = causaliIva.find(c=>norm(c.descrizione).includes('escl'))
+      else
+        match = causaliIva.find(c=>norm(c.descrizione).includes('fuori campo')||norm(c.codice).includes('fc'))
+      console.log('[IVA MATCH FIX]', { aliquota_originale: aliquota, aliquota_num: aliquotaNum, match: match?.descrizione||null })
+      return match?.id || ''
+    }
+
+    // Match principale per numero
+    const match = causaliIva.find(c => {
+      const testo = (c.descrizione||c.codice||'').toLowerCase()
+      const numero = extractAliquota(testo)
+      return numero === aliquotaNum
+    })
+
+    console.log('[IVA MATCH FIX]', {
+      aliquota_originale: aliquota,
+      aliquota_num: aliquotaNum,
+      causali: causaliIva.map(c=>c.descrizione),
+      match: match?.descrizione||null
+    })
+
+    return match?.id || ''
+  }
+
+
+  // ── useEffect: si attiva quando causaliIva è caricato o dati cambiano ──
+  useEffect(()=>{
+    if(!causaliIva?.length) return
+
+    trace('UI STATE', {
+      doc_id: doc.id, conto_id: doc.conto_id,
+      causale_iva_doc: doc.causale_iva,
+      causaliIva_count: causaliIva?.length,
+      pianoConti_count: pianoConti?.length,
+    })
+
+    // ── PRIORITÀ ASSOLUTA: causale_iva_id sul conto documento ──
+    const conto = pianoConti?.find(c => c.id === (doc.conto_id || _datiEst?.conto_id))
+    if(conto?.causale_iva_id) {
+      const causale = causaliIva.find(c => c.id === conto.causale_iva_id)
+      console.log('[CAUSALE IVA]', {
+        conto_id: doc.conto_id,
+        causale_da_conto: conto.causale_iva_id,
+        causale_trovata: causale?.id || null
+      })
+      if(causale) { setCausaleIva(causale.id); return }
+    }
+
+    // ── FALLBACK: match per aliquota ──
+    const riepilogo = _datiEst?.riepilogo_iva || []
+
+    // Conto fornitore per priorità anagrafica aliquota_iva
+    const pivaFornitore = doc.soggetto_piva || _datiEst?.cedente_piva
+    const contoFornitore = pianoConti?.find(c =>
+      c.partita_iva===pivaFornitore || c.anagrafica_piva===pivaFornitore
+    ) || null
+
+    if(riepilogo.length === 0) {
+      if(!causaleIva) {
+        const aliqDoc = doc.aliquota_iva || _datiEst?.aliquota_iva || '22'
+        const id = getCausaleIVA({aliquota:aliqDoc, natura:'', contoFornitore, causaliIva})
+        if(id) setCausaleIva(id)
+      }
+      return
+    }
+
+    if(riepilogo.length === 1) {
+      if(!causaleIva) {
+        const r = riepilogo[0]
+        const id = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+        if(id) setCausaleIva(id)
+      }
+    } else {
+      const map = {}
+      riepilogo.forEach(r => {
+        const key = String(r.aliquota)
+        if(!map[key])
+          map[key] = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+      })
+      setCausaliPerRiga(map)
+      if(!causaleIva && Object.values(map)[0]) setCausaleIva(Object.values(map)[0])
+    }
+  },[causaliIva?.length, doc.id]);
   const [confirmAll,setConfirmAll]=useState(true);
 
   const handleSave=()=>{
@@ -1377,33 +2571,160 @@ function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
 
 // ─── MODAL EDIT DOC (Split Screen) ───────────────────────────
 function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose}){
-  const [contoId,setContoId]=useState(doc.conto_id||'');
-  const [causaleIva,setCausaleIva]=useState('');
+  trace('MODAL', {
+    doc_id: doc.id, filename: doc.filename,
+    conto_id: doc.conto_id, causale_iva: doc.causale_iva,
+    validation_status: doc.validation_status,
+    dati_estratti_keys: doc.dati_estratti ? Object.keys(typeof doc.dati_estratti==='string'?JSON.parse(doc.dati_estratti):doc.dati_estratti) : []
+  })
+  // Leggi conto_id: prima dalla colonna diretta, poi da dati_estratti
+  const _datiEst = doc.dati_estratti
+    ? (typeof doc.dati_estratti==='string' ? JSON.parse(doc.dati_estratti) : doc.dati_estratti)
+    : {}
+  const [contoId,setContoId]=useState(doc.conto_id || _datiEst?.conto_id || '');
+  const [causaleIva,setCausaleIva]=useState(doc.causale_iva||'');
+  // causaleIva per riga multi-aliquota: { [aliquota]: causale_id }
+  const [causaliPerRiga,setCausaliPerRiga]=useState({});
+
+  // ── getCausaleIVA: priorità anagrafica → fallback per aliquota ──
+  const getCausaleIVA = ({aliquota, natura, contoFornitore, causaliIva}) => {
+    if(!causaliIva?.length) return ''
+    const norm = s => (s||'').toLowerCase()
+    const aliq = String(aliquota||'').replace('%','').trim()
+    const nat  = norm(natura||'')
+
+    // PRIORITÀ 1: aliquota_iva predefinita nel conto fornitore/cliente
+    if(contoFornitore?.aliquota_iva) {
+      const defAliq = String(contoFornitore.aliquota_iva).replace('%','').trim()
+      // cerca causale che matcha l'aliquota predefinita dell'anagrafica
+      const m = causaliIva.find(c =>
+        norm(c.codice).includes(defAliq) || norm(c.descrizione).includes(defAliq)
+      )
+      if(m) return m.id
+    }
+
+    // PRIORITÀ 2: match per aliquota + natura
+    let match = null
+    if(aliqNum===22)
+      match = causaliIva.find(c=>norm(c.codice).includes('22')||norm(c.descrizione).includes('22')||norm(c.descrizione).includes('ordinari'))
+    else if(aliqNum===10)
+      match = causaliIva.find(c=>norm(c.codice).includes('10')||norm(c.descrizione).includes('10')||norm(c.descrizione).includes('ridott'))
+    else if(aliqNum===5)
+      match = causaliIva.find(c=>norm(c.codice).includes('5')||norm(c.descrizione).includes('super'))
+    else if(aliqNum===4)
+      match = causaliIva.find(c=>norm(c.codice).includes('4')||norm(c.descrizione).includes('super ridott'))
+    else if(aliq==='0'||aliq==='0-fc') {
+      if(nat.includes('n6')||nat.includes('n7')||nat.includes('reverse')||nat.includes('rc'))
+        match = causaliIva.find(c=>norm(c.descrizione).includes('reverse')||norm(c.descrizione).includes('inversione'))
+      else if(nat.includes('esente')||nat.includes('n4'))
+        match = causaliIva.find(c=>norm(c.descrizione).includes('esente')||norm(c.codice).includes('es'))
+      else if(nat.includes('escl')||nat.includes('n2'))
+        match = causaliIva.find(c=>norm(c.descrizione).includes('escl')||norm(c.codice).includes('ns'))
+      else
+        match = causaliIva.find(c=>norm(c.descrizione).includes('fuori campo')||norm(c.codice).includes('fc'))
+    }
+    else if(aliq==='0-esente')
+      match = causaliIva.find(c=>norm(c.descrizione).includes('esente')||norm(c.codice).includes('es'))
+    else if(aliq==='0-escl')
+      match = causaliIva.find(c=>norm(c.descrizione).includes('escl')||norm(c.codice).includes('ns'))
+    else if(aliq==='0-rev')
+      match = causaliIva.find(c=>norm(c.descrizione).includes('reverse')||norm(c.descrizione).includes('inversione'))
+    else if(aliq==='0-ns')
+      match = causaliIva.find(c=>norm(c.descrizione).includes('non soggett')||norm(c.codice).includes('ns'))
+
+    trace('MATCH', { aliquota, natura, scelto: match?.descrizione||null })
+    return match?.id || ''
+  }
+
+  // ── useEffect: si attiva quando causaliIva è caricato o dati cambiano ──
+  useEffect(()=>{
+    if(!causaliIva?.length) return
+    const riepilogo = _datiEst?.riepilogo_iva || []
+
+    // Conto fornitore per priorità anagrafica
+    const pivaFornitore = doc.soggetto_piva || _datiEst?.cedente_piva
+    const contoFornitore = pianoConti?.find(c=>
+      c.partita_iva===pivaFornitore || c.anagrafica_piva===pivaFornitore
+    ) || null
+
+    if(riepilogo.length === 0) {
+      // Nessun riepilogo — usa aliquota del documento se presente
+      if(!causaleIva) {
+        const aliqDoc = doc.aliquota_iva || _datiEst?.aliquota_iva || '22'
+        const id = getCausaleIVA({aliquota:aliqDoc, natura:'', contoFornitore, causaliIva})
+        if(id) setCausaleIva(id)
+      }
+      return
+    }
+
+    if(riepilogo.length === 1) {
+      // Una sola aliquota — imposta causaleIva principale
+      if(!causaleIva) {
+        const r = riepilogo[0]
+        const id = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+        if(id) setCausaleIva(id)
+      }
+    } else {
+      // Multi-aliquota — calcola causale per ogni riga
+      const map = {}
+      riepilogo.forEach(r => {
+        const key = String(r.aliquota)
+        if(!map[key]) {
+          map[key] = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+        }
+      })
+      setCausaliPerRiga(map)
+      // Imposta causaleIva principale con la prima aliquota
+      if(!causaleIva && Object.values(map)[0]) setCausaleIva(Object.values(map)[0])
+    }
+  },[causaliIva?.length, doc.id])
   const [splitView,setSplitView]=useState('split');
   const [saving,setSaving]=useState(false);
-  const [contoSearch,setContoSearch]=useState('');
+  const _contoIniziale = pianoConti?.find(c=>c.id===(doc.conto_id||_datiEst?.conto_id))
+  const [contoSearch,setContoSearch]=useState(_contoIniziale?`${_contoIniziale.codice} — ${_contoIniziale.descrizione}`:'');
   const [showContoDropdown,setShowContoDropdown]=useState(false);
   const [xmlPreview,setXmlPreview]=useState(null);
   const [aiSuggestion,setAiSuggestion]=useState(null);
   const ai=useAIStatus();
 
-  // If XML, fetch and parse for nice preview (foglio di cortesia)
+  // Preview XML: usa xml_content da fatture_xml (via dati_estratti) o fetch da storage
   useEffect(()=>{
-    const isXML=doc.mime_type?.includes('xml')||doc.filename?.endsWith('.xml');
-    if(!isXML)return;
-    
-    // Get URL: from file_url or generate from file_path
-    let url=doc.file_url;
-    if(!url&&doc.file_path){
-      const{data:u}=sb.storage.from('documenti').getPublicUrl(doc.file_path);
-      url=u?.publicUrl;
+    const isXML = doc.mime_type?.includes('xml')
+      || doc.filename?.toLowerCase().endsWith('.xml')
+      || doc.filename?.toLowerCase().endsWith('.p7m')
+      || doc.tipo_documento?.includes('fattura');
+    if(!isXML) return;
+
+    // 1. Prova a leggere xml_content da dati_estratti (fatture importate da fatture_xml)
+    const datiEst = doc.dati_estratti
+      ? (typeof doc.dati_estratti === 'string' ? JSON.parse(doc.dati_estratti) : doc.dati_estratti)
+      : null;
+
+    const tryParseXml = (text) => {
+      try { setXmlPreview(parseXMLFattura(text)); } catch(e) { console.error('XML parse:', e); }
+    };
+
+    if(datiEst?.xml_filename) {
+      // Carica xml_content da fatture_xml tramite filename + societa_id
+      sb.from('fatture_xml')
+        .select('xml_content')
+        .eq('filename', datiEst.xml_filename)
+        .limit(1)
+        .then(({data}) => {
+          if(data?.[0]?.xml_content) tryParseXml(data[0].xml_content);
+        });
+      return;
     }
-    if(!url)return;
-    
-    fetch(url).then(r=>r.text()).then(text=>{
-      try{setXmlPreview(parseXMLFattura(text));}catch(e){console.error('XML parse error:',e);}
-    }).catch(e=>console.error('XML fetch error:',e));
-  },[doc.file_url,doc.file_path,doc.filename]);
+
+    // 2. Fallback: fetch da URL storage
+    let url = doc.file_url;
+    if(!url && doc.file_path) {
+      const {data:u} = sb.storage.from('documenti').getPublicUrl(doc.file_path);
+      url = u?.publicUrl;
+    }
+    if(!url) return;
+    fetch(url).then(r=>r.text()).then(tryParseXml).catch(e=>console.error('XML fetch:', e));
+  },[doc.id, doc.file_url, doc.file_path, doc.filename, doc.dati_estratti]);
 
   // AI suggestion for conto on mount
   useEffect(()=>{
@@ -1449,55 +2770,205 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
   }).slice(0,80);
   const selectedConto=pianoConti.find(c=>c.id===contoId);
 
-  const XMLPreview=({data})=>(
-    <div style={{padding:'1.2rem',fontSize:'.82rem',lineHeight:'1.7',background:'var(--s1)',height:'100%',overflow:'auto'}}>
-      <div style={{background:'var(--s2)',borderRadius:10,padding:'1rem 1.2rem',marginBottom:'1rem',border:'1px solid var(--bd)'}}>
-        <div style={{fontSize:'1rem',fontWeight:700,color:'var(--gold)',marginBottom:'.5rem'}}>Fattura {data.tipo==='TD01'?'Ordinaria':data.tipo==='TD04'?'Nota di Credito':data.tipo}</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'.3rem'}}>
-          <div><span style={{color:'var(--mu)'}}>N\u00b0:</span> <strong>{data.numero}</strong></div>
-          <div><span style={{color:'var(--mu)'}}>Data:</span> <strong>{data.data}</strong></div>
+  // ── Visualizzatore fattura XML (foglio di cortesia) ──────────────
+  const FatturaViewer = ({data}) => {
+    const TIPO_DOC = {
+      TD01:'Fattura', TD02:'Acconto su fattura', TD03:'Acconto su parcella',
+      TD04:'Nota di credito', TD05:'Nota di debito', TD06:'Parcella',
+      TD16:'Integrazione reverse charge', TD17:'Integrazione acquisto servizi estero',
+      TD18:'Integrazione acquisto beni intracomunitari', TD19:'Integrazione acquisto beni art.17',
+      TD20:'Autofattura', TD24:'Fattura differita', TD25:'Fattura differita (art.21 c.4)',
+      TD26:'Cessione beni ammortizzabili', TD27:'Fattura per autoconsumo',
+    };
+    const MODALITA_PAG = {
+      MP01:'Contanti', MP02:'Assegno', MP03:'Assegno circolare', MP04:'Contanti presso Tesoreria',
+      MP05:'Bonifico', MP06:'Vaglia cambiario', MP07:'Bollettino bancario', MP08:'Carta di pagamento',
+      MP09:'RID', MP10:'RID utenze', MP11:'RID veloce', MP12:'RIBA', MP13:'MAV',
+      MP14:'Quietanza erario', MP15:'Giroconto su conti di contabilità speciale',
+      MP16:'Domiciliazione bancaria', MP17:'Domiciliazione postale', MP18:'Bollettino di c/c postale',
+      MP19:'SEPA Direct Debit', MP20:'SEPA Direct Debit CORE', MP21:'SEPA Direct Debit B2B',
+      MP22:'Trattenuta su somme già riscosse', MP23:'PagoPA',
+    };
+    const fmt = (n) => n != null ? Number(n).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+    const tipoLabel = TIPO_DOC[data.tipo] || data.tipo || 'Fattura';
+    const isNC = data.tipo === 'TD04' || data.tipo === 'TD05';
+
+    return (
+      <div style={{
+        padding:'1.5rem', fontSize:'.82rem', lineHeight:'1.6',
+        background:'#fff', color:'#1a1a2e', height:'100%', overflow:'auto',
+        fontFamily:"'Segoe UI', system-ui, sans-serif",
+      }}>
+        {/* Header documento */}
+        <div style={{
+          display:'flex', justifyContent:'space-between', alignItems:'flex-start',
+          borderBottom:'3px solid #1a1a2e', paddingBottom:'1rem', marginBottom:'1.25rem',
+        }}>
+          <div>
+            <div style={{fontSize:'1.4rem', fontWeight:700, color: isNC?'#c0392b':'#1a1a2e', letterSpacing:'-.02em'}}>
+              {tipoLabel.toUpperCase()}
+            </div>
+            <div style={{fontSize:'.72rem', color:'#666', marginTop:'.15rem'}}>
+              Fattura Elettronica FPR12 · SDI
+            </div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:'1rem', fontWeight:700}}>N° {data.numero}</div>
+            <div style={{fontSize:'.85rem', color:'#555'}}>del {data.data}</div>
+            {data.divisa && data.divisa !== 'EUR' && (
+              <div style={{fontSize:'.72rem', color:'#888', marginTop:'.2rem'}}>Divisa: {data.divisa}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Cedente / Cessionario */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem', marginBottom:'1.25rem'}}>
+          <div style={{border:'1px solid #e0e0e0', borderRadius:6, padding:'.75rem 1rem'}}>
+            <div style={{fontSize:'.65rem', fontWeight:700, color:'#888', letterSpacing:'.08em', marginBottom:'.4rem'}}>CEDENTE / PRESTATORE</div>
+            <div style={{fontWeight:700, fontSize:'.9rem', marginBottom:'.15rem'}}>{data.nome_cedente || '—'}</div>
+            {data.piva_cedente && <div style={{fontSize:'.75rem', color:'#555'}}>P.IVA: {data.piva_cedente}</div>}
+            {data.cf_cedente && data.cf_cedente !== data.piva_cedente && (
+              <div style={{fontSize:'.75rem', color:'#555'}}>C.F.: {data.cf_cedente}</div>
+            )}
+            {data.indirizzo_cedente && <div style={{fontSize:'.72rem', color:'#777', marginTop:'.2rem'}}>{data.indirizzo_cedente}</div>}
+            {data.regime_fiscale && (
+              <div style={{display:'inline-block', marginTop:'.3rem', background:'#f0f0f0', borderRadius:3, padding:'.1rem .4rem', fontSize:'.65rem', color:'#555'}}>
+                Regime: {data.regime_fiscale}
+              </div>
+            )}
+          </div>
+          <div style={{border:'1px solid #e0e0e0', borderRadius:6, padding:'.75rem 1rem'}}>
+            <div style={{fontSize:'.65rem', fontWeight:700, color:'#888', letterSpacing:'.08em', marginBottom:'.4rem'}}>CESSIONARIO / COMMITTENTE</div>
+            <div style={{fontWeight:700, fontSize:'.9rem', marginBottom:'.15rem'}}>{data.nome_cessionario || '—'}</div>
+            {data.piva_cessionario && <div style={{fontSize:'.75rem', color:'#555'}}>P.IVA: {data.piva_cessionario}</div>}
+            {data.cf_cessionario && data.cf_cessionario !== data.piva_cessionario && (
+              <div style={{fontSize:'.75rem', color:'#555'}}>C.F.: {data.cf_cessionario}</div>
+            )}
+            {data.indirizzo_cessionario && <div style={{fontSize:'.72rem', color:'#777', marginTop:'.2rem'}}>{data.indirizzo_cessionario}</div>}
+          </div>
+        </div>
+
+        {/* Causale */}
+        {data.causale && (
+          <div style={{background:'#f9f9f9', border:'1px solid #e8e8e8', borderRadius:6, padding:'.6rem 1rem', marginBottom:'1rem', fontSize:'.78rem', color:'#444'}}>
+            <span style={{fontWeight:600, color:'#666', fontSize:'.65rem', letterSpacing:'.06em'}}>CAUSALE: </span>{data.causale}
+          </div>
+        )}
+
+        {/* Righe */}
+        {data.lines?.length > 0 && (
+          <div style={{marginBottom:'1.25rem'}}>
+            <table style={{width:'100%', borderCollapse:'collapse', fontSize:'.78rem'}}>
+              <thead>
+                <tr style={{background:'#1a1a2e', color:'#fff'}}>
+                  <th style={{padding:'.5rem .75rem', textAlign:'left', fontWeight:600, borderRadius:'4px 0 0 0'}}>N°</th>
+                  <th style={{padding:'.5rem .75rem', textAlign:'left', fontWeight:600}}>Descrizione</th>
+                  <th style={{padding:'.5rem .5rem', textAlign:'right', fontWeight:600}}>Qtà</th>
+                  <th style={{padding:'.5rem .5rem', textAlign:'right', fontWeight:600}}>U.M.</th>
+                  <th style={{padding:'.5rem .5rem', textAlign:'right', fontWeight:600}}>P. Unit.</th>
+                  <th style={{padding:'.5rem .5rem', textAlign:'right', fontWeight:600}}>Sconto</th>
+                  <th style={{padding:'.5rem .5rem', textAlign:'right', fontWeight:600}}>IVA%</th>
+                  <th style={{padding:'.5rem .75rem', textAlign:'right', fontWeight:600, borderRadius:'0 4px 0 0'}}>Totale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.lines.map((l,i) => (
+                  <tr key={i} style={{borderBottom:'1px solid #f0f0f0', background: i%2===0?'#fff':'#fafafa'}}>
+                    <td style={{padding:'.4rem .75rem', color:'#999', textAlign:'center'}}>{l.num||i+1}</td>
+                    <td style={{padding:'.4rem .75rem'}}>
+                      <div style={{fontWeight:500}}>{l.desc}</div>
+                      {l.codice_art && <div style={{fontSize:'.65rem', color:'#aaa'}}>Art: {l.codice_art}</div>}
+                    </td>
+                    <td style={{padding:'.4rem .5rem', textAlign:'right'}}>{l.qty != null ? Number(l.qty).toLocaleString('it-IT') : '—'}</td>
+                    <td style={{padding:'.4rem .5rem', textAlign:'right', color:'#888', fontSize:'.72rem'}}>{l.um||'—'}</td>
+                    <td style={{padding:'.4rem .5rem', textAlign:'right'}}>{l.prezzo != null ? fmt(l.prezzo) : '—'}</td>
+                    <td style={{padding:'.4rem .5rem', textAlign:'right', color:'#e67e22'}}>{l.sconto ? l.sconto+'%' : '—'}</td>
+                    <td style={{padding:'.4rem .5rem', textAlign:'right'}}>{l.iva != null ? l.iva+'%' : '—'}</td>
+                    <td style={{padding:'.4rem .75rem', textAlign:'right', fontWeight:600}}>{l.totale != null ? fmt(l.totale) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Riepilogo IVA */}
+        {data.riepilogo?.length > 0 && (
+          <div style={{display:'flex', justifyContent:'flex-end', marginBottom:'1rem'}}>
+            <table style={{width:320, fontSize:'.78rem', borderCollapse:'collapse'}}>
+              <thead>
+                <tr style={{background:'#f0f0f0'}}>
+                  <th style={{padding:'.35rem .6rem', textAlign:'right', fontWeight:600, color:'#555'}}>Aliquota</th>
+                  <th style={{padding:'.35rem .6rem', textAlign:'right', fontWeight:600, color:'#555'}}>Imponibile</th>
+                  <th style={{padding:'.35rem .6rem', textAlign:'right', fontWeight:600, color:'#555'}}>Imposta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.riepilogo.map((r,i) => (
+                  <tr key={i} style={{borderBottom:'1px solid #eee'}}>
+                    <td style={{padding:'.3rem .6rem', textAlign:'right'}}>{r.aliquota}%{r.natura?' ('+r.natura+')':''}</td>
+                    <td style={{padding:'.3rem .6rem', textAlign:'right'}}>{fmt(r.imponibile)}</td>
+                    <td style={{padding:'.3rem .6rem', textAlign:'right'}}>{fmt(r.imposta)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Totali */}
+        <div style={{display:'flex', justifyContent:'flex-end', marginBottom:'1.25rem'}}>
+          <div style={{width:320, border:'2px solid #1a1a2e', borderRadius:8, overflow:'hidden'}}>
+            {data.imponibile != null && (
+              <div style={{display:'flex', justifyContent:'space-between', padding:'.45rem .9rem', borderBottom:'1px solid #eee', background:'#fafafa'}}>
+                <span style={{color:'#555', fontWeight:500}}>Imponibile</span>
+                <span style={{fontWeight:600}}>{fmt(data.imponibile)} €</span>
+              </div>
+            )}
+            {data.imposta != null && data.imposta !== 0 && (
+              <div style={{display:'flex', justifyContent:'space-between', padding:'.45rem .9rem', borderBottom:'1px solid #eee', background:'#fafafa'}}>
+                <span style={{color:'#555', fontWeight:500}}>IVA</span>
+                <span style={{fontWeight:600}}>{fmt(data.imposta)} €</span>
+              </div>
+            )}
+            <div style={{display:'flex', justifyContent:'space-between', padding:'.7rem .9rem', background:'#1a1a2e', color:'#fff'}}>
+              <span style={{fontWeight:700, fontSize:'.9rem'}}>TOTALE DOCUMENTO</span>
+              <span style={{fontWeight:700, fontSize:'1.1rem'}}>{fmt(data.totale_doc || (data.imponibile + data.imposta))} €</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Pagamento */}
+        {data.pagamenti?.length > 0 && (
+          <div style={{border:'1px solid #e0e0e0', borderRadius:6, padding:'.75rem 1rem', marginBottom:'1rem'}}>
+            <div style={{fontSize:'.65rem', fontWeight:700, color:'#888', letterSpacing:'.08em', marginBottom:'.5rem'}}>DATI PAGAMENTO</div>
+            {data.pagamenti.map((p,i) => (
+              <div key={i} style={{display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'.78rem', marginBottom: i < data.pagamenti.length-1 ? '.4rem':0}}>
+                <div><span style={{color:'#888'}}>Modalità: </span><strong>{MODALITA_PAG[p.modalita]||p.modalita||'—'}</strong></div>
+                {p.scadenza && <div><span style={{color:'#888'}}>Scadenza: </span><strong>{p.scadenza}</strong></div>}
+                {p.importo != null && <div><span style={{color:'#888'}}>Importo: </span><strong>{fmt(p.importo)} €</strong></div>}
+                {p.iban && <div><span style={{color:'#888'}}>IBAN: </span><span style={{fontFamily:'monospace', fontSize:'.72rem'}}>{p.iban}</span></div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Bollo */}
+        {data.bollo_virtuale && (
+          <div style={{fontSize:'.75rem', color:'#555', marginBottom:'.5rem'}}>
+            ✓ Imposta di bollo assolta in modo virtuale
+            {data.bollo_importo ? ` — € ${fmt(data.bollo_importo)}` : ''}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{marginTop:'1rem', paddingTop:'.75rem', borderTop:'1px solid #eee', fontSize:'.65rem', color:'#aaa', display:'flex', justifyContent:'space-between'}}>
+          <span>Progressivo: {data.progressivo_invio || '—'} · Formato: {data.formato || 'FPR12'}</span>
+          <span style={{color:'#27ae60'}}>✓ Fattura Elettronica</span>
         </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1rem'}}>
-        <div style={{background:'var(--s2)',borderRadius:8,padding:'.8rem',border:'1px solid var(--bd)'}}>
-          <div style={{fontSize:'.7rem',color:'var(--mu)',fontWeight:700,marginBottom:'.3rem'}}>CEDENTE / PRESTATORE</div>
-          <div style={{fontWeight:600}}>{data.nome_cedente}</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>P.IVA: {data.piva_cedente}</div>
-        </div>
-        <div style={{background:'var(--s2)',borderRadius:8,padding:'.8rem',border:'1px solid var(--bd)'}}>
-          <div style={{fontSize:'.7rem',color:'var(--mu)',fontWeight:700,marginBottom:'.3rem'}}>CESSIONARIO / COMMITTENTE</div>
-          <div style={{fontWeight:600}}>{data.nome_cessionario}</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>P.IVA: {data.piva_cessionario}</div>
-        </div>
-      </div>
-      {data.lines?.length>0&&(
-        <div style={{marginBottom:'1rem'}}>
-          <table style={{width:'100%',fontSize:'.78rem',borderCollapse:'collapse'}}>
-            <thead><tr style={{borderBottom:'1px solid var(--bd)'}}>
-              <th style={{textAlign:'left',padding:'.3rem'}}>Descrizione</th>
-              <th style={{textAlign:'right',padding:'.3rem'}}>Qta</th>
-              <th style={{textAlign:'right',padding:'.3rem'}}>Prezzo</th>
-              <th style={{textAlign:'right',padding:'.3rem'}}>IVA%</th>
-              <th style={{textAlign:'right',padding:'.3rem'}}>Totale</th>
-            </tr></thead>
-            <tbody>{data.lines.map((l,i)=>(
-              <tr key={i} style={{borderBottom:'1px solid var(--s2)'}}>
-                <td style={{padding:'.3rem'}}>{l.desc}</td>
-                <td style={{textAlign:'right',padding:'.3rem'}}>{l.qty}</td>
-                <td style={{textAlign:'right',padding:'.3rem'}}>{l.prezzo?.toFixed(2)}</td>
-                <td style={{textAlign:'right',padding:'.3rem'}}>{l.iva}%</td>
-                <td style={{textAlign:'right',padding:'.3rem',fontWeight:600}}>{l.totale?.toFixed(2)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      <div style={{background:'rgba(200,164,94,.1)',border:'1px solid rgba(200,164,94,.3)',borderRadius:8,padding:'.8rem',textAlign:'right'}}>
-        <div style={{fontSize:'.78rem'}}>Imponibile: <strong>{data.imponibile?.toFixed(2)}</strong></div>
-        <div style={{fontSize:'1.2rem',fontWeight:700,color:'var(--gold)'}}>Totale: {data.totale_doc?.toFixed(2)||data.imponibile?.toFixed(2)}</div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
@@ -1519,7 +2990,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
               <div className="split-pane">
                 <div className="split-pane-header"><span style={{fontWeight:600,fontSize:'.85rem'}}>Documento originale</span></div>
                 <div className="split-pane-content" style={{overflow:'auto'}}>
-                  {xmlPreview?(<XMLPreview data={xmlPreview}/>
+                  {xmlPreview?(<FatturaViewer data={xmlPreview}/>
                   ):doc.file_url?(
                     <iframe src={doc.file_url} style={{width:'100%',height:'100%',border:'none'}}/>
                   ):(

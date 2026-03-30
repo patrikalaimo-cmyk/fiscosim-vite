@@ -14,7 +14,7 @@ import { AccessDenied } from './shared/components'
 import { Dashboard }              from './modules/dashboard'
 import { ModuloImpostazioni }     from './modules/impostazioni'
 import { ModuloDeleghe }          from './modules/deleghe'
-import { ModuloImportDocumenti }  from './modules/import_documenti'
+import { ModuloImportUnificato }  from './modules/import_unificato'
 import { ModuloExportDati }       from './modules/export_dati'
 import { ModuloContabilita }      from './modules/contabilita'
 import { ModuloPianoConti }       from './modules/piano_conti'
@@ -32,8 +32,10 @@ import { ModuloAmmortamenti }     from './modules/ammortamenti'
 import { ModuloAdempimenti }      from './modules/adempimenti'
 import { ModuloAgenda }           from './modules/agenda'
 import { ModuloCU }               from './modules/cu'
+import { ModuloAIAgent }          from './modules/ai_agent'
+import { ModuloRevisioneDich }    from './modules/revisione_dich'
 import { ModuloSimulatore }       from './modules/simulatore'
-import { AIChat}                  from './components/AIChat'
+import { ModuloAgeCon }           from './modules/agecon'
 
 // Login (inline - piccolo)
 import { Login }                  from './modules/login'
@@ -95,7 +97,6 @@ function App() {
       <div className="app">
         <AIBadge />
         <TestModeBadge />
-        <AIChat />
 
         {showGuida && <GuidaModuliModal onClose={() => setShowGuida(false)} />}
 
@@ -203,7 +204,7 @@ function App() {
           {tab === 'deleghe'      && <ModuloDeleghe />}
 
           {/* DOCUMENT HUB */}
-          {tab === 'import_documenti'  && <ModuloImportDocumenti ruolo={ruolo} />}
+          {tab === 'import_unificato'  && <ModuloImportUnificato ruolo={ruolo} />}
           {tab === 'export_dati'       && <ModuloExportDati onNavigate={setTab} />}
           {tab === 'fatture_ade'       && <ModuloFattureADE />}
           {tab === 'lettura_mail'      && <ModuloLetturaMail />}
@@ -220,7 +221,10 @@ function App() {
           {tab === 'f24'          && (canLeggi(perm, 'f24')         ? <ModuloF24 ruolo={ruolo} perm={perm} />          : <AccessDenied />)}
           {tab === 'simulatore'   && (canLeggi(perm, 'simulatore')  ? <ModuloSimulatore />                             : <AccessDenied />)}
           {tab === 'ammortamenti' && (canLeggi(perm, 'ammortamenti')? <ModuloAmmortamenti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
+          {tab === 'ai_agent'     && <ModuloAIAgent utente={utente} />}
           {tab === 'cu'           && <ModuloCU />}
+          {tab === 'revisione_dich' && <ModuloRevisioneDich utente={utente} />}
+          {tab === 'agecon'         && <ModuloAgeCon ruolo={ruolo} />}
 
           {/* COMUNICAZIONI */}
           {tab === 'adempimenti' && (canLeggi(perm, 'adempimenti') ? <ModuloAdempimenti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
