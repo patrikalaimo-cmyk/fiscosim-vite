@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { sb } from '../../lib/supabase'
+import { createPrimaNota } from '../../../services/primaNotaService.js'
+import { TestScenarioE2EPanel } from './TestScenarioE2EPanel.jsx'
 
 const STATO_CFG = {
   pending:  { label: '⚪ Da testare', color: 'var(--mu)',   bg: 'rgba(107,122,153,.1)',  border: 'rgba(107,122,153,.25)' },
@@ -109,7 +111,7 @@ const EXECUTORS = {
   'T07': async ({ societaId, log }) => {
     if (!societaId) throw new Error('Società non selezionata')
     const { data, error } = await sb.from('causali_iva')
-      .select('id,codice,aliquota,descrizione').eq('societa_id', societaId).limit(3)
+      .select('id,codice,aliquota,descrizione').limit(3)
     if (error) throw new Error(error.message)
     if (!data?.length) throw new Error('Nessuna causale IVA — importa prima da Excel')
     log(`${data.length}+ causali IVA trovate ✓`, 'success')
@@ -177,13 +179,13 @@ const EXECUTORS = {
   'T12': async ({ societaId, log }) => {
     if (!societaId) throw new Error('Società non selezionata')
     log('Inserimento scrittura prima nota di test...')
-    const { data: sc, error } = await sb.from('prima_nota').insert([{
+    const { data: sc, error } = await createPrimaNota({ db: sb, pnPayload: {
       societa_id: societaId,
       data_registrazione: new Date().toISOString().split('T')[0],
       descrizione: TEST_PREFIX + ' Scrittura test',
       totale_dare: 1220.00, totale_avere: 1220.00,
       numero_registrazione: 99999,
-    }]).select().single()
+    }, headerSelect: '*' })
     if (error) throw new Error('Insert prima nota: ' + error.message)
     log(`Scrittura creata ID=${sc.id}`, 'success')
     if (Math.abs(sc.totale_dare - sc.totale_avere) > 0.01)
@@ -680,8 +682,8 @@ export function ModuloTestMode({ utente }) {
 
       <div className="page-hdr">
         <div>
-          <div className="page-title">🧪 Test Suite Operativa</div>
-          <div className="page-sub">{stats.total} test · {autoCount} automatici · {stats.total-autoCount} con intervento</div>
+          <div className="page-title">🧪 Test Mode</div>
+          <div className="page-sub">Scenari E2E da DB · {stats.total} test suite · {autoCount} automatici</div>
         </div>
         <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
           <button className="btn-sec" style={{fontSize:'.78rem'}} onClick={resetAll}>🗑 Reset</button>
@@ -717,6 +719,12 @@ export function ModuloTestMode({ utente }) {
             {testFile&&<div style={{fontSize:'.7rem',color:'#34c27a',marginTop:'.2rem'}}>✓ {testFile.name}</div>}
           </div>
         </div>
+      </div>
+
+      <TestScenarioE2EPanel societaId={societaId} />
+
+      <div className="card" style={{ marginBottom: '.65rem', padding: '.55rem 1rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '.85rem', color: 'var(--mu)' }}>Suite operativa (T01–T26)</div>
       </div>
 
       <div className="card" style={{marginBottom:'1.25rem',padding:'1rem 1.25rem'}}>

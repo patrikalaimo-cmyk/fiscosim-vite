@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
+import { createPrimaNota } from '../../../services/primaNotaService.js'
 
 // ─── TOOLS DEFINIZIONE ───────────────────────────────────────
 // Strumenti che l'agente può usare — divisi in lettura e scrittura
@@ -150,14 +151,14 @@ async function executeTool(name, params) {
         const { data: doc } = await sb.from('documenti_contabilita').select('*').eq('id', id).single()
         if(!doc) { risultati.push({ id, ok: false, msg: 'Documento non trovato' }); continue }
         // Crea prima nota
-        const { data: pn, error } = await sb.from('prima_nota').insert([{
+        const { data: pn, error } = await createPrimaNota({ db: sb, pnPayload: {
           societa_id,
           data_registrazione: doc.data_documento || new Date().toISOString().split('T')[0],
           causale_id: doc.causale_id || null,
           descrizione: doc.nome_file,
           importo: doc.importo || 0,
           documento_id: id,
-        }]).select('id').single()
+        }, headerSelect: 'id' })
         if(error) { risultati.push({ id, ok: false, msg: error.message }); continue }
         // Aggiorna stato documento
         await sb.from('documenti_contabilita').update({ stato: 'registrato' }).eq('id', id)

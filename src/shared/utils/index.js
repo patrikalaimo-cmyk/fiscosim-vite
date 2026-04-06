@@ -23,6 +23,9 @@ export const canElimina   = (perm, modulo) => perm?.[modulo]?.elimina  === true
 export const isSoloAssegnati = (perm, modulo) => perm?.[modulo]?.solo_assegnati === true
 export const puoGestireUtenti = ruolo => ruolo === 'owner'
 
+/** Owner o Admin: notifiche aggiornamento regole IA e pannello nascosto. */
+export const puoGestireRegoleFiscaliIA = ruolo => ruolo === 'owner' || ruolo === 'admin'
+
 // ─── API CALLS ───────────────────────────────────────────────────
 export async function callAPI(endpoint, payload) {
   const res = await fetch(endpoint, {

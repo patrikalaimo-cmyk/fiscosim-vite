@@ -1,4 +1,4 @@
-import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeterministico } from '../../shared/utils/fatture'
+import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeterministico } from '../../../domain/fatture.js'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
 import { MESI } from '../../shared/constants'

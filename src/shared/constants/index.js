@@ -2,6 +2,34 @@
 // Usate da più moduli — NON comunicare moduli direttamente,
 // passare sempre per core/workflow.js
 
+/** localStorage: ultima società attiva scelta (Import, Contabilità, ecc.). */
+export const LAST_SOCIETA_STORAGE_KEY = 'fiscosim:lastSocietaId'
+
+/** localStorage: motore AI import / pipeline — `local` | `online` */
+export const AI_MODE_STORAGE_KEY = 'ai_mode'
+
+/**
+ * localStorage: testo inviato all'AI da PDF — `on` = preprocessInvoiceTextForAi (PREPROCESSED), `off` = testo grezzo (RAW).
+ */
+export const AI_PREPROCESS_MODE_STORAGE_KEY = 'ai_preprocess_mode'
+
+/** Scenario E2E predefinito (migration test_scenarios): fattura passiva XML + pipeline. */
+export const DEFAULT_TEST_SCENARIO_FATTURA_PASSIVA_ID = 'a0000000-0000-4000-8000-000000000001'
+
+/** E2E batch: più fatture XML consecutive (stesso flusso utente replicato). */
+export const DEFAULT_TEST_SCENARIO_MULTI_INVOICES_ID = 'b0000000-0000-4000-8000-000000000002'
+
+/** E2E ciclo completo: controlli IVA / liquidazione / insight. */
+export const DEFAULT_TEST_SCENARIO_FULL_IVA_CYCLE_ID = 'c0000000-0000-4000-8000-000000000003'
+
+/** Shortcut tastiera (mostrata in UI): apre pannello regole IA nascosto. */
+export const FISCAL_KNOWLEDGE_PANEL_SHORTCUT_LABEL = 'Ctrl + Shift + K'
+
+/** sessionStorage: snooze modale proposte per batch (solo sessione corrente). */
+export function fiscalProposalSnoozeKey(batchId) {
+  return `fk_proposal_snooze_${batchId}`
+}
+
 export const TIPO_CLIENTE = ['forfettario', 'ordinario', 'srl', 'snc', 'occasionale']
 
 export const TIPO_LABEL = {
@@ -135,6 +163,7 @@ export const NAV = [
       { id: 'import',       ico: '📤', label: 'Import Excel' },
       { id: 'utenti',       ico: '👤', label: 'Utenti Studio' },
       { id: 'impostazioni', ico: '⚙️', label: 'Impostazioni Studio' },
+      { id: 'impostazioni_procedure', ico: '📋', label: 'Impostazioni Procedure' },
       { id: 'deleghe',      ico: '🔑', label: 'Deleghe Uniche' }
     ]
   },
@@ -142,6 +171,7 @@ export const NAV = [
     section: 'DOCUMENT HUB',
     items: [
       { id: 'import_unificato',    ico: '📁', label: 'Import Documenti' },
+      { id: 'import_nuovo',        ico: '📥', label: 'Import Nuovo' },
       { id: 'export_dati',         ico: '📤', label: 'Export Dati' },
       { id: 'fatture_ade',         ico: '📥', label: 'Fatture Massive ADE' },
       { id: 'lettura_mail',        ico: '📧', label: 'Lettura Mail' },
@@ -194,7 +224,8 @@ export const PERMESSI_MODULI = [
   { id: 'revisione_dich',  label: 'Revisione Dichiarativi', ico: '🔍', hasSoloAssegnati: false },
   { id: 'deleghe',          label: 'Deleghe Uniche',       ico: '🔑', hasSoloAssegnati: false },
   { id: 'richieste_fatture',label: 'Richieste Fatture',    ico: '📡', hasSoloAssegnati: false },
-  { id: 'impostazioni',     label: 'Impostazioni Studio',  ico: '⚙️', hasSoloAssegnati: false }
+  { id: 'impostazioni',     label: 'Impostazioni Studio',  ico: '⚙️', hasSoloAssegnati: false },
+  { id: 'impostazioni_procedure', label: 'Impostazioni Procedure', ico: '📋', hasSoloAssegnati: false }
 ]
 
 export const PERMESSI_DEFAULT = Object.fromEntries(

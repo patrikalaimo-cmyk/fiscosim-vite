@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
-import { TIPO_LABEL, TIPO_COLOR } from '../../shared/constants'
+import { TIPO_LABEL, TIPO_COLOR, LAST_SOCIETA_STORAGE_KEY } from '../../shared/constants'
+import { CopilotInsightsBlock } from '../contabilita/CopilotInsightsBlock.jsx'
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
 const fmt0 = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
@@ -12,6 +13,32 @@ export function Dashboard({ onNavigate }) {
   const [recenti, setRecenti] = useState([])
   const [f24Prox, setF24Prox] = useState([])
   const [loading, setLoading] = useState(true)
+  const [dashSocietaId, setDashSocietaId] = useState('')
+  const [insightsRefreshKey, setInsightsRefreshKey] = useState(0)
+
+  const refreshDashSocieta = useCallback(() => {
+    try {
+      setDashSocietaId(localStorage.getItem(LAST_SOCIETA_STORAGE_KEY) || '')
+    } catch {
+      setDashSocietaId('')
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshDashSocieta()
+  }, [refreshDashSocieta])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') refreshDashSocieta()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', refreshDashSocieta)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', refreshDashSocieta)
+    }
+  }, [refreshDashSocieta])
 
   useEffect(() => {
     (async () => {
@@ -39,6 +66,43 @@ export function Dashboard({ onNavigate }) {
         <div className="page-title">Dashboard</div>
         <div className="page-sub">Riepilogo attività studio · {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
       </div>
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="card-hdr">
+          <div className="card-title">🤖 Insight Copilot</div>
+          <div style={{ display: 'flex', gap: '.35rem', alignItems: 'center' }}>
+            <button type="button" className="btn-sec btn-sm" onClick={() => setInsightsRefreshKey((k) => k + 1)}>
+              Ricarica
+            </button>
+            <button type="button" className="btn-sec btn-sm" onClick={() => onNavigate('contabilita')}>
+              Contabilità
+            </button>
+          </div>
+        </div>
+        {!dashSocietaId ? (
+          <div className="empty" style={{ padding: '1rem' }}>
+            <div className="empty-t" style={{ fontSize: '.82rem' }}>
+              Nessuna società ricordata. Apri <strong>Contabilità</strong>, seleziona una società: gli insight compariranno qui e nel pannello Copilot.
+            </div>
+          </div>
+        ) : (
+          <CopilotInsightsBlock
+            societaId={dashSocietaId}
+            documentId={null}
+            variant="dashboard"
+            refreshKey={insightsRefreshKey}
+            onFixNow={() => {
+              try {
+                if (dashSocietaId) localStorage.setItem(LAST_SOCIETA_STORAGE_KEY, dashSocietaId)
+              } catch {
+                /* ignore */
+              }
+              onNavigate('contabilita')
+            }}
+          />
+        )}
+      </div>
+
       <div className="stats-grid">
         <div className="stat-card" onClick={() => onNavigate('clienti')} style={{ cursor: 'pointer' }}>
           <div className="stat-ico">👥</div>

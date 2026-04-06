@@ -1,0 +1,154 @@
+Struttura creata
+/lib/db.js: client Supabase lato backend (Vercel/Node) con caching
+/services/aiParsingService.js
+/services/orchestratorService.js
+/services/accountingModuleService.js
+/services/aiSupervisorService.js
+Cosa fa ogni servizio (base)
+aiParsingService: riceve documento grezzo e restituisce un oggetto parsed (placeholder, pronto per chiamare /api/analyze-document o provider AI).
+accountingModuleService: genera le righe contabili a partire da ivaRows usando la funzione già presente buildScritturaRowsFromIvaRows (niente duplicazioni).
+aiSupervisorService: validazioni deterministiche (causali IVA presenti, scrittura bilanciata, totale coerente).
+orchestratorService: orchestration parse → contabilità → validazione → (persist opzionale, stub).
+Env richieste (backend)
+In Vercel aggiungi:
+
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+(opzionale) SUPABASE_ANON_KEY se vuoi anche client anon lato server
+Build ok (npm run build).
+
+step 2
+Implementato services/aiParsingService.js
+Ho aggiunto la funzione principale runParsing(documentId) con il flusso richiesto:
+
+Carica il documento dal DB (prova prima documents, fallback documenti_contabilita)
+Scarica il file da Supabase Storage (best-effort: inferisce bucket/path da campi tipo storage_bucket, storage_path, file_path; se non disponibili usa mock come da richiesta)
+Chiama AI con placeholder Claude e retry 1 volta se la chiamata fallisce
+Usa il prompt esatto che mi hai dato
+Parsa il JSON in modo robusto:
+rimuove eventuali code-fence ```json
+tenta parse diretto
+altrimenti estrae il primo blocco {...} con brace-matching
+Salva su ai_parsing_results con:
+document_id
+json_output (JSONB)
+confidence (clamp 0..1)
+Aggiorna documents.status = "PARSED" (se la tabella usata non supporta, riprova su documents e documenti_contabilita)
+Integra aiSupervisorService in modo non bloccante (solo logging esito: AI_PARSING_SUPERVISOR_OK/REJECT/ERROR)
+In più ho mantenuto l’export aiParsingService(...) per compatibilità con l’orchestrator già creato (chiama internamente runParsing).
+
+Build ok (npm run build)
+
+step 3
+Implementato services/orchestratorService.js (funzione orchestrate(documentId))
+Ho aggiunto export async function orchestrate(documentId) con il flusso richiesto:
+
+Imposta documents.status = "PROCESSING" (fallback automatico su documenti_contabilita se documents non esiste)
+Recupera parsing JSON da ai_parsing_results:
+legge json_output (+ confidence)
+se manca parsing → log errore e termina con { ok:false }
+Legge azioni_suggerite
+Routing semplice (if):
+se azioni_suggerite.includes("registrazione_acquisto") → chiama accountingModuleService
+(niente switch, facile aggiungere altri if in futuro)
+Imposta documents.status = "COMPLETED" alla fine
+Supervisor integration (ogni step)
+Ho integrato aiSupervisorService come hook per ogni step tramite supervisorStep(...):
+
+non blocca la pipeline (logga ORCH_SUPERVISOR_STEP / ORCH_SUPERVISOR_STEP_ERROR)
+e dopo accountingModuleService esegue anche una validazione “vera” su ivaRows/righe con log ORCH_SUPERVISOR_OK_ACCOUNTING o ORCH_SUPERVISOR_REJECT_ACCOUNTING.
+Nota pratica
+Dal parsing JSON non esiste ancora causale_iva_id, quindi quando instrado su accountingModuleService costruisco una ivaRows minima da json_output.contabile con causale_iva_id: null (da risolvere in step successivi della pipeline).
+
+Build ok (npm run build).
+
+step 4
+Implementato services/accountingModuleService.js (funzione runAccounting(documentId, parsingJson))
+Ho aggiunto export async function runAccounting(documentId, parsingJson) con il flusso richiesto:
+
+Legge i dati contabili da parsingJson.contabile e parsingJson.documento
+Crea l’oggetto scrittura contabile:
+{
+  tipo: "acquisto",
+  imponibile,
+  iva,
+  totale,
+  data
+}
+Salva in tabella accounting_entries:
+document_id
+data (jsonb) = oggetto sopra
+status = "CREATED"
+Error handling / warning (non bloccante)
+Se mancano campi (es. data, aliquota, imponibile/iva zero) non blocca:
+logga ACC_WARN_MISSING_DATA con lista warnings
+prosegue comunque con insert (se possibile)
+Supervisor integration
+Integra aiSupervisorService come hook di logging per step:
+START, ENTRY_BUILT, DB_SAVED
+non blocca l’esecuzione (solo log)
+Compatibilità
+Ho lasciato intatta l’export esistente accountingModuleService(...) (quella che genera righe contabili da ivaRows) per non rompere l’orchestrator/UI già presenti.
+
+Build ok (npm run build).
+
+step 5
+Implementato services/aiSupervisorService.js
+1) logStep(documentId, step, message, level)
+Level supportati: info | warning | error (normalizzati)
+Salva su tabella ai_logs:
+document_id
+step
+message
+level
+Ritorna { ok: true } oppure { ok: false, error } (se insert fallisce / input mancante)
+2) checkAnomalies(parsingJson)
+Controlli richiesti:
+
+IVA incoerente con imponibile (se imponibile > 0 e aliquota > 0, confronto con tolleranza (> 0.05))
+confidence < 0.7
+Se trova problemi:
+
+logga warning con logStep(..., 'CHECK_ANOMALIES', ...)
+ritorna { anomaly: true, reasons: [...] }
+Se non trova problemi:
+
+ritorna { anomaly: false, reasons: [] }
+Compatibilità
+Ho lasciato anche l’export esistente aiSupervisorService(...) (validazioni deterministic legacy) perché è già usato dagli altri servizi.
+
+Build ok (npm run build).
+
+
+
+step 6
+ggiunta runFullPipeline(documentId) (pronta per API endpoint)
+Ho creato services/pipelineService.js con:
+
+export async function runFullPipeline(documentId)
+Flusso:
+logStep(documentId, 'PIPELINE', 'START PIPELINE', 'info')
+runParsing(documentId) (passando un logger che scrive su ai_logs per gli eventi di step)
+orchestrate(documentId) (stessa cosa)
+logStep(documentId, 'PIPELINE', 'END PIPELINE', 'info')
+Gestione errori globale:
+try/catch
+log su ai_logs con level error
+ritorno { ok:false, step, error }
+“Ogni step chiama aiSupervisorService”
+runFullPipeline logga sempre via logStep.
+Inoltre passa deps.log a runParsing e orchestrate così ogni step produce log persistenti (best-effort, non bloccanti).
+Build ok (npm run build).
+
+step 7
+Creato endpoint POST /api/process-document (Vercel-compatible)
+File aggiunto: api/process-document.js
+
+Input: JSON { documentId }
+Azione: chiama runFullPipeline(documentId)
+Successo (200):
+{ "status": "ok", "documentId": "<id>" }
+Errori:
+400 se documentId manca
+500 se pipeline fallisce o eccezione (con messaggio + step se disponibile)
+Build ok (npm run build).

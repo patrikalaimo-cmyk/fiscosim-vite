@@ -6,15 +6,17 @@ import { AIStatusProvider, AIBadge } from './context/AIStatusContext'
 import { TestModeBadge } from './context/TestModeContext'
 
 // Shared
-import { NAV, RUOLI_INFO, PERMESSI_MODULI } from './shared/constants'
-import { getPermessi, canLeggi, canModifica, puoGestireUtenti, tomorrowStr } from './shared/utils'
+import { NAV, RUOLI_INFO, PERMESSI_MODULI, FISCAL_KNOWLEDGE_PANEL_SHORTCUT_LABEL } from './shared/constants'
+import { getPermessi, canLeggi, canModifica, puoGestireUtenti, puoGestireRegoleFiscaliIA, tomorrowStr } from './shared/utils'
 import { AccessDenied } from './shared/components'
 
 // Modules
 import { Dashboard }              from './modules/dashboard'
 import { ModuloImpostazioni }     from './modules/impostazioni'
+import { ModuloImpostazioniProcedure } from './modules/impostazioni_procedure'
 import { ModuloDeleghe }          from './modules/deleghe'
 import { ModuloImportUnificato }  from './modules/import_unificato'
+import { ModuloImportNuovo }      from './modules/import_nuovo/index.jsx'
 import { ModuloExportDati }       from './modules/export_dati'
 import { ModuloContabilita }      from './modules/contabilita'
 import { ModuloPianoConti }       from './modules/piano_conti'
@@ -43,6 +45,8 @@ import { ModuloTestMode }         from './modules/test_mode'
 
 // Guida moduli (inline - dati statici)
 import { GuidaModuliModal }       from './modules/guida'
+import { PipelineDebugPanel }     from './components/PipelineDebugPanel.jsx'
+import { useFiscalKnowledgeAdmin } from './components/FiscalKnowledgeAdmin.jsx'
 
 // ─── APP ROOT ─────────────────────────────────────────────────
 function App() {
@@ -53,6 +57,7 @@ function App() {
   const [utente, setUtente] = useState(null)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [showGuida, setShowGuida] = useState(false)
+  const [fkPanelOpen, setFkPanelOpen] = useState(false)
 
   useEffect(() => {
     const h = e => { e.preventDefault(); setDeferredPrompt(e); setShowInstall(true) }
@@ -68,6 +73,24 @@ function App() {
       .then(({ count }) => setAlertCount(count || 0))
   }, [utente])
 
+  useEffect(() => {
+    if (!utente) return
+    const syncFromHash = () => {
+      const raw = (window.location.hash || '').replace(/^#\/?/, '')
+      if (raw === 'impostazioni-procedure' || raw === 'impostazioni_procedure') setTab('impostazioni_procedure')
+    }
+    syncFromHash()
+    window.addEventListener('hashchange', syncFromHash)
+    return () => window.removeEventListener('hashchange', syncFromHash)
+  }, [utente])
+
+  useEffect(() => {
+    if (!utente) return
+    if (tab === 'impostazioni_procedure' && window.location.hash !== '#/impostazioni-procedure') {
+      window.history.replaceState(null, '', '#/impostazioni-procedure')
+    }
+  }, [tab, utente])
+
   const handleInstall = async () => {
     if (!deferredPrompt) return
     deferredPrompt.prompt()
@@ -76,6 +99,14 @@ function App() {
     setShowInstall(false)
   }
   const logout = () => { setUtente(null); setTab('dashboard'); setShowLogoutConfirm(false) }
+
+  const ruoloForFk = utente?.ruolo || 'collaboratore'
+  const fkAdmin = useFiscalKnowledgeAdmin({
+    utente,
+    ruolo: ruoloForFk,
+    panelOpen: fkPanelOpen,
+    setPanelOpen: setFkPanelOpen,
+  })
 
   if (!utente) return <Login onLogin={u => { setUtente(u); setTab('dashboard') }} />
 
@@ -97,6 +128,10 @@ function App() {
       <div className="app">
         <AIBadge />
         <TestModeBadge />
+        <PipelineDebugPanel />
+        {fkAdmin.introModal}
+        {fkAdmin.reviewModal}
+        {fkAdmin.rulesPanel}
 
         {showGuida && <GuidaModuliModal onClose={() => setShowGuida(false)} />}
 
@@ -196,15 +231,30 @@ function App() {
           )}
 
           {/* STUDIO */}
+          {tab === 'dashboard' && puoGestireRegoleFiscaliIA(ruolo) && (
+            <div style={{ padding: '.35rem 1rem 0', fontSize: '.68rem', color: 'var(--mu)', lineHeight: 1.4 }}>
+              Regole IA (nascosto): <kbd style={{ background: 'var(--s2)', border: '1px solid var(--bd)', borderRadius: 4, padding: '1px 5px' }}>{FISCAL_KNOWLEDGE_PANEL_SHORTCUT_LABEL}</kbd>
+              {' · '}anche in Impostazioni studio
+            </div>
+          )}
           {tab === 'dashboard'    && <Dashboard onNavigate={setTab} />}
           {tab === 'clienti'      && (canLeggi(perm, 'clienti')   ? <ModuloClienti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
           {tab === 'import'       && (canModifica(perm, 'import')  ? <ModuloImportExcel />                       : <AccessDenied />)}
           {tab === 'utenti'       && puoGestireUtenti(ruolo)       && <ModuloUtenti ruolo={ruolo} />}
-          {tab === 'impostazioni' && <ModuloImpostazioni ruolo={ruolo} />}
+          {tab === 'impostazioni' && (
+            <ModuloImpostazioni
+              ruolo={ruolo}
+              utente={utente}
+              onOpenFiscalKnowledgePanel={puoGestireRegoleFiscaliIA(ruolo) ? () => setFkPanelOpen(true) : undefined}
+              fiscalShortcutLabel={FISCAL_KNOWLEDGE_PANEL_SHORTCUT_LABEL}
+            />
+          )}
+          {tab === 'impostazioni_procedure' && <ModuloImpostazioniProcedure />}
           {tab === 'deleghe'      && <ModuloDeleghe />}
 
           {/* DOCUMENT HUB */}
           {tab === 'import_unificato'  && <ModuloImportUnificato ruolo={ruolo} />}
+          {tab === 'import_nuovo'      && <ModuloImportNuovo />}
           {tab === 'export_dati'       && <ModuloExportDati onNavigate={setTab} />}
           {tab === 'fatture_ade'       && <ModuloFattureADE />}
           {tab === 'lettura_mail'      && <ModuloLetturaMail />}

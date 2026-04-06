@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
 import { invalidateAICache } from '../../core/workflow'
 
-export function ModuloImpostazioni({ ruolo }) {
+export function ModuloImpostazioni({ ruolo, utente, onOpenFiscalKnowledgePanel, fiscalShortcutLabel }) {
   const canEdit = ruolo === 'owner' || ruolo === 'admin'
   const [imp, setImp] = useState({})
   const [loading, setLoading] = useState(true)
@@ -15,6 +15,10 @@ export function ModuloImpostazioni({ ruolo }) {
         const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore || '']))
         if (!map.ai_enabled)  map.ai_enabled  = 'true'
         if (!map.test_mode)   map.test_mode   = 'false'
+        if (map.automazione_pipeline == null || map.automazione_pipeline === '') map.automazione_pipeline = 'false'
+        if (map.auto_fatture_passive == null || map.auto_fatture_passive === '') map.auto_fatture_passive = 'false'
+        if (map.auto_fatture_attive == null || map.auto_fatture_attive === '') map.auto_fatture_attive = 'false'
+        if (map.confidence_threshold == null || map.confidence_threshold === '') map.confidence_threshold = '0.85'
         setImp(map)
         setLoading(false)
       })
@@ -43,6 +47,11 @@ export function ModuloImpostazioni({ ruolo }) {
 
   const isTestMode = imp.test_mode === 'true'
   const isAIOn     = imp.ai_enabled === 'true'
+  const isAutoPipeline = imp.automazione_pipeline === 'true'
+  const autoPassive = imp.auto_fatture_passive === 'true'
+  const autoAttive = imp.auto_fatture_attive === 'true'
+  const confRaw = parseFloat(String(imp.confidence_threshold ?? '0.85').replace(',', '.'))
+  const confSlider = Number.isFinite(confRaw) ? Math.min(0.95, Math.max(0.8, confRaw)) : 0.85
 
   return (
     <div className="page">
@@ -50,6 +59,47 @@ export function ModuloImpostazioni({ ruolo }) {
         <div className="page-title">⚙️ Impostazioni Studio</div>
         <div className="page-sub">Dati del titolare, studio e configurazione AI</div>
       </div>
+
+      {/* ─── REGOLE IA (solo Owner / Admin — titolare/responsabile) ─── */}
+      {canEdit && onOpenFiscalKnowledgePanel && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1.25rem',
+            background: 'linear-gradient(135deg,rgba(120,90,200,.1),rgba(120,90,200,.02))',
+            border: '1px solid rgba(120,90,200,.35)',
+          }}
+        >
+          <div className="card-hdr">
+            <div className="card-title">Regole IA (avanzato)</div>
+            <span className="bdg bdg-pu">Nascosto</span>
+          </div>
+          <p style={{ fontSize: '.82rem', color: 'var(--mu)', lineHeight: 1.5, margin: '0 0 .75rem' }}>
+            Pannello per consultare il database <code style={{ fontSize: '.78rem' }}>fiscal_knowledge</code>, avviare una
+            verifica fonti (placeholder) e gestire i batch di aggiornamento proposti dall&apos;IA.
+          </p>
+          <p style={{ fontSize: '.78rem', margin: '0 0 .75rem', color: 'var(--tx)' }}>
+            Combinazione tasti:{' '}
+            <kbd
+              style={{
+                background: 'var(--s2)',
+                border: '1px solid var(--bd)',
+                borderRadius: 6,
+                padding: '2px 8px',
+                fontSize: '.76rem',
+              }}
+            >
+              {fiscalShortcutLabel || 'Ctrl + Shift + K'}
+            </kbd>
+          </p>
+          <button type="button" className="btn" onClick={onOpenFiscalKnowledgePanel}>
+            Apri pannello regole IA
+          </button>
+          {utente?.email && (
+            <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.65rem' }}>Sessione: {utente.email}</div>
+          )}
+        </div>
+      )}
 
       {/* ─── TEST MODE ─────────────────────────────────── */}
       <div className="card" style={{ marginBottom: '1.25rem', background: isTestMode ? 'linear-gradient(135deg,rgba(99,217,196,.08),rgba(99,217,196,.02))' : 'var(--s1)', border: isTestMode ? '1px solid rgba(99,217,196,.4)' : '1px solid var(--bd)' }}>
@@ -111,6 +161,73 @@ export function ModuloImpostazioni({ ruolo }) {
         </div>
         <div className="alert alert-info" style={{ margin: 0 }}>
           💡 <strong>Modalità senza AI:</strong> Il sistema funziona al 100% anche con AI disattivata.
+        </div>
+      </div>
+
+      {/* ─── AUTOMAZIONE CONTABILE ─────────────────────── */}
+      <div className="card" style={{ marginBottom: '1.25rem', background: 'linear-gradient(135deg,rgba(78,142,247,.08),rgba(78,142,247,.02))', border: '1px solid rgba(78,142,247,.28)' }}>
+        <div className="card-hdr">
+          <div className="card-title">Automazione Contabile</div>
+          <span className={'bdg ' + (isAutoPipeline ? 'bdg-green' : 'bdg-gray')}>
+            {isAutoPipeline ? 'PIPELINE AUTO' : 'MANUALE'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+          <div
+            onClick={() => canEdit && up('automazione_pipeline', isAutoPipeline ? 'false' : 'true')}
+            style={{ width: 56, height: 30, borderRadius: 15, background: isAutoPipeline ? 'var(--gr)' : 'var(--bd2)', cursor: canEdit ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background .2s', opacity: canEdit ? 1 : 0.6 }}
+          >
+            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'white', position: 'absolute', top: 3, left: isAutoPipeline ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '.9rem' }}>Automazione pipeline</div>
+            <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>
+              Se attiva, dopo l&apos;import può essere eseguita automaticamente la pipeline (parsing / orchestrazione) in base alle regole sotto.
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '.65rem', marginBottom: '1rem', paddingLeft: '.1rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '.55rem', cursor: canEdit ? 'pointer' : 'not-allowed', fontSize: '.84rem', color: 'var(--tx)', opacity: canEdit ? 1 : 0.65 }}>
+            <input
+              type="checkbox"
+              checked={autoPassive}
+              disabled={!canEdit}
+              onChange={e => up('auto_fatture_passive', e.target.checked ? 'true' : 'false')}
+              style={{ width: 16, height: 16, accentColor: 'var(--gr)' }}
+            />
+            <span>auto_fatture_passive</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '.55rem', cursor: canEdit ? 'pointer' : 'not-allowed', fontSize: '.84rem', color: 'var(--tx)', opacity: canEdit ? 1 : 0.65 }}>
+            <input
+              type="checkbox"
+              checked={autoAttive}
+              disabled={!canEdit}
+              onChange={e => up('auto_fatture_attive', e.target.checked ? 'true' : 'false')}
+              style={{ width: 16, height: 16, accentColor: 'var(--gr)' }}
+            />
+            <span>auto_fatture_attive</span>
+          </label>
+        </div>
+        <div className="fg" style={{ marginBottom: 0 }}>
+          <label style={{ display: 'block', marginBottom: '.4rem', fontSize: '.82rem', fontWeight: 600, color: 'var(--tx)' }}>
+            Soglia confidence (minimo per automazione)
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <input
+              type="range"
+              min={0.8}
+              max={0.95}
+              step={0.01}
+              value={confSlider}
+              disabled={!canEdit}
+              onChange={e => up('confidence_threshold', String(parseFloat(e.target.value)))}
+              style={{ flex: '1 1 180px', maxWidth: 320, accentColor: 'var(--gld2)', opacity: canEdit ? 1 : 0.55 }}
+            />
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '.9rem', color: 'var(--gld2)', minWidth: '3.2rem' }}>
+              {confSlider.toFixed(2)}
+            </span>
+          </div>
+          <div className="hint" style={{ marginTop: '.35rem' }}>Valori tra 0,80 e 0,95 — solo esiti con confidence ≥ soglia saranno candidati all&apos;automazione.</div>
         </div>
       </div>
 

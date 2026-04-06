@@ -7,9 +7,38 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { useAIStatus } from '../../context/AIStatusContext'
+import {
+  LAST_SOCIETA_STORAGE_KEY,
+  AI_MODE_STORAGE_KEY,
+  AI_PREPROCESS_MODE_STORAGE_KEY,
+} from '../../shared/constants'
 import { renderPDFPagesToImages } from '../../shared/utils'
-import { parseXMLFattura } from '../../shared/utils/fatture'
+import { parseXMLFattura } from '../../../domain/fatture.js'
 import { trace } from '../../core/debug/trace'
+import {
+  traceStep,
+  traceDiff,
+  traceIva,
+  insertCausaleIvaMeta,
+  newPipelineContext,
+  buildAdvancedTextSnapshot,
+  extractJsonErrorPosition,
+  snippetAroundIndex,
+} from '../../utils/pipelineLogger.js'
+import { runImportIvaAndDraftPipeline } from './importIvaPipeline.js'
+import { ResolveIvaError } from '../../shared/utils/primaNotaDraftFromDocumento.js'
+import { triggerAutoPipeline } from '../../utils/autoPipeline.js'
+import { pickContoFromAiAccountingRows } from '../../utils/matchAiAccountingRowsToPianoConti.js'
+import {
+  buildParsingSnapshotFromImportForm,
+  buildAccountingSnapshotFromImportForm,
+} from '../../shared/utils/operatorCorrectionsSnapshots.js'
+import { preprocessInvoiceTextForAi } from '../../../domain/preprocessInvoiceTextForAi.js'
+import { resolveIvaOrNull } from '../../../domain/resolveIva.js'
+import {
+  extractXmlFromP7m as workflowExtractXmlFromP7m,
+  processImportedFile,
+} from './application/importWorkflow.js'
 
 // ─── COSTANTI ────────────────────────────────────────────────────────────────
 
@@ -36,6 +65,23 @@ const ALIQUOTE_IVA = [
 
 const fmt = n => n != null ? Number(n).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
+
+function resolveCausaleIVA({
+  aliquota,
+  natura,
+  fornitore,
+  clienteDefault,
+  causaliIva
+}) {
+  void clienteDefault
+  return resolveIvaOrNull({
+    conto: fornitore || null,
+    aliquota,
+    natura,
+    causaliIva,
+    pipelineContext: undefined,
+  })
+}
 
 // ─── LOOKUP ANAGRAFICA FORNITORE/CLIENTE ────────────────────────────────────
 
@@ -140,47 +186,297 @@ async function extractXmlFromP7m(file) {
   return text.replace(/\u0000/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
 }
 
+// ─── Ollama / Mistral (allineato a aiParsingService) ─────────────────────────
+
+function extractFirstJsonObjectString(txt) {
+  const s = String(txt).replace(/```json|```/gi, '').trim()
+  const start = s.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i]
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) return s.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+function parseAnalisiModelJson(raw) {
+  const block = extractFirstJsonObjectString(raw)
+  if (!block) throw new Error('Nessun JSON trovato nella risposta del modello')
+  return JSON.parse(block)
+}
+
+function summarizeClaudeContentForLog(content) {
+  if (!Array.isArray(content)) {
+    return { kind: 'flat', snapshot: buildAdvancedTextSnapshot(String(content ?? ''), { headMax: 3200, tailMax: 1000 }) }
+  }
+  const parts = content.map((p) => {
+    if (!p || typeof p !== 'object') return { type: 'unknown' }
+    if (p.type === 'image')
+      return { type: 'image', media_type: p.source?.media_type || 'image/jpeg', note: '[base64 omesso dal log]' }
+    if (p.type === 'text')
+      return {
+        type: 'text',
+        snapshot: buildAdvancedTextSnapshot(p.text || '', { headMax: 3200, tailMax: 1000 }),
+      }
+    return { type: p.type || 'unknown' }
+  })
+  return { kind: 'multipart', parts }
+}
+
+/** Analisi testo con Ollama (default Mistral). In dev: proxy Vite → :11434; in build: `/api/ollama-analyze`. */
+async function runOllamaAnalisiPrompt(fullPrompt, pipelineCtx, filename = '') {
+  const model = import.meta.env.VITE_OLLAMA_MODEL || 'mistral'
+  let data
+  let res
+
+  if (import.meta.env.DEV) {
+    res = await fetch('/ollama-proxy/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: fullPrompt, stream: false }),
+    })
+    const raw = await res.text().catch(() => '')
+    try {
+      data = raw ? JSON.parse(raw) : {}
+    } catch {
+      data = {}
+    }
+    if (!res.ok) {
+      const fromApi = typeof data?.error === 'string' ? data.error : ''
+      const hint =
+        fromApi ||
+        raw.slice(0, 400) ||
+        `HTTP ${res.status}`
+      const fix =
+        res.status === 404 || /not found/i.test(hint)
+          ? ` Esegui: ollama pull ${model}`
+          : res.status === 500
+            ? ' Controlla che il modello sia scaricato (ollama list), che ci sia RAM/VRAM sufficiente e prova un prompt più corto.'
+            : ''
+      throw new Error(
+        `Ollama (dev, proxy → 11434): ${hint}.${fix} Servizio: ollama serve — oppure OLLAMA_PROXY_TARGET se Ollama non è su localhost.`
+      )
+    }
+  } else {
+    res = await fetch('/api/ollama-analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: fullPrompt, model }),
+    })
+    data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const hint = data?.error || `HTTP ${res.status}`
+      if (res.status === 404) {
+        throw new Error('API /api/ollama-analyze non disponibile.')
+      }
+      if (res.status === 502) {
+        throw new Error(
+          hint ||
+            'Ollama non risponde (502). Avvia Ollama (ollama serve), poi: ollama pull mistral'
+        )
+      }
+      throw new Error(hint)
+    }
+  }
+
+  const raw = data.response || ''
+  traceStep(
+    'IMPORT_OLLAMA_OUTPUT_ADVANCED',
+    buildAdvancedTextSnapshot(raw, { headMax: 5000, tailMax: 1800 }),
+    { model, filename, response_total_chars: raw.length },
+    pipelineCtx
+  )
+
+  let parsed
+  try {
+    parsed = parseAnalisiModelJson(raw)
+  } catch (e) {
+    const block = extractFirstJsonObjectString(raw) || ''
+    const pos = extractJsonErrorPosition(e?.message)
+    const target = block.length ? block : raw
+    traceStep(
+      'IMPORT_OLLAMA_JSON_PARSE_FAILED',
+      {
+        error: e?.message || String(e),
+        filename,
+        model,
+        raw_response: buildAdvancedTextSnapshot(raw, { headMax: 5500, tailMax: 2200 }),
+        extracted_json_block: block
+          ? buildAdvancedTextSnapshot(block, { headMax: 5500, tailMax: 2200 })
+          : null,
+        at_error: pos != null ? snippetAroundIndex(target, pos, 180) : null,
+      },
+      { model, filename },
+      pipelineCtx
+    )
+    throw e
+  }
+
+  traceStep('DOCUMENT_NORMALIZED', parsed, { metodo: 'ollama_mistral' }, pipelineCtx)
+  traceStep(
+    'IMPORT_OLLAMA_PARSE_OK',
+    {
+      filename,
+      tipo_documento: parsed?.tipo_documento,
+      confidenza: parsed?.confidenza,
+      keys: parsed && typeof parsed === 'object' ? Object.keys(parsed).slice(0, 40) : [],
+    },
+    { model },
+    pipelineCtx
+  )
+  return {
+    tipo: parsed.tipo_documento || 'altro',
+    confidenza: parsed.confidenza ?? 0.7,
+    metodo: 'ollama_mistral',
+    dati: parsed,
+  }
+}
+
+/** Analisi via /api/claude (solo modalità online). */
+async function runClaudeImportAnalisi(content, pipelineCtx, filename = '') {
+  trace('AI_MODE_ONLINE', { phase: 'import_claude' })
+  traceStep(
+    'IMPORT_CLAUDE_INPUT_ADVANCED',
+    summarizeClaudeContentForLog(content),
+    { filename },
+    pipelineCtx
+  )
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      system:
+        'Sei un esperto commercialista italiano. Analizza documenti fiscali. Rispondi SOLO con JSON valido, zero testo aggiuntivo.',
+      messages: [{ role: 'user', content }],
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const hint = data?.error || data?.detail?.error?.message || `HTTP ${res.status}`
+    throw new Error(
+      res.status === 404 ? 'API /api/claude non raggiungibile: avvia `npm run dev:api` (porta 3001).' : hint
+    )
+  }
+  const txt = (data.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+  traceStep(
+    'IMPORT_CLAUDE_OUTPUT_ADVANCED',
+    buildAdvancedTextSnapshot(txt, { headMax: 5000, tailMax: 1800 }),
+    { filename, response_total_chars: txt.length },
+    pipelineCtx
+  )
+
+  let parsed
+  try {
+    parsed = JSON.parse(txt)
+  } catch (e1) {
+    const block = extractFirstJsonObjectString(txt)
+    try {
+      parsed = block ? JSON.parse(block) : {}
+    } catch (e2) {
+      const pos = extractJsonErrorPosition(e2?.message || e1?.message)
+      const target = block || txt
+      traceStep(
+        'IMPORT_CLAUDE_JSON_PARSE_FAILED',
+        {
+          error: e2?.message || e1?.message || String(e2 || e1),
+          filename,
+          text_snapshot: buildAdvancedTextSnapshot(txt, { headMax: 5500, tailMax: 2200 }),
+          json_block_snapshot: block
+            ? buildAdvancedTextSnapshot(block, { headMax: 5500, tailMax: 2200 })
+            : null,
+          at_error: pos != null ? snippetAroundIndex(target, pos, 180) : null,
+        },
+        { filename },
+        pipelineCtx
+      )
+      parsed = {}
+    }
+  }
+  traceStep('DOCUMENT_NORMALIZED', parsed, { metodo: 'claude_haiku' }, pipelineCtx)
+  return {
+    tipo: parsed.tipo_documento || 'altro',
+    confidenza: parsed.confidenza || 0.7,
+    metodo: 'claude_haiku',
+    dati: parsed,
+  }
+}
+
+/** Se Ollama e Claude non sono disponibili, l’import prosegue: operatore compila a mano. */
+function analisiFallbackSenzaAi(file, textSlice, reason) {
+  const base = file.name.replace(/\.[^.]+$/, '')
+  return {
+    tipo: 'fattura_passiva',
+    confidenza: 0.15,
+    metodo: 'manuale_senza_ai',
+    dati: {
+      cedente_denom: base,
+      file_riferimento: file.name,
+      note_ai: reason || 'Nessun motore AI disponibile',
+      estratto_testo_breve: textSlice ? String(textSlice).slice(0, 500) : null,
+    },
+  }
+}
+
 // ─── AI PARSING ──────────────────────────────────────────────────────────────
 
-async function analizzaDocumento(file, xmlContent = null) {
+async function analizzaDocumento(
+  file,
+  xmlContent = null,
+  pipelineCtx,
+  aiMode = 'local',
+  aiPreprocessMode = 'on'
+) {
   // Per XML/p7m: parsing deterministico diretto, zero AI
   if (xmlContent || file.name.toLowerCase().endsWith('.xml') || file.name.toLowerCase().endsWith('.p7m')) {
     const xml = xmlContent || await file.text()
     if (xml.includes('FatturaElettronica') || xml.includes('CedentePrestatore')) {
       const dati = parseXMLFattura(xml)
+      traceStep('PARSE_XML_OUTPUT', dati, { metodo: 'xml_deterministico' }, pipelineCtx)
+
       // Cerca contropartita predefinita nell'anagrafica (viene usata nel form)
       // Il societaId non è disponibile qui, lo passiamo come parametro opzionale
+      const normalizedDati = {
+        // Fattura
+        numero:        dati.numero,
+        data:          dati.data,
+        tipo_doc:      dati.tipo || 'TD01',
+        // Cedente (fornitore per passiva)
+        cedente_denom: dati.nome_cedente || dati.fornitore,
+        cedente_piva:  dati.piva_cedente || dati.fornitore_cf,
+        cedente_cf:    dati.cf_cedente,
+        cedente_ind:   dati.indirizzo_cedente,
+        // Cessionario (cliente per passiva)
+        cessionario_denom: dati.nome_cessionario || dati.cliente,
+        cessionario_piva:  dati.piva_cessionario,
+        cessionario_cf:    dati.cf_cessionario,
+        // Importi
+        imponibile: dati.imponibile,
+        iva:        dati.imposta,
+        totale:     dati.totale_doc || dati.totale,
+        // Aliquote IVA multiple
+        riepilogo_iva: dati.riepilogo || [],
+        // Righe
+        linee: dati.lines || [],
+        // Pagamento
+        pagamenti: dati.pagamenti || [],
+        causale: dati.causale,
+      }
+      traceStep('DOCUMENT_NORMALIZED', normalizedDati, { metodo: 'xml_deterministico' }, pipelineCtx)
+
       return {
         tipo: 'fattura_passiva', // default conservativo, operatore può cambiare
         confidenza: 0.97,
         metodo: 'xml_deterministico',
         xml_content: xml,
-        dati: {
-          // Fattura
-          numero:        dati.numero,
-          data:          dati.data,
-          tipo_doc:      dati.tipo || 'TD01',
-          // Cedente (fornitore per passiva)
-          cedente_denom: dati.nome_cedente || dati.fornitore,
-          cedente_piva:  dati.piva_cedente || dati.fornitore_cf,
-          cedente_cf:    dati.cf_cedente,
-          cedente_ind:   dati.indirizzo_cedente,
-          // Cessionario (cliente per passiva)
-          cessionario_denom: dati.nome_cessionario || dati.cliente,
-          cessionario_piva:  dati.piva_cessionario,
-          cessionario_cf:    dati.cf_cessionario,
-          // Importi
-          imponibile: dati.imponibile,
-          iva:        dati.imposta,
-          totale:     dati.totale_doc || dati.totale,
-          // Aliquote IVA multiple
-          riepilogo_iva: dati.riepilogo || [],
-          // Righe
-          linee: dati.lines || [],
-          // Pagamento
-          pagamenti: dati.pagamenti || [],
-          causale: dati.causale,
-        }
+        dati: normalizedDati,
       }
     }
   }
@@ -192,41 +488,112 @@ async function analizzaDocumento(file, xmlContent = null) {
 
   const isScanned = !text || text.replace(/\s/g,'').length < 200
 
-  let content
-  if (isScanned) {
-    const imgs = await renderPDFPagesToImages(file, {maxPages: 3, scale: 1.2})
-    content = [
-      ...imgs.map(b64 => ({type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}})),
-      {type:'text', text: PROMPT_ANALISI}
-    ]
-  } else {
-    content = [{type:'text', text: `${PROMPT_ANALISI}\n\n=== TESTO DOCUMENTO ===\n${text.substring(0, 8000)}`}]
+  const usePreprocessed = aiPreprocessMode !== 'off'
+  let docForAi = ''
+  if (!isScanned) {
+    if (usePreprocessed) {
+      trace('AI_INPUT_MODE: PREPROCESSED', { file: file?.name })
+      const pre = preprocessInvoiceTextForAi(text || '', { maxChars: 12000 })
+      trace('INVOICE_TEXT_PREPROCESSED', { file: file?.name, ...pre.stats })
+      docForAi = pre.compactText
+    } else {
+      trace('AI_INPUT_MODE: RAW', { file: file?.name })
+      docForAi = (text || '').substring(0, 12000)
+    }
   }
 
-  const res = await fetch('/api/claude', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
-      system: 'Sei un esperto commercialista italiano. Analizza documenti fiscali. Rispondi SOLO con JSON valido, zero testo aggiuntivo.',
-      messages: [{role:'user', content}]
-    })
-  })
+  const system =
+    'Sei un esperto commercialista italiano. Analizza documenti fiscali. Rispondi SOLO con JSON valido, zero testo aggiuntivo.'
+  const fullPrompt = `${system}\n\n${PROMPT_ANALISI}\n\n${docForAi}`
 
-  if (!res.ok) throw new Error(`API error ${res.status}`)
-  const data = await res.json()
-  const txt = (data.content?.[0]?.text || '{}').replace(/```json|```/g,'').trim()
-  const parsed = JSON.parse(txt)
-  return {
-    tipo: parsed.tipo_documento || 'altro',
-    confidenza: parsed.confidenza || 0.7,
-    metodo: 'ai_vision',
-    dati: parsed
+  if (!isScanned && docForAi) {
+    traceStep(
+      'IMPORT_AI_INPUT_ADVANCED',
+      {
+        document_block: buildAdvancedTextSnapshot(docForAi, { headMax: 3200, tailMax: 1200 }),
+        full_prompt: buildAdvancedTextSnapshot(fullPrompt, { headMax: 4000, tailMax: 1500 }),
+        sizes: {
+          extracted_pdf_text_chars: (text || '').length,
+          doc_for_ai_chars: docForAi.length,
+          prompt_analisi_chars: PROMPT_ANALISI.length,
+          system_chars: system.length,
+          full_prompt_chars: fullPrompt.length,
+        },
+      },
+      {
+        file: file?.name,
+        input_mode: usePreprocessed ? 'PREPROCESSED' : 'RAW',
+        ai_mode: aiMode,
+      },
+      pipelineCtx
+    )
+  }
+
+  // PDF con testo sufficiente: locale = solo Ollama (niente fallback online); online = solo Claude
+  if (!isScanned) {
+    if (aiMode === 'local') {
+      trace('AI_MODE_LOCAL', { file: file?.name, phase: 'import_text' })
+      try {
+        return await runOllamaAnalisiPrompt(fullPrompt, pipelineCtx, file?.name)
+      } catch (eOllama) {
+        const reason = eOllama?.message || String(eOllama)
+        trace('AI_LOCAL_FAILED', { file: file?.name, error: reason })
+        const fb = analisiFallbackSenzaAi(file, text?.substring(0, 800), reason)
+        traceStep('DOCUMENT_NORMALIZED', fb.dati, { metodo: 'manuale_senza_ai' }, pipelineCtx)
+        return fb
+      }
+    }
+    try {
+      return await runClaudeImportAnalisi(
+        [{ type: 'text', text: `${PROMPT_ANALISI}\n\n${docForAi}` }],
+        pipelineCtx,
+        file?.name
+      )
+    } catch (eClaude) {
+      const reason = eClaude?.message || String(eClaude)
+      trace('AI_ONLINE_FAILED', { file: file?.name, error: reason })
+      const fb = analisiFallbackSenzaAi(file, text?.substring(0, 800), reason)
+      traceStep('DOCUMENT_NORMALIZED', fb.dati, { metodo: 'manuale_senza_ai' }, pipelineCtx)
+      return fb
+    }
+  }
+
+  // Scannerizzato / poco testo: locale → niente vision; online → Claude multimodale
+  if (aiMode === 'local') {
+    trace('AI_MODE_LOCAL', { file: file?.name, phase: 'import_scanned', note: 'no_vision' })
+    const fb = analisiFallbackSenzaAi(
+      file,
+      null,
+      'Modalità locale: documento senza testo sufficiente — usa PDF con testo estraibile o passa a motore online.'
+    )
+    traceStep('DOCUMENT_NORMALIZED', fb.dati, { metodo: 'manuale_senza_ai' }, pipelineCtx)
+    return fb
+  }
+
+  let content
+  const imgs = await renderPDFPagesToImages(file, { maxPages: 3, scale: 1.2 })
+  content = [
+    ...imgs.map((b64) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: b64 },
+    })),
+    { type: 'text', text: PROMPT_ANALISI },
+  ]
+
+  try {
+    return await runClaudeImportAnalisi(content, pipelineCtx, file?.name)
+  } catch (eClaude) {
+    const reason = eClaude?.message || String(eClaude)
+    trace('AI_ONLINE_FAILED', { file: file?.name, error: reason, phase: 'vision' })
+    const fb = analisiFallbackSenzaAi(file, null, reason)
+    traceStep('DOCUMENT_NORMALIZED', fb.dati, { metodo: 'manuale_senza_ai' }, pipelineCtx)
+    return fb
   }
 }
 
 const PROMPT_ANALISI = `Analizza questo documento fiscale italiano e rispondi SOLO con JSON.
+
+Se vedi la sezione "RIEPILOGO_STRUTTURATO", usala come fonte primaria: contiene righe con importi già in formato 12.34 (EUR), P.IVA, CF, date e frammenti utili estratti dal PDF.
 
 Determina il tipo:
 - "fattura_passiva" = fattura ricevuta (acquisto)  
@@ -255,6 +622,10 @@ Per FATTURA estrai:
   "causale": "descrizione servizio/bene",
   "linee": [{"desc":"","qty":1,"prezzo":0,"totale":0,"iva":"22"}]
 }
+
+Regole IVA e importi (Italia):
+- Importi: preferisci numeri JSON (es. 2585.5); se usi stringhe, formato italiano tipo "2.585,50" è ammesso.
+- Operazioni esenti / non imponibili (codice natura N1…N7, es. N4): imposta "aliquota" a 0 o "0" e il codice in "natura" (es. "N4"). Evita di usare solo "N4" come percentuale.
 
 Per F24 estrai:
 {
@@ -289,49 +660,60 @@ Per AVVISO ADE estrai:
 
 // ─── COMPONENTE CARD DOCUMENTO ───────────────────────────────────────────────
 
-function CardDocumento({ doc, onConferma, onElimina, clienti, pianoConti, societaId }) {
+function CardDocumento({ doc, onConferma, onElimina, clienti, pianoConti, causaliIva, societaId }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(null)
   const [cercaConto, setCercaConto] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!doc.ai_raw_response) return
-    const d = doc.ai_raw_response
+    if (!doc) return
+    const d = doc.ai_raw_response || {}
+    // Trova causale IVA default per aliquota principale
+    let causaleIvaDefault = ''
+    if (causaliIva?.length && d.riepilogo_iva?.length > 0) {
+      const aliqNum = Math.round(parseFloat(String(d.riepilogo_iva[0]?.aliquota || '0').replace(/[%\s]/g, '')))
+      const nat = (d.riepilogo_iva[0]?.natura || '').toLowerCase()
+      const isRC = nat.includes('n6') || nat.includes('n7') || nat.includes('rev')
+      const codFS = aliqNum > 0 ? (isRC ? `F${aliqNum}RC` : `F${aliqNum}`) : 'F0FC'
+      const globale = causaliIva.find((c) => !c.societa_id && c.codice === codFS)
+      if (globale) causaleIvaDefault = globale.id
+    }
     setForm({
       tipo_documento: doc.tipo_documento || d.tipo_documento || 'fattura_passiva',
       // Fattura
-      numero:        d.numero || '',
-      data:          d.data || '',
+      numero: d.numero || '',
+      data: d.data || '',
       cedente_denom: d.cedente_denom || '',
-      cedente_piva:  d.cedente_piva || '',
-      cedente_cf:    d.cedente_cf || '',
+      cedente_piva: d.cedente_piva || '',
+      cedente_cf: d.cedente_cf || '',
       cessionario_denom: d.cessionario_denom || '',
-      cessionario_piva:  d.cessionario_piva || '',
-      imponibile:    d.imponibile ?? '',
-      iva_totale:    d.iva ?? '',
-      totale:        d.totale ?? '',
+      cessionario_piva: d.cessionario_piva || '',
+      imponibile: d.imponibile ?? '',
+      iva_totale: d.iva ?? '',
+      totale: d.totale ?? '',
       riepilogo_iva: d.riepilogo_iva || [],
-      causale:       d.causale || '',
-      conto_id:      null,
-      conto_search:  '',
+      causale: d.causale || '',
+      causale_iva_id: causaleIvaDefault,
+      conto_id: null,
+      conto_search: '',
       // F24
-      contribuente:  d.contribuente || '',
-      cf_f24:        d.codice_fiscale || '',
+      contribuente: d.contribuente || '',
+      cf_f24: d.codice_fiscale || '',
       data_versamento: d.data_versamento || '',
-      saldo_finale:  d.saldo_finale ?? '',
+      saldo_finale: d.saldo_finale ?? '',
       sezione_erario: d.sezione_erario || [],
-      sezione_inps:   d.sezione_inps || [],
+      sezione_inps: d.sezione_inps || [],
       // Avviso
-      tipo_avviso:   d.tipo_avviso || '',
-      numero_atto:   d.numero_atto || '',
+      tipo_avviso: d.tipo_avviso || '',
+      numero_atto: d.numero_atto || '',
       importo_avviso: d.importo ?? '',
-      scadenza:      d.data_scadenza || '',
-      anno_imposta:  d.anno_imposta || '',
-      modello_dich:  d.modello_dichiarativo || '',
-      contenuto:     d.contenuto || '',
+      scadenza: d.data_scadenza || '',
+      anno_imposta: d.anno_imposta || '',
+      modello_dich: d.modello_dichiarativo || '',
+      contenuto: d.contenuto || '',
       // Cliente match
-      cliente_id:    doc.cliente_id || null,
+      cliente_id: doc.cliente_id || null,
     })
   }, [doc])
 
@@ -381,6 +763,56 @@ function CardDocumento({ doc, onConferma, onElimina, clienti, pianoConti, societ
 
     setForm(f => ({...f, ...updates}))
   }, [form?.cedente_piva, form?.cedente_cf, form?.cedente_denom, pianoConti, societaId])
+
+  // Proposta contabile server (accounting_entries.status = AI_PROPOSED, document_id = staging import)
+  useEffect(() => {
+    if (!doc?.id || !form?.tipo_documento || !pianoConti?.length) return
+    let cancelled = false
+
+    const applyAiAccounting = async () => {
+      const { data, error } = await sb
+        .from('accounting_entries')
+        .select('id, data, status, created_at')
+        .eq('document_id', doc.id)
+        .order('created_at', { ascending: false })
+
+      if (cancelled) return
+      if (error) {
+        console.warn('[Import] accounting_entries:', error.message)
+        return
+      }
+
+      const preferred =
+        (data || []).find((e) => e.status === 'AI_PROPOSED') || (data || [])[0]
+      const payload = preferred?.data
+      if (!payload || payload.source !== 'ai_accounting' || !Array.isArray(payload.rows)) return
+
+      setForm((f) => {
+        if (!f) return f
+        if (f.conto_da_anagrafica && f.conto_id) return f
+        const matched = pickContoFromAiAccountingRows(payload.rows, f.tipo_documento, pianoConti)
+        if (!matched?.id) return f
+        return {
+          ...f,
+          conto_id: matched.id,
+          conto_search: `${matched.codice} — ${matched.descrizione || ''}`,
+          conto_da_ai: true,
+        }
+      })
+    }
+
+    void applyAiAccounting()
+
+    const onPipeline = (ev) => {
+      const d = ev?.detail
+      if (d?.documentId === doc.id && d?.phase === 'end' && d?.ok) void applyAiAccounting()
+    }
+    if (typeof window !== 'undefined') window.addEventListener('fiscosim:ai-pipeline', onPipeline)
+    return () => {
+      cancelled = true
+      if (typeof window !== 'undefined') window.removeEventListener('fiscosim:ai-pipeline', onPipeline)
+    }
+  }, [doc?.id, form?.tipo_documento, pianoConti])
 
   if (!form) return null
 
@@ -532,8 +964,9 @@ function CardDocumento({ doc, onConferma, onElimina, clienti, pianoConti, societ
                                 up('riepilogo_iva',nv)
                               }}
                               style={{background:'var(--s2)',border:'1px solid var(--bd)',color:'var(--tx)',borderRadius:4,padding:'.15rem .3rem',fontSize:'.72rem',width:'100%'}}>
-                              {ALIQUOTE_IVA.map(a=><option key={a.val} value={a.val}>{a.label}</option>)}
-                              {!ALIQUOTE_IVA.find(a=>a.val===r.aliquota) && <option value={r.aliquota}>{r.aliquota}%</option>}
+                              {causaliIva?.filter(c=>c.aliquota>0||['esente','escluso','non_imponibile'].includes(c.tipo)).map(c=>(
+                                <option key={c.id} value={c.id}>{c.aliquota}% — {c.descrizione}</option>
+                              ))}
                             </select>
                           </td>
                           <td style={{padding:'.25rem'}}>
@@ -593,6 +1026,11 @@ function CardDocumento({ doc, onConferma, onElimina, clienti, pianoConti, societ
                 {form.conto_da_anagrafica && (
                   <span style={{fontSize:'.65rem',background:'rgba(52,194,122,.12)',border:'1px solid rgba(52,194,122,.3)',color:'#34c27a',borderRadius:4,padding:'.1rem .4rem'}}>
                     📋 da anagrafica
+                  </span>
+                )}
+                {form.conto_da_ai && (
+                  <span style={{fontSize:'.65rem',background:'rgba(200,164,94,.15)',border:'1px solid rgba(200,164,94,.35)',color:'var(--gold)',borderRadius:4,padding:'.1rem .4rem'}}>
+                    proposta AI
                   </span>
                 )}
               </div>
@@ -778,6 +1216,8 @@ export function ModuloImportUnificato({ ruolo }) {
   const dropRef = useRef()
 
   const [aiEnabled, setAiEnabled] = useState(true) // letto da impostazioni_studio
+  const [causaliIva, setCausaliIva] = useState([]) // causali IVA da DB
+  const [causaliContabili, setCausaliContabili] = useState([])
   const [societa, setSocieta] = useState([])
   const [societaId, setSocietaId] = useState('')
   const [clienti, setClienti] = useState([])
@@ -786,12 +1226,59 @@ export function ModuloImportUnificato({ ruolo }) {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(null) // {current, total, file}
   const [dragOver, setDragOver] = useState(false)
+  /** Messaggio inline se si prova a caricare senza società (evita alert bloccante). */
+  const [societaImportHint, setSocietaImportHint] = useState('')
   // Modalità manuale: se l'operatore sa già il tipo
   const [tipoManuale, setTipoManuale] = useState('')
+  const [aiMode, setAiMode] = useState(() => {
+    try {
+      return localStorage.getItem(AI_MODE_STORAGE_KEY) === 'online' ? 'online' : 'local'
+    } catch {
+      return 'local'
+    }
+  })
+  const [aiPreprocessMode, setAiPreprocessMode] = useState(() => {
+    try {
+      return localStorage.getItem(AI_PREPROCESS_MODE_STORAGE_KEY) === 'off' ? 'off' : 'on'
+    } catch {
+      return 'on'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AI_MODE_STORAGE_KEY, aiMode)
+    } catch {
+      /* ignore */
+    }
+  }, [aiMode])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AI_PREPROCESS_MODE_STORAGE_KEY, aiPreprocessMode)
+    } catch {
+      /* ignore */
+    }
+  }, [aiPreprocessMode])
+
+  useEffect(() => {
+    if (societaId) setSocietaImportHint('')
+  }, [societaId])
 
   // Carica dati base + impostazione AI
   useEffect(() => {
-    sb.from('societa').select('id,denominazione').order('denominazione').then(({data})=>setSocieta(data||[]))
+    sb.from('societa').select('id,denominazione').eq('attiva', true).order('denominazione').then(({data})=>{
+      const list = data || []
+      setSocieta(list)
+      if (!list.length) return
+      let preferred = null
+      try {
+        const saved = localStorage.getItem(LAST_SOCIETA_STORAGE_KEY)
+        if (saved && list.some((s) => s.id === saved)) preferred = saved
+      } catch { /* ignore */ }
+      // Stesso criterio della Contabilità: default prima società attiva; se c’è una scelta salvata valida, quella.
+      setSocietaId(preferred || list[0].id)
+    })
     // Leggi ai_enabled da impostazioni_studio
     sb.from('impostazioni_studio').select('valore').eq('chiave','ai_enabled').then(({data})=>{
       const val = Array.isArray(data) ? data[0]?.valore : data?.valore
@@ -804,9 +1291,19 @@ export function ModuloImportUnificato({ ruolo }) {
     sb.from('clienti').select('id,nome,cognome,ragione_sociale,partita_iva,codice_fiscale')
       .eq('attivo',true).order('nome').then(({data})=>setClienti(data||[]))
     sb.from('piano_conti')
-      .select('id,codice,descrizione,livello,partita_iva,anagrafica_piva,codice_fiscale,anagrafica_cf,contropartita,aliquota_iva')
+      .select('id,codice,descrizione,livello,partita_iva,anagrafica_piva,codice_fiscale,anagrafica_cf,contropartita,aliquota_iva,causale_iva_id,is_fornitore,is_cliente,is_iva')
       .eq('societa_id',societaId).eq('attivo',true).order('codice')
       .then(({data})=>setPianoConti(data||[]))
+    sb.from('causali_contabili')
+      .select('id,codice,descrizione')
+      .eq('societa_id', societaId)
+      .eq('attivo', true)
+      .order('codice')
+      .then(({ data }) => setCausaliContabili(data || []))
+    sb.from('causali_iva')
+      .select('id,codice,codice_interno,usa_per_automazione,descrizione,aliquota,tipo,regime,detraibile,is_default_per_aliquota')
+      .eq('attivo',true).order('codice')
+      .then(({data})=>setCausaliIva(data||[]))
     caricaDocumenti()
   }, [societaId])
 
@@ -826,17 +1323,27 @@ export function ModuloImportUnificato({ ruolo }) {
   useEffect(() => {
     const el = dropRef.current
     if (!el) return
-    const over = e => { e.preventDefault(); setDragOver(true) }
+    const over = e => {
+      e.preventDefault()
+      if (societaId) setDragOver(true)
+    }
     const leave = () => setDragOver(false)
-    const drop = e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }
+    const drop = e => {
+      e.preventDefault()
+      setDragOver(false)
+      handleFiles(e.dataTransfer.files)
+    }
     el.addEventListener('dragover', over)
     el.addEventListener('dragleave', leave)
     el.addEventListener('drop', drop)
     return () => { el.removeEventListener('dragover',over); el.removeEventListener('dragleave',leave); el.removeEventListener('drop',drop) }
-  }, [societaId, tipoManuale])
+  }, [societaId, tipoManuale, aiMode, aiPreprocessMode])
 
   const handleFiles = async (fileList) => {
-    if (!societaId) { alert('Seleziona prima la società'); return }
+    if (!societaId) {
+      setSocietaImportHint('Seleziona prima la società dal menu Società sopra.')
+      return
+    }
     const files = Array.from(fileList)
     if (!files.length) return
     setUploading(true)
@@ -853,7 +1360,7 @@ export function ModuloImportUnificato({ ruolo }) {
           const n = name.toLowerCase()
           if (n.endsWith('.p7m')) {
             const ab = await entry.async('arraybuffer')
-            const xml = await extractXmlFromP7m(new File([ab], name))
+            const xml = await workflowExtractXmlFromP7m(new File([ab], name))
             const xmlName = name.split('/').pop().replace(/\.p7m$/i,'.xml')
             toProcess.push({file: new File([xml], xmlName, {type:'application/xml'}), xmlContent: xml})
           } else if (n.endsWith('.xml')||n.endsWith('.pdf')||n.endsWith('.png')||n.endsWith('.jpg')||n.endsWith('.jpeg')) {
@@ -863,7 +1370,7 @@ export function ModuloImportUnificato({ ruolo }) {
           }
         }
       } else if (file.name.toLowerCase().endsWith('.p7m')) {
-        const xml = await extractXmlFromP7m(file)
+        const xml = await workflowExtractXmlFromP7m(file)
         const xmlName = file.name.replace(/\.p7m$/i,'.xml')
         toProcess.push({file: new File([xml], xmlName, {type:'application/xml'}), xmlContent: xml})
       } else {
@@ -878,6 +1385,27 @@ export function ModuloImportUnificato({ ruolo }) {
       setProgress({current:i+1, total:toProcess.length, file:file.name})
 
       try {
+        const result = await processImportedFile({
+          file,
+          xmlContent,
+          societaId,
+          aiEnabled,
+          aiMode,
+          aiPreprocessMode,
+          tipoManuale,
+          pianoConti,
+          causaliIva,
+          causaliContabili,
+          clienti,
+          ai,
+          confirm: window.confirm,
+          alert: window.alert,
+        })
+        if (result?.skipped) continue
+        continue
+
+        const pipelineCtx = newPipelineContext()
+        trace("IMPORT START", { filename: file?.name })
         // 1. Upload a Supabase Storage
         const filePath = `inbox/${Date.now()}_${file.name}`
         // DEDUP — controlla se fattura già presente in documenti_contabilita
@@ -907,11 +1435,11 @@ export function ModuloImportUnificato({ ruolo }) {
         if (isXmlFile) {
           // XML → sempre deterministico, mai AI
           ai.setAI('processing', `Parsing XML ${file.name}`, 'local')
-          analisi = await analizzaDocumento(file, xmlContent)
+          analisi = await analizzaDocumento(file, xmlContent, pipelineCtx, aiMode, aiPreprocessMode)
         } else if (aiEnabled) {
           // PDF/immagine con AI attiva
-          ai.setAI('processing', `Analisi AI ${file.name}`, 'ai')
-          analisi = await analizzaDocumento(file, xmlContent)
+          ai.setAI('processing', `Analisi AI ${file.name}`, aiMode === 'online' ? 'ai' : 'local')
+          analisi = await analizzaDocumento(file, xmlContent, pipelineCtx, aiMode, aiPreprocessMode)
         } else {
           // AI disattivata: classificazione base da filename/tipo manuale
           ai.setAI('done', 'AI disattivata', 'local')
@@ -923,10 +1451,62 @@ export function ModuloImportUnificato({ ruolo }) {
           }
         }
 
+        trace("AFTER PARSE", {
+          riepilogo_iva: analisi?.dati?.riepilogo_iva,
+          raw_analysis: analisi?.dati
+        })
+
         // 3. Salva in documenti_import con stato classified
         trace('IMPORT', { file: file.name, tipo: analisi.tipo, confidenza: analisi.confidenza, metodo: analisi.metodo })
         const tipoFinale = tipoManuale || analisi.tipo
-        const {data:doc, error:dbErr} = await sb.from('documenti_import').insert([{
+
+        let ivaDraftResult = null
+        let importIvaPipelineFailed = false
+        if ((tipoFinale === 'fattura_passiva' || tipoFinale === 'fattura_attiva') && causaliIva.length) {
+          try {
+            ivaDraftResult = await runImportIvaAndDraftPipeline({
+              analisi,
+              tipoFinale,
+              societaId,
+              pianoConti,
+              causaliIva,
+              causaliContabili,
+              clienti,
+              pipelineCtx,
+            })
+          } catch (e) {
+            importIvaPipelineFailed = true
+            if (e instanceof ResolveIvaError) {
+              const hint = e.details?.aliquota_percent != null ? `\n\nAliquota: ${e.details.aliquota_percent}%` : ''
+              alert(`Import bloccato — ${file.name}\n\n${e.message}${hint}\n\nImpostazioni Procedure → Aliquote IVA.`)
+            } else {
+              console.error('[import_unificato] IVA + draft pipeline', e)
+              alert(`Import bloccato — ${file.name}\n\n${e?.message || String(e)}`)
+            }
+          }
+        }
+
+        if (importIvaPipelineFailed) {
+          ai.setAI('done', 'Errore causale IVA', 'local')
+          continue
+        }
+
+        const ai_raw_response = {
+          ...analisi.dati,
+          tipo_documento: tipoFinale,
+          metodo: analisi.metodo,
+          xml_content: xmlContent || analisi.xml_content || null,
+          ...(ivaDraftResult
+            ? {
+                riepilogo_iva: ivaDraftResult.enrichedDati.riepilogo_iva,
+                linee: ivaDraftResult.enrichedDati.linee,
+                causale_iva_id: ivaDraftResult.headerCausaleIvaId,
+                prima_nota_guidata_draft: JSON.parse(JSON.stringify(ivaDraftResult.primaNotaDraft)),
+              }
+            : {}),
+        }
+
+        const documentiImportPayload = {
           filename:     file.name,
           file_path:    filePath,
           file_size:    file.size,
@@ -934,11 +1514,34 @@ export function ModuloImportUnificato({ ruolo }) {
           tipo_documento: tipoFinale,
           confidence:   analisi.confidenza,
           ai_summary:   `${tipoFinale} — ${analisi.dati?.cedente_denom||analisi.dati?.contribuente||file.name}`,
-          ai_raw_response: {...analisi.dati, tipo_documento:tipoFinale, metodo:analisi.metodo, xml_content:xmlContent||analisi.xml_content||null},
+          ai_raw_response,
           stato:        'classified',
           societa_destinazione_id: societaId,
-        }]).select().single()
+        }
+        traceStep('INSERT_PAYLOAD', documentiImportPayload, { table: 'documenti_import', ...insertCausaleIvaMeta(documentiImportPayload) }, pipelineCtx)
+        const { data: doc, error: dbErr } = await sb.from('documenti_import').insert([documentiImportPayload]).select().single()
+        if (doc?.id) pipelineCtx.documentId = doc.id
+        traceStep('INSERT_RESULT', { table: 'documenti_import', data: doc, error: dbErr }, {}, pipelineCtx)
         if (dbErr) throw dbErr
+
+        if (
+          doc?.id &&
+          aiEnabled &&
+          (tipoFinale === 'fattura_passiva' || tipoFinale === 'fattura_attiva')
+        ) {
+          triggerAutoPipeline(doc.id, {
+            source: 'import_unificato_staging',
+            aiMode: aiMode === 'online' ? 'online' : 'local',
+            aiPreprocessMode,
+          })
+        }
+
+        if (doc?.id && ivaDraftResult?.primaNotaDraft) {
+          const draft = JSON.parse(JSON.stringify(ivaDraftResult.primaNotaDraft))
+          draft.meta = { ...draft.meta, documento_import_id: doc.id }
+          const nextRaw = { ...ai_raw_response, prima_nota_guidata_draft: draft }
+          await sb.from('documenti_import').update({ ai_raw_response: nextRaw }).eq('id', doc.id)
+        }
 
         // Auto-match cliente per PIVA
         const piva = analisi.dati?.cedente_piva || analisi.dati?.cessionario_piva || analisi.dati?.codice_fiscale
@@ -951,7 +1554,7 @@ export function ModuloImportUnificato({ ruolo }) {
         ai.setAI('done', `${file.name} classificato`, 'ai')
       } catch(e) {
         console.error('Errore processing:', file.name, e)
-        ai.setAI('done','Errore','ai')
+        ai.setAI('error', 'Errore AI', 'ai')
       }
     }
 
@@ -963,6 +1566,7 @@ export function ModuloImportUnificato({ ruolo }) {
   // Conferma documento → smista al modulo giusto
   const confermaDocumento = async (doc, form) => {
     try {
+      const confermaPipelineCtx = newPipelineContext(doc?.id)
       const tipo = form.tipo_documento
       const nullDate = v => { if(!v) return null; const s=String(v).trim(); return s?s:null }
       const nullNum  = v => { if(v===''||v==null||isNaN(v)) return null; const n=parseFloat(v); return isNaN(n)?null:n }
@@ -988,6 +1592,18 @@ export function ModuloImportUnificato({ ruolo }) {
             if(c.causale_iva_id) causaleIvaId=c.causale_iva_id
           }
         }
+        // PRIORITÀ 2: causale_iva_id selezionata dall'operatore nel form
+        if(!causaleIvaId && form.causale_iva_id) causaleIvaId = form.causale_iva_id
+
+        // PRIORITÀ 3: match diretto su aliquota XML → causale FiscoSim globale
+        if(!causaleIvaId && form.riepilogo_iva?.length > 0) {
+          const aliq = Math.round(parseFloat(form.riepilogo_iva[0]?.aliquota || 0))
+          // Mappa semplice: 22→F22, 10→F10, 5→F5, 4→F4, 0→F0FC
+          const codFS = aliq > 0 ? `F${aliq}` : 'F0FC'
+          const {data: cfs} = await sb.from('causali_iva')
+            .select('id').eq('codice', codFS).limit(1)
+          if(cfs?.[0]?.id) causaleIvaId = cfs[0].id
+        }
         // Fallback codice da conto_search
         if (!contoCodice && form.conto_search) {
           const codFromSearch = form.conto_search.split('—')[0].trim()
@@ -997,6 +1613,57 @@ export function ModuloImportUnificato({ ruolo }) {
             if(c.causale_iva_id) causaleIvaId=c.causale_iva_id
           }
         }
+
+        // Match causale IVA deterministico (fallback)
+        if (!causaleIvaId) {
+          trace("BEFORE ALIQUOTA EXTRACTION", {
+            riepilogo_iva: form.riepilogo_iva
+          })
+          trace("ALIQUOTA RAW DEBUG", {
+            form_aliquota_iva: form.aliquota_iva,
+            riepilogo_iva: form.riepilogo_iva,
+            first_riepilogo: form.riepilogo_iva?.[0],
+            aliquota_from_riepilogo: form.riepilogo_iva?.[0]?.aliquota
+          })
+          const rie0 = form.riepilogo_iva?.[0] || null
+          const natura0 = rie0?.natura || ''
+          const aliqRaw0 = form.aliquota_iva ?? rie0?.aliquota
+          // Se IVA=0 e non c'è natura, forza aliquota 0 (evita match errati tipo 20/22)
+          const aliqRaw = (iva === 0 && !natura0) ? 0 : aliqRaw0
+          const aliquota = aliqRaw
+          trace("ALIQUOTA EXTRACTED", {
+            aliquota
+          })
+          trace("BEFORE MATCH", {
+            aliquota,
+            causaliIva
+          })
+          traceStep('RESOLVE_IVA_INPUT', {
+            aliquota: aliqRaw,
+            natura: natura0,
+            conto_id: contoId,
+            causaliIva_count: (causaliIva || []).length,
+          }, { filename: doc?.filename }, confermaPipelineCtx)
+          const causaleIvaIdResolved = resolveCausaleIVA({
+            aliquota: aliqRaw,
+            natura: natura0,
+            fornitore: pianoConti.find(x=>x.id===contoId) || null,
+            clienteDefault: null,
+            causaliIva: causaliIva || [],
+          })
+          traceStep('RESOLVE_IVA_OUTPUT', {
+            causale_iva_id: causaleIvaIdResolved,
+            causale_iva_id_typeof: typeof causaleIvaIdResolved,
+          }, { filename: doc?.filename }, confermaPipelineCtx)
+          traceIva('POST_RESOLVE_CAUSALE_IVA', 'builder', causaleIvaIdResolved, confermaPipelineCtx)
+          trace("IVA RESOLUTION", { aliquota: aliqRaw, causaleIvaId: causaleIvaIdResolved })
+          trace("MATCH RESULT", {
+            causaleIvaId: causaleIvaIdResolved
+          })
+          if (causaleIvaIdResolved) causaleIvaId = causaleIvaIdResolved
+        }
+
+        traceIva('CONFIRM_BEFORE_PAYLOAD', 'UI', causaleIvaId, confermaPipelineCtx)
 
         const _payload = {
           societa_id:       societaId,
@@ -1022,7 +1689,7 @@ export function ModuloImportUnificato({ ruolo }) {
           cliente_id:       form.cliente_id||null,  // uuid o null
           source_document_id: doc.id||null,
           conto_id:         contoId||null,
-          causale_iva:      causaleIvaId||null,
+          causale_iva_id:   causaleIvaId||null,
           conto_match_type: contoId?'piano_conti':'none',
           dati_estratti: JSON.stringify({
             xml_content:      doc.ai_raw_response?.xml_content||null,
@@ -1036,14 +1703,82 @@ export function ModuloImportUnificato({ ruolo }) {
             pagamenti:        form.pagamenti||[],
           }),
         }
+        const aliquota = form.aliquota_iva ?? form.riepilogo_iva?.[0]?.aliquota
+
+        console.log("=== DEBUG IVA MATCH ===")
+        console.log("ALIQUOTA:", aliquota)
+        console.log("CAUSALI IVA LIST:", causaliIva)
+
+        const debugMatch = causaliIva.map(c => {
+          const testo = (c.descrizione || c.codice || "")
+          const numero = (testo.match(/\\d+/) || [null])[0]
+          return {
+            descrizione: c.descrizione,
+            codice: c.codice,
+            extracted: numero
+          }
+        })
+
+        console.log("PARSED CAUSALI:", debugMatch)
+        trace("FINAL ALIQUOTA USED", {
+          aliquota_final: aliquota,
+          form_aliquota_iva: form.aliquota_iva,
+          riepilogo_iva: form.riepilogo_iva
+        })
+        trace("BEFORE INSERT", {
+          payload: {
+            causale_iva_id: causaleIvaId,
+            conto_id: contoId,
+            dati_estratti: form
+          }
+        })
         trace('DB', { action: 'INSERT documenti_contabilita', filename: doc.filename, tipo, contoId, causaleIvaId })
         console.log('[Import] Payload insert:', JSON.stringify(_payload, null, 2))
-        const {error: _insErr} = await sb.from('documenti_contabilita').insert([_payload])
+        traceIva('PRE_INSERT_DOCUMENTI_CONT', 'DB', _payload.causale_iva_id, confermaPipelineCtx)
+        traceStep('INSERT_PAYLOAD', _payload, { table: 'documenti_contabilita', ...insertCausaleIvaMeta(_payload) }, confermaPipelineCtx)
+        traceDiff(
+          'DB_MAPPING_DIFF',
+          { causale_iva_id_form: form.causale_iva_id ?? null, causale_iva_id_resolved: causaleIvaId },
+          { causale_iva_id_payload: _payload.causale_iva_id ?? null },
+          confermaPipelineCtx
+        )
+        const _insRes = await sb.from('documenti_contabilita').insert([_payload]).select()
+        if (_insRes.data?.[0]?.id) confermaPipelineCtx.documentId = _insRes.data[0].id
+        traceStep('INSERT_RESULT', { table: 'documenti_contabilita', data: _insRes.data, error: _insRes.error }, {}, confermaPipelineCtx)
+        const _insErr = _insRes.error
         if (_insErr) { console.error('[Import] ERRORE INSERT:', _insErr); alert('Errore: ' + _insErr.message); return }
+        const contId = _insRes.data?.[0]?.id
+        if (contId)
+          triggerAutoPipeline(contId, {
+            source: 'import_unificato_conferma_fattura',
+            aiMode,
+            aiPreprocessMode,
+          })
+
+        if (doc?.id && (tipo === 'fattura_passiva' || tipo === 'fattura_attiva')) {
+          void (async () => {
+            try {
+              const parsingAfter = buildParsingSnapshotFromImportForm(form, tipo)
+              const accountingAfter = buildAccountingSnapshotFromImportForm(form, pianoConti)
+              const res = await fetch('/api/save-operator-corrections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  documentId: doc.id,
+                  parsingAfter,
+                  accountingAfter,
+                }),
+              })
+              if (!res.ok) console.warn('[Import] save-operator-corrections', await res.text())
+            } catch (e) {
+              console.warn('[Import] save-operator-corrections', e?.message || e)
+            }
+          })()
+        }
 
       } else if (tipo === 'f24') {
         // Salva in documenti_contabilita con tipo f24
-        await sb.from('documenti_contabilita').insert([{
+        const f24Payload = {
           societa_id:       societaId,
           tipo:             'f24',
           tipo_documento:   'f24',
@@ -1065,12 +1800,24 @@ export function ModuloImportUnificato({ ruolo }) {
             sezione_inps:    form.sezione_inps,
             saldo_finale:    form.saldo_finale,
           }),
-        }])
+        }
+        traceStep('INSERT_PAYLOAD', f24Payload, { table: 'documenti_contabilita', ...insertCausaleIvaMeta(f24Payload) }, confermaPipelineCtx)
+        traceDiff('DB_MAPPING_DIFF', { ui: { tipo: 'f24', cliente_id: form.cliente_id } }, { payload_keys: Object.keys(f24Payload) }, confermaPipelineCtx)
+        const f24Ins = await sb.from('documenti_contabilita').insert([f24Payload]).select()
+        if (f24Ins.data?.[0]?.id) confermaPipelineCtx.documentId = f24Ins.data[0].id
+        traceStep('INSERT_RESULT', { table: 'documenti_contabilita', data: f24Ins.data, error: f24Ins.error }, {}, confermaPipelineCtx)
+        const f24Id = f24Ins.data?.[0]?.id
+        if (f24Id && !f24Ins.error)
+          triggerAutoPipeline(f24Id, {
+            source: 'import_unificato_conferma_f24',
+            aiMode,
+            aiPreprocessMode,
+          })
 
       } else if (tipo === 'avviso_ade') {
         // Inserisce direttamente in avvisi_ade
         const codStudio = `AGE-${String(Date.now()).slice(-4)}`
-        await sb.from('avvisi_ade').insert([{
+        const avvisoPayload = {
           codice_studio:    codStudio,
           cliente_id:       form.cliente_id||null,  // uuid o null
           cliente_nome:     form.cedente_denom||null,
@@ -1081,7 +1828,12 @@ export function ModuloImportUnificato({ ruolo }) {
           contenuto:        form.contenuto||null,
           note:             form.numero_atto?`N° Atto: ${form.numero_atto}`:'',
           dati_estratti:    JSON.stringify(doc.ai_raw_response||{}),
-        }])
+        }
+        traceStep('INSERT_PAYLOAD', avvisoPayload, { table: 'avvisi_ade', ...insertCausaleIvaMeta(avvisoPayload) }, confermaPipelineCtx)
+        traceDiff('DB_MAPPING_DIFF', { ui: { tipo_avviso: form.tipo_avviso, cliente_id: form.cliente_id } }, { payload_keys: Object.keys(avvisoPayload) }, confermaPipelineCtx)
+        const avvIns = await sb.from('avvisi_ade').insert([avvisoPayload]).select()
+        if (avvIns.data?.[0]?.id) confermaPipelineCtx.documentId = avvIns.data[0].id
+        traceStep('INSERT_RESULT', { table: 'avvisi_ade', data: avvIns.data, error: avvIns.error }, {}, confermaPipelineCtx)
       }
 
       // Segna come processato
@@ -1116,7 +1868,14 @@ export function ModuloImportUnificato({ ruolo }) {
         <div style={{fontWeight:600,fontSize:'.85rem'}}>Società:</div>
         <select
           value={societaId}
-          onChange={e=>setSocietaId(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value
+            setSocietaId(v)
+            try {
+              if (v) localStorage.setItem(LAST_SOCIETA_STORAGE_KEY, v)
+              else localStorage.removeItem(LAST_SOCIETA_STORAGE_KEY)
+            } catch { /* ignore */ }
+          }}
           style={{flex:1,minWidth:200,background:'var(--s2)',border:'1px solid var(--bd)',color:'var(--tx)',borderRadius:7,padding:'.4rem .75rem',fontSize:'.85rem'}}>
           <option value="">— Seleziona società —</option>
           {societa.map(s=><option key={s.id} value={s.id}>{s.denominazione}</option>)}
@@ -1132,6 +1891,58 @@ export function ModuloImportUnificato({ ruolo }) {
         }}>
           {aiEnabled ? '🤖 AI ON' : '🤖 AI OFF'}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.35rem', opacity: aiEnabled ? 1 : 0.5 }}>
+          <span style={{ fontSize: '.72rem', color: 'var(--mu)', fontWeight: 600 }}>Motore</span>
+          <select
+            value={aiMode}
+            disabled={!aiEnabled}
+            onChange={(e) => setAiMode(e.target.value === 'online' ? 'online' : 'local')}
+            style={{
+              background: 'var(--s2)',
+              border: '1px solid var(--bd)',
+              color: aiMode === 'online' ? 'var(--gold)' : 'var(--tx)',
+              borderRadius: 7,
+              padding: '.28rem .55rem',
+              fontSize: '.72rem',
+              fontWeight: 600,
+              cursor: aiEnabled ? 'pointer' : 'not-allowed',
+            }}
+          >
+            <option value="local">Locale (Ollama)</option>
+            <option value="online">Online (Claude)</option>
+          </select>
+        </div>
+        {ruolo === 'owner' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '.35rem',
+              opacity: aiEnabled ? 1 : 0.5,
+            }}
+            title="Debug: confronto input grezzo PDF vs riepilogo strutturato per l'AI"
+          >
+            <span style={{ fontSize: '.72rem', color: 'var(--mu)', fontWeight: 600 }}>Input AI</span>
+            <select
+              value={aiPreprocessMode}
+              disabled={!aiEnabled}
+              onChange={(e) => setAiPreprocessMode(e.target.value === 'off' ? 'off' : 'on')}
+              style={{
+                background: 'var(--s2)',
+                border: '1px solid var(--bd)',
+                color: aiPreprocessMode === 'off' ? 'var(--gold)' : 'var(--tx)',
+                borderRadius: 7,
+                padding: '.28rem .55rem',
+                fontSize: '.72rem',
+                fontWeight: 600,
+                cursor: aiEnabled ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <option value="off">RAW</option>
+              <option value="on">PREPROCESSED</option>
+            </select>
+          </div>
+        )}
         {/* Tipo manuale: se so già cosa sto caricando */}
         <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
           <span style={{fontSize:'.78rem',color:'var(--mu)'}}>Tipo manuale:</span>
@@ -1148,15 +1959,24 @@ export function ModuloImportUnificato({ ruolo }) {
       {/* Drop zone */}
       <div
         ref={dropRef}
-        onClick={()=>!uploading&&fileInputRef.current?.click()}
+        onClick={()=>{
+          if (uploading) return
+          if (!societaId) {
+            setSocietaImportHint('Seleziona prima la società dal menu Società sopra.')
+            return
+          }
+          fileInputRef.current?.click()
+        }}
         style={{
           border:`2px dashed ${dragOver?'var(--gold)':'var(--bd)'}`,
           borderRadius:12, padding:'2.5rem 2rem', textAlign:'center',
-          cursor:uploading?'not-allowed':'pointer',
+          cursor:uploading||!societaId?'not-allowed':'pointer',
+          opacity:!societaId?0.72:1,
           background:dragOver?'rgba(200,164,94,.06)':'var(--s2)',
           marginBottom:'1rem', transition:'all .2s',
         }}>
         <input ref={fileInputRef} type="file" multiple
+          disabled={!societaId}
           accept=".pdf,.xml,.p7m,.png,.jpg,.jpeg,.zip"
           style={{display:'none'}}
           onChange={e=>handleFiles(e.target.files)}/>
@@ -1172,8 +1992,15 @@ export function ModuloImportUnificato({ ruolo }) {
         ) : (
           <div>
             <div style={{fontSize:'2.5rem',marginBottom:'.5rem'}}>📂</div>
-            <div style={{fontWeight:600,fontSize:'1rem',marginBottom:'.25rem'}}>Trascina i documenti qui</div>
+            <div style={{fontWeight:600,fontSize:'1rem',marginBottom:'.25rem'}}>
+              {!societaId ? 'Seleziona la società per caricare' : 'Trascina i documenti qui'}
+            </div>
             <div style={{fontSize:'.78rem',color:'var(--mu)'}}>PDF · XML · P7M · Immagini · ZIP</div>
+            {societaImportHint && (
+              <div style={{marginTop:'.65rem',fontSize:'.8rem',color:'#e8a045',fontWeight:500}} role="status">
+                {societaImportHint}
+              </div>
+            )}
             {tipoManuale && (
               <div style={{marginTop:'.5rem',display:'inline-block',background:'rgba(200,164,94,.12)',border:'1px solid rgba(200,164,94,.3)',color:'var(--gold)',borderRadius:6,padding:'.2rem .6rem',fontSize:'.75rem'}}>
                 ✓ Modalità: {TIPI_DOCUMENTO.find(t=>t.id===tipoManuale)?.label}
@@ -1210,7 +2037,7 @@ export function ModuloImportUnificato({ ruolo }) {
                       cedente_denom: form.cedente_denom||'', cedente_piva: form.cedente_piva||'',
                       cedente_cf: form.cedente_cf||'', cessionario_denom: form.cessionario_denom||'',
                       cessionario_piva: form.cessionario_piva||'',
-                      imponibile: form.imponibile||0, iva_totale: form.iva||0,
+                      imponibile: form.imponibile||0, iva_totale: form.iva_totale ?? form.iva ?? 0,
                       totale: form.totale||0, riepilogo_iva: form.riepilogo_iva||[],
                       causale: form.causale||'', conto_id: null, cliente_id: doc.cliente_id||null,
                       contribuente: form.contribuente||'', cf_f24: form.codice_fiscale||'',
@@ -1248,6 +2075,7 @@ export function ModuloImportUnificato({ ruolo }) {
               onElimina={eliminaDocumento}
               clienti={clienti}
               pianoConti={pianoConti}
+              causaliIva={causaliIva}
               societaId={societaId}
             />
           ))}

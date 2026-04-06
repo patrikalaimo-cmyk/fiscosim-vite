@@ -1,17 +1,29 @@
-import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeterministico } from '../../shared/utils/fatture'
+import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeterministico } from '../../../domain/fatture.js'
 import { trace } from '../../core/debug/trace'
+import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { sb } from '../../lib/supabase'
 import { useAIStatus } from '../../context/AIStatusContext'
 import { TagInput } from '../../shared/components'
-import { TIPO_LABEL, TIPO_COLOR, MESI } from '../../shared/constants'
+import { TIPO_LABEL, TIPO_COLOR, MESI, LAST_SOCIETA_STORAGE_KEY } from '../../shared/constants'
 import { shouldUseAI, routeDocument } from '../../core/workflow'
 import { extractTextFromPDFBrowser, loadScript } from '../../shared/utils'
+import { PrimaNotaGuidata } from './prima_nota_guidata.jsx'
+import { DaValidareSplitView } from './da_validare_split_view.jsx'
+import { PN_GUIDATA_BUILDER_VERSION, buildInitialDraftFromDocumento, ResolveIvaError } from '../../shared/utils/primaNotaDraftFromDocumento.js'
+import { resolveIvaOrNull } from '../../../domain/resolveIva.js'
+import { triggerAutoPipeline } from '../../utils/autoPipeline.js'
+import AnagraficheContabiliView from './views/AnagraficheContabiliView.jsx'
+import PrimaNotaHubView from './views/PrimaNotaHubView.jsx'
+import BankingView from './views/BankingView.jsx'
+import TaxComplianceView from './views/TaxComplianceView.jsx'
+import StampeViewContainer from './views/StampeView.jsx'
+import * as contabilitaRepo from './data/contabilitaRepo.js'
+import { createPrimaNotaCompleta, createPrimaNota } from '../../../services/primaNotaService.js'
 
+/** Risoluzione causale IVA allineata a Impostazioni Procedure (natura FatturaPA → 0% e causale da natura o default). */
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
 const fmt0 = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
-const todayStr = () => new Date().toISOString().split('T')[0]
 
 const CONT_SIDEBAR_MENU = [
   {section:"IMPOSTAZIONI",items:[
@@ -28,6 +40,7 @@ const CONT_SIDEBAR_MENU = [
   ]},
   {section:"CONTABILITÀ",items:[
     {id:"prima_nota",ico:"📝",label:"Prima Nota"},
+    {id:"prima_nota_guidata",ico:"✨",label:"Prima Nota (Guidata)"},
     {id:"corrispettivi",ico:"🧾",label:"Corrispettivi"},
     {id:"scritture",ico:"📒",label:"Scritture Varie"}
   ]},
@@ -77,37 +90,129 @@ export function ModuloContabilita({ruolo}){
   const [percipienti,setPercipienti]=useState([]);
   const [clienti,setClienti]=useState([]);
   
-  // Selezione
-  const [selectedDocs,setSelectedDocs]=useState([]);
   const [docInEdit,setDocInEdit]=useState(null);
+  const [pnGuidataDraft,setPnGuidataDraft]=useState(null);
+  const [pnGuidataNav,setPnGuidataNav]=useState({ ids: [], idx: -1 });
   const [splitMode,setSplitMode]=useState('split'); // split, pdf, scrittura
   
+  const getDraftKey = (docId) => `pnGuidataDraft:${societaAttiva?.id || 'no_soc'}:${docId}`
+
+  const openGuidataAt = async (doc, ids, idx) => {
+    const k = getDraftKey(doc.id)
+    const saved = (() => {
+      try { return JSON.parse(localStorage.getItem(k) || 'null') } catch { return null }
+    })()
+
+    const hasValidSaved = saved?.meta?.builder_version === PN_GUIDATA_BUILDER_VERSION
+    let computedDraft
+    try {
+      computedDraft = await buildInitialDraftFromDocumento(doc, {
+        societaId: societaAttiva?.id,
+        pianoConti,
+        causaliContabili,
+        causaliIva,
+        clienti
+      })
+    } catch (e) {
+      if (e instanceof ResolveIvaError) {
+        const atteso = e.details?.aliquota_percent != null ? ` (aliquota ${e.details.aliquota_percent}%)` : ''
+        alert(
+          `Impossibile generare la prima nota guidata${atteso}:\n\n${e.message}\n\n` +
+            'Configura in Impostazioni Procedure → Aliquote IVA una causale predefinita per ogni aliquota usata (0, 4, 5, 10, 22).'
+        )
+      } else {
+        console.error('[openGuidataAt] buildInitialDraftFromDocumento', e)
+        alert(`Errore nella generazione della bozza:\n\n${e?.message || String(e)}`)
+      }
+      return
+    }
+
+    // Se esiste una bozza valida, preserva le modifiche ma allinea SEMPRE la causale IVA al draft calcolato.
+    const computedIvaId = computedDraft?.meta?.causale_iva_id || null
+    const initialDraft = hasValidSaved
+      ? {
+          ...computedDraft,
+          ...saved,
+          header: saved?.header || computedDraft?.header,
+          rows: saved?.rows || computedDraft?.rows,
+          ivaRows:
+            Array.isArray(saved?.ivaRows) && saved.ivaRows.length > 0
+              ? saved.ivaRows
+              : (computedDraft?.ivaRows ?? []),
+          ivaUi: {
+            ...(computedDraft?.ivaUi || {}),
+            ...(saved?.ivaUi || {}),
+            causale_iva_id: computedIvaId || (saved?.ivaUi?.causale_iva_id || ''),
+            multi_riepilogo: computedDraft?.ivaUi?.multi_riepilogo === true || saved?.ivaUi?.multi_riepilogo === true
+          },
+          meta: {
+            ...(saved?.meta || {}),
+            ...(computedDraft?.meta || {}),
+            causale_iva_id: computedIvaId || (saved?.meta?.causale_iva_id || '')
+          }
+        }
+      : computedDraft
+    setPnGuidataDraft(initialDraft)
+    // Aggiorna anche localStorage per evitare rientri incoerenti
+    persistGuidataDraft(initialDraft)
+    setPnGuidataNav({ ids, idx })
+    setContTab('prima_nota_guidata')
+  }
+
+  const persistGuidataDraft = (draft) => {
+    try {
+      const docId = draft?.meta?.documento_import_id
+      if (!docId) return
+      localStorage.setItem(getDraftKey(docId), JSON.stringify(draft))
+    } catch (e) {
+      console.error('[PrimaNotaGuidata] persist draft failed', e)
+    }
+  }
+
+  const gotoGuidataRelative = async (delta) => {
+    const ids = pnGuidataNav.ids || []
+    const idx = pnGuidataNav.idx
+    const nextIdx = idx + delta
+    if (nextIdx < 0 || nextIdx >= ids.length) return
+    const nextDoc = documenti.find(d => d.id === ids[nextIdx])
+    if (!nextDoc) return
+    await openGuidataAt(nextDoc, ids, nextIdx)
+  }
+
   // Modali
   const [modalSocieta,setModalSocieta]=useState(false);
   const [modalImportPDF,setModalImportPDF]=useState(null);
-  const [modalBulkEdit,setModalBulkEdit]=useState(false);
 
   useEffect(()=>{caricaSocieta();},[]);
   useEffect(()=>{if(societaAttiva)caricaTutto();},[societaAttiva]);
 
   const caricaSocieta=async()=>{
-    const{data}=await sb.from('societa').select('*').eq('attiva',true).order('denominazione');
-    setSocieta(data||[]);
-    if(data?.length>0)setSocietaAttiva(data[0]);
+    const{data}=await contabilitaRepo.getSocietaAttive();
+    const list=data||[];
+    setSocieta(list);
+    if(list.length>0){
+      let preferred=null;
+      try{
+        const saved=localStorage.getItem(LAST_SOCIETA_STORAGE_KEY);
+        if(saved&&list.some(s=>s.id===saved))preferred=saved;
+      }catch{/* ignore */}
+      const pick=list.find(s=>s.id===(preferred||list[0].id))||list[0];
+      setSocietaAttiva(pick);
+    }
     setLoading(false);
   };
 
   const caricaTutto=async()=>{
     if(!societaAttiva)return;
     const[{data:docs},{data:pc},{data:cc},{data:ci},{data:reg},{data:pn},{data:perc},{data:cli}]=await Promise.all([
-      sb.from('documenti_contabilita').select('*').eq('societa_id',societaAttiva.id).order('created_at',{ascending:false}),
-      (async()=>{const PAGE=1000;let all=[],from=0;while(true){const{data,error}=await sb.from('piano_conti').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').range(from,from+PAGE-1);if(error)throw error;all=[...all,...(data||[])];if(!data||data.length<PAGE)break;from+=PAGE;}return{data:all,error:null};})(),
-      sb.from('causali_contabili').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').limit(2000),
-      sb.from('causali_iva').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('codice').limit(2000),
-      sb.from('regole_automatiche').select('*').eq('societa_id',societaAttiva.id).eq('attiva',true).order('priorita'),
-      sb.from('prima_nota').select('*').eq('societa_id',societaAttiva.id).order('numero_registrazione',{ascending:false}).limit(100),
-      sb.from('percipienti').select('*').eq('societa_id',societaAttiva.id).eq('attivo',true).order('ragione_sociale'),
-      sb.from('clienti').select('id,codice_cliente,nome,cognome,ragione_sociale,codice_fiscale,partita_iva').eq('attivo',true).order('codice_cliente')
+      contabilitaRepo.getDocumenti(societaAttiva.id),
+      contabilitaRepo.getPianoConti(societaAttiva.id),
+      contabilitaRepo.getCausali(societaAttiva.id),
+      contabilitaRepo.getCausaliIvaAttive(),
+      contabilitaRepo.getRegoleAutomatiche(societaAttiva.id),
+      contabilitaRepo.getScrittureRecenti(societaAttiva.id),
+      contabilitaRepo.getPercipientiAttivi(societaAttiva.id),
+      contabilitaRepo.getClientiBase()
     ]);
     setDocumenti(docs||[]);
     setPianoConti(pc||[]);
@@ -127,23 +232,14 @@ export function ModuloContabilita({ruolo}){
     registrati:documenti.filter(d=>d.workflow_status==='registered').length
   };
 
-  // Toggle selezione
-  const toggleSelect=(id)=>setSelectedDocs(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
-  const selectAll=(ids)=>setSelectedDocs(ids);
-  const deselectAll=()=>setSelectedDocs([]);
+  const patchDocumento = (id, partial) => {
+    setDocumenti((prev) => prev.map((d) => (d.id === id ? { ...d, ...partial } : d)))
+  }
 
   // Conferma singola
   const confermaDoc=async(docId)=>{
-    await sb.from('documenti_contabilita').update({validation_status:'confirmed',validated_at:new Date().toISOString()}).eq('id',docId);
+    await contabilitaRepo.confirmDocumento(docId,new Date().toISOString());
     setDocumenti(prev=>prev.map(d=>d.id===docId?{...d,validation_status:'confirmed'}:d));
-  };
-
-  // Conferma multipla
-  const confermaTutti=async()=>{
-    if(!selectedDocs.length)return;
-    await sb.from('documenti_contabilita').update({validation_status:'confirmed',validated_at:new Date().toISOString()}).in('id',selectedDocs);
-    setDocumenti(prev=>prev.map(d=>selectedDocs.includes(d.id)?{...d,validation_status:'confirmed'}:d));
-    setSelectedDocs([]);
   };
 
   // Registra confermati → crea scritture prima nota
@@ -181,7 +277,7 @@ export function ModuloContabilita({ruolo}){
 
         // 1. Create prima nota header
         trace('DB', { action: 'INSERT prima_nota', doc_id: doc.id })
-        const{data:pn,error:pnErr}=await sb.from('prima_nota').insert([{
+        const pnInsertPayload={
           societa_id:societaAttiva.id,
           data_registrazione:doc.data_documento||new Date().toISOString().slice(0,10),
           data_documento:doc.data_documento,
@@ -193,17 +289,21 @@ export function ModuloContabilita({ruolo}){
           totale_avere:doc.totale||0,
           stato:'provvisoria',
           documento_import_id:doc.source_document_id||null
-        }]).select().single();
-        
-        if(pnErr)throw pnErr;
-
+        }
+        traceIva('PRE_INSERT_PRIMA_NOTA_HEADER', 'DB', doc.causale_iva_id ?? null)
+        traceStep('INSERT_PAYLOAD', pnInsertPayload, { table: 'prima_nota', ...insertCausaleIvaMeta(pnInsertPayload) })
+        traceDiff(
+          'DB_MAPPING_DIFF',
+          { causale_iva_id: doc.causale_iva_id ?? null },
+          { causale_iva_id: pnInsertPayload.causale_iva_id ?? null }
+        )
         // 2. Create righe prima nota (3 righe: costo/ricavo, IVA, fornitore/cliente)
         const righe=[];
         
         if(isPassiva){
           // FATTURA PASSIVA: Dare costo + Dare IVA credito + Avere fornitore
           righe.push({
-            prima_nota_id:pn.id,riga_numero:1,
+            riga_numero:1,
             conto_id:contoCostoRicavo?.id||null,
             conto_codice:contoCostoRicavo?.codice,
             conto_descrizione:contoCostoRicavo?.descrizione,
@@ -213,7 +313,7 @@ export function ModuloContabilita({ruolo}){
           });
           if(doc.iva>0){
             righe.push({
-              prima_nota_id:pn.id,riga_numero:2,
+              riga_numero:2,
               conto_id:contoIva?.id||null,
               conto_codice:contoIva?.codice,
               conto_descrizione:contoIva?.descrizione||'IVA ns. credito',
@@ -223,7 +323,7 @@ export function ModuloContabilita({ruolo}){
             });
           }
           righe.push({
-            prima_nota_id:pn.id,riga_numero:3,
+            riga_numero:3,
             conto_id:contoControparte?.id||null,
             conto_codice:contoControparte?.codice,
             conto_descrizione:contoControparte?.descrizione||doc.soggetto_denominazione,
@@ -234,7 +334,7 @@ export function ModuloContabilita({ruolo}){
         }else{
           // FATTURA ATTIVA: Dare cliente + Avere ricavo + Avere IVA debito
           righe.push({
-            prima_nota_id:pn.id,riga_numero:1,
+            riga_numero:1,
             conto_id:contoControparte?.id||null,
             conto_codice:contoControparte?.codice,
             conto_descrizione:contoControparte?.descrizione||doc.soggetto_denominazione,
@@ -243,7 +343,7 @@ export function ModuloContabilita({ruolo}){
             imponibile:0,iva:0
           });
           righe.push({
-            prima_nota_id:pn.id,riga_numero:2,
+            riga_numero:2,
             conto_id:contoCostoRicavo?.id||null,
             conto_codice:contoCostoRicavo?.codice,
             conto_descrizione:contoCostoRicavo?.descrizione,
@@ -253,7 +353,7 @@ export function ModuloContabilita({ruolo}){
           });
           if(doc.iva>0){
             righe.push({
-              prima_nota_id:pn.id,riga_numero:3,
+              riga_numero:3,
               conto_id:contoIva?.id||null,
               conto_codice:contoIva?.codice,
               conto_descrizione:contoIva?.descrizione||'IVA ns. debito',
@@ -265,16 +365,34 @@ export function ModuloContabilita({ruolo}){
         }
 
         if(righe.length>0){
-          const{error:righeErr}=await sb.from('prima_nota_righe').insert(righe);
-          if(righeErr)console.error('Righe error:',righeErr);
+          traceIva('PRE_INSERT_PRIMA_NOTA_RIGHE', 'DB', righe[0]?.causale_iva_id ?? doc.causale_iva_id ?? null)
+          traceStep('INSERT_PAYLOAD', righe, { table: 'prima_nota_righe', ...insertCausaleIvaMeta(righe) })
+          traceDiff(
+            'DB_MAPPING_DIFF',
+            { causale_iva_id: doc.causale_iva_id ?? null },
+            { causale_iva_id: righe[0]?.causale_iva_id ?? null }
+          )
         }
 
+        const complete = await createPrimaNotaCompleta({
+          pnPayload: pnInsertPayload,
+          righePayload: righe,
+          partEntries: [],
+          headerSelect: '*',
+          righeSelect: '*',
+          partitarioSelect: '*',
+        });
+        traceStep('INSERT_RESULT', { table: 'prima_nota', data: complete.pn, error: complete.error })
+        traceStep('INSERT_RESULT', { table: 'prima_nota_righe', data: complete.righeIns?.data, error: complete.righeIns?.error ?? complete.error })
+        if(complete.error)throw complete.error;
+        const pn = complete.pn
+
         // 3. Update document status
-        await sb.from('documenti_contabilita').update({
+        await contabilitaRepo.updateDocumentoContabilita(doc.id,{
           workflow_status:'registered',
           registered_at:new Date().toISOString(),
           prima_nota_id:pn.id
-        }).eq('id',doc.id);
+        });
         
         registrati++;
       }catch(err){
@@ -294,7 +412,7 @@ export function ModuloContabilita({ruolo}){
       <div className="cont-sidebar">
         {/* Selezione società */}
         <div style={{padding:'0 1rem .75rem',borderBottom:'1px solid var(--bd)'}}>
-          <select value={societaAttiva?.id||''} onChange={e=>{const s=societa.find(x=>x.id===e.target.value);setSocietaAttiva(s);}} style={{width:'100%',fontSize:'.78rem'}}>
+          <select value={societaAttiva?.id||''} onChange={e=>{const s=societa.find(x=>x.id===e.target.value);setSocietaAttiva(s);try{if(s?.id)localStorage.setItem(LAST_SOCIETA_STORAGE_KEY,s.id);}catch{/* ignore */}}} style={{width:'100%',fontSize:'.78rem'}}>
             {societa.length===0&&<option value="">Nessuna società</option>}
             {societa.map(s=><option key={s.id} value={s.id}>{s.denominazione}</option>)}
           </select>
@@ -324,77 +442,75 @@ export function ModuloContabilita({ruolo}){
           <div className="empty"><div className="empty-ico">🏢</div><div className="empty-t">Seleziona o crea una società</div></div>
         ):(
           <>
-            {/* DA VALIDARE - Core workflow */}
-            {contTab==='da_validare'&&<DaValidareView 
-              documenti={documenti.filter(d=>d.workflow_status!=='registered')} 
+            <PrimaNotaHubView
+              contTab={contTab}
+              documenti={documenti}
+              scritture={scritture}
+              pianoConti={pianoConti}
+              causaliIva={causaliIva}
+              causaliContabili={causaliContabili}
+              clienti={clienti}
+              societaAttiva={societaAttiva}
+              stats={stats}
+              caricaTutto={caricaTutto}
+              patchDocumento={patchDocumento}
+              confermaDoc={confermaDoc}
+              registraConfermati={registraConfermati}
+              openGuidataAt={openGuidataAt}
+              pnGuidataDraft={pnGuidataDraft}
+              pnGuidataNav={pnGuidataNav}
+              gotoGuidataRelative={gotoGuidataRelative}
+              setPnGuidataDraft={setPnGuidataDraft}
+              persistGuidataDraft={persistGuidataDraft}
+              DaValidareSplitView={DaValidareSplitView}
+              PrimaNotaView={PrimaNotaView}
+              PrimaNotaGuidata={PrimaNotaGuidata}
+              RegistrateView={RegistrateView}
+            />
+
+            <AnagraficheContabiliView
+              contTab={contTab}
+              societaAttiva={societaAttiva}
               pianoConti={pianoConti}
               causaliContabili={causaliContabili}
               causaliIva={causaliIva}
-              selectedDocs={selectedDocs}
-              toggleSelect={toggleSelect}
-              selectAll={selectAll}
-              deselectAll={deselectAll}
-              confermaDoc={confermaDoc}
-              confermaTutti={confermaTutti}
-              registraConfermati={registraConfermati}
-              onEdit={setDocInEdit}
-              setModalBulkEdit={setModalBulkEdit}
-              stats={stats}
-              onRefresh={caricaTutto}
-            />}
+              caricaTutto={caricaTutto}
+              setModalImportPDF={setModalImportPDF}
+              PianoContiView={PianoContiView}
+              CausaliView={CausaliView}
+            />
 
-            {/* Piano dei Conti */}
-            {contTab==='piano_conti'&&<PianoContiView pianoConti={pianoConti} societaId={societaAttiva.id} onImport={()=>setModalImportPDF('piano_conti')} onRefresh={caricaTutto}/>}
+            <BankingView
+              contTab={contTab}
+              societaAttiva={societaAttiva}
+              setContTab={setContTab}
+              ModuloBanche={ModuloBanche}
+            />
 
-            {/* Causali Contabili */}
-            {contTab==='causali'&&<CausaliView causali={causaliContabili} tipo="contabili" societaId={societaAttiva.id} onImport={()=>setModalImportPDF('causali')} onRefresh={caricaTutto}/>}
+            <StampeViewContainer
+              contTab={contTab}
+              societaAttiva={societaAttiva}
+              scritture={scritture}
+              pianoConti={pianoConti}
+              causaliIva={causaliIva}
+              StampeDetailView={StampeView}
+            />
 
-            {/* Causali IVA */}
-            {contTab==='causali_iva'&&<CausaliView causali={causaliIva} tipo="iva" societaId={societaAttiva.id} onImport={()=>setModalImportPDF('causali_iva')} onRefresh={caricaTutto}/>}
-
-            {/* Prima Nota */}
-            {contTab==='prima_nota'&&<PrimaNotaView scritture={scritture} pianoConti={pianoConti} causali={causaliContabili} causaliIva={causaliIva} clienti={clienti} societaId={societaAttiva.id} onRefresh={caricaTutto}/>}
-
-            {/* Registrate */}
-            {contTab==='registrate'&&<RegistrateView documenti={documenti.filter(d=>d.workflow_status==='registered')}/>}
-
-            {/* Banche - Vista dedicata */}
-            {(contTab==='movimenti_banca'||contTab==='riconciliazione')&&<ModuloBanche societaId={societaAttiva?.id} contTab={contTab} setContTab={setContTab}/>}
-
-            {/* Stampe - Vista dedicata */}
-            {['registri_iva','partitari','giornale','mastrini','bilancio'].includes(contTab)&&(
-              <StampeView 
-                tipoStampa={contTab} 
-                societa={societaAttiva} 
-                scritture={scritture}
-                pianoConti={pianoConti}
-                causaliIva={causaliIva}
-              />
-            )}
-
-            {/* Liquidazioni IVA */}
-            {contTab==='liquidazioni_iva'&&<LiquidazioniIVAView societa={societaAttiva} scritture={scritture} causaliIva={causaliIva}/>}
-
-            {/* LIPE */}
-            {contTab==='lipe'&&<LIPEView societa={societaAttiva}/>}
-
-            {/* Corrispettivi */}
-            {contTab==='corrispettivi'&&<CorrispettiviView societa={societaAttiva}/>}
-
-            {/* 770 */}
-            {contTab==='f770'&&<Modello770View societa={societaAttiva}/>}
-
-            {/* Intrastat */}
-            {contTab==='intrastat'&&<IntrastatView societa={societaAttiva}/>}
-
-            {/* Percipienti */}
-            {contTab==='percipienti'&&<PercipientiView societa={societaAttiva} onRefresh={caricaTutto}/>}
-
-            {/* Ritenute */}
-            {contTab==='ritenute'&&<RitenuteView societa={societaAttiva}/>}
-
-            {/* IVA Annuale */}
-            {contTab==='iva_annuale'&&<IvaAnnualeView societa={societaAttiva} scritture={scritture} causaliIva={causaliIva}/>}
+            <TaxComplianceView
+              contTab={contTab}
+              societaAttiva={societaAttiva}
+              scritture={scritture}
+              causaliIva={causaliIva}
+              caricaTutto={caricaTutto}
+              LiquidazioniIVAView={LiquidazioniIVAView}
+              LIPEView={LIPEView}
+              CorrispettiviView={CorrispettiviView}
+              Modello770View={Modello770View}
+              IntrastatView={IntrastatView}
+              PercipientiView={PercipientiView}
+              RitenuteView={RitenuteView}
+              IvaAnnualeView={IvaAnnualeView}
+            />
 
             {/* Placeholder per altri moduli */}
             {['societa','regole','scritture','cu'].includes(contTab)&&(
@@ -409,120 +525,9 @@ export function ModuloContabilita({ruolo}){
       </div>
 
       {/* Modali */}
-      {modalSocieta&&<ModalNuovaSocieta onSave={async(d)=>{const{data:ns}=await sb.from('societa').insert([d]).select().single();await caricaSocieta();setModalSocieta(false);return ns;}} onClose={()=>setModalSocieta(false)}/>}
+      {modalSocieta&&<ModalNuovaSocieta onSave={async(d)=>{const{data:ns}=await contabilitaRepo.insertSocieta(d);await caricaSocieta();setModalSocieta(false);return ns;}} onClose={()=>setModalSocieta(false)}/>}
       {modalImportPDF&&<ModalImportPDF tipo={modalImportPDF} societaId={societaAttiva?.id} onComplete={()=>{setModalImportPDF(null);caricaTutto();}} onClose={()=>setModalImportPDF(null)}/>}
-      {modalBulkEdit&&<ModalBulkEdit docs={selectedDocs.map(id=>documenti.find(d=>d.id===id)).filter(Boolean)} pianoConti={pianoConti} causaliIva={causaliIva} onSave={async(updates)=>{await sb.from('documenti_contabilita').update(updates).in('id',selectedDocs);await caricaTutto();setSelectedDocs([]);setModalBulkEdit(false);}} onClose={()=>setModalBulkEdit(false)}/>}
       {docInEdit&&<ModalEditDoc doc={docInEdit} pianoConti={pianoConti} causaliContabili={causaliContabili} causaliIva={causaliIva} onSave={caricaTutto} onClose={()=>setDocInEdit(null)}/>}
-    </div>
-  );
-}
-
-// ─── DA VALIDARE VIEW ────────────────────────────────────────
-function DaValidareView({documenti,pianoConti,causaliContabili,causaliIva,selectedDocs,toggleSelect,selectAll,deselectAll,confermaDoc,confermaTutti,registraConfermati,onEdit,setModalBulkEdit,stats,onRefresh}){
-  const [filtroStato,setFiltroStato]=useState('tutti');
-  const [filtroFornitore,setFiltroFornitore]=useState('');
-  const [searchTerm,setSearchTerm]=useState('');
-
-  const filtered=documenti.filter(d=>{
-    if(filtroStato!=='tutti'&&d.validation_status!==filtroStato)return false;
-    if(filtroFornitore&&d.soggetto_piva!==filtroFornitore)return false;
-    if(searchTerm){
-      const s=searchTerm.toLowerCase();
-      if(!(d.soggetto_denominazione||'').toLowerCase().includes(s)&&!(d.numero_documento||'').toLowerCase().includes(s))return false;
-    }
-    return true;
-  });
-
-  const fornitori=[...new Set(documenti.map(d=>d.soggetto_piva).filter(Boolean))];
-
-  return(
-    <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-        <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>⚡ Da Validare</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Documenti in attesa di conferma operatore</div>
-        </div>
-        <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
-          {selectedDocs.length>0&&(
-            <>
-              <button className="btn-sec" onClick={()=>setModalBulkEdit(true)}>✏️ Modifica ({selectedDocs.length})</button>
-              <button className="btn-sec" onClick={confermaTutti}>✓ Conferma ({selectedDocs.length})</button>
-              <button className="btn-sec" style={{borderColor:'rgba(224,82,82,.3)',color:'#ff8585'}} onClick={async()=>{
-                if(!confirm('Eliminare '+selectedDocs.length+' documenti selezionati?'))return;
-                for(const id of selectedDocs){await sb.from('documenti_contabilita').delete().eq('id',id);}
-                deselectAll();if(onRefresh)onRefresh();
-              }}>🗑 Elimina ({selectedDocs.length})</button>
-            </>
-          )}
-          <button className="btn" onClick={registraConfermati} disabled={stats.confermati===0}>📝 Registra confermati ({stats.confermati})</button>
-        </div>
-      </div>
-
-      {/* Stats mini */}
-      <div style={{display:'flex',gap:'.75rem',marginBottom:'1rem'}}>
-        {[['🟡',stats.daValidare,'In attesa','pending'],['🟢',stats.confermati,'Confermati','confirmed'],['🔴',stats.errori,'Da rivedere','error']].map(([ico,n,l,f])=>(
-          <div key={f} onClick={()=>setFiltroStato(filtroStato===f?'tutti':f)} style={{cursor:'pointer',padding:'.5rem 1rem',background:filtroStato===f?'rgba(200,164,94,.1)':'var(--s2)',border:'1px solid '+(filtroStato===f?'var(--gold)':'var(--bd)'),borderRadius:8,display:'flex',alignItems:'center',gap:'.5rem'}}>
-            <span>{ico}</span>
-            <span style={{fontWeight:700}}>{n}</span>
-            <span style={{fontSize:'.75rem',color:'var(--mu)'}}>{l}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtri */}
-      <div style={{display:'flex',gap:'.5rem',marginBottom:'1rem',flexWrap:'wrap'}}>
-        <input placeholder="🔍 Cerca..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{flex:1,minWidth:200}}/>
-        <select value={filtroFornitore} onChange={e=>setFiltroFornitore(e.target.value)} style={{minWidth:180}}>
-          <option value="">Tutti i fornitori/clienti</option>
-          {fornitori.map(p=><option key={p} value={p}>{documenti.find(d=>d.soggetto_piva===p)?.soggetto_denominazione||p}</option>)}
-        </select>
-      </div>
-
-      {/* Tabella */}
-      {filtered.length===0?(
-        <div className="empty"><div className="empty-ico">📄</div><div className="empty-t">Nessun documento</div></div>
-      ):(
-        <div className="card" style={{padding:0,overflow:'hidden'}}>
-          <table className="tbl">
-            <thead><tr>
-              <th style={{width:40}}><input type="checkbox" checked={selectedDocs.length===filtered.length&&filtered.length>0} onChange={e=>e.target.checked?selectAll(filtered.map(d=>d.id)):deselectAll()}/></th>
-              <th>Stato</th>
-              <th>Tipo</th>
-              <th>N° Doc</th>
-              <th>Data</th>
-              <th>Soggetto</th>
-              <th>Totale</th>
-              <th>Conto proposto</th>
-              <th>Azioni</th>
-            </tr></thead>
-            <tbody>{filtered.map(d=>(
-              <tr key={d.id} className={'row-'+(d.validation_status==='confirmed'?'confirmed':d.validation_status==='error'?'error':'pending')}>
-                <td><input type="checkbox" checked={selectedDocs.includes(d.id)} onChange={()=>toggleSelect(d.id)}/></td>
-                <td>
-                  <span className={'bdg status-'+d.validation_status}>
-                    {d.validation_status==='pending'?'🟡':d.validation_status==='confirmed'?'🟢':'🔴'}
-                  </span>
-                </td>
-                <td><span className={'bdg '+(d.tipo_documento?.includes('attiva')?'bdg-green':'bdg-gold')}>{d.tipo_documento?.includes('attiva')?'📤':'📥'}</span></td>
-                <td style={{fontWeight:600}}>{d.numero_documento||'—'}</td>
-                <td style={{fontSize:'.78rem'}}>{fmtDate(d.data_documento)}</td>
-                <td>
-                  <div style={{fontSize:'.8rem',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'}}>{d.soggetto_denominazione||'—'}</div>
-                  <div style={{fontSize:'.65rem',color:'var(--mu)'}}>{d.soggetto_piva}</div>
-                </td>
-                <td style={{fontWeight:700,color:'var(--gld2)'}}>{fmt(d.totale)}</td>
-                <td style={{fontSize:'.75rem',color:'var(--mu)'}}>{pianoConti.find(c=>c.id===d.conto_id)?.descrizione||'Da assegnare'}</td>
-                <td>
-                  <div className="tbl-actions">
-                    <button className="btn-icon" onClick={()=>onEdit(d)} title="Modifica">✏️</button>
-                    {d.validation_status==='pending'&&<button className="btn-icon" style={{borderColor:'rgba(76,175,80,.4)',color:'var(--gr)'}} onClick={()=>confermaDoc(d.id)} title="Conferma">✓</button>}
-                  </div>
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
@@ -537,7 +542,7 @@ function ImportFattureView({societaId,onComplete}){
 
   // Load AI setting
   useEffect(()=>{
-    sb.from('impostazioni_studio').select('chiave,valore').eq('chiave','ai_enabled')
+    contabilitaRepo.getImpostazioneStudio('ai_enabled')
       .then(({data})=>setAiEnabled(data?.valore!=='false'));
   },[]);
 
@@ -614,12 +619,12 @@ function ImportFattureView({societaId,onComplete}){
 
         // Upload file a storage
         const filePath=`contabilita/${societaId}/${Date.now()}_${file.name}`;
-        await sb.storage.from('documenti').upload(filePath,file);
-        const{data:urlData}=sb.storage.from('documenti').getPublicUrl(filePath);
+        await contabilitaRepo.uploadDocumento(filePath,file);
+        const{data:urlData}=contabilitaRepo.getDocumentoPublicUrl(filePath);
 
         // Salva documento (con validazione societaId)
         if(!societaId){console.error('ERRORE: societaId è null/undefined!');throw new Error('Società non selezionata');}
-        const{error:insertErr}=await sb.from('documenti_contabilita').insert([{
+        const docUploadPayload={
           societa_id:societaId,
           filename:file.name,
           file_path:filePath,
@@ -638,8 +643,16 @@ function ImportFattureView({societaId,onComplete}){
           workflow_status:aiEnabled?'proposed':'manual',
           validation_status:analysis.is_transitorio?'error':'pending',
           ai_confidence:analysis.confidence||0
-        }]);
+        }
+        traceIva('PRE_INSERT_DOCUMENTI_CONT_UPLOAD', 'DB', docUploadPayload.causale_iva_id ?? analysis.causale_iva_id ?? null)
+        traceStep('INSERT_PAYLOAD', docUploadPayload, { table: 'documenti_contabilita', ...insertCausaleIvaMeta(docUploadPayload) })
+        traceDiff('DB_MAPPING_DIFF', { causale_iva_id: analysis.causale_iva_id ?? null }, { causale_iva_id: docUploadPayload.causale_iva_id ?? null })
+        const uploadIns=await contabilitaRepo.insertDocumentoContabilita(docUploadPayload);
+        traceStep('INSERT_RESULT', { table: 'documenti_contabilita', data: uploadIns.data, error: uploadIns.error })
+        const insertErr=uploadIns.error
         if(insertErr){console.error('Insert error:',insertErr);throw insertErr;}
+        const newDocId = uploadIns.data?.[0]?.id
+        if (newDocId) triggerAutoPipeline(newDocId, { source: 'contabilita_import_fatture' })
 
       }catch(err){
         console.error('Import error:',err);
@@ -722,9 +735,7 @@ function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
   // Calcola prossimo codice disponibile
   const calcolaCodice = async (parent) => {
     const livello = parent.split(' ').length + 1;
-    const {data} = await sb.from('piano_conti')
-      .select('codice').eq('societa_id',societaId).eq('attivo',true)
-      .like('codice', parent+' %')
+    const {data} = await contabilitaRepo.getPianoContiCodiciByLike(societaId, parent)
       .eq('livello', livello)
       .order('codice',{ascending:false}).limit(1);
     if(!data?.length){
@@ -1004,7 +1015,7 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
 
     // Aggiorna conti esistenti
     for(const rec of preview.aggiornati){
-      const {error} = await sb.from('piano_conti').update({
+      const {error} = await contabilitaRepo.updatePianoContoByCodiceSocieta({
         rag_sociale_2:    rec.rag_sociale_2||null,
         indirizzo:        rec.indirizzo||null,
         cap:              rec.cap||null,
@@ -1025,7 +1036,7 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
         soggetto_operaz:  rec.soggetto_operaz||null,
         tipo_controparte: rec.tipo_controparte||null,
         partecipa_gruppo_iva: rec.partecipa_gruppo_iva,
-      }).eq('codice',rec.codice_piano).eq('societa_id',societaId);
+      }, rec.codice_piano, societaId);
       error ? err++ : ok++;
     }
 
@@ -1165,7 +1176,7 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
     if(!sel.size||!confirm(`Eliminare ${sel.size} conti selezionati?`))return;
     setDeleting(true);
     const ids=[...sel];
-    for(let i=0;i<ids.length;i+=100) await sb.from('piano_conti').update({attivo:false}).in('id',ids.slice(i,i+100));
+    for(let i=0;i<ids.length;i+=100) await contabilitaRepo.bulkDeactivatePianoConti(ids.slice(i,i+100));
     setSel(new Set());setDeleting(false);onRefresh();
   };
 
@@ -1174,7 +1185,7 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
     setDeleting(true);
     // Elimina in batch da 100
     const ids=pianoConti.map(c=>c.id);
-    for(let i=0;i<ids.length;i+=100) await sb.from('piano_conti').update({attivo:false}).in('id',ids.slice(i,i+100));
+    for(let i=0;i<ids.length;i+=100) await contabilitaRepo.bulkDeactivatePianoConti(ids.slice(i,i+100));
     setSel(new Set());setDeleting(false);onRefresh();
   };
 
@@ -1271,8 +1282,8 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
 
   return(
     <div>
-      {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{await sb.from('piano_conti').update(updates).eq('id',editConto.id);setEditConto(null);onRefresh();}} onClose={()=>setEditConto(null)}/>}
-      {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{const{error}=await sb.from('piano_conti').insert([{...rec,societa_id:societaId,attivo:true}]);if(error){alert('Errore: '+error.message);return;}setNuovoConto({open:false});onRefresh();}} onClose={()=>setNuovoConto({open:false})}/>}
+      {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{await contabilitaRepo.updatePianoConto(editConto.id,updates);setEditConto(null);onRefresh();}} onClose={()=>setEditConto(null)}/>}
+      {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{const{error}=await contabilitaRepo.insertPianoConto({...rec,societa_id:societaId,attivo:true});if(error){alert('Errore: '+error.message);return;}setNuovoConto({open:false});onRefresh();}} onClose={()=>setNuovoConto({open:false})}/>}
       {importAnagrafica&&<ModalImportAnagraficaNESPianoConti societaId={societaId} pianoConti={pianoConti} onComplete={()=>{setImportAnagrafica(false);onRefresh();}} onClose={()=>setImportAnagrafica(false)}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
@@ -1330,9 +1341,7 @@ function SelettoreContropartita({value, onChange, societaId}){
   useEffect(()=>{
     if(!open||!societaId) return;
     setLoading(true);
-    sb.from('piano_conti').select('id,codice,descrizione,livello')
-      .eq('societa_id',societaId).eq('attivo',true)
-      .order('codice').limit(3000) // tutto il piano conti, nessun filtro livello
+    contabilitaRepo.getPianoContiBasic(societaId) // tutto il piano conti, nessun filtro livello
       .then(({data})=>{ setConti(data||[]); setLoading(false); });
   },[open,societaId]);
 
@@ -1394,8 +1403,7 @@ function AnagraficaTab({form, up, conto, B}){
   const [causaliIva,setCausaliIva]=useState([]);
   useEffect(()=>{
     if(!conto.societa_id) return;
-    sb.from('causali_iva').select('id,codice,descrizione,aliquota')
-      .eq('societa_id',conto.societa_id).eq('attivo',true).order('codice').limit(200)
+    contabilitaRepo.getCausaliIvaBasic()
       .then(({data})=>setCausaliIva(data||[]));
   },[conto.societa_id]);
 
@@ -1447,9 +1455,14 @@ function AnagraficaTab({form, up, conto, B}){
         {/* Aliquota IVA — dropdown causali IVA */}
         <div className="fg">
           <label>Aliquota IVA predefinita</label>
-          <select value={form.aliquota_iva||''} onChange={e=>up('aliquota_iva',e.target.value)}>
+          <select value={form.causale_iva_id||''} onChange={e=>{
+            const id=e.target.value
+            const c=causaliIva.find(x=>x.id===id)
+            up('causale_iva_id',id)
+            up('aliquota_iva',c?String(c.aliquota??''):'')
+          }}>
             <option value="">-- Standard (da causale) --</option>
-            {causaliIva.map(c=><option key={c.id} value={c.codice}>{c.codice} — {c.descrizione}{c.aliquota?` (${c.aliquota}%)`:''}</option>)}
+            {causaliIva.map(c=><option key={c.id} value={c.id}>{c.codice} — {c.descrizione}{c.aliquota?` (${c.aliquota}%)`:''}</option>)}
           </select>
         </div>
 
@@ -1567,6 +1580,7 @@ function ModalEditConto({conto,onSave,onClose}){
     tipo_pagamento:conto.tipo_pagamento||'',
     banca:conto.banca||'',
     aliquota_iva:conto.aliquota_iva||'',
+    causale_iva_id:conto.causale_iva_id||'',
     soggetto_operaz:conto.soggetto_operaz||'',
     tipo_controparte:conto.tipo_controparte||'1 = Persona fisica',
     regime_fiscale:conto.regime_fiscale||'',
@@ -1680,7 +1694,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
     setDeleting(true);
     const table=tipo==='iva'?'causali_iva':'causali_contabili';
     const ids=[...sel];
-    for(let i=0;i<ids.length;i+=100) await sb.from(table).update({attivo:false}).in('id',ids.slice(i,i+100));
+    for(let i=0;i<ids.length;i+=100) await contabilitaRepo.bulkDeactivateCausali(table, ids.slice(i,i+100));
     setSel(new Set());setDeleting(false);onRefresh();
   };
 
@@ -1690,14 +1704,14 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
     setDeleting(true);
     const table=tipo==='iva'?'causali_iva':'causali_contabili';
     const ids=causali.map(c=>c.id);
-    for(let i=0;i<ids.length;i+=100) await sb.from(table).update({attivo:false}).in('id',ids.slice(i,i+100));
+    for(let i=0;i<ids.length;i+=100) await contabilitaRepo.bulkDeactivateCausali(table, ids.slice(i,i+100));
     setSel(new Set());setDeleting(false);onRefresh();
   };
 
   return(
     <div>
-      {editCausale&&<ModalEditCausale causale={editCausale} tipo={tipo} onSave={async(updates)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';await sb.from(table).update(updates).eq('id',editCausale.id);setEditCausale(null);onRefresh();}} onClose={()=>setEditCausale(null)}/>}
-      {nuovaCausale&&<ModalNuovaCausale tipo={tipo} societaId={societaId} onSave={async(rec)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const{error}=await sb.from(table).insert([{...rec,societa_id:societaId,attivo:true}]);if(error){alert('Errore: '+error.message);return;}setNuovaCausale(false);onRefresh();}} onClose={()=>setNuovaCausale(false)}/>}
+      {editCausale&&<ModalEditCausale causale={editCausale} tipo={tipo} onSave={async(updates)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';await contabilitaRepo.updateCausale(table,editCausale.id,updates);setEditCausale(null);onRefresh();}} onClose={()=>setEditCausale(null)}/>}
+      {nuovaCausale&&<ModalNuovaCausale tipo={tipo} societaId={societaId} onSave={async(rec)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const row=tipo==='iva'?{...rec,attivo:true}:{...rec,societa_id:societaId,attivo:true};const{error}=await contabilitaRepo.insertCausale(table,row);if(error){alert('Errore: '+error.message);return;}setNuovaCausale(false);onRefresh();}} onClose={()=>setNuovaCausale(false)}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
           <div style={{fontSize:'1.1rem',fontWeight:700}}>{tipo==='contabili'?'📋 Causali Contabili':'💧 Causali IVA'}</div>
@@ -2145,6 +2159,30 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
   );
 }
 
+// ─── PRIMA NOTA VIEW — riga tabella scritture (log binding) ──
+function PrimaNotaViewScritturaRow({ s, getClienteCodice, getClienteNome, fmtDate, fmt }) {
+  traceStep('UI_ROW_PROPS', {
+    id: s.id,
+    numero_registrazione: s.numero_registrazione,
+    cliente_id: s.cliente_id,
+    causale_codice: s.causale_codice,
+    causale_iva_codice: s.causale_iva_codice ?? null
+  }, { component: 'PrimaNotaViewScritturaRow' })
+  return (
+    <tr>
+      <td style={{fontWeight:600}}>{s.numero_registrazione}</td>
+      <td style={{fontSize:'.78rem'}}>{fmtDate(s.data_registrazione)}</td>
+      <td><span style={{fontFamily:'monospace',fontWeight:700,color:'var(--gold)',background:'rgba(200,164,94,.1)',padding:'.1rem .3rem',borderRadius:4,fontSize:'.7rem'}}>{getClienteCodice(s.cliente_id)}</span></td>
+      <td style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis'}}>{s.cliente_fornitore_nome||getClienteNome(s.cliente_id)}</td>
+      <td><span className="bdg bdg-blue">{s.causale_codice||'—'}</span></td>
+      <td style={{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',fontSize:'.8rem'}}>{s.descrizione}</td>
+      <td style={{fontWeight:600,color:'var(--gr)',textAlign:'right'}}>{fmt(s.totale_dare)}</td>
+      <td style={{fontWeight:600,color:'var(--rd)',textAlign:'right'}}>{fmt(s.totale_avere)}</td>
+      <td><span className={'bdg '+(s.stato==='definitiva'?'bdg-green':'bdg-gold')}>{s.stato}</span></td>
+    </tr>
+  )
+}
+
 // ─── PRIMA NOTA VIEW ─────────────────────────────────────────
 function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaId,onRefresh}){
   const [modalNuova,setModalNuova]=useState(false);
@@ -2156,7 +2194,7 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
     numero_documento:'',
     cliente_id:'',
     causale_codice:'',
-    causale_iva_codice:'',
+    causale_iva_id:'',
     descrizione:'',
     totale_dare:0,
     totale_avere:0,
@@ -2187,6 +2225,7 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
   });
 
   const onClienteChange=(id)=>{
+    traceStep('UI_INPUT_CHANGE', { value: id, payload: { field: 'cliente_id', scope: 'PrimaNotaView_modal' } })
     const c=clienti.find(x=>x.id===id);
     setFormData(p=>({
       ...p,
@@ -2202,15 +2241,17 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
   };
 
   const onImponibileChange=(val)=>{
-    const causIva=causaliIva.find(c=>c.codice===formData.causale_iva_codice);
+    traceStep('UI_INPUT_CHANGE', { value: val, payload: { field: 'imponibile', scope: 'PrimaNotaView_modal' } })
+    const causIva=causaliIva.find(c=>c.id===formData.causale_iva_id);
     const{imposta,totale}=calcolaIVA(val,causIva?.aliquota||22);
     setFormData(p=>({...p,imponibile:val,imposta,totale_dare:totale,totale_avere:totale}));
   };
 
-  const onCausaleIvaChange=(codice)=>{
-    const causIva=causaliIva.find(c=>c.codice===codice);
+  const onCausaleIvaChange=(causaleId)=>{
+    traceStep('UI_INPUT_CHANGE', { value: causaleId, payload: { field: 'causale_iva_id', scope: 'PrimaNotaView_modal' } })
+    const causIva=causaliIva.find(c=>c.id===causaleId);
     const{imposta,totale}=calcolaIVA(formData.imponibile,causIva?.aliquota||22);
-    setFormData(p=>({...p,causale_iva_codice:codice,imposta,totale_dare:totale,totale_avere:totale}));
+    setFormData(p=>({...p,causale_iva_id:causaleId,imposta,totale_dare:totale,totale_avere:totale}));
   };
 
   const salvaScrittura=async()=>{
@@ -2226,7 +2267,7 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
       cliente_id:formData.cliente_id||null,
       cliente_fornitore_nome:cliente?(cliente.ragione_sociale||`${cliente.nome} ${cliente.cognome||''}`.trim()):formData.descrizione,
       causale_codice:formData.causale_codice,
-      causale_iva_codice:formData.causale_iva_codice,
+      causale_iva_codice:causaliIva.find(c=>c.id===formData.causale_iva_id)?.codice||'',
       descrizione:formData.descrizione,
       totale_dare:parseFloat(formData.totale_dare||0),
       totale_avere:parseFloat(formData.totale_avere||0),
@@ -2234,14 +2275,23 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
       imposta:parseFloat(formData.imposta||0),
       stato:'provvisoria'
     };
-    
-    const{error}=await sb.from('prima_nota').insert([record]);
+
+    traceIva('PRE_INSERT_PRIMA_NOTA_VIEW', 'DB', formData.causale_iva_id ?? null)
+    traceStep('INSERT_PAYLOAD', record, { table: 'prima_nota', ...insertCausaleIvaMeta(record) })
+    traceDiff(
+      'DB_MAPPING_DIFF',
+      { causale_iva_id: formData.causale_iva_id ?? null },
+      { causale_iva_id: record.causale_iva_id ?? null }
+    )
+    const pnViewIns=await createPrimaNota({ pnPayload: record, headerSelect: '*' });
+    traceStep('INSERT_RESULT', { table: 'prima_nota', data: pnViewIns.data, error: pnViewIns.error })
+    const error=pnViewIns.error
     if(error){
       alert('Errore: '+error.message);
       return;
     }
     setModalNuova(false);
-    setFormData({data_registrazione:new Date().toISOString().split('T')[0],data_documento:'',numero_documento:'',cliente_id:'',causale_codice:'',causale_iva_codice:'',descrizione:'',totale_dare:0,totale_avere:0,conto_dare_id:'',conto_avere_id:'',imponibile:0,imposta:0});
+    setFormData({data_registrazione:new Date().toISOString().split('T')[0],data_documento:'',numero_documento:'',cliente_id:'',causale_codice:'',causale_iva_id:'',descrizione:'',totale_dare:0,totale_avere:0,conto_dare_id:'',conto_avere_id:'',imponibile:0,imposta:0});
     onRefresh();
   };
 
@@ -2260,11 +2310,19 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
         <div style={{display:'flex',gap:'1rem',alignItems:'flex-end',flexWrap:'wrap'}}>
           <div className="fg" style={{flex:1,minWidth:200}}>
             <label>Cerca</label>
-            <input placeholder="🔍 N° documento, descrizione..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}/>
+            <input placeholder="🔍 N° documento, descrizione..." value={searchTerm} onChange={e=>{
+              const value=e.target.value
+              traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'searchTerm', scope: 'PrimaNotaView_filtri' } })
+              setSearchTerm(value)
+            }}/>
           </div>
           <div className="fg" style={{minWidth:200}}>
             <label>Filtra per Cliente</label>
-            <select value={filtroCliente} onChange={e=>setFiltroCliente(e.target.value)}>
+            <select value={filtroCliente} onChange={e=>{
+              const value=e.target.value
+              traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'filtroCliente', scope: 'PrimaNotaView_filtri' } })
+              setFiltroCliente(value)
+            }}>
               <option value="">Tutti i clienti</option>
               {clienti.filter(c=>c.codice_cliente).map(c=><option key={c.id} value={c.id}>[{c.codice_cliente}] {c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()}</option>)}
             </select>
@@ -2278,19 +2336,29 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
         <div className="card" style={{padding:0,overflow:'hidden'}}>
           <table className="tbl">
             <thead><tr><th>N°</th><th>Data</th><th>Cod.Cli.</th><th>Cliente/Fornitore</th><th>Causale</th><th>Descrizione</th><th style={{textAlign:'right'}}>Dare</th><th style={{textAlign:'right'}}>Avere</th><th>Stato</th></tr></thead>
-            <tbody>{filtered.map(s=>(
-              <tr key={s.id}>
-                <td style={{fontWeight:600}}>{s.numero_registrazione}</td>
-                <td style={{fontSize:'.78rem'}}>{fmtDate(s.data_registrazione)}</td>
-                <td><span style={{fontFamily:'monospace',fontWeight:700,color:'var(--gold)',background:'rgba(200,164,94,.1)',padding:'.1rem .3rem',borderRadius:4,fontSize:'.7rem'}}>{getClienteCodice(s.cliente_id)}</span></td>
-                <td style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis'}}>{s.cliente_fornitore_nome||getClienteNome(s.cliente_id)}</td>
-                <td><span className="bdg bdg-blue">{s.causale_codice||'—'}</span></td>
-                <td style={{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',fontSize:'.8rem'}}>{s.descrizione}</td>
-                <td style={{fontWeight:600,color:'var(--gr)',textAlign:'right'}}>{fmt(s.totale_dare)}</td>
-                <td style={{fontWeight:600,color:'var(--rd)',textAlign:'right'}}>{fmt(s.totale_avere)}</td>
-                <td><span className={'bdg '+(s.stato==='definitiva'?'bdg-green':'bdg-gold')}>{s.stato}</span></td>
-              </tr>
-            ))}</tbody>
+            <tbody>
+              {(() => {
+                traceStep('UI_RENDER_RIGHE', {
+                  righe: filtered.map((row, i) => ({
+                    i,
+                    id: row.id,
+                    causale_iva_codice: row.causale_iva_codice ?? null,
+                    causale_codice: row.causale_codice ?? null
+                  }))
+                }, { component: 'PrimaNotaView' })
+                return null
+              })()}
+              {filtered.map(s => (
+                <PrimaNotaViewScritturaRow
+                  key={s.id}
+                  s={s}
+                  getClienteCodice={getClienteCodice}
+                  getClienteNome={getClienteNome}
+                  fmtDate={fmtDate}
+                  fmt={fmt}
+                />
+              ))}
+            </tbody>
           </table>
         </div>
       )}
@@ -2308,19 +2376,35 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
               <div className="form-grid">
                 <div className="fg">
                   <label>Data Registrazione *</label>
-                  <input type="date" value={formData.data_registrazione} onChange={e=>setFormData(p=>({...p,data_registrazione:e.target.value}))}/>
+                  <input type="date" value={formData.data_registrazione} onChange={e=>{
+                    const value=e.target.value
+                    traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'data_registrazione', scope: 'PrimaNotaView_modal' } })
+                    setFormData(p=>({...p,data_registrazione:value}))
+                  }}/>
                 </div>
                 <div className="fg">
                   <label>Data Documento</label>
-                  <input type="date" value={formData.data_documento} onChange={e=>setFormData(p=>({...p,data_documento:e.target.value}))}/>
+                  <input type="date" value={formData.data_documento} onChange={e=>{
+                    const value=e.target.value
+                    traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'data_documento', scope: 'PrimaNotaView_modal' } })
+                    setFormData(p=>({...p,data_documento:value}))
+                  }}/>
                 </div>
                 <div className="fg">
                   <label>N° Documento</label>
-                  <input value={formData.numero_documento} onChange={e=>setFormData(p=>({...p,numero_documento:e.target.value}))} placeholder="Es. FT-001/2025"/>
+                  <input value={formData.numero_documento} onChange={e=>{
+                    const value=e.target.value
+                    traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'numero_documento', scope: 'PrimaNotaView_modal' } })
+                    setFormData(p=>({...p,numero_documento:value}))
+                  }} placeholder="Es. FT-001/2025"/>
                 </div>
                 <div className="fg">
                   <label>Causale Contabile</label>
-                  <select value={formData.causale_codice} onChange={e=>setFormData(p=>({...p,causale_codice:e.target.value}))}>
+                  <select value={formData.causale_codice} onChange={e=>{
+                    const value=e.target.value
+                    traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'causale_codice', scope: 'PrimaNotaView_modal' } })
+                    setFormData(p=>({...p,causale_codice:value}))
+                  }}>
                     <option value="">-- Seleziona --</option>
                     {causali.map(c=><option key={c.id} value={c.codice}>{c.codice} - {c.descrizione}</option>)}
                   </select>
@@ -2335,7 +2419,11 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
                 </div>
                 <div className="fg full">
                   <label>Descrizione</label>
-                  <input value={formData.descrizione} onChange={e=>setFormData(p=>({...p,descrizione:e.target.value}))} placeholder="Descrizione operazione"/>
+                  <input value={formData.descrizione} onChange={e=>{
+                    const value=e.target.value
+                    traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'descrizione', scope: 'PrimaNotaView_modal' } })
+                    setFormData(p=>({...p,descrizione:value}))
+                  }} placeholder="Descrizione operazione"/>
                 </div>
                 <div className="fg">
                   <label>Imponibile €</label>
@@ -2343,9 +2431,9 @@ function PrimaNotaView({scritture,pianoConti,causali,causaliIva,clienti,societaI
                 </div>
                 <div className="fg">
                   <label>Causale IVA</label>
-                  <select value={formData.causale_iva_codice} onChange={e=>onCausaleIvaChange(e.target.value)}>
+                  <select value={formData.causale_iva_id} onChange={e=>onCausaleIvaChange(e.target.value)}>
                     <option value="">-- Seleziona --</option>
-                    {causaliIva.map(c=><option key={c.id} value={c.codice}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}
+                    {causaliIva.map(c=><option key={c.id} value={c.id}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}
                   </select>
                 </div>
                 <div className="fg">
@@ -2401,71 +2489,21 @@ function RegistrateView({documenti}){
 
 // ─── MODAL BULK EDIT ─────────────────────────────────────────
 function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
+  const doc = docs?.[0]
+  const _datiEst = doc?.dati_estratti
+    ? (typeof doc.dati_estratti === 'string' ? JSON.parse(doc.dati_estratti) : doc.dati_estratti)
+    : {}
   const [contoId,setContoId]=useState('');
-  const [causaleIva,setCausaleIva]=useState(doc.causale_iva||'');
+  const [causaleIva,setCausaleIva]=useState(doc?.causale_iva||'');
   // causaleIva per riga multi-aliquota: { [aliquota]: causale_id }
   const [causaliPerRiga,setCausaliPerRiga]=useState({});
 
-  // ── getCausaleIVA: priorità anagrafica → fallback per aliquota ──
-  // Estrae numero intero da aliquota: "22.00" → 22, "10%" → 10
-  function extractAliquota(value) {
-    if(!value) return null
-    const m = String(value).match(/\d+/)
-    return m ? parseInt(m[0]) : null
-  }
 
-  const getCausaleIVA = ({aliquota, natura, contoFornitore, causaliIva}) => {
-    if(!causaliIva?.length) return ''
-
-    const aliquotaNum = extractAliquota(aliquota)
-    const nat = (natura||'').toLowerCase()
-
-    // PRIORITÀ 1: aliquota_iva predefinita nel conto fornitore
-    if(contoFornitore?.aliquota_iva) {
-      const defNum = extractAliquota(contoFornitore.aliquota_iva)
-      if(defNum!=null) {
-        const m = causaliIva.find(c => extractAliquota(c.descrizione||c.codice) === defNum)
-        if(m) return m.id
-      }
-    }
-
-    // Trova per natura 0%
-    if(aliquotaNum === 0 || aliquotaNum == null) {
-      let match = null
-      const norm = s => (s||'').toLowerCase()
-      if(nat.includes('n6')||nat.includes('n7')||nat.includes('rev'))
-        match = causaliIva.find(c=>norm(c.descrizione).includes('reverse')||norm(c.descrizione).includes('inversione'))
-      else if(nat.includes('esente')||nat.includes('n4'))
-        match = causaliIva.find(c=>norm(c.descrizione).includes('esente'))
-      else if(nat.includes('escl')||nat.includes('n2'))
-        match = causaliIva.find(c=>norm(c.descrizione).includes('escl'))
-      else
-        match = causaliIva.find(c=>norm(c.descrizione).includes('fuori campo')||norm(c.codice).includes('fc'))
-      console.log('[IVA MATCH FIX]', { aliquota_originale: aliquota, aliquota_num: aliquotaNum, match: match?.descrizione||null })
-      return match?.id || ''
-    }
-
-    // Match principale per numero
-    const match = causaliIva.find(c => {
-      const testo = (c.descrizione||c.codice||'').toLowerCase()
-      const numero = extractAliquota(testo)
-      return numero === aliquotaNum
-    })
-
-    console.log('[IVA MATCH FIX]', {
-      aliquota_originale: aliquota,
-      aliquota_num: aliquotaNum,
-      causali: causaliIva.map(c=>c.descrizione),
-      match: match?.descrizione||null
-    })
-
-    return match?.id || ''
-  }
 
 
   // ── useEffect: si attiva quando causaliIva è caricato o dati cambiano ──
   useEffect(()=>{
-    if(!causaliIva?.length) return
+    if(!doc||!causaliIva?.length) return
 
     trace('UI STATE', {
       doc_id: doc.id, conto_id: doc.conto_id,
@@ -2498,7 +2536,7 @@ function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
     if(riepilogo.length === 0) {
       if(!causaleIva) {
         const aliqDoc = doc.aliquota_iva || _datiEst?.aliquota_iva || '22'
-        const id = getCausaleIVA({aliquota:aliqDoc, natura:'', contoFornitore, causaliIva})
+        const id = (resolveIvaOrNull({ conto: contoFornitore || null, aliquota: aliqDoc, natura: '', causaliIva, pipelineContext: undefined }) || '')
         if(id) setCausaleIva(id)
       }
       return
@@ -2507,7 +2545,7 @@ function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
     if(riepilogo.length === 1) {
       if(!causaleIva) {
         const r = riepilogo[0]
-        const id = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+        const id = (resolveIvaOrNull({ conto: contoFornitore || null, aliquota: r.aliquota, natura: r.natura || '', causaliIva, pipelineContext: undefined }) || '')
         if(id) setCausaleIva(id)
       }
     } else {
@@ -2515,12 +2553,12 @@ function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
       riepilogo.forEach(r => {
         const key = String(r.aliquota)
         if(!map[key])
-          map[key] = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+          map[key] = (resolveIvaOrNull({ conto: contoFornitore || null, aliquota: r.aliquota, natura: r.natura || '', causaliIva, pipelineContext: undefined }) || '')
       })
       setCausaliPerRiga(map)
       if(!causaleIva && Object.values(map)[0]) setCausaleIva(Object.values(map)[0])
     }
-  },[causaliIva?.length, doc.id]);
+  },[causaliIva?.length, doc?.id]);
   const [confirmAll,setConfirmAll]=useState(true);
 
   const handleSave=()=>{
@@ -2530,6 +2568,8 @@ function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
     if(confirmAll)updates.validation_status='confirmed';
     onSave(updates);
   };
+
+  if(!doc) return null
 
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
@@ -2552,7 +2592,7 @@ function ModalBulkEdit({docs,pianoConti,causaliIva,onSave,onClose}){
             <label>Causale IVA</label>
             <select value={causaleIva} onChange={e=>setCausaleIva(e.target.value)}>
               <option value="">— Non modificare —</option>
-              {causaliIva.map(c=><option key={c.id} value={c.codice}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}
+              {causaliIva.map(c=><option key={c.id} value={c.id}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}
             </select>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'.5rem',marginTop:'1rem'}}>
@@ -2577,6 +2617,12 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
     validation_status: doc.validation_status,
     dati_estratti_keys: doc.dati_estratti ? Object.keys(typeof doc.dati_estratti==='string'?JSON.parse(doc.dati_estratti):doc.dati_estratti) : []
   })
+  console.log("UI AMOUNTS DEBUG", {
+    imponibile: doc.imponibile,
+    iva: doc.iva,
+    totale: doc.totale,
+    dati_estratti: doc.dati_estratti
+  })
   // Leggi conto_id: prima dalla colonna diretta, poi da dati_estratti
   const _datiEst = doc.dati_estratti
     ? (typeof doc.dati_estratti==='string' ? JSON.parse(doc.dati_estratti) : doc.dati_estratti)
@@ -2585,56 +2631,6 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
   const [causaleIva,setCausaleIva]=useState(doc.causale_iva||'');
   // causaleIva per riga multi-aliquota: { [aliquota]: causale_id }
   const [causaliPerRiga,setCausaliPerRiga]=useState({});
-
-  // ── getCausaleIVA: priorità anagrafica → fallback per aliquota ──
-  const getCausaleIVA = ({aliquota, natura, contoFornitore, causaliIva}) => {
-    if(!causaliIva?.length) return ''
-    const norm = s => (s||'').toLowerCase()
-    const aliq = String(aliquota||'').replace('%','').trim()
-    const nat  = norm(natura||'')
-
-    // PRIORITÀ 1: aliquota_iva predefinita nel conto fornitore/cliente
-    if(contoFornitore?.aliquota_iva) {
-      const defAliq = String(contoFornitore.aliquota_iva).replace('%','').trim()
-      // cerca causale che matcha l'aliquota predefinita dell'anagrafica
-      const m = causaliIva.find(c =>
-        norm(c.codice).includes(defAliq) || norm(c.descrizione).includes(defAliq)
-      )
-      if(m) return m.id
-    }
-
-    // PRIORITÀ 2: match per aliquota + natura
-    let match = null
-    if(aliqNum===22)
-      match = causaliIva.find(c=>norm(c.codice).includes('22')||norm(c.descrizione).includes('22')||norm(c.descrizione).includes('ordinari'))
-    else if(aliqNum===10)
-      match = causaliIva.find(c=>norm(c.codice).includes('10')||norm(c.descrizione).includes('10')||norm(c.descrizione).includes('ridott'))
-    else if(aliqNum===5)
-      match = causaliIva.find(c=>norm(c.codice).includes('5')||norm(c.descrizione).includes('super'))
-    else if(aliqNum===4)
-      match = causaliIva.find(c=>norm(c.codice).includes('4')||norm(c.descrizione).includes('super ridott'))
-    else if(aliq==='0'||aliq==='0-fc') {
-      if(nat.includes('n6')||nat.includes('n7')||nat.includes('reverse')||nat.includes('rc'))
-        match = causaliIva.find(c=>norm(c.descrizione).includes('reverse')||norm(c.descrizione).includes('inversione'))
-      else if(nat.includes('esente')||nat.includes('n4'))
-        match = causaliIva.find(c=>norm(c.descrizione).includes('esente')||norm(c.codice).includes('es'))
-      else if(nat.includes('escl')||nat.includes('n2'))
-        match = causaliIva.find(c=>norm(c.descrizione).includes('escl')||norm(c.codice).includes('ns'))
-      else
-        match = causaliIva.find(c=>norm(c.descrizione).includes('fuori campo')||norm(c.codice).includes('fc'))
-    }
-    else if(aliq==='0-esente')
-      match = causaliIva.find(c=>norm(c.descrizione).includes('esente')||norm(c.codice).includes('es'))
-    else if(aliq==='0-escl')
-      match = causaliIva.find(c=>norm(c.descrizione).includes('escl')||norm(c.codice).includes('ns'))
-    else if(aliq==='0-rev')
-      match = causaliIva.find(c=>norm(c.descrizione).includes('reverse')||norm(c.descrizione).includes('inversione'))
-    else if(aliq==='0-ns')
-      match = causaliIva.find(c=>norm(c.descrizione).includes('non soggett')||norm(c.codice).includes('ns'))
-
-    trace('MATCH', { aliquota, natura, scelto: match?.descrizione||null })
-    return match?.id || ''
-  }
 
   // ── useEffect: si attiva quando causaliIva è caricato o dati cambiano ──
   useEffect(()=>{
@@ -2651,7 +2647,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
       // Nessun riepilogo — usa aliquota del documento se presente
       if(!causaleIva) {
         const aliqDoc = doc.aliquota_iva || _datiEst?.aliquota_iva || '22'
-        const id = getCausaleIVA({aliquota:aliqDoc, natura:'', contoFornitore, causaliIva})
+        const id = (resolveIvaOrNull({ conto: contoFornitore || null, aliquota: aliqDoc, natura: '', causaliIva, pipelineContext: undefined }) || '')
         if(id) setCausaleIva(id)
       }
       return
@@ -2661,7 +2657,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
       // Una sola aliquota — imposta causaleIva principale
       if(!causaleIva) {
         const r = riepilogo[0]
-        const id = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+        const id = (resolveIvaOrNull({ conto: contoFornitore || null, aliquota: r.aliquota, natura: r.natura || '', causaliIva, pipelineContext: undefined }) || '')
         if(id) setCausaleIva(id)
       }
     } else {
@@ -2670,7 +2666,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
       riepilogo.forEach(r => {
         const key = String(r.aliquota)
         if(!map[key]) {
-          map[key] = getCausaleIVA({aliquota:r.aliquota, natura:r.natura||'', contoFornitore, causaliIva})
+          map[key] = (resolveIvaOrNull({ conto: contoFornitore || null, aliquota: r.aliquota, natura: r.natura || '', causaliIva, pipelineContext: undefined }) || '')
         }
       })
       setCausaliPerRiga(map)
@@ -2706,10 +2702,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
 
     if(datiEst?.xml_filename) {
       // Carica xml_content da fatture_xml tramite filename + societa_id
-      sb.from('fatture_xml')
-        .select('xml_content')
-        .eq('filename', datiEst.xml_filename)
-        .limit(1)
+      contabilitaRepo.getFatturaXmlByFilename(datiEst.xml_filename)
         .then(({data}) => {
           if(data?.[0]?.xml_content) tryParseXml(data[0].xml_content);
         });
@@ -2719,7 +2712,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
     // 2. Fallback: fetch da URL storage
     let url = doc.file_url;
     if(!url && doc.file_path) {
-      const {data:u} = sb.storage.from('documenti').getPublicUrl(doc.file_path);
+      const {data:u} = contabilitaRepo.getDocumentoPublicUrl(doc.file_path);
       url = u?.publicUrl;
     }
     if(!url) return;
@@ -2729,7 +2722,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
   // AI suggestion for conto on mount
   useEffect(()=>{
     (async()=>{
-      const{data:sArr}=await sb.from('impostazioni_studio').select('valore').eq('chiave','ai_enabled');
+      const{data:sArr}=await contabilitaRepo.getImpostazioneStudioValore('ai_enabled');
       const s=Array.isArray(sArr)?sArr[0]:sArr;
       if(s?.valore==='false')return;
       const isPassiva=doc.tipo_documento?.includes('passiva');
@@ -2747,9 +2740,9 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
 
   const handleConfirm=async()=>{
     setSaving(true);
-    await sb.from('documenti_contabilita').update({
+    await contabilitaRepo.updateDocumentoContabilita(doc.id,{
       conto_id:contoId||null,validation_status:'confirmed',validated_at:new Date().toISOString()
-    }).eq('id',doc.id);
+    });
     onSave();onClose();
   };
 
@@ -3059,7 +3052,7 @@ function ModalEditDoc({doc,pianoConti,causaliContabili,causaliIva,onSave,onClose
                     <label>Causale IVA</label>
                     <select value={causaleIva} onChange={e=>setCausaleIva(e.target.value)}>
                       <option value="">Seleziona...</option>
-                      {causaliIva.map(c=><option key={c.id} value={c.codice}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}
+                      {causaliIva.map(c=><option key={c.id} value={c.id}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}
                     </select>
                   </div>
                   {doc.ai_confidence>0&&(
@@ -3103,8 +3096,8 @@ function ModalNuovaSocieta({onSave,onClose}){
 
   useEffect(()=>{
     Promise.all([
-      sb.from('clienti').select('*').eq('attivo',true).order('ragione_sociale'),
-      sb.from('societa').select('id,denominazione,codice').eq('attiva',true).order('denominazione'),
+      contabilitaRepo.getClientiAttiviCompleti(),
+      contabilitaRepo.getSocietaAttiveBasic(),
     ]).then(([{data:cl},{data:soc}])=>{
       setClienti(cl||[]);
       setSocieta(soc||[]);
@@ -3122,15 +3115,15 @@ function ModalNuovaSocieta({onSave,onClose}){
   // Duplica piano conti + causali dalla società sorgente
   const duplicaDati=async(newSocietaId,sourceSocietaId)=>{
     const[{data:pc},{data:cc},{data:ci}]=await Promise.all([
-      sb.from('piano_conti').select('*').eq('societa_id',sourceSocietaId).eq('attivo',true),
-      sb.from('causali_contabili').select('*').eq('societa_id',sourceSocietaId).eq('attivo',true),
-      sb.from('causali_iva').select('*').eq('societa_id',sourceSocietaId).eq('attivo',true),
+      contabilitaRepo.getPianoContiSource(sourceSocietaId),
+      contabilitaRepo.getCausaliContabiliSource(sourceSocietaId),
+      contabilitaRepo.getCausaliIvaSource(sourceSocietaId),
     ]);
     const strip=(arr)=>arr.map(({id,created_at,updated_at,...r})=>({...r,societa_id:newSocietaId}));
     const BATCH=500;
     for(const[table,data] of [['piano_conti',pc||[]],['causali_contabili',cc||[]],['causali_iva',ci||[]]]){
       for(let i=0;i<data.length;i+=BATCH){
-        const{error}=await sb.from(table).insert(strip(data.slice(i,i+BATCH)));
+        const{error}=await contabilitaRepo.insertBatch(table, strip(data.slice(i,i+BATCH)));
         if(error)console.error(`Errore duplica ${table}:`,error);
       }
     }
@@ -3617,7 +3610,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
         const parsed=parsePianoContiFromExcel(wb);
         if(!parsed.length)throw new Error('Nessun conto trovato nel file Excel.');
         setProgress('Controllo duplicati...');
-        const{data:esistenti}=await sb.from(cfg.table).select('codice').eq('societa_id',societaId).eq('attivo',true);
+        const{data:esistenti}=await contabilitaRepo.getCodiciEsistenti(cfg.table, societaId);
         const esistentiSet=new Set((esistenti||[]).map(r=>r.codice?.toString().trim()));
         const nuovi=parsed.filter(r=>!esistentiSet.has(r.codice?.toString().trim()));
         const duplicati=parsed.filter(r=>esistentiSet.has(r.codice?.toString().trim()));
@@ -3647,7 +3640,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
         const parsed=tipo==='causali_iva'?parseCausaliIvaFromExcel(wb):parseCausaliContabiliFromExcel(wb);
         if(!parsed.length)throw new Error('Nessuna causale trovata nel file Excel.');
         setProgress('Controllo duplicati...');
-        const{data:esistenti}=await sb.from(cfg.table).select('codice').eq('societa_id',societaId).eq('attivo',true);
+        const{data:esistenti}=await contabilitaRepo.getCodiciEsistenti(cfg.table, societaId);
         const esistentiSet=new Set((esistenti||[]).map(r=>r.codice?.toString().trim()));
         const nuovi=parsed.filter(r=>!esistentiSet.has(r.codice?.toString().trim()));
         const duplicati=parsed.filter(r=>esistentiSet.has(r.codice?.toString().trim()));
@@ -3675,8 +3668,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
 
       // 4. Controllo doppioni
       setProgress('Controllo duplicati...');
-      const {data:esistenti}=await sb.from(cfg.table)
-        .select('codice').eq('societa_id',societaId).eq('attivo',true);
+      const {data:esistenti}=await contabilitaRepo.getCodiciEsistenti(cfg.table, societaId);
       const esistentiSet=new Set((esistenti||[]).map(r=>r.codice?.toString().trim()));
       const nuovi=parsed.filter(r=>!esistentiSet.has(r.codice?.toString().trim()));
       const duplicati=parsed.filter(r=>esistentiSet.has(r.codice?.toString().trim()));
@@ -3714,7 +3706,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
       const BATCH=500;
       for(let i=0;i<records.length;i+=BATCH){
         setProgress(`Inserimento ${Math.min(i+BATCH,records.length)}/${records.length}...`);
-        const{error:err}=await sb.from(cfg.table).upsert(records.slice(i,i+BATCH),{onConflict:'societa_id,codice',ignoreDuplicates:false});
+        const{error:err}=await contabilitaRepo.upsertBatch(cfg.table, records.slice(i,i+BATCH));
         if(err)throw err;
       }
       setProgress('');onComplete();
@@ -3736,7 +3728,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
       if(!data.records?.length)throw new Error('AI non ha trovato risultati.');
 
       // controllo doppioni anche per AI
-      const{data:esistenti}=await sb.from(cfg.table).select('codice').eq('societa_id',societaId).eq('attivo',true);
+      const{data:esistenti}=await contabilitaRepo.getCodiciEsistenti(cfg.table, societaId);
       const esistentiSet=new Set((esistenti||[]).map(r=>r.codice?.toString().trim()));
       const nuovi=data.records.filter(r=>!esistentiSet.has(r.codice?.toString().trim()));
       const duplicati=data.records.filter(r=>esistentiSet.has(r.codice?.toString().trim()));
@@ -3881,9 +3873,9 @@ function ModuloBanche({societaId,contTab,setContTab}){
   const caricaDati=async()=>{
     setLoading(true);
     const[{data:c},{data:m},{data:f}]=await Promise.all([
-      sb.from('conti_bancari').select('*').eq('societa_id',societaId).order('nome'),
-      sb.from('movimenti_bancari').select('*').eq('societa_id',societaId).order('data_operazione',{ascending:false}).limit(200),
-      sb.from('partitario').select('*').eq('societa_id',societaId).eq('stato','aperta')
+      contabilitaRepo.getContiBancari(societaId),
+      contabilitaRepo.getMovimentiBancariRecenti(societaId),
+      contabilitaRepo.getPartitarioAperto(societaId)
     ]);
     setConti(c||[]);
     setMovimenti(m||[]);
@@ -3952,13 +3944,13 @@ function ModuloBanche({societaId,contTab,setContTab}){
       const data=await res.json();
       if(data.success){
         // Salva requisition
-        await sb.from('conti_bancari').insert([{
+        await contabilitaRepo.insertContoBancario({
           societa_id:societaId,
           requisition_id:data.requisitionId,
           banca_id:bankId,
           banca_nome:banks.find(b=>b.id===bankId)?.name,
           stato:'pending'
-        }]);
+        });
         // Apri link banca
         window.open(data.link,'_blank');
         setModalCollegaBanca(false);
@@ -3993,7 +3985,7 @@ function ModuloBanche({societaId,contTab,setContTab}){
         });
         const detData=await detRes.json();
 
-        await sb.from('conti_bancari').update({
+        await contabilitaRepo.updateContoBancario(conto.id,{
           account_id:accountId,
           nome:detData.account?.name||conto.banca_nome,
           iban:detData.account?.iban,
@@ -4002,7 +3994,7 @@ function ModuloBanche({societaId,contTab,setContTab}){
           saldo_contabile:detData.balances?.find(b=>b.balanceType==='closingBooked')?.balanceAmount?.amount,
           stato:'linked',
           data_ultimo_sync:new Date().toISOString()
-        }).eq('id',conto.id);
+        });
 
         await caricaDati();
         alert('Conto collegato con successo!');
@@ -4043,7 +4035,7 @@ function ModuloBanche({societaId,contTab,setContTab}){
         // Salva movimenti
         let nuovi=0;
         for(const tx of data.transactions){
-          const{error}=await sb.from('movimenti_bancari').upsert({
+          const{error}=await contabilitaRepo.upsertMovimentoBancario({
             conto_bancario_id:conto.id,
             societa_id:societaId,
             transaction_id:tx.id,
@@ -4056,11 +4048,11 @@ function ModuloBanche({societaId,contTab,setContTab}){
             controparte_nome:tx.counterparty,
             controparte_iban:tx.counterpartyIban,
             stato_riconciliazione:'da_riconciliare'
-          },{onConflict:'conto_bancario_id,transaction_id'});
+          });
           if(!error)nuovi++;
         }
 
-        await sb.from('conti_bancari').update({data_ultimo_sync:new Date().toISOString()}).eq('id',conto.id);
+        await contabilitaRepo.updateContoBancario(conto.id,{data_ultimo_sync:new Date().toISOString()});
         await caricaDati();
         alert(`Sincronizzati ${data.count} movimenti (${nuovi} nuovi)`);
       }
@@ -4092,12 +4084,12 @@ function ModuloBanche({societaId,contTab,setContTab}){
         
         // Aggiorna stato movimenti matchati
         for(const match of data.matches){
-          await sb.from('movimenti_bancari').update({
+          await contabilitaRepo.updateMovimentoBancario(match.transaction.id,{
             stato_riconciliazione:'proposto',
             match_score:match.score,
             match_confidence:match.confidence,
             partita_id:match.fattura?.id
-          }).eq('id',match.transaction.id);
+          });
         }
 
         await caricaDati();
@@ -4109,14 +4101,14 @@ function ModuloBanche({societaId,contTab,setContTab}){
   };
 
   const confermaMatch=async(movId,partitaId)=>{
-    await sb.from('movimenti_bancari').update({
+    await contabilitaRepo.updateMovimentoBancario(movId,{
       stato_riconciliazione:'confermato',
       partita_id:partitaId,
       riconciliato_at:new Date().toISOString()
-    }).eq('id',movId);
+    });
 
     // Chiudi partita se importo corrisponde
-    await sb.from('partitario').update({stato:'chiusa',data_chiusura:new Date().toISOString().split('T')[0]}).eq('id',partitaId);
+    await contabilitaRepo.updatePartitario(partitaId,{stato:'chiusa',data_chiusura:new Date().toISOString().split('T')[0]});
     
     await caricaDati();
   };
@@ -4257,7 +4249,7 @@ function ModuloBanche({societaId,contTab,setContTab}){
                       </div>
                     </div>
                     <div style={{display:'flex',gap:'.5rem',marginTop:'.75rem',justifyContent:'flex-end'}}>
-                      <button className="btn-sec" onClick={()=>sb.from('movimenti_bancari').update({stato_riconciliazione:'da_riconciliare',partita_id:null}).eq('id',m.id).then(caricaDati)}>✗ Rifiuta</button>
+                      <button className="btn-sec" onClick={()=>contabilitaRepo.updateMovimentoBancario(m.id,{stato_riconciliazione:'da_riconciliare',partita_id:null}).then(caricaDati)}>✗ Rifiuta</button>
                       <button className="btn" onClick={()=>confermaMatch(m.id,m.partita_id)}>✓ Conferma</button>
                     </div>
                   </div>
@@ -4575,7 +4567,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
 
   const caricaLiquidazioni=async()=>{
     setLoading(true);
-    const{data}=await sb.from('liquidazioni_iva_societa').select('*').eq('societa_id',societa.id).order('anno',{ascending:false}).order('periodo',{ascending:false});
+    const{data}=await contabilitaRepo.getLiquidazioniIvaSocieta(societa.id);
     setLiquidazioni(data||[]);
     setLoading(false);
   };
@@ -4632,7 +4624,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       stato:'calcolata'
     };
     
-    const{error}=await sb.from('liquidazioni_iva_societa').insert([record]);
+    const{error}=await contabilitaRepo.insertLiquidazioneIvaSocieta(record);
     if(error){
       // Se la tabella non esiste, la creiamo
       if(error.code==='42P01'){
@@ -4801,7 +4793,7 @@ function LIPEView({societa}){
 
   const caricaDati=async()=>{
     setLoading(true);
-    const{data}=await sb.from('liquidazioni_iva_societa').select('*').eq('societa_id',societa.id).eq('tipo_periodo','trimestrale').order('anno',{ascending:false}).order('periodo',{ascending:false});
+    const{data}=await contabilitaRepo.getLiquidazioniIvaTrimestrali(societa.id);
     setLiquidazioni(data||[]);
     setLoading(false);
   };
@@ -4964,7 +4956,7 @@ function CorrispettiviView({societa}){
     const inizioMese=`${annoSel}-${String(meseSel).padStart(2,'0')}-01`;
     const fineMese=new Date(annoSel,meseSel,0).toISOString().split('T')[0];
     
-    const{data}=await sb.from('corrispettivi_giornalieri').select('*').eq('societa_id',societa.id).gte('data',inizioMese).lte('data',fineMese).order('data',{ascending:true});
+    const{data}=await contabilitaRepo.getCorrispettiviGiornalieri(societa.id, inizioMese, fineMese);
     setCorrispettivi(data||[]);
     setLoading(false);
   };
@@ -4991,7 +4983,7 @@ function CorrispettiviView({societa}){
       note:formData.note
     };
     
-    const{error}=await sb.from('corrispettivi_giornalieri').insert([record]);
+    const{error}=await contabilitaRepo.insertCorrispettivoGiornaliero(record);
     if(error){
       if(error.code==='42P01'){
         alert('Tabella corrispettivi_giornalieri non trovata. Crea la tabella nel database.');
@@ -5156,7 +5148,7 @@ function Modello770View({societa}){
 
   const caricaPercipienti=async()=>{
     setLoading(true);
-    const{data}=await sb.from('ritenute_dacconto').select('*').eq('societa_id',societa.id).gte('data_pagamento',`${annoSel}-01-01`).lte('data_pagamento',`${annoSel}-12-31`).order('percipiente_denominazione');
+    const{data}=await contabilitaRepo.getRitenuteByAnnoPerPercipiente(societa.id, annoSel);
     setPercipienti(data||[]);
     setLoading(false);
   };
@@ -5363,7 +5355,7 @@ function IntrastatView({societa}){
     const inizioMese=`${periodoSel.anno}-${String(periodoSel.mese).padStart(2,'0')}-01`;
     const fineMese=new Date(periodoSel.anno,periodoSel.mese,0).toISOString().split('T')[0];
     
-    const{data}=await sb.from('intrastat_operazioni').select('*').eq('societa_id',societa.id).eq('tipo',tipoSel==='cessioni'?'cessione':'acquisto').gte('data',inizioMese).lte('data',fineMese).order('data',{ascending:false});
+    const{data}=await contabilitaRepo.getIntrastatOperazioni(societa.id, tipoSel==='cessioni'?'cessione':'acquisto', inizioMese, fineMese);
     setOperazioni(data||[]);
     setLoading(false);
   };
@@ -5386,7 +5378,7 @@ function IntrastatView({societa}){
       note:formData.note
     };
     
-    const{error}=await sb.from('intrastat_operazioni').insert([record]);
+    const{error}=await contabilitaRepo.insertIntrastatOperazione(record);
     if(error){
       if(error.code==='42P01'){
         alert('Tabella intrastat_operazioni non trovata. Crea la tabella nel database.');
@@ -5618,7 +5610,7 @@ function IvaAnnualeView({societa,scritture,causaliIva}){
     setLoading(true);
     
     // Carica liquidazioni dell'anno
-    const{data:liq}=await sb.from('liquidazioni_iva_societa').select('*').eq('societa_id',societa.id).eq('anno',annoSel).order('periodo');
+    const{data:liq}=await contabilitaRepo.getLiquidazioniIvaByAnno(societa.id, annoSel);
     setLiquidazioni(liq||[]);
     
     // Calcola riepilogo da liquidazioni
@@ -5899,7 +5891,7 @@ function PercipientiView({societa,onRefresh}){
 
   const caricaPercipienti=async()=>{
     setLoading(true);
-    const{data}=await sb.from('percipienti').select('*').eq('societa_id',societa.id).eq('attivo',true).order('ragione_sociale');
+    const{data}=await contabilitaRepo.getPercipientiAttivi(societa.id);
     setPercipienti(data||[]);
     setLoading(false);
   };
@@ -5913,9 +5905,9 @@ function PercipientiView({societa,onRefresh}){
     
     let error;
     if(editingId){
-      ({error}=await sb.from('percipienti').update(record).eq('id',editingId));
+      ({error}=await contabilitaRepo.updatePercipiente(editingId, record));
     }else{
-      ({error}=await sb.from('percipienti').insert([record]));
+      ({error}=await contabilitaRepo.insertPercipiente(record));
     }
     
     if(error){
@@ -5931,7 +5923,7 @@ function PercipientiView({societa,onRefresh}){
 
   const eliminaPercipiente=async(id)=>{
     if(!confirm('Disattivare questo percipiente?'))return;
-    await sb.from('percipienti').update({attivo:false}).eq('id',id);
+    await contabilitaRepo.deactivatePercipiente(id);
     caricaPercipienti();
   };
 
@@ -6200,8 +6192,8 @@ function RitenuteView({societa}){
   const caricaDati=async()=>{
     setLoading(true);
     const[{data:rit},{data:perc}]=await Promise.all([
-      sb.from('ritenute_dacconto').select('*').eq('societa_id',societa.id).gte('data_pagamento',`${annoSel}-01-01`).lte('data_pagamento',`${annoSel}-12-31`).order('data_pagamento',{ascending:false}),
-      sb.from('percipienti').select('*').eq('societa_id',societa.id).eq('attivo',true).order('ragione_sociale')
+      contabilitaRepo.getRitenuteByAnnoPerData(societa.id, annoSel),
+      contabilitaRepo.getPercipientiAttivi(societa.id)
     ]);
     setRitenute(rit||[]);
     setPercipienti(perc||[]);
@@ -6244,7 +6236,7 @@ function RitenuteView({societa}){
       note:formData.note
     };
     
-    const{error}=await sb.from('ritenute_dacconto').insert([record]);
+    const{error}=await contabilitaRepo.insertRitenuta(record);
     if(error){
       alert('Errore: '+error.message);
       return;
@@ -6256,7 +6248,7 @@ function RitenuteView({societa}){
 
   const eliminaRitenuta=async(id)=>{
     if(!confirm('Eliminare questa ritenuta?'))return;
-    await sb.from('ritenute_dacconto').delete().eq('id',id);
+    await contabilitaRepo.deleteRitenuta(id);
     caricaDati();
   };
 
