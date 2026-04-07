@@ -82,6 +82,19 @@ export function getScrittureRecenti(societaId) {
     .limit(100)
 }
 
+export function getAccountingEntriesByDocumentId(documentId) {
+  return sb
+    .from('accounting_entries')
+    .select('*')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: false })
+    .limit(5)
+}
+
+export function insertAccountingEntry(payload) {
+  return sb.from('accounting_entries').insert([payload]).select().maybeSingle()
+}
+
 export function getPercipientiAttivi(societaId) {
   return sb.from('percipienti').select('*').eq('societa_id', societaId).eq('attivo', true).order('ragione_sociale')
 }
@@ -307,6 +320,48 @@ export function getLiquidazioniIvaTrimestrali(societaId) {
     .eq('tipo_periodo', 'trimestrale')
     .order('anno', { ascending: false })
     .order('periodo', { ascending: false })
+}
+
+export function getLiquidazioniIvaCanoniche() {
+  return sb
+    .from('liquidazione_iva')
+    .select('*')
+    .order('periodo_fine', { ascending: false })
+    .limit(200)
+}
+
+export async function getLiquidazioniIvaCanonicheByPeriodicita(periodicita) {
+  return sb
+    .from('liquidazione_iva')
+    .select('*')
+    .eq('periodicita', periodicita)
+    .order('periodo_fine', { ascending: false })
+    .limit(200)
+}
+
+export async function upsertLiquidazioneIvaCanonica(row) {
+  const per = row?.periodicita
+  const anno = row?.anno
+  if (!per || !anno) return { data: null, error: new Error('periodicita/anno mancanti') }
+  let sel = sb.from('liquidazione_iva').select('id').eq('periodicita', per).eq('anno', anno)
+  if (per === 'mensile') {
+    sel = sel.eq('mese', row?.mese || null).is('trimestre', null)
+  } else {
+    sel = sel.eq('trimestre', row?.trimestre || null).is('mese', null)
+  }
+  const { data: existing } = await sel.maybeSingle()
+  if (existing?.id) {
+    return sb.from('liquidazione_iva').update(row).eq('id', existing.id).select('*').maybeSingle()
+  }
+  return sb.from('liquidazione_iva').insert([row]).select('*').maybeSingle()
+}
+
+export function getRegistriIvaByPeriodo(periodo_inizio, periodo_fine) {
+  return sb
+    .from('registri_iva')
+    .select('tipo, iva, iva_detraibile, data')
+    .gte('data', periodo_inizio)
+    .lte('data', periodo_fine)
 }
 
 export function getCorrispettiviGiornalieri(societaId, inizioMese, fineMese) {

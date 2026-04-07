@@ -67,10 +67,10 @@ export function SendMailModal({ onClose, cliente = null, adempimento = null, ogg
     setSending(true)
     setErr(null)
     try {
-      const res = await fetch('/api/send-email', {
+      const res = await fetch('/api/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, cc, oggetto: ogg, corpo: body })
+        body: JSON.stringify({ action: 'send', to, cc, oggetto: ogg, corpo: body })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)

@@ -120,10 +120,11 @@ FORMATO RISPOSTA — Rispondi SOLO con JSON valido:
 Per ogni controllo: "ok" = tutto corretto, "warning" = da valutare/approfondire, "error" = dato errato/mancante critico.
 Sii specifico nei dettagli: indica importi, quadri, righi quando possibile.`
 
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      action: 'claude',
       model: 'claude-sonnet-4-20250514', // Sonnet per analisi complessa
       max_tokens: 4000,
       system: 'Sei un esperto commercialista italiano. Rispondi SEMPRE e SOLO con JSON valido, zero testo aggiuntivo.',

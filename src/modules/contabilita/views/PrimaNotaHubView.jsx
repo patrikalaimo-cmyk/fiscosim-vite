@@ -340,6 +340,7 @@ export default function PrimaNotaHubView({
   patchDocumento,
   confermaDoc,
   registraConfermati,
+  registrazioneInCorso = false,
   openGuidataAt,
   pnGuidataDraft,
   pnGuidataNav,
@@ -362,6 +363,7 @@ export default function PrimaNotaHubView({
           patchDocumento={patchDocumento}
           confermaDoc={confermaDoc}
           registraConfermati={registraConfermati}
+          registrazioneInCorso={registrazioneInCorso}
           onEdit={async (doc, ids, idx) => {
             const listIds =
               Array.isArray(ids) && ids.length

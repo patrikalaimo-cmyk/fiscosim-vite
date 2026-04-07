@@ -94,8 +94,8 @@ const GUIDA_MODULI = {
   iva: {
     nome: "Liquidazione IVA",
     ico: "💧",
-    desc: "Calcolo e gestione delle liquidazioni IVA periodiche (mensili/trimestrali) con generazione prospetti e comunicazioni clienti.",
-    uso: "Registra IVA vendite/acquisti, calcola il saldo e genera le comunicazioni per i clienti."
+    desc: "Calcolo e gestione delle liquidazioni IVA periodiche (mensili/trimestrali) nel percorso fiscale di Contabilità, con generazione prospetti e comunicazioni clienti.",
+    uso: "Apri Contabilità e usa la sezione Adempimenti fiscali per liquidazioni IVA, LIPE e IVA annuale."
   },
   f24: {
     nome: "Gestione F24",

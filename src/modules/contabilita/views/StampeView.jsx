@@ -94,42 +94,57 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
           return;
         }
         // Simula movimenti per il conto (in produzione questi verrebbero dalle righe prima nota)
-        const movimenti=scrittureFiltrate.filter(s=>s.conto_id===selectedConto||Math.random()>0.7).slice(0,20).map(s=>({
+        const movimenti=scrittureFiltrate.filter(s=>s.conto_id===selectedConto).map(s=>({
           data_registrazione:s.data_registrazione,
           causale_codice:s.causale_codice||'GEN',
           descrizione_riga:s.descrizione,
           descrizione:s.descrizione,
-          importo_dare:Math.random()>0.5?(s.totale_dare||Math.random()*1000):0,
-          importo_avere:Math.random()>0.5?(s.totale_avere||Math.random()*1000):0
+          importo_dare:s.totale_dare||0,
+          importo_avere:s.totale_avere||0
         }));
-        dati={conto:{codice:conto.codice,descrizione:conto.descrizione,saldo_iniziale:0},movimenti};
+        if(!movimenti.length){
+          setError('Nessun movimento disponibile per il conto selezionato.');
+          setLoading(false);
+          return;
+        }
+        const saldoIniziale=movimenti.reduce((acc,m)=>acc+(m.importo_dare-m.importo_avere),0);
+        dati={conto:{codice:conto.codice,descrizione:conto.descrizione,saldo_iniziale:saldoIniziale},movimenti};
       }
       else if(tipoStampa==='bilancio'){
         tipo='bilancio_verifica';
         // Aggrega per conto
-        const contiAggregati=pianoConti.map(c=>({
-          codice:c.codice,
-          descrizione:c.descrizione,
-          tipo:c.tipo,
-          natura:c.natura,
-          saldo_dare:Math.random()*10000,
-          saldo_avere:Math.random()*5000
+        const aggregati=pianoConti.map(c=>({
+          ...c,
+          saldo_dare:0,
+          saldo_avere:0
         }));
-        dati={conti:contiAggregati};
+        scrittureFiltrate.forEach(s=>{
+          const index=aggregati.findIndex(c=>c.id===s.conto_id);
+          if(index===-1)return;
+          aggregati[index].saldo_dare += s.totale_dare||0;
+          aggregati[index].saldo_avere += s.totale_avere||0;
+        });
+        dati={conti:aggregati};
       }
       else if(tipoStampa==='partitari'){
         tipo='partitario';
-        // Genera partite simulate
-        const partite=scrittureFiltrate.slice(0,15).map((s,i)=>({
-          data_documento:s.data_documento||s.data_registrazione,
-          numero_documento:s.numero_documento||`DOC-${i+1}`,
-          conto_descrizione:s.descrizione||'Cliente/Fornitore',
-          importo_originale:s.totale_dare||Math.random()*5000,
-          importo_pagato:Math.random()>0.5?Math.random()*(s.totale_dare||1000):0,
-          importo_residuo:Math.random()>0.3?(s.totale_dare||1000)*0.3:0,
-          data_scadenza:new Date(Date.now()+Math.random()*90*24*60*60*1000).toISOString(),
-          stato:Math.random()>0.6?'aperta':Math.random()>0.3?'parziale':'chiusa'
-        }));
+        const partite=scrittureFiltrate
+          .filter(s=>partitarioTipo==='clienti' ? !!s.cliente_fornitore_nome : !!s.fornitore_nome)
+          .map(s=>({
+            data_documento:s.data_documento||s.data_registrazione,
+            numero_documento:s.numero_documento||'',
+            conto_descrizione:s.cliente_fornitore_nome||s.fornitore_nome||s.descrizione||'Cliente/Fornitore',
+            importo_originale:s.totale_dare||s.totale_avere||0,
+            importo_pagato:s.pagato||0,
+            importo_residuo:(s.totale_dare||s.totale_avere||0)-(s.pagato||0),
+            data_scadenza:s.scadenza||s.data_documento,
+            stato:s.stato_partitario||'aperta'
+          }));
+        if(!partite.length){
+          setError('Nessuna partita aperta disponibile per il tipo selezionato.');
+          setLoading(false);
+          return;
+        }
         dati={partite,tipoPartitario:partitarioTipo};
       }
 

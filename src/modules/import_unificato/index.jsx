@@ -35,6 +35,7 @@ export function ModuloImportUnificato({ ruolo }) {
   const [progress, setProgress] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [societaImportHint, setSocietaImportHint] = useState('')
+  const [bulkConfirming, setBulkConfirming] = useState(false)
   const [tipoManuale, setTipoManuale] = useState('')
   const [aiMode, setAiMode] = useState(() => getStoredAiMode())
   const [aiPreprocessMode, setAiPreprocessMode] = useState(() => getStoredAiPreprocessMode())
@@ -156,9 +157,15 @@ export function ModuloImportUnificato({ ruolo }) {
   }
 
   const confermaTuttiDocumenti = async () => {
+    if (bulkConfirming) return
     if (!window.confirm("Confermi l'invio di tutti i " + documenti.length + ' documenti in Da Validare?')) return
-    for (const doc of documenti) {
-      await confermaDocumento(doc, buildBulkConfirmFormFromDocument(doc))
+    setBulkConfirming(true)
+    try {
+      for (const doc of documenti) {
+        await confermaDocumento(doc, buildBulkConfirmFormFromDocument(doc))
+      }
+    } finally {
+      setBulkConfirming(false)
     }
   }
 
@@ -222,6 +229,7 @@ export function ModuloImportUnificato({ ruolo }) {
         tipiDocumento={TIPI_DOCUMENTO}
         aliquoteIva={ALIQUOTE_IVA}
         fmt={fmt}
+        actionsBusy={bulkConfirming}
       />
     </div>
   )

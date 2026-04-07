@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
-import { parseIvaPercent } from '../../../domain/resolveIva.js'
+import { parseIvaPercent, classifyIvaRegime, formatIvaRegimeLabel } from '../../../domain/resolveIva.js'
 import {
   buildScritturaContabileFromDraft,
   buildPrimaNotaPayloadFromState,
@@ -9,6 +9,7 @@ import {
   normalizePartitarioEntry,
   normalizeRigaForPrimaNotaPayload,
 } from '../../../domain/primaNotaPayloadBuilder.js'
+import { loadIvaInsightsForSocieta } from './application/ivaInsightsClient.js'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { createPrimaNotaCompleta } from '../../../services/primaNotaService.js'
 import { fmtCurrency as fmtMoney, fmtDate } from './ui/formatters.js'
@@ -51,7 +52,9 @@ function normalizeIvaRowsFromDraft(initialDraft) {
       iva: toMoneyNumber(r.iva),
       causale_iva_id: r.causale_iva_id ? String(r.causale_iva_id) : null,
       codice_interno: r.codice_interno ?? null,
-      autoResolved: r.autoResolved === true
+      autoResolved: r.autoResolved === true,
+      natura: r.natura ?? null,
+      regime_iva: r.regime_iva ?? null
     }))
   }
   const u = initialDraft?.ivaUi
@@ -67,7 +70,9 @@ function normalizeIvaRowsFromDraft(initialDraft) {
       iva: toMoneyNumber(u.iva),
       causale_iva_id: u.causale_iva_id ? String(u.causale_iva_id) : null,
       codice_interno: null,
-      autoResolved: false
+      autoResolved: false,
+      natura: u.natura ?? null,
+      regime_iva: u.regime_iva ?? null
     }]
   }
   return []
@@ -595,6 +600,7 @@ export function PrimaNotaGuidata({
 
   const [stato, setStatoInternal] = useState(() => initialDraft?.stato || 'bozza') // bozza | confermata
   const [progressivo, setProgressivoInternal] = useState(() => initialDraft?.progressivo || null)
+  const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTabInternal] = useState('scrittura')
 
   const [ivaRows, setIvaRowsInternal] = useState(() => normalizeIvaRowsFromDraft(initialDraft))
@@ -603,12 +609,29 @@ export function PrimaNotaGuidata({
     causale_iva_id: initialDraft?.ivaUi?.causale_iva_id || initialDraft?.meta?.causale_iva_id || '',
     label: '',
     aliquota: null,
-    percDetraibile: 100,
+    percDetraibile: initialDraft?.ivaUi?.percDetraibile ?? 100,
     imponibile: null,
     iva: null,
-    ivaIndetraibile: 0,
+    ivaIndetraibile: initialDraft?.ivaUi?.ivaIndetraibile ?? 0,
+    regime_iva: initialDraft?.ivaUi?.regime_iva ?? null,
     multi_riepilogo: initialDraft?.ivaUi?.multi_riepilogo === true
   }))
+  const [ivaInsights, setIvaInsights] = useState([])
+  const [ivaInsightsLoading, setIvaInsightsLoading] = useState(false)
+  const ivaInsightsDisplay = useMemo(() => {
+    if (!Array.isArray(ivaInsights)) return []
+    const seen = new Set()
+    const out = []
+    for (const ins of ivaInsights) {
+      const key = ins.fingerprint || ins.titolo || ins.descrizione
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      out.push(ins)
+    }
+    return out
+  }, [ivaInsights])
+  const ivaInsightsLimited = useMemo(() => ivaInsightsDisplay.slice(0, 3), [ivaInsightsDisplay])
+  const ivaInsightsExtraCount = ivaInsightsDisplay.length > ivaInsightsLimited.length ? (ivaInsightsDisplay.length - ivaInsightsLimited.length) : 0
 
   const latestGuidataRef = useRef({})
   latestGuidataRef.current = { header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap }
@@ -714,6 +737,26 @@ export function PrimaNotaGuidata({
     traceStep('STATE_UPDATED', buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap }))
     traceIva('STATE_AFTER_COMMIT', 'state', ivaUi?.causale_iva_id ?? null)
   }, [header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap])
+
+  const docIdForInsights = initialDraft?.meta?.documento_import_id
+  useEffect(() => {
+    let alive = true
+    if (!societaId || !docIdForInsights) {
+      setIvaInsights([])
+      return () => { alive = false }
+    }
+    setIvaInsightsLoading(true)
+    loadIvaInsightsForSocieta(societaId, { docIds: [docIdForInsights] })
+      .then((res) => {
+        if (!alive) return
+        const rows = res.byDocId?.[String(docIdForInsights)] || []
+        setIvaInsights(rows)
+      })
+      .finally(() => {
+        if (alive) setIvaInsightsLoading(false)
+      })
+    return () => { alive = false }
+  }, [societaId, docIdForInsights])
 
   const selectedCausale = useMemo(
     () => causali.find(c => String(c.id) === String(header.causale_id)),
@@ -821,6 +864,7 @@ export function PrimaNotaGuidata({
       imponibile: initialDraft?.ivaUi?.imponibile ?? null,
       iva: initialDraft?.ivaUi?.iva ?? null,
       ivaIndetraibile: initialDraft?.ivaUi?.ivaIndetraibile ?? 0,
+      regime_iva: initialDraft?.ivaUi?.regime_iva ?? null,
       multi_riepilogo: initialDraft?.ivaUi?.multi_riepilogo === true
     })
   }, [initialDraft?.meta?.documento_import_id, runSetHeader, runSetRows, runSetIvaRows, runSetPartitarioClosedMap, runSetStato, runSetProgressivo, runSetIvaUi])
@@ -917,11 +961,18 @@ export function PrimaNotaGuidata({
     // Da import: imponibile/IVA arrivano dal documento (e da più DatiRiepilogo). NON ricalcolare da
     // totale documento / (1+aliquota): con più aliquote (o 0% + 22%) produrrebbe IVA errata (es. 10,81 vs 10,45).
     if (fromImport) {
+      const nextRegime = classifyIvaRegime({
+        causale: selectedCausaleIva,
+        natura: null,
+        aliquota: aliq,
+      })
       runSetIvaUi(prev => ({
         ...prev,
         label: prev.label || buildCausaleIvaLabel(selectedCausaleIva),
         percDetraibile: percDet,
-        aliquota: prev.aliquota != null ? prev.aliquota : aliq
+        aliquota: prev.aliquota != null ? prev.aliquota : aliq,
+        ivaIndetraibile: Math.round((toMoneyNumber(prev.iva) * (100 - percDet) / 100) * 100) / 100,
+        regime_iva: prev.regime_iva || nextRegime
       }))
       return
     }
@@ -939,7 +990,8 @@ export function PrimaNotaGuidata({
       percDetraibile: percDet,
       imponibile: impon,
       iva: ivaCalc,
-      ivaIndetraibile: ivaInd
+      ivaIndetraibile: ivaInd,
+      regime_iva: prev.regime_iva || classifyIvaRegime({ causale: selectedCausaleIva, natura: null, aliquota: aliq })
     }))
 
     applyIvaToRows({ imponibile: impon, iva: ivaCalc, ivaIndetraibile: ivaInd })
@@ -960,6 +1012,16 @@ export function PrimaNotaGuidata({
     () => [...ivaRows].sort((a, b) => a.aliquota - b.aliquota),
     [ivaRows]
   )
+
+  const regimeSummary = useMemo(() => {
+    const regimes = ivaRows.map(r => r.regime_iva || null).filter(Boolean)
+    const uniq = Array.from(new Set(regimes))
+    return {
+      list: uniq,
+      unknown: ivaRows.some(r => r.regime_iva === 'unknown' || !r.regime_iva),
+      mixed: uniq.length > 1
+    }
+  }, [ivaRows])
 
   const ivaTotalsFromRows = useMemo(() => {
     const ti = ivaRows.reduce((s, r) => s + r.imponibile, 0)
@@ -1003,9 +1065,19 @@ export function PrimaNotaGuidata({
   }
 
   async function handleSave() {
+    if (saving) return null
     try {
+      setSaving(true)
       if (!totals?.bilanciata) {
         alert('Scrittura non bilanciata')
+        return null
+      }
+      if (!header?.data_registrazione) {
+        alert('Data registrazione mancante')
+        return null
+      }
+      if (!rows.some(hasImporto)) {
+        alert('Inserisci almeno una riga con importo')
         return null
       }
       if (isFattura) {
@@ -1014,6 +1086,12 @@ export function PrimaNotaGuidata({
           if (missing.length) {
             missing.forEach(row => traceStep('IVA_ROW_MISSING_CAUSALE', { row }, {}))
             alert('Una o più righe IVA non hanno causale assegnata')
+            return null
+          }
+          const invalidRows = ivaRows.filter(r => !Number.isFinite(r.imponibile) || !Number.isFinite(r.iva))
+          if (invalidRows.length) {
+            invalidRows.forEach(row => traceStep('IVA_ROW_INVALID', { row }, {}))
+            alert('Una o piÃ¹ righe IVA hanno importi non validi')
             return null
           }
         } else if (!String(ivaUi.causale_iva_id || '').trim()) {
@@ -1081,6 +1159,8 @@ export function PrimaNotaGuidata({
     } catch (e) {
       console.error('[PrimaNotaGuidata] handleSave error', e)
       return null
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1169,6 +1249,34 @@ export function PrimaNotaGuidata({
         </div>
       </div>
 
+      {(ivaInsightsLoading || ivaInsightsLimited.length > 0) && (
+        <div className="card" style={{ marginTop: '.75rem' }}>
+          {ivaInsightsLoading && ivaInsightsLimited.length === 0 && (
+            <div className="alert alert-info" style={{ margin: 0 }}>
+              Analisi IVA in corso…
+            </div>
+          )}
+          {ivaInsightsLimited.map((ins) => {
+            const sev = String(ins.gravita || '').toLowerCase()
+            const tipo = String(ins.tipo || '').toLowerCase()
+            const isWarn = tipo === 'iva_anomaly'
+              ? (sev === 'critical' || sev === 'warning' || sev === 'high' || sev === 'medium')
+              : false
+            return (
+              <div key={ins.fingerprint || ins.titolo} className={`alert ${isWarn ? 'alert-warn' : 'alert-info'}`} style={{ marginBottom: '.35rem' }}>
+                <strong>{ins.titolo || 'Segnale IVA'}</strong>
+                <div style={{ fontSize: '.72rem', marginTop: '.2rem' }}>{ins.descrizione}</div>
+              </div>
+            )
+          })}
+          {ivaInsightsExtraCount > 0 && (
+            <div className="alert alert-info" style={{ marginBottom: '.35rem' }}>
+              Altri {ivaInsightsExtraCount} segnali IVA disponibili.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* TABS DINAMICHE */}
       <div className="card" style={{ marginTop: '.75rem' }}>
         <Tabs
@@ -1256,6 +1364,16 @@ export function PrimaNotaGuidata({
           <div style={{ fontSize: '.78rem', color: 'var(--mu)', marginBottom: '.75rem' }}>
             Una riga per ogni aliquota presente nel documento. La verità IVA è in queste righe; la scrittura si aggiorna di conseguenza.
           </div>
+          {regimeSummary.unknown && (
+            <div className="alert alert-warn" style={{ marginBottom: '.6rem' }}>
+              Regime IVA non determinato su una o più righe. Verifica causale e natura FE.
+            </div>
+          )}
+          {regimeSummary.mixed && (
+            <div className="alert alert-info" style={{ marginBottom: '.6rem' }}>
+              Regime IVA misto: {regimeSummary.list.map(r => formatIvaRegimeLabel(r)).join(', ')}
+            </div>
+          )}
 
           {ivaRows.length === 0 ? (
             <div style={{ fontSize: '.85rem', color: 'var(--mu)' }}>
@@ -1284,6 +1402,9 @@ export function PrimaNotaGuidata({
                       <div>
                         <div style={{ fontSize: '.65rem', color: 'var(--mu)' }}>Aliquota</div>
                         <div style={{ fontWeight: 800 }}>{row.aliquota}%</div>
+                        <div style={{ fontSize: '.62rem', color: 'var(--mu)', marginTop: '.2rem' }}>
+                          {formatIvaRegimeLabel(row.regime_iva)}
+                        </div>
                         {row.autoResolved && (
                           <span className="bdg bdg-green" style={{ fontSize: '.58rem', marginTop: '.25rem', display: 'inline-block' }}>AUTO</span>
                         )}
@@ -1329,7 +1450,8 @@ export function PrimaNotaGuidata({
                               ...r,
                               causale_iva_id: id || null,
                               codice_interno: c?.codice_interno ?? null,
-                              autoResolved: false
+                              autoResolved: false,
+                              regime_iva: classifyIvaRegime({ causale: c, natura: r.natura, aliquota: r.aliquota })
                             } : r)))
                           }}
                           causaliIva={causaliIva}

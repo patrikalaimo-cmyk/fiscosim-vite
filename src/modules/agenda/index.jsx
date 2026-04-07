@@ -223,10 +223,11 @@ async function estraiDatiRicevuta(base64, mimeType, useAI=true) {
     : [{ type:'image', source:{ type:'base64', media_type:mimeType, data:base64 }},
        { type:'text', text:'Estrai i dati da questa ricevuta di affitto breve.' }];
 
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
+      action: 'claude',
       model:'claude-haiku-4-5-20251001',
       max_tokens:500,
       system:`Sei un esperto contabile italiano. Analizza la ricevuta di affitto breve e rispondi SOLO con JSON valido, zero testo extra.`,

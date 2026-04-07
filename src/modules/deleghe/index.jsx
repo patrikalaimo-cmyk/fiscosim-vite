@@ -281,7 +281,7 @@ export function ModuloDeleghe() {
       const oggetto = `⚠️ Deleghe Uniche in scadenza — ${lista.length} clienti`
       const corpo = `Gentile ${utente.nome},\n\nI seguenti clienti hanno la Delega Unica ADE in scadenza:\n\n${lista.map(c => `• ${c.ragione_sociale || `${c.nome} ${c.cognome || ''}`} — scadenza: ${fmtDate(c.delega?.data_scadenza)}`).join('\n')}\n\nStudio Envisioning`
       try {
-        await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: [utente.email], oggetto, corpo }) })
+        await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', to: [utente.email], oggetto, corpo }) })
         sent++
       } catch (e) { console.error(e) }
     }

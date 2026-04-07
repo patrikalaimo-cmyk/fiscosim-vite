@@ -408,10 +408,11 @@ export function ModuloAIAgent({ utente }) {
       history.push({ role: 'user', content: text })
 
       // Prima chiamata API — l'agente ragiona e decide quali tool usare
-      const res = await fetch('/api/claude', {
+      const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'claude',
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 2000,
           system: buildSystemPrompt(societaAttiva),
@@ -460,10 +461,11 @@ export function ModuloAIAgent({ utente }) {
 
       if(toolsScrittura.length === 0) {
         // Solo lettura — fai seconda chiamata con risultati e mostra risposta finale
-        const finalRes = await fetch('/api/claude', {
+        const finalRes = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'claude',
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 1500,
             system: buildSystemPrompt(societaAttiva),
@@ -541,10 +543,11 @@ export function ModuloAIAgent({ utente }) {
     const allResults = [...(msg._letturResults||[]), ...scritturaResults]
 
     // Chiamata finale per risposta sintetica
-    const finalRes = await fetch('/api/claude', {
+    const finalRes = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        action: 'claude',
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 800,
         system: buildSystemPrompt(societaAttiva),

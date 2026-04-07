@@ -113,22 +113,16 @@ function parsePianoContiFromText(text) {
 }
 
 // ─── HANDLER ───────────────────────────────────────────────────
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+export async function parseContabilitaPdfHandler({ body }) {
   try {
-    const { fileBase64, pdf, filename } = req.body;
-    let { tipo } = req.body;
+    const { fileBase64, pdf, filename } = body || {};
+    let { tipo } = body || {};
     const pdfData = fileBase64 || pdf;
-    if (!pdfData || !tipo) return res.status(400).json({ error: 'File e tipo richiesti' });
+    if (!pdfData || !tipo) return { status: 400, json: { error: 'File e tipo richiesti' } };
     if (tipo === 'causali') tipo = 'causali_contabili';
 
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-    if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY mancante' });
+    if (!ANTHROPIC_KEY) return { status: 500, json: { error: 'ANTHROPIC_API_KEY mancante' } };
 
     // Cost-effective model: Haiku for structured document parsing
     const MODEL = 'claude-haiku-4-5-20251001';
@@ -140,7 +134,7 @@ export default async function handler(req, res) {
     };
 
     const systemPrompt = systemPrompts[tipo];
-    if (!systemPrompt) return res.status(400).json({ error: `Tipo non valido: ${tipo}` });
+    if (!systemPrompt) return { status: 400, json: { error: `Tipo non valido: ${tipo}` } };
 
     // Send PDF natively to Claude (no pdfjs needed)
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -168,24 +162,24 @@ export default async function handler(req, res) {
     if (!r.ok) {
       const errBody = await r.text();
       console.error('Anthropic error:', r.status, errBody.substring(0, 300));
-      return res.status(500).json({ error: 'Errore Anthropic API', status: r.status, detail: errBody.substring(0, 200) });
+      return { status: 500, json: { error: 'Errore Anthropic API', status: r.status, detail: errBody.substring(0, 200) } };
     }
 
     const data = await r.json();
     const aiText = data.content?.map(c => c.text || '').join('') || '';
 
     if (!aiText || aiText.trim().length < 10) {
-      return res.status(500).json({ error: 'Nessuna risposta dal modello AI' });
+      return { status: 500, json: { error: 'Nessuna risposta dal modello AI' } };
     }
 
     // ━━━ PIANO DEI CONTI: deterministic parse of AI-extracted text ━━━
     if (tipo === 'piano_conti') {
       const items = parsePianoContiFromText(aiText);
       if (items.length === 0) {
-        return res.status(500).json({
+        return { status: 500, json: {
           error: 'Nessun conto trovato nel testo estratto. Formato non riconosciuto.',
           debug: { aiTextLength: aiText.length, sample: aiText.substring(0, 400) }
-        });
+        }};
       }
 
       const stats = {
@@ -198,7 +192,7 @@ export default async function handler(req, res) {
         banche: items.filter(i => i.is_banca).length,
       };
 
-      return res.status(200).json({ ok: true, tipo, count: items.length, items, records: items, stats });
+      return { status: 200, json: { ok: true, tipo, count: items.length, items, records: items, stats } };
     }
 
     // ━━━ CAUSALI: parse JSON from AI response ━━━━━━━━━━━━━━━━━━
@@ -208,7 +202,7 @@ export default async function handler(req, res) {
       const start = clean.indexOf('['), end = clean.lastIndexOf(']');
       if (start >= 0 && end > start) items = JSON.parse(clean.substring(start, end + 1));
     } catch (e) {
-      return res.status(500).json({ error: 'Parsing JSON fallito', raw: aiText.substring(0, 500) });
+      return { status: 500, json: { error: 'Parsing JSON fallito', raw: aiText.substring(0, 500) } };
     }
 
     items = (items || []).filter(i => i.codice && i.descrizione);
@@ -237,10 +231,10 @@ export default async function handler(req, res) {
       }));
     }
 
-    return res.status(200).json({ ok: true, tipo, count: items.length, items, records: items });
+    return { status: 200, json: { ok: true, tipo, count: items.length, items, records: items } };
 
   } catch (err) {
     console.error('Unhandled error:', err);
-    return res.status(500).json({ error: err.message });
+    return { status: 500, json: { error: err.message } };
   }
 }

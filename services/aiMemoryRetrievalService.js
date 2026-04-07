@@ -314,7 +314,7 @@ export async function fetchAiMemoryContextForParsing(opts) {
 
 /**
  * Flusso accounting: usa parsingJson + opzionale riga ai_parsing_results.
- * Con `layoutTextForHash` (es. /api/proposta-contabile) calcola layout come il parsing senza documentId.
+ * Con `layoutTextForHash` (es. /api/accounting/ai action=proposta_contabile) calcola layout come il parsing senza documentId.
  *
  * @param {{
  *   db: import('@supabase/supabase-js').SupabaseClient,

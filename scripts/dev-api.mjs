@@ -25,7 +25,8 @@ import { runPrimaNotaBulkUpdate } from '../services/primaNotaBulkUpdateService.j
 import { getSupabaseAdmin } from '../lib/db.js'
 import { runAutoValidateOnAccountingEntries } from '../services/autoValidateAccountingEngine.js'
 import { recordAiAccountingFeedback, recordAiAccountingFeedbackBatch } from '../services/aiAccountingFeedbackService.js'
-import { runAccountingCopilotTurn } from '../services/copilotAccountingService.js'
+import { propostaContabileHandler } from '../services/api/accounting/proposta-contabile.js'
+import { copilotAccountingHandler } from '../services/api/accounting/copilot-accounting.js'
 import { runProactiveInsightEngine } from '../services/proactiveInsightEngine.js'
 import { runTestScenario } from '../services/testScenarioEngine.js'
 
@@ -82,8 +83,10 @@ const server = http.createServer(async (req, res) => {
         message:
           'Questo è solo il backend API. Apri il frontend su http://localhost:5173 (npm run dev). Le chiamate /api/* dal browser passano dal proxy Vite a questa porta.',
         postEndpoints: [
+          '/api/document',
           '/api/process-document',
           '/api/save-operator-corrections',
+          '/api/ai',
           '/api/claude',
           '/api/ollama-analyze',
           '/api/prima-nota/bulk-update',
@@ -91,7 +94,7 @@ const server = http.createServer(async (req, res) => {
           '/api/accounting/auto-validate',
           '/api/accounting/feedback',
           '/api/accounting/feedback-batch',
-          '/api/copilot/accounting',
+          '/api/accounting/ai',
           '/api/insights/run',
           '/api/test-scenario/run',
         ],
@@ -103,6 +106,152 @@ const server = http.createServer(async (req, res) => {
         return
       }
       return send(res, 200, info)
+    }
+
+    if (path === '/api/ai' && req.method === 'POST') {
+      const body = await readJson(req)
+      const actionRaw = typeof body?.action === 'string' ? body.action : ''
+      const action =
+        actionRaw.trim().toLowerCase()
+        || (typeof body?.message === 'string' ? 'chat' : '')
+        || (typeof body?.prompt === 'string' ? 'ollama_analyze' : '')
+        || (Array.isArray(body?.messages) ? 'claude' : '')
+        || 'chat'
+
+      if (action === 'ollama_analyze') {
+        const prompt = String(body?.prompt || '')
+        if (!prompt) return send(res, 400, { error: 'prompt mancante' })
+        try {
+          const response = await callLocalAI(prompt, { model: body?.model })
+          return send(res, 200, { response })
+        } catch (e) {
+          console.error('[dev-api] /api/ai ollama_analyze', e)
+          const base = e?.message || String(e)
+          const hint =
+            /ECONNREFUSED|fetch failed|ENOTFOUND|network/i.test(base)
+              ? ` Ollama non raggiungibile. Avvia il servizio (terminale: ollama serve) e verifica il modello: ollama pull mistral. URL: ${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}`
+              : ''
+          return send(res, 502, { error: base + hint })
+        }
+      }
+
+      if (action === 'claude' || action === 'test_claude') {
+        const apiKey = process.env.ANTHROPIC_API_KEY
+        if (!apiKey) {
+          console.warn('[dev-api] /api/ai: ANTHROPIC_API_KEY mancante nel .env')
+          return send(res, 503, {
+            error:
+              'ANTHROPIC_API_KEY non configurata. Aggiungila al file .env nella root del progetto e riavvia dev-api (Import unificato PDF con AI usa Claude).',
+          })
+        }
+
+        const payload =
+          action === 'test_claude'
+            ? {
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 50,
+                messages: [{ role: 'user', content: 'Rispondi solo: OK' }],
+              }
+            : (() => {
+                const { action: _a, ...rest } = body || {}
+                return rest
+              })()
+
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(payload),
+        })
+
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          console.error('[dev-api] /api/ai anthropic error', response.status, data)
+          return send(res, response.status >= 400 && response.status < 600 ? response.status : 502, {
+            error: data.error?.message || 'Errore API Anthropic',
+            detail: data,
+          })
+        }
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.end(JSON.stringify(data))
+        return
+      }
+
+      // chat (OpenAI): best effort
+      try {
+        const apiKey = process.env.OPENAI_API_KEY
+        if (!apiKey) return send(res, 500, { error: 'OPENAI_API_KEY non configurata sul server (dev-api)' })
+        const message = body?.message
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: `Sei l'assistente di FiscoSim. Rispondi in modo operativo e concreto.` },
+              { role: 'user', content: message },
+            ],
+          }),
+        })
+        if (!response.ok) {
+          const text = await response.text().catch(() => '')
+          return send(res, 200, { reply: text || `HTTP ${response.status}` })
+        }
+        const data = await response.json().catch(() => ({}))
+        const content = data.choices?.[0]?.message?.content
+        return send(res, 200, { reply: typeof content === 'string' ? content : 'Nessuna risposta' })
+      } catch (e) {
+        console.error('[dev-api] /api/ai chat', e)
+        return send(res, 200, { reply: 'Errore interno AI' })
+      }
+    }
+
+    if (path === '/api/document' && req.method === 'POST') {
+      const body = await readJson(req)
+      const actionRaw = typeof body?.action === 'string' ? body.action : ''
+      const action =
+        actionRaw.trim().toLowerCase()
+        || (body?.documentId ? 'process' : '')
+        || (typeof body?.tipo === 'string' ? 'parse_contabilita_pdf' : '')
+        || (body?.pdfBase64 ? 'split_cu' : '')
+        || (body?.fileBase64 ? 'analyze' : '')
+        || 'analyze'
+
+      if (action !== 'process') {
+        return send(res, 501, { error: 'dev-api: action non supportata su /api/document', action })
+      }
+
+      const documentId = body?.documentId
+      if (!documentId) return send(res, 400, { error: 'documentId mancante' })
+      const aiMode = body?.aiMode === 'online' ? 'online' : 'local'
+      const aiPreprocessMode = body?.aiPreprocessMode === 'off' ? 'off' : 'on'
+
+      console.log('AUTO_PIPELINE_TRIGGERED', { documentId, via: 'dev-api', aiMode, aiPreprocessMode })
+      console.log('[dev-api] /api/document', { documentId, aiMode, aiPreprocessMode })
+      const r = await runFullPipeline(documentId, { aiMode, aiPreprocessMode })
+      if (!r.ok) {
+        return send(res, 500, {
+          error: r.error || 'Pipeline error',
+          step: r.step || null,
+          pipeline_run_id: r.pipeline_run_id ?? null,
+          pipeline_trace: r.pipeline_trace ?? null,
+        })
+      }
+      return send(res, 200, {
+        status: 'ok',
+        documentId,
+        pipeline_run_id: r.pipeline_run_id ?? null,
+        pipeline_trace: r.pipeline_trace ?? null,
+      })
     }
 
     if (path === '/api/ollama-analyze' && req.method === 'POST') {
@@ -259,38 +408,27 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    if (path === '/api/copilot/accounting' && req.method === 'POST') {
+    if (path === '/api/accounting/ai' && req.method === 'POST') {
       const body = await readJson(req)
-      const documentId = body?.documentId
-      const societaId = body?.societaId
-      const messages = Array.isArray(body?.messages) ? body.messages : null
-      if (!documentId) return send(res, 400, { error: 'documentId richiesto' })
-      if (!societaId) return send(res, 400, { error: 'societaId richiesto' })
-      if (!messages?.length) return send(res, 400, { error: 'messages (array) richiesto' })
-      const last = messages[messages.length - 1]
-      if (!last || last.role !== 'user' || !String(last.content || '').trim()) {
-        return send(res, 400, { error: 'Ultimo messaggio deve essere user con content' })
-      }
-      if (!process.env.ANTHROPIC_API_KEY) {
+      const actionRaw = typeof body?.action === 'string' ? body.action : ''
+      const action =
+        actionRaw.trim().toLowerCase()
+        || (Array.isArray(body?.messages) ? 'copilot_turn' : '')
+        || 'proposta_contabile'
+
+      if (action === 'copilot_turn' && !process.env.ANTHROPIC_API_KEY) {
         return send(res, 503, {
           error:
             'ANTHROPIC_API_KEY non configurata. Aggiungila al .env e riavvia dev-api per usare il Copilot contabile.',
         })
       }
+
       try {
-        const db = await getSupabaseAdmin()
-        const out = await runAccountingCopilotTurn({
-          db,
-          documentId,
-          societaId,
-          messages,
-          log: (e, p) => console.log(`[dev-api] copilot ${e}`, p || ''),
-        })
-        if (!out.ok) return send(res, 400, { error: out.error })
-        const { ok: _o, raw_model, ...rest } = out
-        return send(res, 200, rest)
+        const handlerFn = action === 'copilot_turn' ? copilotAccountingHandler : propostaContabileHandler
+        const out = await handlerFn({ body })
+        return send(res, out.status, out.json)
       } catch (e) {
-        console.error('[dev-api] /api/copilot/accounting', e)
+        console.error('[dev-api] /api/accounting/ai', e)
         return send(res, 500, { error: e?.message || String(e) })
       }
     }
@@ -412,4 +550,3 @@ server.on('error', (err) => {
 server.listen(PORT, () => {
   console.log(`[dev-api] listening on http://localhost:${PORT}`)
 })
-

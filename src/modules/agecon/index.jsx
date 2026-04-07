@@ -334,10 +334,11 @@ function ModalCivisAI({ avviso, onClose }) {
     if (!descrizione.trim()) return alert('Inserisci una descrizione della situazione')
     setLoading(true)
     try {
-      const res = await fetch('/api/claude', {
+      const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'claude',
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1500,
           system: `Sei un esperto commercialista italiano specializzato nella gestione degli avvisi ADE e nella redazione di istanze CIVIS per conto dei contribuenti. Redigi testi formali, precisi e professionali in italiano.`,
@@ -452,10 +453,11 @@ function ModalAnalisiAI({ avviso, onClose }) {
   useEffect(() => {
     const analizza = async () => {
       try {
-        const res = await fetch('/api/claude', {
+        const res = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'claude',
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 1200,
             system: 'Sei un esperto commercialista italiano. Rispondi in italiano con analisi precise e pratiche.',

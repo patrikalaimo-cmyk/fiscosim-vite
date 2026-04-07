@@ -14,6 +14,7 @@ export function ImportDocumentsList({
   tipiDocumento,
   aliquoteIva,
   fmt,
+  actionsBusy = false,
 }) {
   if (!societaId) {
     return <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--mu)' }}>Seleziona una società per iniziare</div>
@@ -34,6 +35,7 @@ export function ImportDocumentsList({
         documenti={documenti}
         onConfermaTutti={onConfermaTutti}
         onSvuotaTutto={onSvuotaTutto}
+        busy={actionsBusy}
       />
       {documenti.map((doc) => (
         <ImportDocumentCard

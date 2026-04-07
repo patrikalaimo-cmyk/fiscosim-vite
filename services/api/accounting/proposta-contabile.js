@@ -1,22 +1,17 @@
 // API per proposta contabile da fattura XML/PDF — motore unificato: runAiAccounting (pipeline)
 
-import { getSupabaseAdmin } from '../lib/db.js'
+import { getSupabaseAdmin } from '../../../lib/db.js'
 import {
   getFiscalKnowledge,
   promptBodyFromFiscalRows,
   FISCAL_CATEGORIES_ACCOUNTING,
-} from '../lib/fiscalKnowledge.js'
+} from '../../../lib/fiscalKnowledge.js'
 import {
   fetchAiMemoryContextForAccounting,
   AI_MEMORY_PROMPT_MAX_CHARS,
   extractPivaHintFromText,
-} from '../services/aiMemoryRetrievalService.js'
-import { runAiAccounting } from '../services/aiAccountingService.js'
-
-export const config = {
-  api: { bodyParser: { sizeLimit: '15mb' } },
-  maxDuration: 120,
-}
+} from '../../aiMemoryRetrievalService.js'
+import { runAiAccounting } from '../../aiAccountingService.js'
 
 /** Estrazione leggera campi FatturaPA (regex) per popolare parsingJson. */
 function extractXmlQuickFields(xml) {
@@ -198,14 +193,7 @@ function mapEngineToLegacyAnalysis({ acc, parsingJson, tipoFattura, rawText }) {
   }
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-
-  if (req.method === 'OPTIONS') return res.status(200).end()
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-
+export async function propostaContabileHandler({ body }) {
   try {
     const {
       fileBase64,
@@ -216,10 +204,10 @@ export default async function handler(req, res) {
       memoryPartitaIva,
       memoryFornitoreNome,
       aiMode: aiModeBody,
-    } = req.body
+    } = body || {}
 
     if (!fileBase64) {
-      return res.status(400).json({ error: 'File mancante' })
+      return { status: 400, json: { error: 'File mancante' } }
     }
 
     const aiMode = aiModeBody === 'online' ? 'online' : 'local'
@@ -415,13 +403,16 @@ export default async function handler(req, res) {
       ]
     }
 
-    return res.status(200).json({
-      success: true,
-      analysis,
-      raw_response: rawResponse,
-    })
+    return {
+      status: 200,
+      json: {
+        success: true,
+        analysis,
+        raw_response: rawResponse,
+      },
+    }
   } catch (error) {
     console.error('Error:', error)
-    return res.status(500).json({ error: 'Errore interno', message: error.message })
+    return { status: 500, json: { error: 'Errore interno', message: error.message } }
   }
 }

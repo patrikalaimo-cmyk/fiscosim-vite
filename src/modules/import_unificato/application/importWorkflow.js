@@ -255,6 +255,23 @@ export async function confirmImportedDocument({
     return isNaN(n) ? null : n
   }
 
+  if (!doc?.id) {
+    alert('Documento non valido o mancante.')
+    return
+  }
+  if (!societaId) {
+    alert('SocietÃ  non selezionata.')
+    return
+  }
+  if (!form) {
+    alert('Dati documento mancanti.')
+    return
+  }
+  if (!tipo) {
+    alert('Tipo documento mancante.')
+    return
+  }
+
   if (tipo === 'fattura_passiva' || tipo === 'fattura_attiva') {
     let imponibile = nullNum(form.imponibile)
     let iva = nullNum(form.iva_totale)
@@ -263,6 +280,10 @@ export async function confirmImportedDocument({
       iva = form.riepilogo_iva.reduce((s, r) => s + (r.imposta || 0), 0)
     }
     const totale = nullNum(form.totale) || (imponibile || 0) + (iva || 0)
+    if (!Number.isFinite(totale)) {
+      alert('Totale documento non valido.')
+      return
+    }
 
     let contoId = form.conto_id || null
     let contoCodice = null
@@ -334,6 +355,10 @@ export async function confirmImportedDocument({
     }
 
     traceIva('CONFIRM_BEFORE_PAYLOAD', 'UI', causaleIvaId, confermaPipelineCtx)
+    if (!causaleIvaId) {
+      alert('Causale IVA mancante. Verifica la causale o le aliquote.')
+      return
+    }
 
     const payload = buildDocumentoContabilitaPayload({
       societaId,
@@ -406,6 +431,10 @@ export async function confirmImportedDocument({
     const f24Ins = await importRepo.insertDocumentoContabilita(f24Payload)
     if (f24Ins.data?.[0]?.id) confermaPipelineCtx.documentId = f24Ins.data[0].id
     traceStep('INSERT_RESULT', { table: 'documenti_contabilita', data: f24Ins.data, error: f24Ins.error }, {}, confermaPipelineCtx)
+    if (f24Ins.error) {
+      alert('Errore: ' + f24Ins.error.message)
+      return
+    }
     const f24Id = f24Ins.data?.[0]?.id
     if (f24Id && !f24Ins.error) {
       triggerAutoPipeline(f24Id, {
@@ -421,6 +450,10 @@ export async function confirmImportedDocument({
     const avvIns = await importRepo.insertAvvisoAde(avvisoPayload)
     if (avvIns.data?.[0]?.id) confermaPipelineCtx.documentId = avvIns.data[0].id
     traceStep('INSERT_RESULT', { table: 'avvisi_ade', data: avvIns.data, error: avvIns.error }, {}, confermaPipelineCtx)
+    if (avvIns.error) {
+      alert('Errore: ' + avvIns.error.message)
+      return
+    }
   }
 
   await importRepo.markDocumentoImportProcessed(doc.id, tipo)

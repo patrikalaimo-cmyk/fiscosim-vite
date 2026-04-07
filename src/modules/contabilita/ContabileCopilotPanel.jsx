@@ -27,7 +27,7 @@ const QUICK_ACTIONS = [
 ]
 
 /**
- * Chat Copilot contabile → POST /api/copilot/accounting
+ * Chat Copilot contabile → POST /api/accounting/ai (action=copilot_turn)
  * layout="sidebar" | "floating"
  */
 export function ContabileCopilotPanel({
@@ -114,10 +114,11 @@ export function ContabileCopilotPanel({
       setLoading(true)
 
       try {
-        const res = await fetch('/api/copilot/accounting', {
+        const res = await fetch('/api/accounting/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'copilot_turn',
             documentId: docForApi,
             societaId,
             accountingEntryId: accountingEntryId || undefined,

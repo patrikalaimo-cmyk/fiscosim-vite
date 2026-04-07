@@ -16,7 +16,6 @@ import { ModuloImpostazioni }     from './modules/impostazioni'
 import { ModuloImpostazioniProcedure } from './modules/impostazioni_procedure'
 import { ModuloDeleghe }          from './modules/deleghe'
 import { ModuloImportUnificato }  from './modules/import_unificato'
-import { ModuloImportNuovo }      from './modules/import_nuovo/index.jsx'
 import { ModuloExportDati }       from './modules/export_dati'
 import { ModuloContabilita }      from './modules/contabilita'
 import { ModuloPianoConti }       from './modules/piano_conti'
@@ -26,7 +25,6 @@ import { ModuloLetturaMail }      from './modules/lettura_mail'
 import { ModuloFattureADE }       from './modules/fatture_ade'
 import { ModuloRichiesteFatture } from './modules/richieste_fatture'
 import { ModuloClienti }          from './modules/clienti'
-import { ModuloIVA }              from './modules/iva'
 import { ModuloImportExcel }      from './modules/import_excel'
 import { ModuloUtenti }           from './modules/utenti'
 import { ModuloF24 }              from './modules/f24'
@@ -99,6 +97,30 @@ function App() {
     setShowInstall(false)
   }
   const logout = () => { setUtente(null); setTab('dashboard'); setShowLogoutConfirm(false) }
+  const navigateTo = (nextTab) => {
+    if (nextTab === 'import_nuovo') {
+      setTab('import_unificato')
+      return
+    }
+    if (nextTab === 'iva') {
+      try {
+        localStorage.setItem('contabilita_sub_tab', 'liquidazioni_iva')
+      } catch {
+        /* ignore */
+      }
+      setTab('contabilita')
+      return
+    }
+    setTab(nextTab)
+  }
+
+  useEffect(() => {
+    if (tab === 'import_nuovo') {
+      navigateTo('import_nuovo')
+    } else if (tab === 'iva') {
+      navigateTo('iva')
+    }
+  }, [tab])
 
   const ruoloForFk = utente?.ruolo || 'collaboratore'
   const fkAdmin = useFiscalKnowledgeAdmin({
@@ -176,7 +198,7 @@ function App() {
               {items.map(item => (
                 <div key={item.id}
                   className={'sb-item' + (tab === item.id ? ' active' : '')}
-                  onClick={() => setTab(item.id)}>
+                  onClick={() => navigateTo(item.id)}>
                   <span className="sb-item-ico">{item.ico}</span>
                   <span>{item.label}</span>
                   {item.id === 'agenda' && alertCount > 0 && <span className="sb-badge">{alertCount}</span>}
@@ -237,7 +259,7 @@ function App() {
               {' · '}anche in Impostazioni studio
             </div>
           )}
-          {tab === 'dashboard'    && <Dashboard onNavigate={setTab} />}
+          {tab === 'dashboard'    && <Dashboard onNavigate={navigateTo} />}
           {tab === 'clienti'      && (canLeggi(perm, 'clienti')   ? <ModuloClienti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
           {tab === 'import'       && (canModifica(perm, 'import')  ? <ModuloImportExcel />                       : <AccessDenied />)}
           {tab === 'utenti'       && puoGestireUtenti(ruolo)       && <ModuloUtenti ruolo={ruolo} />}
@@ -254,8 +276,7 @@ function App() {
 
           {/* DOCUMENT HUB */}
           {tab === 'import_unificato'  && <ModuloImportUnificato ruolo={ruolo} />}
-          {tab === 'import_nuovo'      && <ModuloImportNuovo />}
-          {tab === 'export_dati'       && <ModuloExportDati onNavigate={setTab} />}
+          {tab === 'export_dati'       && <ModuloExportDati onNavigate={navigateTo} />}
           {tab === 'fatture_ade'       && <ModuloFattureADE />}
           {tab === 'lettura_mail'      && <ModuloLetturaMail />}
           {tab === 'richieste_fatture' && <ModuloRichiesteFatture />}
@@ -267,7 +288,6 @@ function App() {
           {tab === 'bilancio'    && <ModuloBilancio />}
 
           {/* STRUMENTI */}
-          {tab === 'iva'          && (canLeggi(perm, 'iva')         ? <ModuloIVA ruolo={ruolo} perm={perm} />          : <AccessDenied />)}
           {tab === 'f24'          && (canLeggi(perm, 'f24')         ? <ModuloF24 ruolo={ruolo} perm={perm} />          : <AccessDenied />)}
           {tab === 'simulatore'   && (canLeggi(perm, 'simulatore')  ? <ModuloSimulatore />                             : <AccessDenied />)}
           {tab === 'ammortamenti' && (canLeggi(perm, 'ammortamenti')? <ModuloAmmortamenti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}

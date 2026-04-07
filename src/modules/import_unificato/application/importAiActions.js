@@ -52,7 +52,7 @@ export async function runOllamaAnalisiPrompt(fullPrompt, pipelineCtx, filename =
     data = prodRes.data
     if (!res.ok) {
       const hint = data?.error || `HTTP ${res.status}`
-      if (res.status === 404) throw new Error('API /api/ollama-analyze non disponibile.')
+      if (res.status === 404) throw new Error('API /api/ai (ollama_analyze) non disponibile.')
       if (res.status === 502) {
         throw new Error(hint || 'Ollama non risponde (502). Avvia Ollama (ollama serve), poi: ollama pull mistral')
       }
@@ -92,7 +92,7 @@ export async function runClaudeImportAnalisi(content, pipelineCtx, filename = ''
   const { res, data } = await fetchClaudeImportAnalisi(content)
   if (!res.ok) {
     const hint = data?.error || data?.detail?.error?.message || `HTTP ${res.status}`
-    throw new Error(res.status === 404 ? 'API /api/claude non raggiungibile: avvia `npm run dev:api` (porta 3001).' : hint)
+    throw new Error(res.status === 404 ? 'API /api/ai (claude) non raggiungibile: avvia `npm run dev:api` (porta 3001).' : hint)
   }
   const txt = (data.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
   traceStep('IMPORT_CLAUDE_OUTPUT_ADVANCED', buildAdvancedTextSnapshot(txt, { headMax: 5000, tailMax: 1800 }), { filename, response_total_chars: txt.length }, pipelineCtx)

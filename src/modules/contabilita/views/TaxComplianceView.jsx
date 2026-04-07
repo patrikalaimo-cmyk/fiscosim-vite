@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { fmtNumber } from '../ui/formatters.js'
 import { getLiquidazioneBadgeClass, getLipeBadgeClass } from '../ui/viewMappers.js'
+import {
+  aggregateRegistriIvaRows,
+  buildLiquidazionePayload,
+  mapLiquidazioneForUi,
+  boundsMensile,
+  boundsTrimestrale,
+} from '../application/liquidazioneIvaClient.js'
 
 export default function TaxComplianceView({
   contTab,
@@ -47,8 +54,6 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
     periodo:Math.ceil((new Date().getMonth()+1)/3),
     iva_vendite:0,
     iva_acquisti:0,
-    credito_precedente:0,
-    interessi:0,
     note:''
   });
 
@@ -58,68 +63,50 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
 
   const caricaLiquidazioni=async()=>{
     setLoading(true);
-    const{data}=await contabilitaRepo.getLiquidazioniIvaSocieta(societa.id);
-    setLiquidazioni(data||[]);
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche();
+    const mapped = (data || []).map(mapLiquidazioneForUi).filter(Boolean);
+    setLiquidazioni(mapped);
     setLoading(false);
   };
 
-  const calcolaDaScritture=()=>{
-    // Calcola IVA dalle scritture del periodo
+  const calcolaDaRegistri=async()=>{
     const anno=formData.anno;
     const periodo=formData.periodo;
     const isTrimestrale=formData.tipo_periodo==='trimestrale';
-    
-    let ivaVendite=0,ivaAcquisti=0;
-    
-    scritture.forEach(s=>{
-      const dataReg=new Date(s.data_registrazione);
-      const annoReg=dataReg.getFullYear();
-      const meseReg=dataReg.getMonth()+1;
-      const trimestreReg=Math.ceil(meseReg/3);
-      
-      const inPeriodo=isTrimestrale?(annoReg===anno&&trimestreReg===periodo):(annoReg===anno&&meseReg===periodo);
-      
-      if(inPeriodo){
-        // Determina se è vendita o acquisto dalla causale
-        if(s.causale_codice?.startsWith('VE')||s.tipo==='vendita'){
-          ivaVendite+=parseFloat(s.imposta||0);
-        }else if(s.causale_codice?.startsWith('AC')||s.tipo==='acquisto'){
-          ivaAcquisti+=parseFloat(s.imposta||0);
-        }
-      }
-    });
-    
-    setFormData(prev=>({...prev,iva_vendite:ivaVendite.toFixed(2),iva_acquisti:ivaAcquisti.toFixed(2)}));
+    const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
+
+    const { data, error } = await contabilitaRepo.getRegistriIvaByPeriodo(bounds.periodo_inizio, bounds.periodo_fine);
+    if (error) {
+      alert('Errore lettura registri IVA: ' + error.message);
+      return;
+    }
+    const agg = aggregateRegistriIvaRows(data || []);
+    setFormData(prev=>({...prev,iva_vendite:agg.iva_debito.toFixed(2),iva_acquisti:agg.iva_credito.toFixed(2)}));
   };
 
   const salvaLiquidazione=async()=>{
     const ivaDebito=parseFloat(formData.iva_vendite||0);
     const ivaCredito=parseFloat(formData.iva_acquisti||0);
-    const creditoPrec=parseFloat(formData.credito_precedente||0);
-    const interessi=parseFloat(formData.interessi||0);
-    
-    const saldo=ivaDebito-ivaCredito-creditoPrec+interessi;
-    
-    const record={
-      societa_id:societa.id,
-      tipo_periodo:formData.tipo_periodo,
-      anno:formData.anno,
-      periodo:formData.periodo,
-      iva_vendite:ivaDebito,
-      iva_acquisti:ivaCredito,
-      credito_precedente:creditoPrec,
-      interessi:interessi,
-      iva_dovuta:saldo>0?saldo:0,
-      credito_da_riportare:saldo<0?Math.abs(saldo):0,
-      note:formData.note,
-      stato:'calcolata'
+
+    const agg = {
+      iva_debito: ivaDebito,
+      iva_credito: ivaCredito,
+      saldo: Math.round((ivaDebito - ivaCredito) * 100) / 100,
     };
+    const record = buildLiquidazionePayload({
+      periodicita: formData.tipo_periodo,
+      anno: formData.anno,
+      mese: formData.tipo_periodo === 'mensile' ? formData.periodo : null,
+      trimestre: formData.tipo_periodo === 'trimestrale' ? formData.periodo : null,
+      agg,
+      note: formData.note,
+    });
     
-    const{error}=await contabilitaRepo.insertLiquidazioneIvaSocieta(record);
+    const{error}=await contabilitaRepo.upsertLiquidazioneIvaCanonica(record);
     if(error){
       // Se la tabella non esiste, la creiamo
       if(error.code==='42P01'){
-        alert('Tabella liquidazioni_iva_societa non trovata. Crea la tabella nel database.');
+        alert('Tabella liquidazione_iva non trovata. Crea la tabella nel database.');
       }else{
         alert('Errore: '+error.message);
       }
@@ -158,7 +145,6 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                   <th>Periodo</th>
                   <th style={{textAlign:'right'}}>IVA Vendite</th>
                   <th style={{textAlign:'right'}}>IVA Acquisti</th>
-                  <th style={{textAlign:'right'}}>Credito Prec.</th>
                   <th style={{textAlign:'right'}}>IVA Dovuta</th>
                   <th style={{textAlign:'right'}}>Credito</th>
                   <th>Stato</th>
@@ -170,7 +156,6 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                     <td><strong>{periodoLabel(l)}</strong></td>
                     <td style={{textAlign:'right'}}>{fmt(l.iva_vendite)}</td>
                     <td style={{textAlign:'right'}}>{fmt(l.iva_acquisti)}</td>
-                    <td style={{textAlign:'right'}}>{fmt(l.credito_precedente)}</td>
                     <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):'—'}</td>
                     <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):'—'}</td>
                     <td><span className={'bdg '+getLiquidazioneBadgeClass(l.stato)}>{l.stato}</span></td>
@@ -216,7 +201,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                 </div>
                 <div className="fg">
                   <label>&nbsp;</label>
-                  <button className="btn-sec" onClick={calcolaDaScritture} style={{width:'100%'}}>🔄 Calcola da Scritture</button>
+                  <button className="btn-sec" onClick={calcolaDaRegistri} style={{width:'100%'}}>🔄 Calcola da Registri IVA</button>
                 </div>
                 <div className="fg">
                   <label>IVA Vendite (debito)</label>
@@ -225,14 +210,6 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                 <div className="fg">
                   <label>IVA Acquisti (credito)</label>
                   <input type="number" step="0.01" value={formData.iva_acquisti} onChange={e=>setFormData(p=>({...p,iva_acquisti:e.target.value}))}/>
-                </div>
-                <div className="fg">
-                  <label>Credito periodo precedente</label>
-                  <input type="number" step="0.01" value={formData.credito_precedente} onChange={e=>setFormData(p=>({...p,credito_precedente:e.target.value}))}/>
-                </div>
-                <div className="fg">
-                  <label>Interessi (1%)</label>
-                  <input type="number" step="0.01" value={formData.interessi} onChange={e=>setFormData(p=>({...p,interessi:e.target.value}))}/>
                 </div>
                 <div className="fg full">
                   <label>Note</label>
@@ -248,13 +225,10 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
                   <span>IVA a credito:</span><span style={{fontWeight:600}}>- {fmt(formData.iva_acquisti)}</span>
                 </div>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
-                  <span>Credito precedente:</span><span style={{fontWeight:600}}>- {fmt(formData.credito_precedente)}</span>
-                </div>
                 <div style={{display:'flex',justifyContent:'space-between',paddingTop:'.5rem',borderTop:'1px solid var(--bd)'}}>
                   <span style={{fontWeight:700}}>SALDO:</span>
-                  <span style={{fontWeight:700,color:(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0)-parseFloat(formData.credito_precedente||0))>0?'var(--rd)':'var(--gr)'}}>
-                    {fmt(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0)-parseFloat(formData.credito_precedente||0)+parseFloat(formData.interessi||0))}
+                  <span style={{fontWeight:700,color:(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0))>0?'var(--rd)':'var(--gr)'}}>
+                    {fmt(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0))}
                   </span>
                 </div>
               </div>
@@ -284,8 +258,9 @@ function LIPEView({societa}){
 
   const caricaDati=async()=>{
     setLoading(true);
-    const{data}=await contabilitaRepo.getLiquidazioniIvaTrimestrali(societa.id);
-    setLiquidazioni(data||[]);
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanonicheByPeriodicita('trimestrale');
+    const mapped = (data || []).map(mapLiquidazioneForUi).filter(Boolean);
+    setLiquidazioni(mapped);
     setLoading(false);
   };
 
@@ -321,9 +296,9 @@ function LIPEView({societa}){
         <IvaDetratta>${liq.iva_acquisti.toFixed(2)}</IvaDetratta>
         <IvaDovuta>${liq.iva_dovuta>0?liq.iva_dovuta.toFixed(2):'0.00'}</IvaDovuta>
         <IvaCredito>${liq.credito_da_riportare>0?liq.credito_da_riportare.toFixed(2):'0.00'}</IvaCredito>
-        <DebitoCredPeriodPrec>${(liq.credito_precedente||0).toFixed(2)}</DebitoCredPeriodPrec>
+        <DebitoCredPeriodPrec>0.00</DebitoCredPeriodPrec>
         <CreditoAnnoPrec>0.00</CreditoAnnoPrec>
-        <Interessi>${(liq.interessi||0).toFixed(2)}</Interessi>
+        <Interessi>0.00</Interessi>
         <Acconto>0.00</Acconto>
         <ImportoDaVersare>${liq.iva_dovuta>0?liq.iva_dovuta.toFixed(2):'0.00'}</ImportoDaVersare>
         <CreditoDaRiportare>${liq.credito_da_riportare>0?liq.credito_da_riportare.toFixed(2):'0.00'}</CreditoDaRiportare>
@@ -1100,58 +1075,42 @@ function IvaAnnualeView({societa,scritture,causaliIva}){
   const caricaDati=async()=>{
     setLoading(true);
     
-    // Carica liquidazioni dell'anno
-    const{data:liq}=await contabilitaRepo.getLiquidazioniIvaByAnno(societa.id, annoSel);
-    setLiquidazioni(liq||[]);
+    // Carica liquidazioni canoniche dell'anno
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche();
+    const mapped = (data || []).map(mapLiquidazioneForUi).filter((l) => l && l.anno === annoSel);
+    setLiquidazioni(mapped);
     
-    // Calcola riepilogo da liquidazioni
-    if(liq&&liq.length>0){
-      const totIvaVendite=liq.reduce((s,l)=>s+parseFloat(l.iva_vendite||0),0);
-      const totIvaAcquisti=liq.reduce((s,l)=>s+parseFloat(l.iva_acquisti||0),0);
-      const creditoIniziale=parseFloat(liq[0]?.credito_precedente||0);
-      const totIvaDovuta=liq.reduce((s,l)=>s+parseFloat(l.iva_dovuta||0),0);
-      const creditoFinale=liq.length>0?parseFloat(liq[liq.length-1]?.credito_da_riportare||0):0;
+    if(mapped.length>0){
+      const totIvaVendite=mapped.reduce((s,l)=>s+parseFloat(l.iva_vendite||0),0);
+      const totIvaAcquisti=mapped.reduce((s,l)=>s+parseFloat(l.iva_acquisti||0),0);
+      const totSaldo=mapped.reduce((s,l)=>s+parseFloat(l.saldo||0),0);
+      const creditoFinale=mapped.length>0?parseFloat(mapped[mapped.length-1]?.credito_da_riportare||0):0;
       
       setDatiIva({
         operazioni_attive:totIvaVendite/0.22, // stima imponibile
         operazioni_passive:totIvaAcquisti/0.22,
         iva_esigibile:totIvaVendite,
         iva_detratta:totIvaAcquisti,
-        iva_dovuta:totIvaDovuta,
-        credito_anno_prec:creditoIniziale,
+        iva_dovuta:Math.max(0,totSaldo),
+        credito_anno_prec:0,
         acconti_versati:0,
-        totale_dovuto:Math.max(0,totIvaDovuta-creditoIniziale),
+        totale_dovuto:Math.max(0,totSaldo),
         credito_risultante:creditoFinale
       });
     }else{
-      // Calcola da scritture se non ci sono liquidazioni
-      const scrittureAnno=scritture.filter(s=>{
-        const dataReg=new Date(s.data_registrazione);
-        return dataReg.getFullYear()===annoSel;
-      });
-      
-      let ivaVendite=0,ivaAcquisti=0;
-      scrittureAnno.forEach(s=>{
-        if(s.causale_codice?.startsWith('VE')||s.tipo==='vendita'){
-          ivaVendite+=parseFloat(s.imposta||0);
-        }else if(s.causale_codice?.startsWith('AC')||s.tipo==='acquisto'){
-          ivaAcquisti+=parseFloat(s.imposta||0);
-        }
-      });
-      
       setDatiIva({
-        operazioni_attive:ivaVendite/0.22,
-        operazioni_passive:ivaAcquisti/0.22,
-        iva_esigibile:ivaVendite,
-        iva_detratta:ivaAcquisti,
-        iva_dovuta:Math.max(0,ivaVendite-ivaAcquisti),
+        operazioni_attive:0,
+        operazioni_passive:0,
+        iva_esigibile:0,
+        iva_detratta:0,
+        iva_dovuta:0,
         credito_anno_prec:0,
         acconti_versati:0,
-        totale_dovuto:Math.max(0,ivaVendite-ivaAcquisti),
-        credito_risultante:Math.max(0,ivaAcquisti-ivaVendite)
+        totale_dovuto:0,
+        credito_risultante:0
       });
     }
-    
+
     setLoading(false);
   };
 
@@ -1305,7 +1264,6 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
                       <th>Periodo</th>
                       <th style={{textAlign:'right'}}>IVA Vendite</th>
                       <th style={{textAlign:'right'}}>IVA Acquisti</th>
-                      <th style={{textAlign:'right'}}>Credito Prec.</th>
                       <th style={{textAlign:'right'}}>IVA Dovuta</th>
                       <th style={{textAlign:'right'}}>Credito</th>
                     </tr>
@@ -1316,7 +1274,6 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
                         <td><strong>{l.tipo_periodo==='trimestrale'?`${l.periodo}° Trimestre`:`${l.periodo}/${l.anno}`}</strong></td>
                         <td style={{textAlign:'right'}}>{fmt(l.iva_vendite)}</td>
                         <td style={{textAlign:'right'}}>{fmt(l.iva_acquisti)}</td>
-                        <td style={{textAlign:'right'}}>{fmt(l.credito_precedente)}</td>
                         <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):'—'}</td>
                         <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):'—'}</td>
                       </tr>
@@ -1327,7 +1284,6 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
                       <td>TOTALE</td>
                       <td style={{textAlign:'right'}}>{fmt(liquidazioni.reduce((s,l)=>s+parseFloat(l.iva_vendite||0),0))}</td>
                       <td style={{textAlign:'right'}}>{fmt(liquidazioni.reduce((s,l)=>s+parseFloat(l.iva_acquisti||0),0))}</td>
-                      <td></td>
                       <td style={{textAlign:'right',color:'var(--rd)'}}>{fmt(liquidazioni.reduce((s,l)=>s+parseFloat(l.iva_dovuta||0),0))}</td>
                       <td></td>
                     </tr>

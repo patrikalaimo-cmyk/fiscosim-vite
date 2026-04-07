@@ -92,10 +92,46 @@ export async function callBackend(endpoint, payload) {
 function _mockResponse(endpoint, payload) {
   switch (endpoint) {
 
-    case '/api/send-email':
-      return { ok: true, message: '[TEST] Email simulata — non inviata realmente', test: true }
+    case '/api/email':
+      if (payload?.action === 'send') {
+        return { ok: true, message: '[TEST] Email simulata — non inviata realmente', test: true }
+      }
+      return {
+        ok: true, test: true,
+        emails: [
+          { id: 'test-1', subject: '[TEST] Email di prova', from: 'test@example.com', date: new Date().toISOString(), hasAttachments: false, body: 'Email simulata in test mode.' }
+        ]
+      }
 
-    case '/api/analyze-document':
+    case '/api/document': {
+      const action =
+        (typeof payload?.action === 'string' ? payload.action : '')
+          .trim()
+          .toLowerCase()
+        || (payload?.documentId ? 'process' : '')
+        || (typeof payload?.tipo === 'string' ? 'parse_contabilita_pdf' : '')
+        || (payload?.pdfBase64 ? 'split_cu' : '')
+        || (payload?.fileBase64 ? 'analyze' : '')
+        || 'analyze'
+
+      if (action === 'parse_contabilita_pdf') {
+        return {
+          ok: true, test: true,
+          records: [
+            { codice: 'TEST01', descrizione: '[TEST] Conto di prova 1', tipo: 'economico', attivo: true },
+            { codice: 'TEST02', descrizione: '[TEST] Conto di prova 2', tipo: 'patrimoniale', attivo: true },
+          ]
+        }
+      }
+
+      if (action === 'process') {
+        return { status: 'ok', documentId: payload?.documentId || 'test-doc', pipeline_run_id: 'test-run', pipeline_trace: null }
+      }
+
+      if (action === 'split_cu') {
+        return { ok: true, totale: 1, anno: String(payload?.anno || new Date().getFullYear()), cu: [] }
+      }
+
       return {
         ok: true, test: true,
         tipo_documento: 'fattura_acquisto',
@@ -104,8 +140,9 @@ function _mockResponse(endpoint, payload) {
         confidence: 0.95,
         note: '[TEST MODE] Classificazione simulata'
       }
+    }
 
-    case '/api/proposta-contabile':
+    case '/api/accounting/ai':
       return {
         ok: true, test: true,
         proposta: {
@@ -119,27 +156,19 @@ function _mockResponse(endpoint, payload) {
         }
       }
 
-    case '/api/claude':
-      return {
-        content: [{ type: 'text', text: '[TEST MODE] Risposta AI simulata. Nessuna chiamata reale effettuata.' }]
+    case '/api/ai':
+      // Compat: se i moduli chiamano /api/ai con action=claude, simuliamo una risposta Anthropic.
+      if (payload?.action === 'claude') {
+        return {
+          content: [{ type: 'text', text: '[TEST MODE] Risposta AI simulata. Nessuna chiamata reale effettuata.' }]
+        }
       }
+      if (payload?.action === 'ollama_analyze') {
+        return { response: '[TEST MODE] Risposta Ollama simulata.' }
+      }
+      return { reply: '[TEST MODE] Risposta chat simulata.' }
 
-    case '/api/parse-contabilita-pdf':
-      return {
-        ok: true, test: true,
-        records: [
-          { codice: 'TEST01', descrizione: '[TEST] Conto di prova 1', tipo: 'economico', attivo: true },
-          { codice: 'TEST02', descrizione: '[TEST] Conto di prova 2', tipo: 'patrimoniale', attivo: true },
-        ]
-      }
 
-    case '/api/read-email':
-      return {
-        ok: true, test: true,
-        emails: [
-          { id: 'test-1', subject: '[TEST] Email di prova', from: 'test@example.com', date: new Date().toISOString(), hasAttachments: false, body: 'Email simulata in test mode.' }
-        ]
-      }
 
     case '/api/banking':
       return { ok: true, test: true, data: [], message: '[TEST] Banking API simulata' }
@@ -194,5 +223,11 @@ export function emitEvent(event, payload) {
 // ─── CALL CLAUDE (wrapper) ───────────────────────────────────────
 
 export async function callClaude(systemPrompt, userContent, maxTokens = 1000) {
-  return callBackend('/api/analyze-document', { system: systemPrompt, content: userContent, maxTokens })
+  return callBackend('/api/ai', {
+    action: 'claude',
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userContent }],
+  })
 }

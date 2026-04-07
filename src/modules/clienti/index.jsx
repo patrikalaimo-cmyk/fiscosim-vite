@@ -269,10 +269,11 @@ function ModuliBulkModal({clienti, onSave, onClose}){
 // ─── IVA IMPORT (PDF / Excel via Claude AI) ──────────────────
 async function estraiDatiIVADaPDF(base64, mimeType, useAI=true) {
   if(!useAI)return null; // Caller will show manual input form
-  const res = await fetch("/api/claude", {
+  const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      action: "claude",
       model: "claude-haiku-4-5-20251001",
       max_tokens: 600,
       system: `Sei un esperto di contabilità IVA italiana. Analizza il documento e rispondi SOLO con JSON valido, zero testo aggiuntivo.`,
@@ -311,10 +312,11 @@ async function estraiDatiIVADaExcel(file, useAI=true) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const testo = XLSX.utils.sheet_to_csv(ws).slice(0, 4000);
 
-  const res = await fetch("/api/claude", {
+  const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      action: "claude",
       model: "claude-haiku-4-5-20251001",
       max_tokens: 600,
       system: `Sei un esperto di contabilità IVA italiana. Analizza il testo CSV di un foglio Excel e rispondi SOLO con JSON valido, zero testo aggiuntivo.`,

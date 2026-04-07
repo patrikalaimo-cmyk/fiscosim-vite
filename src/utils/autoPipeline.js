@@ -19,7 +19,7 @@ function readAiPreprocessModeForPipeline() {
 
 /**
  * Dopo insert su `documenti_contabilita`, chiama in background `runFullPipeline(documentId)`
- * via `POST /api/process-document` (stesso endpoint di prima; nessun await in UI).
+ * via `POST /api/document` (action process; nessun await in UI).
  * Richiede API attiva (`npm run dev:api` in locale: proxy Vite `/api` → :3001).
  *
  * @param {string | null | undefined} documentId
@@ -54,7 +54,7 @@ export function triggerAutoPipeline(documentId, options = {}) {
 
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
 
-  void fetch('/api/process-document', {
+  void fetch('/api/document', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ documentId, aiMode, aiPreprocessMode }),

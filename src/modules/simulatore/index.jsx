@@ -37,7 +37,7 @@ function CalendarModal({regimeId,onClose}){
   const toggleAll=()=>{if(allSel)setSel({});else{const s={};allItems.forEach((_,i)=>s[i]=true);setSel(s);}};
   const toggle=i=>setSel(p=>({...p,[i]:!p[i]}));
   const countSel=Object.values(sel).filter(Boolean).length;
-  const send=async()=>{if(!email||!countSel)return;setLoading(true);setErr(null);try{await callBackend('/api/send-email', {email,regimeName:REGIME_LABELS[regimeId],scadenze:allItems.filter((_,i)=>sel[i]),isTest:false});setSent(true);}catch(e){setErr(e.message);}finally{setLoading(false);}};
+  const send=async()=>{if(!email||!countSel)return;setLoading(true);setErr(null);try{await callBackend('/api/email', {action:'send',email,regimeName:REGIME_LABELS[regimeId],scadenze:allItems.filter((_,i)=>sel[i]),isTest:false});setSent(true);}catch(e){setErr(e.message);}finally{setLoading(false);}};
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()}>

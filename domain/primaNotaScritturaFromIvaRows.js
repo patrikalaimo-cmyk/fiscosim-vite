@@ -59,6 +59,33 @@ function resolveContoIvaPerCausale({ causale, pianoConti, isPassiva }) {
   return findContoIvaDefault({ pianoConti, isPassiva })
 }
 
+function parsePercent(p) {
+  if (p == null) return 0
+  if (typeof p === 'number') return Number.isFinite(p) ? p : 0
+  const s = String(p).trim().toLowerCase()
+  const m = s.match(/(\d+(?:[.,]\d+)?)/)
+  if (!m) return 0
+  const x = parseFloat(m[1].replace(',', '.'))
+  return Number.isFinite(x) ? x : 0
+}
+
+function isDetraibileFalse(v) {
+  if (v === false || v === 0) return true
+  const s = String(v ?? '').trim().toLowerCase()
+  return s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off' || s === 'f'
+}
+
+function getPercDetraibileFromCausale(c) {
+  if (!c) return 100
+  if (isDetraibileFalse(c.detraibile)) return 0
+  const det = parsePercent(c.percentuale_detraibilita)
+  if (String(c.percentuale_detraibilita ?? '').trim() !== '') {
+    return Math.max(0, Math.min(100, det))
+  }
+  const ind = parsePercent(c.percentuale_indetraibilita)
+  return Math.max(0, Math.min(100, 100 - ind))
+}
+
 export function buildScritturaRowsFromIvaRows({
   ivaRows,
   pianoConti = [],
@@ -117,18 +144,10 @@ export function buildScritturaRowsFromIvaRows({
   if (isPassiva) {
     for (const ir of sorted) {
       const imp = toNum(ir.imponibile)
-      if (imp > 0) {
-        out.push({
-          ...newRow(),
-          conto_id: contoCosti.id,
-          descrizione: `Costi (${ir.aliquota}%)`,
-          dare: imp,
-          avere: '',
-          iva_row_id: ir.id,
-          tipo_riga_auto: 'costo'
-        })
-      }
       const tax = toNum(ir.iva)
+      let percDet = 100
+      let taxDet = tax
+      let taxInd = 0
       if (tax > 0) {
         if (!ir.causale_iva_id) {
           return {
@@ -140,6 +159,23 @@ export function buildScritturaRowsFromIvaRows({
         if (!causale) {
           return { rows: null, error: `Causale IVA non trovata in anagrafica (aliquota ${ir.aliquota}%).` }
         }
+        percDet = getPercDetraibileFromCausale(causale)
+        taxDet = Math.round((tax * percDet / 100) * 100) / 100
+        taxInd = Math.round((tax - taxDet) * 100) / 100
+      }
+      if (imp > 0 || taxInd > 0) {
+        out.push({
+          ...newRow(),
+          conto_id: contoCosti.id,
+          descrizione: `Costi (${ir.aliquota}%)`,
+          dare: Math.round((imp + taxInd) * 100) / 100,
+          avere: '',
+          iva_row_id: ir.id,
+          tipo_riga_auto: 'costo'
+        })
+      }
+      if (taxDet > 0) {
+        const causale = causaliIva.find(c => String(c.id) === String(ir.causale_iva_id))
         const contoIva = resolveContoIvaPerCausale({ causale, pianoConti, isPassiva: true })
         if (!contoIva?.id) {
           return {
@@ -152,7 +188,7 @@ export function buildScritturaRowsFromIvaRows({
           ...newRow(),
           conto_id: contoIva.id,
           descrizione: `IVA a credito (${ir.aliquota}%)`,
-          dare: tax,
+          dare: taxDet,
           avere: '',
           causale_iva_id: ir.causale_iva_id,
           iva_row_id: ir.id,

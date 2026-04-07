@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseXMLFattura } from '../../../domain/fatture.js'
 import { resolveIvaOrNull } from '../../../domain/resolveIva.js'
+import { evaluateDraftReliability, reliabilityTierLabel } from '../../../domain/draftReliability.js'
+import { sb } from '../../lib/supabase.js'
 import { FatturaCourtesyViewer } from './FatturaCourtesyViewer.jsx'
 import { ContabileCopilotPanel } from './ContabileCopilotPanel.jsx'
 import { buildCopilotFixPromptFromInsight } from './CopilotInsightsBlock.jsx'
+import { loadIvaInsightsForSocieta } from './application/ivaInsightsClient.js'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { fmtCurrency as fmt, fmtDate } from './ui/formatters.js'
 
@@ -222,6 +225,8 @@ function AccountingForm({
   onTogglePinExplanation = null,
   onRefreshEntryMeta = null,
   copilotHighlight = null,
+  ivaInsights = [],
+  ivaInsightsLoading = false,
 }) {
   const [contoId, setContoId] = useState('')
   const [causaleIva, setCausaleIva] = useState('')
@@ -338,6 +343,21 @@ function AccountingForm({
     hl?.contoCodes?.length > 0 &&
     selectedConto &&
     hl.contoCodes.some((c) => normContoCode(c) === normContoCode(selectedConto.codice))
+  const reliability = useMemo(() => evaluateDraftReliability({ doc }), [doc])
+  const insightRows = useMemo(() => {
+    if (!Array.isArray(ivaInsights)) return []
+    const seen = new Set()
+    const out = []
+    for (const ins of ivaInsights) {
+      const key = ins.fingerprint || ins.titolo || ins.descrizione
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      out.push(ins)
+    }
+    return out
+  }, [ivaInsights])
+  const insightRowsLimited = useMemo(() => insightRows.slice(0, 3), [insightRows])
+  const insightExtraCount = insightRows.length > insightRowsLimited.length ? (insightRows.length - insightRowsLimited.length) : 0
 
   return (
     <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -419,6 +439,43 @@ function AccountingForm({
             </div>
           </div>
         </div>
+        {reliability && (
+          <div style={{ marginBottom: '.75rem', fontSize: '.72rem', color: 'var(--mu)' }}>
+            Affidabilita bozza: <strong>{reliabilityTierLabel(reliability.tier)}</strong> · {reliability.score}%
+            {reliability.reasons?.length > 0 && (
+              <div style={{ marginTop: '.2rem', color: 'var(--mu)' }}>
+                Motivi: {reliability.reasons.slice(0, 2).map((r) => r.message).join('; ')}
+              </div>
+            )}
+          </div>
+        )}
+        {(ivaInsightsLoading || insightRowsLimited.length > 0) && (
+          <div style={{ marginBottom: '.75rem', display: 'grid', gap: '.4rem' }}>
+            {ivaInsightsLoading && insightRowsLimited.length === 0 && (
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                Analisi IVA in corso…
+              </div>
+            )}
+            {insightRowsLimited.map((ins) => {
+              const sev = String(ins.gravita || '').toLowerCase()
+              const tipo = String(ins.tipo || '').toLowerCase()
+              const isWarn = tipo === 'iva_anomaly'
+                ? (sev === 'critical' || sev === 'warning' || sev === 'high' || sev === 'medium')
+                : false
+              return (
+                <div key={ins.fingerprint || ins.titolo} className={`alert ${isWarn ? 'alert-warn' : 'alert-info'}`} style={{ margin: 0 }}>
+                  <strong>{ins.titolo || 'Segnale IVA'}</strong>
+                  <div style={{ fontSize: '.72rem', marginTop: '.2rem' }}>{ins.descrizione}</div>
+                </div>
+              )
+            })}
+            {insightExtraCount > 0 && (
+              <div className="alert alert-info" style={{ margin: 0 }}>
+                Altri {insightExtraCount} segnali IVA disponibili.
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="fg" style={{ marginBottom: '.65rem' }}>
           <label>Data registrazione</label>
@@ -577,6 +634,7 @@ export function DaValidareSplitView({
   patchDocumento,
   confermaDoc,
   registraConfermati,
+  registrazioneInCorso = false,
 }) {
   const [filtroStato, setFiltroStato] = useState('tutti')
   const [filtroFornitore, setFiltroFornitore] = useState('')
@@ -606,6 +664,8 @@ export function DaValidareSplitView({
   const sendCopilotPromptRef = useRef(null)
   const [insightToPromptOnOpen, setInsightToPromptOnOpen] = useState(null)
   const requestAutoSelectHighRef = useRef(false)
+  const [ivaInsightsByDocId, setIvaInsightsByDocId] = useState({})
+  const [ivaInsightsLoading, setIvaInsightsLoading] = useState(false)
 
   const handleInsightFixNow = useCallback(
     (insight) => {
@@ -642,6 +702,21 @@ export function DaValidareSplitView({
   useEffect(() => {
     setCopilotHighlights(null)
   }, [focusedId])
+
+  useEffect(() => {
+    let alive = true
+    if (!societaId) return () => { alive = false }
+    setIvaInsightsLoading(true)
+    loadIvaInsightsForSocieta(societaId)
+      .then((res) => {
+        if (!alive) return
+        setIvaInsightsByDocId(res.byDocId || {})
+      })
+      .finally(() => {
+        if (alive) setIvaInsightsLoading(false)
+      })
+    return () => { alive = false }
+  }, [societaId])
 
   useEffect(() => {
     if (!autoValidateMode) setPinnedExplanation(null)
@@ -795,10 +870,10 @@ export function DaValidareSplitView({
     if (!ids.length) return
     setEntriesLoading(true)
     try {
-      const res = await fetch('/api/accounting/auto-validate', {
+      const res = await fetch('/api/accounting/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentIds: ids }),
+        body: JSON.stringify({ action: 'auto_validate', documentIds: ids }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) console.warn('[DaValidare] auto-validate API', j.error || res.statusText)
@@ -833,10 +908,10 @@ export function DaValidareSplitView({
         return
       }
       ids.forEach((id) => patchDocumento?.(id, { validation_status: 'confirmed', validated_at: now }))
-      void fetch('/api/accounting/feedback-batch', {
+      void fetch('/api/accounting/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentIds: ids }),
+        body: JSON.stringify({ action: 'feedback_batch', documentIds: ids }),
       }).catch(() => {})
       await onRefresh?.()
     },
@@ -1101,8 +1176,8 @@ export function DaValidareSplitView({
           >
             {copilotOpen ? 'Chiudi Copilot' : '🤖 Copilot contabile'}
           </button>
-          <button type="button" className="btn" onClick={registraConfermati} disabled={stats.confermati === 0}>
-            Registra confermati ({stats.confermati})
+          <button type="button" className="btn" onClick={registraConfermati} disabled={stats.confermati === 0 || registrazioneInCorso}>
+            {registrazioneInCorso ? 'Registrazione in corso...' : `Registra confermati (${stats.confermati})`}
           </button>
         </div>
       </div>
@@ -1158,6 +1233,8 @@ export function DaValidareSplitView({
           entryMeta={focusedEntryMetaDisplay}
           onRefreshEntryMeta={refreshEntryMetaForDocument}
           copilotHighlight={copilotHighlights}
+          ivaInsights={focusedDoc ? (ivaInsightsByDocId[String(focusedDoc.id)] || []) : []}
+          ivaInsightsLoading={ivaInsightsLoading}
           onTogglePinExplanation={
             focusedDoc && autoValidateMode
               ? () => togglePinExplanationForDoc(focusedDoc.id, focusedEntryMetaDisplay)

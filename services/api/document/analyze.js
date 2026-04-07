@@ -80,25 +80,19 @@ Rispondi SOLO con JSON valido:
 }`;
 
 // ─── HANDLER ─────────────────────────────────────────────────────
-export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export async function analyzeDocumentHandler({ body }) {
 
   // API Key — SOLO da env, MAI hardcoded
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY non configurata su Vercel' });
+    return { status: 500, json: { error: 'ANTHROPIC_API_KEY non configurata su Vercel' } };
   }
 
   try {
-    const { fileBase64, filename, mimeType, tipoDocumento } = req.body;
+    const { fileBase64, filename, mimeType, tipoDocumento } = body || {};
 
     if (!fileBase64) {
-      return res.status(400).json({ error: 'Campo fileBase64 obbligatorio' });
+      return { status: 400, json: { error: 'Campo fileBase64 obbligatorio' } };
     }
 
     const isXML = mimeType === 'application/xml' || mimeType === 'text/xml' ||
@@ -113,10 +107,13 @@ export default async function handler(req, res) {
     // ── CSV: decode testo, no AI ──
     if (isCSV) {
       const text = Buffer.from(fileBase64, 'base64').toString('latin1');
-      return res.status(200).json({
-        success: true,
-        analysis: { _testo: text, _tipo: 'csv', tipo_documento: 'csv' }
-      });
+      return {
+        status: 200,
+        json: {
+          success: true,
+          analysis: { _testo: text, _tipo: 'csv', tipo_documento: 'csv' }
+        }
+      };
     }
 
     // ── XML: decode testo → prompt testuale ──
@@ -130,7 +127,7 @@ export default async function handler(req, res) {
           content: `Analizza questa fattura elettronica XML ed estrai i dati. Rispondi SOLO con il JSON.\n\n${xmlContent}`
         }]
       });
-      return res.status(200).json({ success: true, analysis });
+      return { status: 200, json: { success: true, analysis } };
     }
 
     // ── PDF ──
@@ -159,7 +156,7 @@ export default async function handler(req, res) {
         analysis = await analyzelargePDF(apiKey, fileBase64, pageCount, isAnagrafica);
       }
 
-      return res.status(200).json({ success: true, analysis });
+      return { status: 200, json: { success: true, analysis } };
     }
 
     // ── Immagine ──
@@ -175,18 +172,21 @@ export default async function handler(req, res) {
           ]
         }]
       });
-      return res.status(200).json({ success: true, analysis });
+      return { status: 200, json: { success: true, analysis } };
     }
 
     // ── Tipo non supportato ──
-    return res.status(400).json({ error: `Tipo file non supportato: ${mimeType || filename}` });
+    return { status: 400, json: { error: `Tipo file non supportato: ${mimeType || filename}` } };
 
   } catch (error) {
     console.error('analyze-document error:', error);
-    return res.status(200).json({
-      success: true,
-      analysis: fallbackAnalysis('Errore: ' + error.message)
-    });
+    return {
+      status: 200,
+      json: {
+        success: true,
+        analysis: fallbackAnalysis('Errore: ' + error.message)
+      }
+    };
   }
 }
 

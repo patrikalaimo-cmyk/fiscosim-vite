@@ -29,29 +29,7 @@ export function ModuloLetturaMail(){
   },[]);
 
   const caricaEmail=async()=>{
-    setLoading(true);
-    setEmails([]);
-    try{
-      const res=await fetch('/api/read-email',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'list',email:selectedAccount,limit:30})
-      });
-      const data=await res.json();
-      if(data.success){
-        setEmails(data.emails||[]);
-        setStats({
-          totali:data.emails?.length||0,
-          conAllegati:data.emails?.filter(e=>e.hasAttachments).length||0,
-          elaborati:0
-        });
-      }else{
-        alert('Errore: '+data.error);
-      }
-    }catch(err){
-      alert('Errore connessione: '+err.message);
-    }
-    setLoading(false);
+    alert('Lettura inbox temporaneamente disattivata durante la messa in sicurezza della Fase A');
   };
 
   const elaboraEmail=async(email)=>{
@@ -62,18 +40,9 @@ export function ModuloLetturaMail(){
       const useAI=(Array.isArray(aiSetting)?aiSetting[0]:aiSetting)?.valore!=='false';
 
       // 1. Scarica allegati completi
-      const res=await fetch('/api/read-email',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'fetch_attachments',email:selectedAccount,uid:email.uid})
-      });
-      const data=await res.json();
-      
-      if(!data.success||!data.email?.attachments?.length){
-        alert('Nessun allegato trovato');
-        setProcessing(null);
-        return;
-      }
+      alert('Lettura inbox temporaneamente disattivata durante la messa in sicurezza della Fase A');
+      setProcessing(null);
+      return;
 
       // 2. Per ogni allegato, analizza (AI o skip) e salva
       for(const att of data.email.attachments){
@@ -81,7 +50,7 @@ export function ModuloLetturaMail(){
 
         if(useAI){
           // AI MODE: classify with Claude
-          const analyzeRes=await fetch('/api/analyze-document',{
+          const analyzeRes=await fetch('/api/document',{
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body:JSON.stringify({

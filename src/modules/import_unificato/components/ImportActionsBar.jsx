@@ -2,6 +2,7 @@ export function ImportActionsBar({
   documenti,
   onConfermaTutti,
   onSvuotaTutto,
+  busy = false,
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '.75rem', flexWrap: 'wrap', gap: '.5rem' }}>
@@ -11,6 +12,7 @@ export function ImportActionsBar({
       <div style={{ display: 'flex', gap: '.5rem' }}>
         <button
           onClick={onConfermaTutti}
+          disabled={busy}
           style={{
             background: 'var(--gold)',
             border: 'none',
@@ -20,12 +22,14 @@ export function ImportActionsBar({
             fontSize: '.75rem',
             fontWeight: 700,
             cursor: 'pointer',
+            opacity: busy ? 0.7 : 1,
           }}
         >
-          ✓ Conferma tutti
+          {busy ? 'Conferma in corso...' : 'âœ“ Conferma tutti'}
         </button>
         <button
           onClick={onSvuotaTutto}
+          disabled={busy}
           style={{
             background: 'transparent',
             border: '1px solid rgba(224,82,82,.4)',
@@ -34,9 +38,10 @@ export function ImportActionsBar({
             padding: '.35rem .9rem',
             fontSize: '.75rem',
             cursor: 'pointer',
+            opacity: busy ? 0.7 : 1,
           }}
         >
-          🗑 Svuota tutto
+          ðŸ—‘ Svuota tutto
         </button>
       </div>
     </div>

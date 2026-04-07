@@ -1,5 +1,6 @@
-const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-const { PDFDocument } = require("pdf-lib");
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 // Identifica se una pagina è la prima pagina di una nuova CU
 function isPrimaPaginaCU(testo) {
@@ -88,16 +89,13 @@ function nomeFile(nome, cf, anno) {
   return `${pulito}_CU${anno}.pdf`;
 }
 
-module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
+export async function splitCuHandler({ body }) {
   try {
-    const { pdfBase64, anno } = req.body;
-    if (!pdfBase64) return res.status(400).json({ error: "PDF mancante" });
+    const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
+    const { PDFDocument } = require("pdf-lib");
+
+    const { pdfBase64, anno } = body || {};
+    if (!pdfBase64) return { status: 400, json: { error: "PDF mancante" } };
 
     const annoStr = anno || new Date().getFullYear().toString();
     const pdfBytes = Buffer.from(pdfBase64, "base64");
@@ -124,7 +122,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (boundaries.length === 0) {
-      return res.status(400).json({ error: "Nessuna CU trovata nel PDF. Verifica che il file sia corretto." });
+      return { status: 400, json: { error: "Nessuna CU trovata nel PDF. Verifica che il file sia corretto." } };
     }
 
     // 3. Split con pdf-lib
@@ -162,15 +160,15 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({
+    return { status: 200, json: {
       ok: true,
       totale: risultati.length,
       anno: annoStr,
       cu: risultati,
-    });
+    }};
 
   } catch (err) {
     console.error("split-cu error:", err);
-    return res.status(500).json({ error: "Errore elaborazione PDF: " + err.message });
+    return { status: 500, json: { error: "Errore elaborazione PDF: " + err.message } };
   }
-};
+}

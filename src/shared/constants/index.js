@@ -171,7 +171,6 @@ export const NAV = [
     section: 'DOCUMENT HUB',
     items: [
       { id: 'import_unificato',    ico: '📁', label: 'Import Documenti' },
-      { id: 'import_nuovo',        ico: '📥', label: 'Import Nuovo' },
       { id: 'export_dati',         ico: '📤', label: 'Export Dati' },
       { id: 'fatture_ade',         ico: '📥', label: 'Fatture Massive ADE' },
       { id: 'lettura_mail',        ico: '📧', label: 'Lettura Mail' },
@@ -190,7 +189,6 @@ export const NAV = [
   {
     section: 'STRUMENTI',
     items: [
-      { id: 'iva',          ico: '💧', label: 'Liquidazione IVA' },
       { id: 'f24',          ico: '📋', label: 'Gestione F24' },
       { id: 'simulatore',   ico: '📊', label: 'Simulatore Fiscale' },
       { id: 'ammortamenti', ico: '🏢', label: 'Ammortamenti' },

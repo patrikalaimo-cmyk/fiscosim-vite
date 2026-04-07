@@ -83,6 +83,15 @@ export async function createPrimaNotaCompleta({
     }))
     partIns = await insertPrimaNotaPartitario({ db, partEntries: partEntriesWithPrimaNotaId, partitarioSelect })
   }
+  if (partIns?.error) {
+    return {
+      data: null,
+      error: partIns.error,
+      pn,
+      righeIns,
+      partIns,
+    }
+  }
 
   return {
     data: { primaNotaId, pn, righeIns, partIns },

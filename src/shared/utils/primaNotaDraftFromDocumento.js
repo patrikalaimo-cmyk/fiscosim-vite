@@ -11,6 +11,7 @@ import {
   normalizeAliquotaSupportata,
   IVA_ALIQUOTE_SUPPORTATE,
   isNaturaFatturaPA,
+  classifyIvaRegime,
 } from './resolveIva.js'
 import {
   extractAliquota,
@@ -45,6 +46,33 @@ function newIvaRowId() {
     : `iva-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function parsePercent(p) {
+  if (p == null) return 0
+  if (typeof p === 'number') return Number.isFinite(p) ? p : 0
+  const s = String(p).trim().toLowerCase()
+  const m = s.match(/(\d+(?:[.,]\d+)?)/)
+  if (!m) return 0
+  const x = parseFloat(m[1].replace(',', '.'))
+  return Number.isFinite(x) ? x : 0
+}
+
+function isDetraibileFalse(v) {
+  if (v === false || v === 0) return true
+  const s = String(v ?? '').trim().toLowerCase()
+  return s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off' || s === 'f'
+}
+
+function getPercDetraibileFromCausale(c) {
+  if (!c) return 100
+  if (isDetraibileFalse(c.detraibile)) return 0
+  const det = parsePercent(c.percentuale_detraibilita)
+  if (String(c.percentuale_detraibilita ?? '').trim() !== '') {
+    return Math.max(0, Math.min(100, det))
+  }
+  const ind = parsePercent(c.percentuale_indetraibilita)
+  return Math.max(0, Math.min(100, 100 - ind))
+}
+
 /**
  * Prima nota guidata: builder canonico del draft da documento.
  * La risoluzione IVA e' centralizzata in {@link ./resolveIva.js} e la composizione/decisione IVA
@@ -58,6 +86,7 @@ function buildIvaRowsFromRiepiloghi({
   naturaDocFallback,
   causaliIva,
   conto,
+  splitPayment = false,
   pipelineContext,
 }) {
   const n = (v) => {
@@ -71,6 +100,7 @@ function buildIvaRowsFromRiepiloghi({
     let causale_iva_id = null
     let codice_interno = null
     let autoResolved = false
+    let causaleObj = null
     try {
       causale_iva_id = resolveIva({
         conto,
@@ -80,6 +110,7 @@ function buildIvaRowsFromRiepiloghi({
         pipelineContext,
       })
       const c = causaliIva.find((x) => String(x?.id) === String(causale_iva_id))
+      causaleObj = c || null
       codice_interno = c?.codice_interno ?? null
       autoResolved = true
       traceStep('IVA_ROW_RESOLVED', { aliquota: aliquotaNum, causale_iva_id }, {}, pipelineContext)
@@ -103,6 +134,13 @@ function buildIvaRowsFromRiepiloghi({
       causale_iva_id,
       codice_interno,
       autoResolved,
+      natura: String(naturaForResolve ?? '').trim() || null,
+      regime_iva: classifyIvaRegime({
+        causale: causaleObj,
+        natura: naturaForResolve,
+        aliquota: aliquotaNum,
+        splitPayment,
+      }),
     })
   }
 
@@ -293,6 +331,7 @@ export async function buildInitialDraftFromDocumento(
     (pivaSoggetto && (x?.partita_iva === pivaSoggetto)) ||
     (cf && (String(x?.codice_fiscale || '').toUpperCase() === cf))
   ) || null
+  const splitPayment = !isPassiva && clienteMatch?.split_payment === true
 
   const soggettoNome =
     doc?.soggetto_denominazione
@@ -338,11 +377,24 @@ export async function buildInitialDraftFromDocumento(
     naturaDocFallback: datiEst?.natura,
     causaliIva,
     conto: contoCosto,
+    splitPayment,
     pipelineContext,
   })
 
   const sumImpUi = ivaRows.reduce((s, r) => s + r.imponibile, 0)
   const sumTaxUi = ivaRows.reduce((s, r) => s + r.iva, 0)
+  const ivaTotals = ivaRows.reduce(
+    (acc, r) => {
+      const causale = causaliIva.find((c) => String(c?.id) === String(r?.causale_iva_id))
+      const percDet = getPercDetraibileFromCausale(causale)
+      const rowIva = n(r?.iva)
+      const rowInd = Math.round((rowIva * (100 - percDet) / 100) * 100) / 100
+      acc.iva += rowIva
+      acc.indetraibile += rowInd
+      return acc
+    },
+    { iva: 0, indetraibile: 0 }
+  )
 
   const primRForMeta = pickPrimaryRiepilogoIva(riepilogoLista)
   const primNatForMeta = String(primRForMeta?.natura ?? primRForMeta?.Natura ?? datiEst?.natura ?? '').trim()
@@ -360,6 +412,35 @@ export async function buildInitialDraftFromDocumento(
   const primImpUi = riepilogo0 ? n(riepilogo0?.imponibile ?? riepilogo0?.Imponibile) : imponibile
   const primTaxUi = riepilogo0 ? n(riepilogo0?.imposta ?? riepilogo0?.Imposta) : iva
   const primAliqUi = pct != null ? pct : (iva === 0 && primTaxUi === 0 ? 0 : null)
+  const percDetPrim = getPercDetraibileFromCausale(
+    causaliIva.find((c) => String(c?.id) === String(primaryForMeta?.causale_iva_id ?? causaleIvaId))
+  )
+  const percDetFinal = (() => {
+    if (ivaRows.length > 0) {
+      if (ivaTotals.iva > 0) {
+        const pctDet = Math.round(((ivaTotals.iva - ivaTotals.indetraibile) / ivaTotals.iva) * 10000) / 100
+        return Math.max(0, Math.min(100, pctDet))
+      }
+      return percDetPrim
+    }
+    return percDetPrim
+  })()
+  const ivaIndetraibileFinal = ivaRows.length > 0
+    ? Math.round(ivaTotals.indetraibile * 100) / 100
+    : Math.round((primTaxUi * (100 - percDetFinal) / 100) * 100) / 100
+  const regimePrim = classifyIvaRegime({
+    causale: causaliIva.find((c) => String(c?.id) === String(primaryForMeta?.causale_iva_id ?? causaleIvaId)),
+    natura: primNatForMeta,
+    aliquota: primAliqUi,
+    splitPayment,
+  })
+  const regimeFinal = (() => {
+    if (!ivaRows.length) return regimePrim
+    const regimes = ivaRows.map(r => r.regime_iva || null).filter(Boolean)
+    if (!regimes.length) return regimePrim
+    const uniq = Array.from(new Set(regimes))
+    return uniq.length === 1 ? uniq[0] : 'misto'
+  })()
 
   const draft = {
     stato: 'bozza',
@@ -373,8 +454,9 @@ export async function buildInitialDraftFromDocumento(
       imponibile: ivaRows.length > 0 ? sumImpUi : primImpUi,
       iva: ivaRows.length > 0 ? sumTaxUi : primTaxUi,
       aliquota: primAliqUi,
-      percDetraibile: 100,
-      ivaIndetraibile: 0,
+      percDetraibile: percDetFinal,
+      ivaIndetraibile: ivaIndetraibileFinal,
+      regime_iva: regimeFinal,
       label: '',
       multi_riepilogo: riepilogoLista.length > 1
     },

@@ -73,10 +73,11 @@ export async function visionFallback(file, tipo, onProgress) {
 
   const prompt = VISION_PROMPTS[tipo] || VISION_PROMPTS.generico
 
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      action: 'claude',
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: 'Sei un esperto di documenti fiscali italiani. Rispondi SEMPRE e SOLO con JSON valido.',

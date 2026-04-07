@@ -143,10 +143,11 @@ async function estraiDatiRicevuta(base64, mimeType, useAI=true) {
     : [{ type:'image', source:{ type:'base64', media_type:mimeType, data:base64 }},
        { type:'text', text:'Estrai i dati da questa ricevuta di affitto breve.' }];
 
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
+      action: 'claude',
       model:'claude-haiku-4-5-20251001',
       max_tokens:500,
       system:`Sei un esperto contabile italiano. Analizza la ricevuta di affitto breve e rispondi SOLO con JSON valido, zero testo extra.`,
@@ -946,10 +947,10 @@ export function ModuloCU(){
       const allegati=cuList.map(cu=>({fileName:cu.fileName,base64:cu.base64,mimeType:'application/pdf'}));
       const oggetto=`Certificazioni Uniche ${anno} — ${cuPerSostituto[chiave].sostitutoNome||chiave}`;
       const corpo=`Gentile Cliente,\n\nIn allegato le Certificazioni Uniche ${anno} relative ai Vostri dipendenti/collaboratori.\n\nCertificazioni allegate:\n${cuList.map(cu=>`• ${cu.percipientiNome||cu.percipienteCF} (${cu.pagine} pagine)`).join(String.fromCharCode(10))}\n\nCordiali saluti,\nStudio Envisioning`;
-      const resp=await fetch('/api/send-email',{
+      const resp=await fetch('/api/email',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({to:[entry.email],cc:entry.cc||[],oggetto,corpo,allegati_cu:allegati}),
+        body:JSON.stringify({action:'send',to:[entry.email],cc:entry.cc||[],oggetto,corpo,allegati_cu:allegati}),
       });
       const data=await resp.json();
       if(!resp.ok)throw new Error(data.error);
@@ -1215,7 +1216,7 @@ function CalendarModal({regimeId,onClose}){
   const toggleAll=()=>{if(allSel)setSel({});else{const s={};allItems.forEach((_,i)=>s[i]=true);setSel(s);}};
   const toggle=i=>setSel(p=>({...p,[i]:!p[i]}));
   const countSel=Object.values(sel).filter(Boolean).length;
-  const send=async()=>{if(!email||!countSel)return;setLoading(true);setErr(null);try{await callBackend('/api/send-email', {email,regimeName:REGIME_LABELS[regimeId],scadenze:allItems.filter((_,i)=>sel[i]),isTest:false});setSent(true);}catch(e){setErr(e.message);}finally{setLoading(false);}};
+  const send=async()=>{if(!email||!countSel)return;setLoading(true);setErr(null);try{await callBackend('/api/email', {action:'send',email,regimeName:REGIME_LABELS[regimeId],scadenze:allItems.filter((_,i)=>sel[i]),isTest:false});setSent(true);}catch(e){setErr(e.message);}finally{setLoading(false);}};
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()}>

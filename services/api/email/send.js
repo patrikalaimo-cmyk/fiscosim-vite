@@ -1,20 +1,22 @@
-const nodemailer = require("nodemailer");
+import nodemailer from 'nodemailer';
 
 const CONFIG = {
-  GMAIL_USER:     process.env.GMAIL_USER,
+  GMAIL_USER: process.env.GMAIL_USER,
   GMAIL_APP_PASS: process.env.GMAIL_APP_PASS,
-  FROM_NAME:      process.env.FROM_NAME  || "Studio Envisioning",
-  FROM_EMAIL:     process.env.FROM_EMAIL || process.env.GMAIL_USER,
-  REPLY_TO:       process.env.REPLY_TO   || process.env.GMAIL_USER,
+  FROM_NAME: process.env.FROM_NAME || 'Studio Envisioning',
+  FROM_EMAIL: process.env.FROM_EMAIL || process.env.GMAIL_USER,
+  REPLY_TO: process.env.REPLY_TO || process.env.GMAIL_USER,
 };
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: CONFIG.GMAIL_USER, pass: CONFIG.GMAIL_APP_PASS },
-});
+function emailNotConfigured() {
+  return {
+    status: 503,
+    json: { ok: false, error: 'EMAIL_NOT_CONFIGURED', message: 'Email service not configured' },
+  };
+}
 
 function buildGenericHTML(oggetto, corpo) {
-  const bodyHtml = (corpo||"").replace(/\n/g, "<br/>");
+  const bodyHtml = (corpo || '').replace(/\n/g, '<br/>');
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
   <body style="margin:0;padding:0;background:#0e1118;font-family:'Helvetica Neue',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0e1118;padding:30px 0;"><tr><td align="center">
@@ -35,16 +37,27 @@ function buildGenericHTML(oggetto, corpo) {
 
 function buildCalHTML(regimeName, scadenze) {
   const grouped = {};
-  scadenze.forEach(s => { if (!grouped[s.month]) grouped[s.month] = []; grouped[s.month].push(s); });
-  const lvlColor = { urg:"#e05252", imp:"#c8a45e", nrm:"#4e8ef7" };
-  const lvlLabel = { urg:"Urgente", imp:"Importante", nrm:"Ordinario" };
-  const rows = Object.entries(grouped).map(([month, items]) => `
+  scadenze.forEach(s => {
+    if (!grouped[s.month]) grouped[s.month] = [];
+    grouped[s.month].push(s);
+  });
+  const lvlColor = { urg: '#e05252', imp: '#c8a45e', nrm: '#4e8ef7' };
+  const lvlLabel = { urg: 'Urgente', imp: 'Importante', nrm: 'Ordinario' };
+  const rows = Object.entries(grouped)
+    .map(
+      ([month, items]) => `
     <tr><td colspan="3" style="padding:10px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#c8a45e;border-bottom:1px solid rgba(200,164,94,.3);">${month}</td></tr>
-    ${items.map(item => `<tr>
+    ${items
+      .map(
+        item => `<tr>
       <td style="padding:7px 10px 7px 0;font-size:12px;color:#7a8599;font-weight:600;white-space:nowrap;vertical-align:top;">${item.date}</td>
       <td style="padding:7px 10px 7px 0;vertical-align:top;"><div style="font-size:13px;font-weight:500;color:#e4eaf5;">${item.title}</div><div style="font-size:11px;color:#7a8599;margin-top:2px;">${item.desc}</div></td>
       <td style="padding:7px 0;vertical-align:top;white-space:nowrap;"><span style="font-size:10px;padding:2px 7px;border-radius:3px;color:${lvlColor[item.level]};background:${lvlColor[item.level]}22;border:1px solid ${lvlColor[item.level]}44;">${lvlLabel[item.level]}</span></td>
-    </tr>`).join("")}`).join("");
+    </tr>`
+      )
+      .join('')}`
+    )
+    .join('');
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#0e1118;font-family:'Helvetica Neue',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0e1118;padding:30px 0;"><tr><td align="center">
   <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
@@ -62,58 +75,71 @@ function buildCalHTML(regimeName, scadenze) {
   </table></td></tr></table></body></html>`;
 }
 
-module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+let _transporter = null;
+function getTransporter() {
+  if (_transporter) return _transporter;
+  _transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: CONFIG.GMAIL_USER, pass: CONFIG.GMAIL_APP_PASS },
+  });
+  return _transporter;
+}
 
+export async function emailSendHandler({ body }) {
   try {
-    const body = req.body;
+    if (!CONFIG.GMAIL_USER || !CONFIG.GMAIL_APP_PASS) return emailNotConfigured();
 
-    // CASO 1: email generica con eventuale allegati CU
-    if (body.to) {
+    const transporter = getTransporter();
+
+    // Generic email (modal, deleghe, CU, etc.)
+    if (body?.to) {
       const { to, cc, bcc, oggetto, corpo, allegati_cu, isTest } = body;
-      if (!to?.length || !oggetto) return res.status(400).json({ error: "Dati mancanti (to/oggetto)." });
-      const subject = isTest ? `[TEST] ${oggetto}` : oggetto;
+      if (!to?.length || !oggetto) {
+        return { status: 400, json: { error: 'Dati mancanti (to/oggetto).' } };
+      }
 
-      // Costruisci attachments per nodemailer
+      const subject = isTest ? `[TEST] ${oggetto}` : oggetto;
       const attachments = (allegati_cu || []).map(a => ({
         filename: a.fileName,
-        content: Buffer.from(a.base64, "base64"),
-        contentType: "application/pdf",
+        content: Buffer.from(a.base64, 'base64'),
+        contentType: 'application/pdf',
       }));
 
       await transporter.sendMail({
-        from: `"${CONFIG.FROM_NAME}" <${CONFIG.GMAIL_USER}>`,
+        from: `"${CONFIG.FROM_NAME}" <${CONFIG.FROM_EMAIL}>`,
         replyTo: CONFIG.REPLY_TO,
-        to: Array.isArray(to) ? to.join(", ") : to,
-        cc: cc?.length ? (Array.isArray(cc) ? cc.join(", ") : cc) : undefined,
-        bcc: bcc?.length ? (Array.isArray(bcc) ? bcc.join(", ") : bcc) : undefined,
+        to: Array.isArray(to) ? to.join(', ') : to,
+        cc: cc?.length ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
+        bcc: bcc?.length ? (Array.isArray(bcc) ? bcc.join(', ') : bcc) : undefined,
         subject,
-        text: corpo || "",
+        text: corpo || '',
         html: buildGenericHTML(oggetto, corpo),
         attachments,
       });
-      return res.status(200).json({ ok: true });
+
+      return { status: 200, json: { ok: true } };
     }
 
-    // CASO 2: calendario scadenze
-    const { email, regimeName, scadenze, isTest } = body;
-    if (!email || !regimeName || !scadenze?.length) return res.status(400).json({ error: "Dati mancanti." });
+    // Calendar email (simulatore)
+    const { email, regimeName, scadenze, isTest } = body || {};
+    if (!email || !regimeName || !scadenze?.length) {
+      return { status: 400, json: { error: 'Dati mancanti.' } };
+    }
+
     const subject = isTest ? `[TEST] FiscoSim – Scadenze ${regimeName}` : `FiscoSim – Scadenze fiscali (${regimeName})`;
     await transporter.sendMail({
-      from: `"${CONFIG.FROM_NAME}" <${CONFIG.GMAIL_USER}>`,
+      from: `"${CONFIG.FROM_NAME}" <${CONFIG.FROM_EMAIL}>`,
       replyTo: CONFIG.REPLY_TO,
-      to: email, subject,
+      to: email,
+      subject,
       text: `Scadenze fiscali – ${regimeName}`,
       html: buildCalHTML(regimeName, scadenze),
     });
-    return res.status(200).json({ ok: true });
 
+    return { status: 200, json: { ok: true } };
   } catch (err) {
-    console.error("Email error:", err);
-    return res.status(500).json({ error: "Errore invio email.", detail: err.message });
+    console.error('Email error:', err);
+    return { status: 500, json: { error: 'Errore invio email.', detail: err?.message } };
   }
-};
+}
+

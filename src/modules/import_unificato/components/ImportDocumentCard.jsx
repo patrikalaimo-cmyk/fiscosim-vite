@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { pickContoFromAiAccountingRows } from '../../../utils/matchAiAccountingRowsToPianoConti.js'
 import * as importRepo from '../data/importRepo.js'
 import { ImportPreviewPanel } from './ImportPreviewPanel.jsx'
+import { evaluateDraftReliability, reliabilityTierLabel } from '../../../../domain/draftReliability.js'
 
 export function ImportDocumentCard({
   doc,
@@ -160,6 +161,7 @@ export function ImportDocumentCard({
 
   const up = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const tipo = tipiDocumento.find((t) => t.id === form.tipo_documento)
+  const reliability = useMemo(() => evaluateDraftReliability({ doc, form }), [doc, form])
 
   const contiFiltered =
     pianoConti
@@ -252,6 +254,16 @@ export function ImportDocumentCard({
             {doc.confidence != null && `Confidenza AI: ${Math.round(doc.confidence * 100)}%`}
             {doc.ai_raw_response?.metodo === 'xml_deterministico' && ' · XML deterministico ✓'}
           </div>
+          {reliability && (
+            <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.1rem' }}>
+              Affidabilita bozza: <strong>{reliabilityTierLabel(reliability.tier)}</strong> · {reliability.score}%
+              {reliability.reasons?.length > 0 && (
+                <div style={{ marginTop: '.15rem', color: 'var(--mu)' }}>
+                  Motivi: {reliability.reasons.slice(0, 2).map((r) => r.message).join('; ')}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <select
           value={form.tipo_documento}

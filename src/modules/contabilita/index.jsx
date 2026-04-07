@@ -85,6 +85,7 @@ export function ModuloContabilita({ruolo}){
   const [pnGuidataDraft,setPnGuidataDraft]=useState(null);
   const [pnGuidataNav,setPnGuidataNav]=useState({ ids: [], idx: -1 });
   const [splitMode,setSplitMode]=useState('split'); // split, pdf, scrittura
+  const [registrazioneInCorso, setRegistrazioneInCorso] = useState(false);
   
   const getDraftKey = (docId) => `pnGuidataDraft:${societaAttiva?.id || 'no_soc'}:${docId}`
 
@@ -234,26 +235,47 @@ export function ModuloContabilita({ruolo}){
 
   // Registra confermati â†’ crea scritture prima nota
   const registraConfermati=async()=>{
+    if (registrazioneInCorso) return;
     const daRegistrare=documenti.filter(d=>d.validation_status==='confirmed'&&d.workflow_status!=='registered');
     if(!daRegistrare.length){alert('Nessun documento confermato da registrare');return;}
     
     if(!confirm(`Stai per registrare ${daRegistrare.length} documenti in Prima Nota.\n\nConfermi?`))return;
 
-    const { registrati } = await registraDocumentiConfermati({
-      documenti,
-      societaId: societaAttiva.id,
-      pianoConti,
-      causaliContabili,
-      updateDocumento: (id, updates) => contabilitaRepo.updateDocumentoContabilita(id, updates),
-      trace,
-      traceStep,
-      traceDiff,
-      traceIva,
-      insertCausaleIvaMeta,
-    });
-    
-    await caricaTutto();
-    alert(`âœ… Registrati ${registrati}/${daRegistrare.length} documenti in Prima Nota`);
+    setRegistrazioneInCorso(true);
+    try {
+      const { registrati, errors, warnings } = await registraDocumentiConfermati({
+        documenti,
+        societaId: societaAttiva.id,
+        pianoConti,
+        causaliContabili,
+        causaliIva,
+        clienti,
+        updateDocumento: (id, updates) => contabilitaRepo.updateDocumentoContabilita(id, updates),
+        trace,
+        traceStep,
+        traceDiff,
+        traceIva,
+        insertCausaleIvaMeta,
+      });
+
+      await caricaTutto();
+      const failed = Array.isArray(errors) ? errors.length : 0;
+      const warningsCount = Array.isArray(warnings) ? warnings.length : 0;
+      let msg = `âœ… Registrati ${registrati}/${daRegistrare.length} documenti in Prima Nota`;
+      if (failed) msg += `\n\nErrori: ${failed}`;
+      if (warningsCount) msg += `\nAvvisi: ${warningsCount}`;
+      if (warningsCount && warningsCount <= 3) {
+        const warnLines = warnings
+          .map((w) => `- Doc ${w.docId}: ${w.warnings.map((c) => c.message).join('; ')}`)
+          .join('\n');
+        msg += `\n\nDettagli avvisi:\n${warnLines}`;
+      }
+      alert(msg);
+    } catch (e) {
+      alert('Errore: ' + (e?.message || String(e)));
+    } finally {
+      setRegistrazioneInCorso(false);
+    }
   };
 
   if(loading)return<div className="loading">â³ Caricamento...</div>;
@@ -308,6 +330,7 @@ export function ModuloContabilita({ruolo}){
               patchDocumento={patchDocumento}
               confermaDoc={confermaDoc}
               registraConfermati={registraConfermati}
+              registrazioneInCorso={registrazioneInCorso}
               openGuidataAt={openGuidataAt}
               pnGuidataDraft={pnGuidataDraft}
               pnGuidataNav={pnGuidataNav}

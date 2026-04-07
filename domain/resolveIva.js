@@ -1,6 +1,15 @@
 import { traceStep } from '../src/utils/pipelineLogger.js'
 
 export const IVA_ALIQUOTE_SUPPORTATE = Object.freeze([0, 4, 5, 10, 22])
+export const IVA_REGIMI = Object.freeze({
+  ORDINARIA: 'ordinaria',
+  ESENTE: 'esente',
+  NON_IMPONIBILE: 'non_imponibile',
+  FUORI_CAMPO: 'fuori_campo',
+  REVERSE_CHARGE: 'reverse_charge',
+  SPLIT_PAYMENT: 'split_payment',
+  UNKNOWN: 'unknown',
+})
 
 export function isNaturaFatturaPA(value) {
   const raw = String(value ?? '').trim().replace(/\s/g, '')
@@ -222,5 +231,76 @@ export function resolveIvaOrNull({ conto, aliquota, causaliIva, natura, pipeline
     return resolveIva({ conto, aliquota, causaliIva, natura, pipelineContext }) || null
   } catch {
     return null
+  }
+}
+
+function normalizeRegimeString(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function regimeFromNatura(natura) {
+  const nat = String(natura ?? '').trim().toUpperCase()
+  if (!nat || !isNaturaFatturaPA(nat)) return null
+  if (nat.startsWith('N6')) return IVA_REGIMI.REVERSE_CHARGE
+  if (nat.startsWith('N4')) return IVA_REGIMI.ESENTE
+  if (nat.startsWith('N3')) return IVA_REGIMI.NON_IMPONIBILE
+  if (nat.startsWith('N2') || nat.startsWith('N1')) return IVA_REGIMI.FUORI_CAMPO
+  if (nat.startsWith('N5')) return IVA_REGIMI.ESENTE
+  if (nat.startsWith('N7')) return IVA_REGIMI.NON_IMPONIBILE
+  return null
+}
+
+function regimeFromCausale(causale) {
+  if (!causale) return null
+  if (causale.reverse_charge === true) return IVA_REGIMI.REVERSE_CHARGE
+  const regIva = normalizeRegimeString(causale.regime_iva)
+  if (regIva) {
+    if (regIva.includes('imponibile')) return IVA_REGIMI.ORDINARIA
+    if (regIva.includes('non imponibile')) return IVA_REGIMI.NON_IMPONIBILE
+    if (regIva.includes('esente')) return IVA_REGIMI.ESENTE
+    if (regIva.includes('escluso')) return IVA_REGIMI.FUORI_CAMPO
+  }
+  const reg = normalizeRegimeString(causale.regime)
+  if (reg) {
+    if (reg.includes('reverse')) return IVA_REGIMI.REVERSE_CHARGE
+    if (reg.includes('split')) return IVA_REGIMI.SPLIT_PAYMENT
+    if (reg.includes('non impon')) return IVA_REGIMI.NON_IMPONIBILE
+    if (reg.includes('esente')) return IVA_REGIMI.ESENTE
+    if (reg.includes('esclus')) return IVA_REGIMI.FUORI_CAMPO
+  }
+  const desc = normalizeRegimeString(causale.descrizione)
+  if (desc.includes('reverse') || desc.includes('autofatt')) return IVA_REGIMI.REVERSE_CHARGE
+  if (desc.includes('split payment') || desc.includes('split-payment')) return IVA_REGIMI.SPLIT_PAYMENT
+  return null
+}
+
+export function classifyIvaRegime({ causale, natura, aliquota, splitPayment = false }) {
+  if (splitPayment) return IVA_REGIMI.SPLIT_PAYMENT
+  const byCausale = regimeFromCausale(causale)
+  if (byCausale) return byCausale
+  const byNatura = regimeFromNatura(natura)
+  if (byNatura) return byNatura
+  const aliq = parseIvaPercent(aliquota)
+  if (aliq != null && aliq > 0) return IVA_REGIMI.ORDINARIA
+  if (aliq === 0) return IVA_REGIMI.UNKNOWN
+  return IVA_REGIMI.UNKNOWN
+}
+
+export function formatIvaRegimeLabel(regime) {
+  switch (regime) {
+    case IVA_REGIMI.ORDINARIA:
+      return 'Ordinaria'
+    case IVA_REGIMI.ESENTE:
+      return 'Esente'
+    case IVA_REGIMI.NON_IMPONIBILE:
+      return 'Non imponibile'
+    case IVA_REGIMI.FUORI_CAMPO:
+      return 'Fuori campo'
+    case IVA_REGIMI.REVERSE_CHARGE:
+      return 'Reverse charge'
+    case IVA_REGIMI.SPLIT_PAYMENT:
+      return 'Split payment'
+    default:
+      return 'Regime IVA ?'
   }
 }

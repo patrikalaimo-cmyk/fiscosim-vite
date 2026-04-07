@@ -129,10 +129,10 @@ export async function analyzeWithClaude(file, systemPrompt, userPrompt, {
   }
 
   onProgress?.('Elaborazione AI...')
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages })
+    body: JSON.stringify({ action: 'claude', model, max_tokens: maxTokens, system: systemPrompt, messages })
   })
 
   if (!res.ok) throw new Error(`API error ${res.status}`)

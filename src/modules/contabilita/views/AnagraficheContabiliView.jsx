@@ -139,10 +139,10 @@ function ImportFattureView({societaId,onComplete}){
             reader.onerror=rej;
             reader.readAsDataURL(file);
           });
-          const analyzeRes=await fetch('/api/proposta-contabile',{
+          const analyzeRes=await fetch('/api/accounting/ai',{
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({fileBase64:base64,filename:file.name,mimeType:file.type})
+            body:JSON.stringify({action:'proposta_contabile',fileBase64:base64,filename:file.name,mimeType:file.type})
           });
           if(analyzeRes.ok){
             const data=await analyzeRes.json();
@@ -2347,7 +2347,7 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
       setProgress('Analisi AI in corso...');
       const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
       const apiTipo=tipo==='causali'?'causali_contabili':tipo;
-      const resp=await fetch('/api/parse-contabilita-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf:base64,tipo:apiTipo})});
+      const resp=await fetch('/api/document',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf:base64,tipo:apiTipo})});
       if(!resp.ok){const d=await resp.json();throw new Error(d.error||'Errore AI');}
       const data=await resp.json();
       if(!data.records?.length)throw new Error('AI non ha trovato risultati.');
