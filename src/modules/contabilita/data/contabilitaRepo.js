@@ -105,14 +105,6 @@ export function insertPrimaNota(payload) {
   return createPrimaNota({ db: sb, pnPayload: payload, headerSelect: '*' })
 }
 
-export function insertPrimaNotaView(payload) {
-  return createPrimaNota({ db: sb, pnPayload: payload, headerSelect: '*' })
-}
-
-export function insertPrimaNotaIdOnly(payload) {
-  return createPrimaNota({ db: sb, pnPayload: payload, headerSelect: 'id' })
-}
-
 export function insertPrimaNotaRighe(righe) {
   return insertPrimaNotaRigheService({ db: sb, righePayload: righe, righeSelect: '*' })
 }

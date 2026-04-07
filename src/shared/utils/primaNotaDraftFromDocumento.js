@@ -1,8 +1,8 @@
-/**
- * Prima nota guidata: risoluzione IVA e builder da documento (condiviso import + contabilità).
- * La risoluzione IVA è centralizzata in {@link ./resolveIva.js} (default per aliquota in Impostazioni Procedure).
+﻿/**
+ * Prima nota guidata: builder canonico del draft da documento.
+ * La risoluzione IVA e' centralizzata in {@link ./resolveIva.js} e la composizione/decisione IVA
+ * nel path documento -> draft passa da questo builder (import + contabilita').
  */
-import { sb } from '../../lib/supabase'
 import { traceStep, traceIva } from '../../utils/pipelineLogger.js'
 import {
   resolveIva,
@@ -12,6 +12,14 @@ import {
   IVA_ALIQUOTE_SUPPORTATE,
   isNaturaFatturaPA,
 } from './resolveIva.js'
+import {
+  extractAliquota,
+  percentFromCodiceInterno,
+  pickPrimaryRiepilogoIva,
+  buildDraftRowsFromDocumentoValues,
+  todayStr,
+} from '../../../domain/primaNotaDraftPure.js'
+import { getContoFornitore } from './primaNotaDraftLookups.js'
 
 export {
   resolveIva,
@@ -22,74 +30,14 @@ export {
   isNaturaFatturaPA,
 }
 
-export function extractAliquota(value) {
-  if (!value) return null
-  const m = String(value).match(/\d+/)
-  return m ? parseInt(m[0], 10) : null
-}
-
-/**
- * Percentuale ricavata dalla fine del `codice_interno` (uso legacy / diagnostica).
- */
-export function percentFromCodiceInterno(codiceInterno) {
-  const s = String(codiceInterno ?? '').trim().toUpperCase()
-  if (!s) return null
-  const m = s.match(/(\d+)\D*$/)
-  if (!m) return null
-  const n = parseInt(m[1], 10)
-  return Number.isFinite(n) ? n : null
-}
-
-/**
- * Con più riepiloghi IVA, usa quello con imponibile maggiore per intestazione causale / aliquota “principale”
- * (evita di legare tutto al solo primo blocco XML, spesso 0% o ordine casuale).
- */
-export function pickPrimaryRiepilogoIva(riepilogoIva) {
-  if (!Array.isArray(riepilogoIva) || riepilogoIva.length === 0) return null
-  if (riepilogoIva.length === 1) return riepilogoIva[0]
-  const nImp = (r) => {
-    const x = parseFloat(String(r?.imponibile ?? r?.Imponibile ?? '').replace(',', '.'))
-    return Number.isFinite(x) ? x : 0
-  }
-  let best = riepilogoIva[0]
-  let bestImp = nImp(best)
-  for (let i = 1; i < riepilogoIva.length; i++) {
-    const r = riepilogoIva[i]
-    const imp = nImp(r)
-    if (imp > bestImp) {
-      best = r
-      bestImp = imp
-    }
-  }
-  return best
-}
-
-export async function getContoFornitore({ societaId, soggettoDenominazione }) {
-  try {
-    const den = String(soggettoDenominazione || '').trim()
-    if (!societaId || !den) return ''
-
-    const { data, error } = await sb
-      .from('prima_nota_righe')
-      .select('conto_id, prima_nota!inner(id, societa_id, data_registrazione, cliente_fornitore_nome)')
-      .eq('prima_nota.societa_id', societaId)
-      .eq('prima_nota.cliente_fornitore_nome', den)
-      .not('conto_id', 'is', null)
-      .order('data_registrazione', { ascending: false, foreignTable: 'prima_nota' })
-      .limit(1)
-
-    if (error) throw error
-    const contoId = data?.[0]?.conto_id
-    return contoId || ''
-  } catch (e) {
-    console.error('[getContoFornitore] error', e)
-    return ''
-  }
+export {
+  extractAliquota,
+  percentFromCodiceInterno,
+  pickPrimaryRiepilogoIva,
+  todayStr,
 }
 
 export const PN_GUIDATA_BUILDER_VERSION = '2026-04-03-iva-rows-multi'
-
-const todayStr = () => new Date().toISOString().split('T')[0]
 
 function newIvaRowId() {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -98,10 +46,11 @@ function newIvaRowId() {
 }
 
 /**
- * Una riga Movimenti IVA per ogni blocco DatiRiepilogo (o una riga dai totali documento).
- * resolveIva per aliquota; in caso di errore la riga resta con causale_iva_id null (da completare in UI).
+ * Prima nota guidata: builder canonico del draft da documento.
+ * La risoluzione IVA e' centralizzata in {@link ./resolveIva.js} e la composizione/decisione IVA
+ * nel path documento -> draft passa da questo builder (import + contabilita').
  */
-export function buildIvaRowsFromRiepiloghi({
+function buildIvaRowsFromRiepiloghi({
   riepilogoLista,
   imponibileDoc,
   ivaDoc,
@@ -216,7 +165,9 @@ export function buildIvaRowsFromRiepiloghi({
 }
 
 /**
- * @param {Record<string, unknown>} [pipelineContext] — contesto log pipeline (import / conferma)
+ * Prima nota guidata: builder canonico del draft da documento.
+ * La risoluzione IVA e' centralizzata in {@link ./resolveIva.js} e la composizione/decisione IVA
+ * nel path documento -> draft passa da questo builder (import + contabilita').
  */
 export async function buildInitialDraftFromDocumento(
   doc,
@@ -301,7 +252,7 @@ export async function buildInitialDraftFromDocumento(
     riepilogo_iva_count: riepilogoLista.length,
     riepilogo_primary_by_imponibile: riepilogoLista.length > 1,
     policy:
-      'conto.causale_iva_id (se coerente con 0%) → natura FatturaPA → default per aliquota (Impostazioni Procedure)',
+      'conto.causale_iva_id (se coerente con 0%) â†’ natura FatturaPA â†’ default per aliquota (Impostazioni Procedure)',
     causaliIva_count: causaliIva?.length ?? 0,
   }, { context: 'buildInitialDraftFromDocumento' }, pipelineContext)
 
@@ -349,82 +300,14 @@ export async function buildInitialDraftFromDocumento(
     || datiEst?.soggetto_denominazione
     || ''
 
-  const rows = []
-
-  const riepilogoImponibileDesc = (r) => {
-    const nat = String(r?.natura ?? r?.Natura ?? '').trim()
-    const aliqPct = isNaturaFatturaPA(nat) ? 0 : parseIvaPercent(r?.aliquota)
-    const lblAliq = aliqPct == null ? '—' : `${aliqPct}%`
-    if (nat) return `Imponibile (${lblAliq} ${nat})`
-    return `Imponibile (${lblAliq})`
-  }
-  const riepilogoIvaDesc = (r) => {
-    const nat = String(r?.natura ?? r?.Natura ?? '').trim()
-    const aliqPct = isNaturaFatturaPA(nat) ? 0 : parseIvaPercent(r?.aliquota)
-    return aliqPct == null ? 'IVA' : `IVA (${aliqPct}%)`
-  }
-
-  if (riepilogoLista.length > 1) {
-    for (const r of riepilogoLista) {
-      const imp = n(r?.imponibile ?? r?.Imponibile)
-      const tax = n(r?.imposta ?? r?.Imposta)
-      if (imp > 0) {
-        rows.push({
-          conto_id: contoCostoRicavoId || '',
-          descrizione: riepilogoImponibileDesc(r),
-          dare: imp,
-          avere: ''
-        })
-      }
-      if (tax > 0) {
-        rows.push({
-          conto_id: contoIva?.id || '',
-          descrizione: riepilogoIvaDesc(r),
-          dare: tax,
-          avere: ''
-        })
-      }
-    }
-  } else if (riepilogoLista.length === 1) {
-    const r0 = riepilogoLista[0]
-    const impR = n(r0?.imponibile ?? r0?.Imponibile)
-    const taxR = n(r0?.imposta ?? r0?.Imposta)
-    const impUse = impR > 0 || taxR > 0 ? impR : imponibile
-    const taxUse = impR > 0 || taxR > 0 ? taxR : iva
-    if (impUse > 0) {
-      rows.push({
-        conto_id: contoCostoRicavoId || '',
-        descrizione: 'Imponibile',
-        dare: impUse,
-        avere: ''
-      })
-    }
-    if (taxUse > 0) {
-      rows.push({
-        conto_id: contoIva?.id || '',
-        descrizione: 'IVA',
-        dare: taxUse,
-        avere: ''
-      })
-    }
-  } else {
-    if (imponibile > 0) {
-      rows.push({
-        conto_id: contoCostoRicavoId || '',
-        descrizione: 'Imponibile',
-        dare: imponibile,
-        avere: ''
-      })
-    }
-    if (iva > 0) {
-      rows.push({
-        conto_id: contoIva?.id || '',
-        descrizione: 'IVA',
-        dare: iva,
-        avere: ''
-      })
-    }
-  }
+  const rows = buildDraftRowsFromDocumentoValues({
+    riepilogoLista,
+    imponibile,
+    iva,
+    contoCostoRicavoId,
+    contoIvaId: contoIva?.id || '',
+    soggettoNome,
+  })
 
   if (totale > 0) {
     rows.push({
@@ -507,3 +390,4 @@ export async function buildInitialDraftFromDocumento(
   traceIva('BUILDER_OUTPUT', 'builder', draft.ivaUi?.causale_iva_id ?? draft.meta?.causale_iva_id ?? null, pipelineContext)
   return draft
 }
+

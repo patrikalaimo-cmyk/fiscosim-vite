@@ -6,7 +6,7 @@
  * - Keep logic small and extensible (pipeline-friendly).
  */
  
-import { buildScritturaRowsFromIvaRows } from '../domain/primaNotaScritturaFromIvaRows.js'
+import { buildScritturaContabileFromDraft } from '../domain/primaNotaPipeline.js'
 import { getSupabaseAdmin } from '../lib/db.js'
 import { aiSupervisorService } from './aiSupervisorService.js'
 import { syncPartitarioFromAccountingEntry } from './partitarioSyncService.js'
@@ -239,7 +239,7 @@ export async function accountingModuleService({
     }
   }
  
-  const { rows, error } = buildScritturaRowsFromIvaRows({
+  const { rows, error } = buildScritturaContabileFromDraft({
     ivaRows,
     pianoConti,
     causaliIva,

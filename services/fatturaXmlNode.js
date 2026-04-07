@@ -1,6 +1,6 @@
 /**
  * Parsing fattura elettronica in ambiente Node (DOMParser da linkedom — supporta querySelector su XML).
- * Stessa logica di src/shared/utils/fatture.js `parseXMLFattura`.
+ * Stessa logica di domain/fatture.js `parseXMLFattura`.
  */
 
 import { DOMParser } from 'linkedom'
@@ -151,3 +151,4 @@ export function buildPassiveAnalysisFromParsed(parsed) {
     },
   }
 }
+

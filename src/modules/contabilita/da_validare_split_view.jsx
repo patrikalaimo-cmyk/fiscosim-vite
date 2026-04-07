@@ -5,10 +5,7 @@ import { FatturaCourtesyViewer } from './FatturaCourtesyViewer.jsx'
 import { ContabileCopilotPanel } from './ContabileCopilotPanel.jsx'
 import { buildCopilotFixPromptFromInsight } from './CopilotInsightsBlock.jsx'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
-
-const fmt = (n) =>
-  new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('it-IT') : '—')
+import { fmtCurrency as fmt, fmtDate } from './ui/formatters.js'
 
 function parseDati(raw) {
   if (!raw) return {}

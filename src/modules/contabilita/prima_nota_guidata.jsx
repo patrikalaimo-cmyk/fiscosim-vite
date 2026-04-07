@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
 import { parseIvaPercent } from '../../../domain/resolveIva.js'
-import { buildScritturaRowsFromIvaRows } from '../../../domain/primaNotaScritturaFromIvaRows.js'
+import {
+  buildScritturaContabileFromDraft,
+  buildPrimaNotaPayloadFromState,
+} from '../../../domain/primaNotaPipeline.js'
+import {
+  normalizePartitarioEntry,
+  normalizeRigaForPrimaNotaPayload,
+} from '../../../domain/primaNotaPayloadBuilder.js'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { createPrimaNotaCompleta } from '../../../services/primaNotaService.js'
+import { fmtCurrency as fmtMoney, fmtDate } from './ui/formatters.js'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
-const fmtMoney = (n) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 
 function toMoneyNumber(v) {
   const n = typeof v === 'number' ? v : parseFloat(String(v || '').replace(',', '.'))
@@ -26,18 +32,6 @@ function newRow() {
 
 function hasImporto(r) {
   return toMoneyNumber(r?.dare) > 0 || toMoneyNumber(r?.avere) > 0
-}
-
-function normalizeRigaForDb(r, primaNotaId) {
-  const o = {
-    prima_nota_id: primaNotaId,
-    conto_id: r.conto_id || null,
-    descrizione: r.descrizione || '',
-    dare: toMoneyNumber(r.dare),
-    avere: toMoneyNumber(r.avere)
-  }
-  if (r.causale_iva_id) o.causale_iva_id = r.causale_iva_id
-  return o
 }
 
 function newIvaRowId() {
@@ -735,7 +729,7 @@ export function PrimaNotaGuidata({
 
   const syncScritturaFromIvaRows = useCallback((nextIvaRows) => {
     if (!nextIvaRows?.length) return
-    const { rows: built, error } = buildScritturaRowsFromIvaRows({
+    const { rows: built, error } = buildScritturaContabileFromDraft({
       ivaRows: nextIvaRows,
       pianoConti,
       causaliIva,
@@ -1030,14 +1024,22 @@ export function PrimaNotaGuidata({
       }
       if (!societaId) throw new Error('societaId mancante')
 
-      const pnPayload = {
-        societa_id: societaId,
-        data_registrazione: header.data_registrazione || todayStr(),
-        causale_id: header.causale_id || null,
-        cliente_fornitore_id: header.cliente_fornitore_id || null,
-        progressivo: progressivo ?? null,
-        stato: 'confermato'
-      }
+      const {
+        pnPayload,
+        righePayload,
+        partEntries,
+      } = buildPrimaNotaPayloadFromState({
+        societaId,
+        header,
+        rows,
+        progressivo,
+        partitarioClosedMap,
+        defaultDataRegistrazione: todayStr(),
+        filterRiga: hasImporto,
+        mapRiga: normalizeRigaForPrimaNotaPayload,
+        mapPartitarioEntry: normalizePartitarioEntry,
+        filterPartitarioEntry: (x) => toMoneyNumber(x.importo_chiuso) > 0,
+      })
 
       traceIva('PRE_INSERT_PRIMA_NOTA_HEADER', 'DB', primaryIvaCausaleForTrace || null)
       traceStep('INSERT_PAYLOAD', pnPayload, { table: 'prima_nota', ...insertCausaleIvaMeta(pnPayload) })
@@ -1046,13 +1048,6 @@ export function PrimaNotaGuidata({
         { causale_iva_id: primaryIvaCausaleForTrace || null },
         { causale_iva_id: pnPayload.causale_iva_id ?? null }
       )
-      const righePayload = (rows || [])
-        .filter(hasImporto)
-        .map(r => {
-          const { prima_nota_id, ...rest } = normalizeRigaForDb(r, '__PENDING__')
-          return rest
-        })
-
       if (righePayload.length > 0) {
         traceIva('PRE_INSERT_PRIMA_NOTA_RIGHE', 'DB', righePayload[0]?.causale_iva_id ?? primaryIvaCausaleForTrace ?? null)
         traceStep('INSERT_PAYLOAD', righePayload, { table: 'prima_nota_righe', ...insertCausaleIvaMeta(righePayload) })
@@ -1062,13 +1057,6 @@ export function PrimaNotaGuidata({
           { causale_iva_id: righePayload[0]?.causale_iva_id ?? null }
         )
       }
-
-      const partEntries = Object.entries(partitarioClosedMap || {})
-        .map(([documento_id, importo_chiuso]) => ({
-          documento_id,
-          importo_chiuso: toMoneyNumber(importo_chiuso)
-        }))
-        .filter(x => x.importo_chiuso > 0)
 
       if (partEntries.length > 0) {
         traceStep('INSERT_PAYLOAD', partEntries, { table: 'prima_nota_partitario', ...insertCausaleIvaMeta(partEntries) })

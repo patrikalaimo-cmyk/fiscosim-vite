@@ -1,3 +1,5 @@
+import { fmtNumber as fmt } from './ui/formatters.js'
+
 /** Anteprima leggibile fattura elettronica (XML parsato). */
 export function FatturaCourtesyViewer({ data }) {
   if (!data) return null
@@ -43,8 +45,6 @@ export function FatturaCourtesyViewer({ data }) {
     MP22: 'Trattenuta su somme già riscosse',
     MP23: 'PagoPA',
   }
-  const fmt = (n) =>
-    n != null ? Number(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
   const tipoLabel = TIPO_DOC[data.tipo] || data.tipo || 'Fattura'
   const isNC = data.tipo === 'TD04' || data.tipo === 'TD05'
 

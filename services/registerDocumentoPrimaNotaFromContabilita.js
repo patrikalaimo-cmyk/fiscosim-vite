@@ -5,6 +5,7 @@
 
 import { recordAiAccountingFeedback } from './aiAccountingFeedbackService.js'
 import { createPrimaNotaCompleta } from './primaNotaService.js'
+import { buildDocumentoContabilePrimaNotaPayload } from '../domain/primaNotaPayloadBuilder.js'
 
 function pickCausale(causaliContabili, isPassiva) {
   if (!Array.isArray(causaliContabili)) return null
@@ -69,100 +70,27 @@ export async function registerDocumentoPrimaNotaFromContabilita({
     const dataReg =
       dati.data_registrazione || doc.data_documento || new Date().toISOString().slice(0, 10)
 
-    const pnInsertPayload = {
-      societa_id: societaId,
-      data_registrazione: dataReg,
-      data_documento: doc.data_documento,
-      numero_documento: doc.numero_documento,
-      causale_codice: causale?.codice || (isPassiva ? 'FF' : 'FC'),
-      descrizione: `${isPassiva ? 'Fatt. passiva' : 'Fatt. attiva'} ${doc.soggetto_denominazione || ''} n.${doc.numero_documento || '?'}`,
-      cliente_fornitore_nome: doc.soggetto_denominazione,
-      totale_dare: doc.totale || 0,
-      totale_avere: doc.totale || 0,
+    const {
+      pnPayload: pnInsertPayload,
+      righePayload: righe,
+      partEntries,
+    } = buildDocumentoContabilePrimaNotaPayload({
+      doc,
+      societaId,
+      dataRegistrazione: dataReg,
+      causaleCodice: causale?.codice,
+      isPassiva,
+      contoCostoRicavo,
+      contoIva,
+      contoControparte,
       stato: 'provvisoria',
-      documento_import_id: doc.source_document_id || null,
-    }
-
-    const righe = []
-    if (isPassiva) {
-      righe.push({
-        riga_numero: 1,
-        conto_id: contoCostoRicavo?.id || null,
-        conto_codice: contoCostoRicavo?.codice,
-        conto_descrizione: contoCostoRicavo?.descrizione,
-        descrizione_riga: 'Costo/Acquisto',
-        importo_dare: doc.imponibile || doc.totale || 0,
-        importo_avere: 0,
-        imponibile: doc.imponibile || 0,
-        iva: 0,
-      })
-      if (doc.iva > 0) {
-        righe.push({
-          riga_numero: 2,
-          conto_id: contoIva?.id || null,
-          conto_codice: contoIva?.codice,
-          conto_descrizione: contoIva?.descrizione || 'IVA ns. credito',
-          descrizione_riga: 'IVA a credito',
-          importo_dare: doc.iva || 0,
-          importo_avere: 0,
-          imponibile: 0,
-          iva: doc.iva || 0,
-        })
-      }
-      righe.push({
-        riga_numero: 3,
-        conto_id: contoControparte?.id || null,
-        conto_codice: contoControparte?.codice,
-        conto_descrizione: contoControparte?.descrizione || doc.soggetto_denominazione,
-        descrizione_riga: `Fornitore ${doc.soggetto_denominazione || ''}`,
-        importo_dare: 0,
-        importo_avere: doc.totale || 0,
-        imponibile: 0,
-        iva: 0,
-      })
-    } else {
-      righe.push({
-        riga_numero: 1,
-        conto_id: contoControparte?.id || null,
-        conto_codice: contoControparte?.codice,
-        conto_descrizione: contoControparte?.descrizione || doc.soggetto_denominazione,
-        descrizione_riga: `Cliente ${doc.soggetto_denominazione || ''}`,
-        importo_dare: doc.totale || 0,
-        importo_avere: 0,
-        imponibile: 0,
-        iva: 0,
-      })
-      righe.push({
-        riga_numero: 2,
-        conto_id: contoCostoRicavo?.id || null,
-        conto_codice: contoCostoRicavo?.codice,
-        conto_descrizione: contoCostoRicavo?.descrizione,
-        descrizione_riga: 'Ricavo/Vendita',
-        importo_dare: 0,
-        importo_avere: doc.imponibile || doc.totale || 0,
-        imponibile: doc.imponibile || 0,
-        iva: 0,
-      })
-      if (doc.iva > 0) {
-        righe.push({
-          riga_numero: 3,
-          conto_id: contoIva?.id || null,
-          conto_codice: contoIva?.codice,
-          conto_descrizione: contoIva?.descrizione || 'IVA ns. debito',
-          descrizione_riga: 'IVA a debito',
-          importo_dare: 0,
-          importo_avere: doc.iva || 0,
-          imponibile: 0,
-          iva: doc.iva || 0,
-        })
-      }
-    }
+    })
 
     const complete = await createPrimaNotaCompleta({
       db,
       pnPayload: pnInsertPayload,
       righePayload: righe,
-      partEntries: [],
+      partEntries,
       headerSelect: '*',
       righeSelect: 'id, riga_numero, conto_id',
       partitarioSelect: '*',
