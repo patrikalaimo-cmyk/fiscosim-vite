@@ -1,4 +1,4 @@
-import { sb } from '../../lib/supabase.js'
+import { sb } from '../../../lib/supabase.js'
 import { analyzeIvaAnomalyEngine } from '../../../../services/ivaAnomalyEngine.js'
 import { analyzeFiscalDeductibilityEngine } from '../../../../services/fiscalDeductibilityEngine.js'
 
