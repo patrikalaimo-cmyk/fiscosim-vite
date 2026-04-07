@@ -22,7 +22,8 @@ import {
   fetchOllamaAnalisiProd,
 } from './importAiClient.js'
 import { saveImportOperatorCorrections } from './importOperatorCorrections.js'
-\r\n
+
+export { extractXmlFromP7m }
 export async function runOllamaAnalisiPrompt(fullPrompt, pipelineCtx, filename = '') {
   const model = import.meta.env.VITE_OLLAMA_MODEL || 'mistral'
   let data
