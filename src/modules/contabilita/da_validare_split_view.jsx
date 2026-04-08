@@ -1129,65 +1129,69 @@ export function DaValidareSplitView({
 
   return (
     <div className="erp-view erp-table-dominant" style={{ flex: 1, minHeight: 0 }}>
-      <div className="erp-filter-card">
-      <div className="erp-toolbar erp-toolbar-tight">
-        <div className="fg erp-search-field" style={{ flex: 1, minWidth: 220, marginBottom: 0 }}>
-          <input placeholder="Cerca numero documento o soggetto" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+      <div className="erp-filter-card erp-filter-card-compact">
+        <div className="erp-filter-zones">
+        <div className="erp-filter-zone erp-filter-zone-main">
+          <div className="fg erp-search-field" style={{ flex: 1, minWidth: 280, marginBottom: 0 }}>
+            <input placeholder="Cerca numero documento o soggetto" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="fg" style={{ minWidth: 220, marginBottom: 0 }}>
+            <select value={filtroFornitore} onChange={(e) => setFiltroFornitore(e.target.value)}>
+              <option value="">Tutti i soggetti</option>
+              {fornitori.map((p) => (
+                <option key={p} value={p}>
+                  {documenti.find((d) => d.soggetto_piva === p)?.soggetto_denominazione || p}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="cont-toolbar-summary">
+            <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> documenti</span>
+            {selectedIds.length > 0 && <span className="cont-toolbar-pill"><strong>{selectedIds.length}</strong> selezionati</span>}
+          </div>
         </div>
-        <div className="fg" style={{ minWidth: 220, marginBottom: 0 }}>
-          <select value={filtroFornitore} onChange={(e) => setFiltroFornitore(e.target.value)}>
-            <option value="">Tutti i soggetti</option>
-            {fornitori.map((p) => (
-              <option key={p} value={p}>
-                {documenti.find((d) => d.soggetto_piva === p)?.soggetto_denominazione || p}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="erp-status-tabs erp-toolbar-tabs">
-          {[
-            ['tutti', filtered.length, 'Tutti'],
-            ['pending', stats.daValidare, 'In attesa'],
-            ['confirmed', stats.confermati, 'Confermati'],
-            ['error', stats.errori, 'Da rivedere'],
-          ].map(([value, count, label]) => (
-            <button
-              type="button"
-              key={value}
-              className={'erp-status-tab' + (filtroStato === value ? ' active' : '')}
-              onClick={() => setFiltroStato(value)}
-            >
-              <span>{label}</span>
-              <span className="erp-status-count">{count}</span>
-            </button>
-          ))}
-        </div>
-        <div className="erp-toolbar-group">
-          <button type="button" className="btn-sec btn-sm" onClick={selectSameAnagrafica}>Stessa anagrafica</button>
-          <button type="button" className="btn-sec btn-sm" onClick={selectSameAiConto}>Stesso conto AI</button>
-          {autoValidateMode && (
-            <>
-              <button type="button" className="btn-sec btn-sm" disabled={entriesLoading} onClick={() => void refreshAutoValidateScores()}>
-                {entriesLoading ? '...' : 'Aggiorna punteggi'}
+
+        <div className="erp-filter-zone erp-filter-zone-states-actions">
+          <div className="erp-status-tabs erp-status-segmented">
+            {[
+              ['tutti', filtered.length, 'Tutti'],
+              ['pending', stats.daValidare, 'In attesa'],
+              ['confirmed', stats.confermati, 'Confermati'],
+              ['error', stats.errori, 'Da rivedere'],
+            ].map(([value, count, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={'erp-status-tab' + (filtroStato === value ? ' active' : '')}
+                onClick={() => setFiltroStato(value)}
+              >
+                <span>{label}</span>
+                <span className="erp-status-count">{count}</span>
               </button>
-              <button type="button" className="btn-sec btn-sm" onClick={handleApproveAllHighConfidence}>Approva &gt;90%</button>
-              <button type="button" className="btn-sec btn-sm" onClick={handleApproveAllFilteredPending}>Approva lista</button>
-            </>
-          )}
-          <label className={'erp-inline-toggle' + (autoValidateMode ? ' active' : '')}>
-            <input type="checkbox" checked={autoValidateMode} onChange={toggleAutoValidateMode} />
-            <span>Auto Validate</span>
-          </label>
-          <button type="button" className={copilotOpen ? 'btn' : 'btn-sec'} onClick={() => setCopilotOpen((v) => !v)}>
-            {copilotOpen ? 'Chiudi Copilot' : 'Copilot contabile'}
-          </button>
+            ))}
+          </div>
+          <div className="erp-toolbar-group erp-toolbar-group-actions erp-toolbar-group-actions-end">
+            <button type="button" className="btn-sec btn-sm" onClick={selectSameAnagrafica}>Stessa anagrafica</button>
+            <button type="button" className="btn-sec btn-sm" onClick={selectSameAiConto}>Stesso conto AI</button>
+            {autoValidateMode && (
+              <>
+                <button type="button" className="btn-sec btn-sm" disabled={entriesLoading} onClick={() => void refreshAutoValidateScores()}>
+                  {entriesLoading ? '...' : 'Aggiorna punteggi'}
+                </button>
+                <button type="button" className="btn-sec btn-sm" onClick={handleApproveAllHighConfidence}>Approva &gt;90%</button>
+                <button type="button" className="btn-sec btn-sm" onClick={handleApproveAllFilteredPending}>Approva lista</button>
+              </>
+            )}
+            <label className={'erp-inline-toggle' + (autoValidateMode ? ' active' : '')}>
+              <input type="checkbox" checked={autoValidateMode} onChange={toggleAutoValidateMode} />
+              <span>Auto Validate</span>
+            </label>
+            <button type="button" className={copilotOpen ? 'btn' : 'btn-sec'} onClick={() => setCopilotOpen((v) => !v)}>
+              {copilotOpen ? 'Chiudi Copilot' : 'Copilot contabile'}
+            </button>
+          </div>
         </div>
-        <div className="erp-toolbar-spacer" />
-        <div className="cont-toolbar-summary">
-          <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> documenti</span>
-          {selectedIds.length > 0 && <span className="cont-toolbar-pill"><strong>{selectedIds.length}</strong> selezionati</span>}
         </div>
-      </div>
       </div>
 
       {selectedIds.length >= 1 && (
@@ -1311,11 +1315,12 @@ export function DaValidareSplitView({
                           <tr
                             key={d.id}
                             onClick={(e) => handleRowClick(e, d, i)}
-                            style={{
-                              cursor: 'pointer',
-                              outline: focusedId === d.id ? '2px solid var(--gold)' : 'none',
-                              background: selectedIds.includes(d.id) ? 'rgba(200,164,94,.12)' : undefined,
-                            }}
+                            className={[
+                              'tbl-row-clickable',
+                              focusedId === d.id ? ' is-focused' : '',
+                              selectedIds.includes(d.id) ? ' is-selected' : '',
+                            ].join(' ')}
+                            style={{ cursor: 'pointer' }}
                           >
                             <td onClick={(e) => e.stopPropagation()}>
                               <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelected(d.id)} />
@@ -1382,13 +1387,13 @@ export function DaValidareSplitView({
                             <td className={rh?.soggetto || rh?.piva ? 'copilot-highlight' : undefined} style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', padding: rh?.soggetto || rh?.piva ? 6 : undefined }}>
                               {d.soggetto_denominazione}
                             </td>
-                            <td className={rh?.imponibile ? 'copilot-highlight' : undefined} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', padding: rh?.imponibile ? 6 : undefined }}>
+                            <td className={(rh?.imponibile ? 'copilot-highlight ' : '') + 'tbl-num'} style={{ fontVariantNumeric: 'tabular-nums', padding: rh?.imponibile ? 6 : undefined }}>
                               {fmt(imponibile)}
                             </td>
-                            <td className={rh?.iva ? 'copilot-highlight' : undefined} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', padding: rh?.iva ? 6 : undefined }}>
+                            <td className={(rh?.iva ? 'copilot-highlight ' : '') + 'tbl-num'} style={{ fontVariantNumeric: 'tabular-nums', padding: rh?.iva ? 6 : undefined }}>
                               {fmt(iva)}
                             </td>
-                            <td className={rh?.totale ? 'copilot-highlight' : undefined} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, padding: rh?.totale ? 6 : undefined }}>
+                            <td className={(rh?.totale ? 'copilot-highlight ' : '') + 'tbl-num'} style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, padding: rh?.totale ? 6 : undefined }}>
                               {fmt(d.totale)}
                             </td>
                             <td className={contoCellHl ? 'copilot-highlight' : undefined} style={{ color: 'var(--mu)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', padding: contoCellHl ? 6 : undefined }}>

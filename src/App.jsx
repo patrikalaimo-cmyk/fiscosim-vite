@@ -80,16 +80,20 @@ function ShellIcon({ itemId, className = '' }) {
     case 'cu':
     case 'adempimenti':
       return <svg {...props}><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A2.5 2.5 0 0 1 5 18V6a2.5 2.5 0 0 1 2-2.5Z" stroke={stroke} strokeWidth="1.7" strokeLinejoin="round" /><path d="M14 3.5V8h4" stroke={stroke} strokeWidth="1.7" strokeLinejoin="round" /></svg>
+    case 'guide_moduli':
+      return <svg {...props}><path d="M6 5.5A2.5 2.5 0 0 1 8.5 3H19v15.5H8.5A2.5 2.5 0 0 0 6 21V5.5Zm0 0H4.5V19A2 2 0 0 0 6.5 21H8" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'lettura_mail':
     case 'agenda':
       return <svg {...props}><path d="M4 7.5 12 13l8-5.5M5.5 18.5h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 18.5 6.5h-13A1.5 1.5 0 0 0 4 8v9a1.5 1.5 0 0 0 1.5 1.5Z" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'contabilita':
+      return <svg {...props}><rect x="3.75" y="6.25" width="16.5" height="11.5" rx="2.2" stroke={stroke} strokeWidth="1.7" /><path d="M3.75 10.25h16.5M8 14.25h3M14.25 14.25h1.75" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'piano_conti':
     case 'partitario':
     case 'bilancio':
-    case 'f24':
     case 'ammortamenti':
       return <svg {...props}><path d="M5 6.5h14M5 12h14M5 17.5h9M7.5 4v16" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    case 'f24':
+      return <svg {...props}><path d="m6 7 2.2-2.2 3.1 3.1L9.1 10M14.9 14l2.2 2.2-3.1 3.1-2.2-2.2M8.6 17.7 17 9.3M13.3 6.2l4.5 4.5" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'simulatore':
     case 'revisione_dich':
     case 'agecon':
@@ -148,6 +152,7 @@ function App() {
   const [fkPanelOpen, setFkPanelOpen] = useState(false)
   const [sidebarPinned, setSidebarPinned] = useState(false)
   const [openSection, setOpenSection] = useState(null)
+  const [workspaceContext, setWorkspaceContext] = useState('')
 
   useEffect(() => {
     const h = e => { e.preventDefault(); setDeferredPrompt(e); setShowInstall(true) }
@@ -231,13 +236,23 @@ function App() {
     }
   }, [activeVisibleSectionKey])
 
+  useEffect(() => {
+    if (tab !== 'contabilita') {
+      setWorkspaceContext('')
+    }
+  }, [tab])
+
   if (!utente) return <Login onLogin={u => { setUtente(u); setTab('dashboard') }} />
 
   const ruolo = utente.ruolo || 'collaboratore'
   const perm = getPermessi(utente)
   const initials = (utente.nome || '?').charAt(0) + (utente.cognome || '').charAt(0) || '?'
   const activeNavItem = NAV_INDEX.byId.get(tab) || { id: tab, label: 'Workspace' }
-  const workspaceSubtitle = activeSection ? (WORKSPACE_SECTION_COPY[activeSection.section] || '') : ''
+  const workspaceSubtitle = tab === 'contabilita'
+    ? workspaceContext
+    : activeSection
+      ? (WORKSPACE_SECTION_COPY[activeSection.section] || '')
+      : ''
   const activeShellIcon = activeNavItem.id
 
   const navFiltrato = NAV.map(s => ({
@@ -357,24 +372,27 @@ function App() {
 
           <div className="sb-footer">
             {ruolo === 'owner' && (
-            <div style={{ marginBottom: '.5rem' }}>
-              <div
+            <div className="sb-footer-entry">
+              <button
+                type="button"
                 onClick={() => setTab('test_mode')}
-                className={'sb-item' + (tab === 'test_mode' ? ' active' : '')}
-                style={{ borderRadius: 7, margin: '0 .5rem', padding: '.4rem .6rem', fontSize: '.72rem', color: tab === 'test_mode' ? 'var(--cy)' : 'var(--mu)' }}
-                title={'Test Suite'}
+                className={'sb-item sb-footer-item' + (tab === 'test_mode' ? ' active' : '')}
+                title="Test Suite"
               >
                 <span className="sb-item-ico"><ShellIcon itemId="test_mode" className="shell-icon" /></span>
                 <span className="sb-item-label">Test Suite</span>
-              </div>
+              </button>
             </div>
           )}
-          <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.6rem' }}>
-              <button onClick={() => setShowGuida(true)}
-                style={{ flex: 1, background: 'var(--s2)', border: '1px solid var(--bd)', borderRadius: 7, padding: '.4rem .6rem', cursor: 'pointer', fontSize: '.72rem', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.3rem', transition: 'all .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.background = 'rgba(200,164,94,.08)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.background = 'var(--s2)' }}>
-                Guida moduli
+          <div className="sb-footer-entry">
+              <button
+                type="button"
+                className="sb-item sb-footer-item sb-footer-guide"
+                onClick={() => setShowGuida(true)}
+                title="Guida moduli"
+              >
+                <span className="sb-item-ico"><ShellIcon itemId="guide_moduli" className="shell-icon" /></span>
+                <span className="sb-item-label">Guida moduli</span>
               </button>
             </div>
             <div className="sb-user" style={{ cursor: 'pointer' }} onClick={() => setShowLogoutConfirm(true)} title="Clicca per disconnetterti">
@@ -399,11 +417,6 @@ function App() {
                 )}
               </div>
               {workspaceSubtitle && <p className="workspace-subtitle">{workspaceSubtitle}</p>}
-            </div>
-            <div className="workspace-actions">
-              <button type="button" className="btn-sec" onClick={() => setShowGuida(true)}>
-                Guida moduli
-              </button>
             </div>
           </div>
 
@@ -436,7 +449,7 @@ function App() {
           {tab === 'fatture_ade'       && <ModuloFattureADE />}
           {tab === 'lettura_mail'      && <ModuloLetturaMail />}
           {tab === 'richieste_fatture' && <ModuloRichiesteFatture />}
-          {tab === 'contabilita' && <ModuloContabilita ruolo={ruolo} />}
+          {tab === 'contabilita' && <ModuloContabilita ruolo={ruolo} onHeaderContextChange={setWorkspaceContext} />}
           {tab === 'piano_conti' && <ModuloPianoConti />}
           {tab === 'partitario'  && <ModuloPartitario />}
           {tab === 'bilancio'    && <ModuloBilancio />}

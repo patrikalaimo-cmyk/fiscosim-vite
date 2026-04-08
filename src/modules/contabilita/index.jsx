@@ -157,7 +157,7 @@ const CONT_QUICK_STATS = [
   { key: 'registrati', label: 'Registrati' },
 ]
 
-export function ModuloContabilita({ruolo}){
+export function ModuloContabilita({ruolo, onHeaderContextChange}){
   const [societa,setSocieta]=useState([]);
   const [societaAttiva,setSocietaAttiva]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -353,6 +353,20 @@ export function ModuloContabilita({ruolo}){
     title: 'Contabilita',
     subtitle: 'Workspace operativo del modulo contabile con focus su controllo, registrazione e fiscale.',
   }
+  const headerTitle = isDaValidareWorkspace
+    ? `${currentTabMeta.title} — ${societaAttiva?.denominazione || ''}`.trim()
+    : currentTabMeta.title
+  const headerSubtitle = isDaValidareWorkspace ? '' : societaAttiva?.denominazione || ''
+
+  useEffect(() => {
+    if (!onHeaderContextChange) return
+    if (!societaAttiva) {
+      onHeaderContextChange('')
+      return
+    }
+    onHeaderContextChange(`"${currentTabMeta.title}" — "${societaAttiva.denominazione}"`)
+    return () => onHeaderContextChange('')
+  }, [onHeaderContextChange, currentTabMeta.title, societaAttiva])
 
   const patchDocumento = (id, partial) => {
     setDocumenti((prev) => prev.map((d) => (d.id === id ? { ...d, ...partial } : d)))
@@ -460,12 +474,16 @@ export function ModuloContabilita({ruolo}){
           <div className="empty"><div className="empty-ico">🏢</div><div className="empty-t">Seleziona o crea una società</div></div>
         ):(
           <div className="cont-module-shell compact-shell">
-            <div className="cont-module-header compact-header">
-              <div className="cont-module-title-row">
-                <h1 className="cont-module-title">
-                  {`${currentTabMeta.title} — ${societaAttiva.denominazione}`}
-                </h1>
-              </div>
+            <div className={'cont-module-header compact-header' + (isDaValidareWorkspace ? ' header-actions-only' : '')}>
+              {!isDaValidareWorkspace && (
+                <div className="cont-module-title-wrap">
+                  <div className="cont-module-eyebrow">Contabilità</div>
+                  <div className="cont-module-title-row">
+                    <h1 className="cont-module-title">{headerTitle}</h1>
+                  </div>
+                  {headerSubtitle ? <div className="cont-module-subtitle">{headerSubtitle}</div> : null}
+                </div>
+              )}
               <div className="cont-module-actions">
                 {effectiveTab === 'societa' && (
                   <button className="btn" onClick={() => setModalSocieta(true)}>+ Nuova società</button>
