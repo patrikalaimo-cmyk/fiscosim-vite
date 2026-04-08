@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -124,10 +125,11 @@ export function ModuloLetturaMail(){
     <div className="page">
       {selectedEmail&&<EmailDetailModal email={selectedEmail} onClose={()=>setSelectedEmail(null)} onElabora={()=>{elaboraEmail(selectedEmail);setSelectedEmail(null);}}/>}
       
-      <div className="page-hdr">
-        <div className="page-title">📧 Lettura Mail Automatica</div>
-        <div className="page-sub">Leggi email, estrai allegati e classificali automaticamente con AI</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Operatività"
+        title="📧 Lettura Mail Automatica"
+        context="Leggi email, estrai allegati e classificali automaticamente con AI"
+      />
 
       {/* Selezione account */}
       <div className="card" style={{marginBottom:'1rem'}}>

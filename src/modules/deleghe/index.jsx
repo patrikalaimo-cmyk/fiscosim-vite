@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 const todayStr = () => new Date().toISOString().split('T')[0]
@@ -308,10 +309,11 @@ export function ModuloDeleghe() {
           onClose={() => setImportModal(false)} />
       )}
 
-      <div className="page-hdr">
-        <div className="page-title">🔑 Deleghe Uniche ADE</div>
-        <div className="page-sub">Gestione deleghe fatture elettroniche — aggiornato al {new Date().toLocaleDateString('it-IT')}</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Fiscale"
+        title="🔑 Deleghe Uniche ADE"
+        context={`Gestione deleghe fatture elettroniche — aggiornato al ${new Date().toLocaleDateString('it-IT')}`}
+      />
 
       <div className="stats-grid" style={{ marginBottom: '1rem' }}>
         {[['✓ Attive', stats.attivo, 'var(--gr)', 'attivo'], ['⚠ In scadenza', stats.in_scadenza, 'var(--gold)', 'in_scadenza'], ['✕ Scadute', stats.scaduto, 'var(--rd)', 'scaduto'], ['— Da attivare', stats.da_attivare, 'var(--mu)', 'da_attivare']].map(([l, v, c, f]) => (

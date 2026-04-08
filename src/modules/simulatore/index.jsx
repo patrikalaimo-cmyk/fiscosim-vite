@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { callBackend } from '../../core/workflow'
+import { ModuleHeader } from '../../shared/components'
 
 const fmt0 = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
 
@@ -90,7 +91,7 @@ export function ModuloSimulatore(){
   return(
     <div className="page">
       {calModal&&<CalendarModal regimeId={calModal} onClose={()=>setCalModal(null)}/>}
-      <div className="page-hdr"><div className="page-title">📊 Simulatore Fiscale</div><div className="page-sub">Confronto regimi fiscali · Italia 2025</div></div>
+      <ModuleHeader sectionLabel="Fiscale" title="📊 Simulatore Fiscale" context="Confronto regimi fiscali · Italia 2025" />
       <div className="card">
         <div className="card-title" style={{marginBottom:"1rem"}}>Inserisci i dati</div>
         <div className="form-grid">

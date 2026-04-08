@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { TIPO_LABEL, TIPO_COLOR, LAST_SOCIETA_STORAGE_KEY } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 import { CopilotInsightsBlock } from '../contabilita/CopilotInsightsBlock.jsx'
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -62,10 +63,11 @@ export function Dashboard({ onNavigate }) {
 
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">Dashboard</div>
-        <div className="page-sub">Riepilogo attività studio · {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Home"
+        title="Dashboard"
+        context={`Riepilogo attività studio · ${new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
+      />
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="card-hdr">

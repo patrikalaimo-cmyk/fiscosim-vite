@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { sb } from '../../lib/supabase'
 import { createPrimaNota } from '../../../services/primaNotaService.js'
 import { TestScenarioE2EPanel } from './TestScenarioE2EPanel.jsx'
+import { ModuleHeader } from '../../shared/components'
 
 const STATO_CFG = {
   pending:  { label: '⚪ Da testare', color: 'var(--mu)',   bg: 'rgba(107,122,153,.1)',  border: 'rgba(107,122,153,.25)' },
@@ -680,18 +681,13 @@ export function ModuloTestMode({ utente }) {
         />
       )}
 
-      <div className="page-hdr">
-        <div>
-          <div className="page-title">🧪 Test Mode</div>
-          <div className="page-sub">Scenari E2E da DB · {stats.total} test suite · {autoCount} automatici</div>
-        </div>
-        <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
-          <button className="btn-sec" style={{fontSize:'.78rem'}} onClick={resetAll}>🗑 Reset</button>
-          <button className="btn" disabled={runningAll||!societaId} onClick={runAll} style={{fontSize:'.82rem'}}>
-            {runningAll?'⏳ Esecuzione...':`▶ Run Auto (${autoCount})`}
-          </button>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Controllo"
+        title="🧪 Test Mode"
+        context={`Scenari E2E da DB · ${stats.total} test suite · ${autoCount} automatici`}
+        primaryAction={<button className="btn" disabled={runningAll||!societaId} onClick={runAll} style={{fontSize:'.82rem'}}>{runningAll?'⏳ Esecuzione...':`▶ Run Auto (${autoCount})`}</button>}
+        secondaryAction={<button className="btn-sec" style={{fontSize:'.78rem'}} onClick={resetAll}>🗑 Reset</button>}
+      />
 
       {/* ── Configurazione Test ── */}
       <div className="card" style={{marginBottom:'1rem',padding:'1rem 1.25rem',border: societaId ? '1px solid var(--bd)' : '1px solid rgba(251,146,60,.4)',background: societaId ? 'var(--s1)' : 'rgba(251,146,60,.06)'}}>

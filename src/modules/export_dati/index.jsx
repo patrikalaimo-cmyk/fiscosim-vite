@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 
@@ -140,10 +141,11 @@ export function ModuloExportDati({onNavigate}){
 
   return(
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">📤 Export Dati</div>
-        <div className="page-sub">Hub centralizzato per l'esportazione di file telematici e stampe</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Export"
+        title="📤 Export Dati"
+        context="Hub centralizzato per l'esportazione di file telematici e stampe"
+      />
 
       {/* Quick Filters */}
       <div className="card" style={{marginBottom:'1rem',background:'linear-gradient(135deg,rgba(200,164,94,.08),rgba(200,164,94,.02))'}}>
@@ -276,4 +278,3 @@ const CONT_SIDEBAR_MENU = [
     {id:"bilancio",ico:"⚖️",label:"Bilancio"}
   ]}
 ];
-

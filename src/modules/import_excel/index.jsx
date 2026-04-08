@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -72,7 +73,7 @@ export function ModuloImportExcel(){
 
   return(
     <div className="page">
-      <div className="page-hdr"><div className="page-title">📤 Import Excel</div><div className="page-sub">Importa clienti da file .xlsx o .csv</div></div>
+      <ModuleHeader sectionLabel="Operatività" title="📤 Import Excel" context="Importa clienti da file .xlsx o .csv" />
       {done!==null&&<div className="alert alert-ok">✅ Importati con successo <strong>{done}</strong> clienti!</div>}
       {err&&<div className="alert alert-err">⚠️ {err}</div>}
       <div className="card">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { analyzeWithClaude } from '../../shared/utils/parseDoc'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 // ─── COSTANTI ────────────────────────────────────────────────
 const TIPI_AVVISO = [
@@ -781,16 +782,13 @@ export function ModuloAgeCon({ utente, ruolo }) {
       {modalAnalisi && <ModalAnalisiAI avviso={modalAnalisi} onClose={() => setModalAnalisi(null)} />}
 
       {/* Header */}
-      <div className="page-hdr">
-        <div>
-          <div className="page-title">⚡ AgeCon — Avvisi ADE</div>
-          <div className="page-sub">Gestione comunicazioni e avvisi Agenzia delle Entrate · AI-assisted</div>
-        </div>
-        <div style={{display:'flex',gap:'.5rem'}}>
-          <button className="btn-sec" onClick={() => setModalImportPDF(true)}>📄 Import PDF</button>
-          <button className="btn" onClick={() => setModalAvviso({})}>➕ Nuovo avviso</button>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Controllo"
+        title="⚡ AgeCon — Avvisi ADE"
+        context="Gestione comunicazioni e avvisi Agenzia delle Entrate · AI-assisted"
+        primaryAction={<button className="btn" onClick={() => setModalAvviso({})}>➕ Nuovo avviso</button>}
+        secondaryAction={<button className="btn-sec" onClick={() => setModalImportPDF(true)}>📄 Import PDF</button>}
+      />
 
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: '1rem' }}>

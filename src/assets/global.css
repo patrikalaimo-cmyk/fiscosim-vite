@@ -180,6 +180,9 @@ mark.copilot-highlight-inline{
 .page{padding:24px 0;max-width:none}
 @media(max-width:768px){.page{padding:1rem .9rem}}
 .page-hdr{margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.page-hdr-main{min-width:0;display:flex;flex-direction:column}
+.page-hdr-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.page-eyebrow{font-size:.58rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:.25rem}
 .page-title{font-size:1.45rem;font-weight:700;margin-bottom:4px;letter-spacing:-.02em}
 .page-sub{font-size:.8rem;color:var(--mu);line-height:1.6}
 

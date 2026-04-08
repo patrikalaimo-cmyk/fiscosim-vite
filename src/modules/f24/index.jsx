@@ -2,6 +2,7 @@ import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeter
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
 import { MESI } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -72,14 +73,14 @@ export function ModuloF24(){
   // ── RENDER ────────────────────────────────────────────────
   if(stato==='loading') return(
     <div className="page">
-      <div className="page-hdr"><div className="page-title">📋 Gestione F24</div></div>
+      <ModuleHeader sectionLabel="Fiscale" title="📋 Gestione F24" />
       <div className="loading">⏳ Caricamento modulo F24...</div>
     </div>
   );
 
   if(stato==='error') return(
     <div className="page">
-      <div className="page-hdr"><div className="page-title">📋 Gestione F24</div></div>
+      <ModuleHeader sectionLabel="Fiscale" title="📋 Gestione F24" />
       <div className="alert alert-err" style={{marginBottom:'1rem'}}>
         <div style={{fontWeight:700,marginBottom:'.35rem'}}>⚠️ Errore caricamento</div>
         <div style={{fontSize:'.8rem',marginBottom:'.75rem'}}>{errMsg}</div>
@@ -96,10 +97,11 @@ export function ModuloF24(){
 
   return(
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">📋 Gestione F24</div>
-        <div className="page-sub">Tabellone scadenze F24 — seleziona una scadenza per lavorarci</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Fiscale"
+        title="📋 Gestione F24"
+        context="Tabellone scadenze F24 — seleziona una scadenza per lavorarci"
+      />
 
       {/* TABS SCADENZE */}
       <div style={{display:'flex',gap:'.5rem',marginBottom:'1.5rem',flexWrap:'wrap',alignItems:'center'}}>

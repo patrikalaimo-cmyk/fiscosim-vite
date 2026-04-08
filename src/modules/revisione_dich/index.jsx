@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { useAIStatus } from '../../context/AIStatusContext'
 import { renderPDFPagesToImages } from '../../shared/utils'
+import { ModuleHeader } from '../../shared/components'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 
@@ -277,16 +278,17 @@ export function ModuloRevisioneDich({ utente }) {
   // ── RENDER ──────────────────────────────────────────────────
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div>
-          <div className="page-title">🔍 Revisione Dichiarativi</div>
-          <div className="page-sub">Analisi AI · Controlli incrociati · Aree critiche · Confronto storico</div>
-        </div>
-        <div style={{ display: 'flex', gap: '.5rem' }}>
-          {fase !== 'upload' && <button className="btn-sec" onClick={reset}>+ Nuova revisione</button>}
-          <button className="btn-sec" onClick={() => { setFase('storico'); loadStorico() }}>📚 Storico</button>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Controllo"
+        title="🔍 Revisione Dichiarativi"
+        context="Analisi AI · Controlli incrociati · Aree critiche · Confronto storico"
+        secondaryAction={
+          <div style={{ display: 'flex', gap: '.5rem' }}>
+            {fase !== 'upload' && <button className="btn-sec" onClick={reset}>+ Nuova revisione</button>}
+            <button className="btn-sec" onClick={() => { setFase('storico'); loadStorico() }}>📚 Storico</button>
+          </div>
+        }
+      />
 
       {/* ── FASE UPLOAD ───────────────────────────────────── */}
       {fase === 'upload' && (

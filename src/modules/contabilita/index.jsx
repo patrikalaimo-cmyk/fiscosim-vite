@@ -15,6 +15,7 @@ import StampeView from './views/StampeView.jsx'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { registraDocumentiConfermati } from './application/contabilitaRegistrationWorkflow.js'
 import { fmtCurrency as fmt, fmtDate, fmtNumber } from './ui/formatters.js'
+import { ModuleHeader } from '../../shared/components'
 
 
 const SETTINGS_TABS = [
@@ -500,23 +501,21 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
         ):(
           <div className="cont-module-shell compact-shell">
             {!isDaValidareWorkspace && (
-              <div className="cont-module-header compact-header">
-                <div className="cont-module-title-wrap">
-                  <div className="cont-module-eyebrow">Contabilità</div>
-                  <div className="cont-module-title-row">
-                    <h1 className="cont-module-title">{headerTitle}</h1>
-                  </div>
-                  {headerSubtitle ? <div className="cont-module-subtitle">{headerSubtitle}</div> : null}
-                </div>
-                <div className="cont-module-actions">
-                  {effectiveTab === 'societa' && (
-                    <button className="btn" onClick={() => setModalSocieta(true)}>+ Nuova società</button>
-                  )}
-                  {effectiveTab !== 'societa' && (
-                    <button className="btn-sec" onClick={() => void caricaTutto()}>Aggiorna dati</button>
-                  )}
-                </div>
-              </div>
+              <ModuleHeader
+                sectionLabel="Contabilità"
+                title={headerTitle}
+                context={headerSubtitle}
+                primaryAction={
+                  effectiveTab === 'societa'
+                    ? <button className="btn" onClick={() => setModalSocieta(true)}>+ Nuova società</button>
+                    : null
+                }
+                secondaryAction={
+                  effectiveTab !== 'societa'
+                    ? <button className="btn-sec" onClick={() => void caricaTutto()}>Aggiorna dati</button>
+                    : null
+                }
+              />
             )}
 
             <div className="cont-module-content">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { ALLEGATO_LABEL } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -30,7 +31,7 @@ export function ModuloAgenda(){
     <div className="page">
       {modal&&<NuovoInvioModal data={EMPTY} clienti={clienti} adempimenti={adempimenti} onSave={creaInvio} onClose={()=>setModal(null)} saving={saving}/>}
       {mailModal&&<SendMailModal cliente={mailModal.cliente} adempimento={mailModal.adempimento} oggetto={mailModal.oggetto} corpo={mailModal.corpo} onClose={()=>{setMailModal(null);aggStato(mailModal.id,"inviato");}}/>}
-      <div className="page-hdr"><div className="page-title">📅 Agenda Invii</div><div className="page-sub">{invii.length} invii programmati</div></div>
+      <ModuleHeader sectionLabel="Operatività" title="📅 Agenda Invii" context={`${invii.length} invii programmati`} />
       {alertCount>0&&<div className="alert alert-err">🔔 <strong>{alertCount} invio{alertCount>1?"i":""}</strong> in scadenza oggi o domani!</div>}
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:".85rem"}}><button className="btn" onClick={()=>setModal({})}>+ Programma Invio</button></div>
       {loading?<div className="loading">⏳</div>:invii.length===0?(

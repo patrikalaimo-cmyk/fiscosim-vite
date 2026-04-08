@@ -1,6 +1,30 @@
 import { useState } from 'react'
 
 // ─── TAG INPUT ───────────────────────────────────────────────────
+export function ModuleHeader({
+  sectionLabel = '',
+  title,
+  context = '',
+  primaryAction = null,
+  secondaryAction = null,
+}) {
+  return (
+    <div className="page-hdr">
+      <div className="page-hdr-main">
+        {sectionLabel ? <div className="page-eyebrow">{sectionLabel}</div> : null}
+        <div className="page-title">{title}</div>
+        {context ? <div className="page-sub">{context}</div> : null}
+      </div>
+      {(primaryAction || secondaryAction) ? (
+        <div className="page-hdr-actions">
+          {secondaryAction}
+          {primaryAction}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function TagInput({ value = [], onChange, placeholder = 'email@es.it' }) {
   const [input, setInput] = useState('')
 

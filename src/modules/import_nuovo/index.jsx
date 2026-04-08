@@ -5,6 +5,7 @@ import { resolveIva } from './ivaResolver'
 import { insertDocumento } from './importService'
 import { traceIva } from '../../utils/pipelineLogger.js'
 import { triggerAutoPipeline } from '../../utils/autoPipeline.js'
+import { ModuleHeader } from '../../shared/components'
 
 export function ModuloImportNuovo() {
   const [file, setFile] = useState(null)
@@ -141,12 +142,11 @@ export function ModuloImportNuovo() {
 
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-hdr-l">
-          <div className="page-title">📥 Import Nuovo (Passiva)</div>
-          <div className="page-sub">XML deterministico · IVA causale strict match · Insert minimale</div>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Operatività"
+        title="📥 Import Nuovo (Passiva)"
+        context="XML deterministico · IVA causale strict match · Insert minimale"
+      />
 
       <div className="card" style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', gap: '.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -187,4 +187,3 @@ export function ModuloImportNuovo() {
     </div>
   )
 }
-

@@ -3,6 +3,7 @@ import { MODULI_DEFAULT, MODULI_DISPONIBILI } from '../../shared/constants'
 import { useState, useEffect, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
 import { TIPO_LABEL } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -59,14 +60,12 @@ export function ModuloRichiesteFatture(){
       }} onClose={()=>setNuovaModal(false)}/>}
       {viewModal&&<ViewXMLModal richiesta={viewModal} onClose={()=>setViewModal(null)}/>}
 
-      <div className="page-hdr">
-        <div className="page-title">📡 Richieste Fatture ADE</div>
-        <div className="page-sub">Genera file XML per download massivo fatture elettroniche</div>
-      </div>
-
-      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'1rem'}}>
-        <button className="btn" onClick={()=>setNuovaModal(true)}>+ Nuova Richiesta</button>
-      </div>
+      <ModuleHeader
+        sectionLabel="Fiscale"
+        title="📡 Richieste Fatture ADE"
+        context="Genera file XML per download massivo fatture elettroniche"
+        primaryAction={<button className="btn" onClick={()=>setNuovaModal(true)}>+ Nuova Richiesta</button>}
+      />
 
       {loading?<div className="loading">⏳</div>:richieste.length===0?(
         <div className="empty"><div className="empty-ico">📡</div><div className="empty-t">Nessuna richiesta</div><div className="empty-s">Crea la prima richiesta di download massivo</div></div>

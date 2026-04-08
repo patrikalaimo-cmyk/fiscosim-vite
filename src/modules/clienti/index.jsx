@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { TIPO_LABEL, TIPO_COLOR, MODULI_DEFAULT, MODULI_DISPONIBILI, TIPO_CLIENTE } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -57,11 +58,15 @@ export function ModuloClienti(){
       {moduliModal&&<ModuliModal cliente={moduliModal} onSave={salvaModuli} onClose={()=>setModuliModal(null)}/>}
       {bulkModal&&<ModuliBulkModal clienti={selClienti} onSave={salvaModuli} onClose={()=>{setBulkModal(false);setSelected(new Set());}}/>}
 
-      <div className="page-hdr"><div className="page-title">👥 Clienti</div><div className="page-sub">{clienti.length} clienti in archivio</div></div>
+      <ModuleHeader
+        sectionLabel="Operatività"
+        title="👥 Clienti"
+        context={`${clienti.length} clienti in archivio`}
+        primaryAction={<button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Cliente</button>}
+      />
 
       <div style={{display:"flex",gap:".6rem",marginBottom:".85rem",alignItems:"center",flexWrap:"wrap"}}>
         <input className="search-bar" style={{margin:0,flex:1,minWidth:200}} placeholder="🔍  Cerca nome, email, P.IVA..." value={search} onChange={e=>setSearch(e.target.value)}/>
-        <button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Cliente</button>
       </div>
 
       <div className="pills">{["tutti",...TIPO_CLIENTE].map(t=><span key={t} className={"pill"+(filtroTipo===t?" active":"")} onClick={()=>setFiltroTipo(t)}>{t==="tutti"?"Tutti ("+clienti.length+")":TIPO_LABEL[t]}</span>)}</div>

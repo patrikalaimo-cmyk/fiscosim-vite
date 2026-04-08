@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
 import { invalidateAICache } from '../../core/workflow'
+import { ModuleHeader } from '../../shared/components'
 
 export function ModuloImpostazioni({ ruolo, utente, onOpenFiscalKnowledgePanel, fiscalShortcutLabel }) {
   const canEdit = ruolo === 'owner' || ruolo === 'admin'
@@ -55,10 +56,11 @@ export function ModuloImpostazioni({ ruolo, utente, onOpenFiscalKnowledgePanel, 
 
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">⚙️ Impostazioni Studio</div>
-        <div className="page-sub">Dati del titolare, studio e configurazione AI</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Impostazioni"
+        title="⚙️ Impostazioni Studio"
+        context="Dati del titolare, studio e configurazione AI"
+      />
 
       {/* ─── REGOLE IA (solo Owner / Admin — titolare/responsabile) ─── */}
       {canEdit && onOpenFiscalKnowledgePanel && (

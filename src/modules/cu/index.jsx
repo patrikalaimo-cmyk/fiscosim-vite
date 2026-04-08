@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
 import { loadScript } from '../../shared/utils'
-import { TagInput } from '../../shared/components'
+import { TagInput, ModuleHeader } from '../../shared/components'
 import { callBackend } from '../../core/workflow'
 
 const fmt0 = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
@@ -980,10 +980,11 @@ export function ModuloCU(){
 
   return(
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">📜 Certificazioni Uniche</div>
-        <div className="page-sub">Split CU · invio mail · generazione file .TEL locazioni brevi</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Adempimenti"
+        title="📜 Certificazioni Uniche"
+        context="Split CU · invio mail · generazione file .TEL locazioni brevi"
+      />
 
       {/* TAB selector */}
       <div className="pills" style={{marginBottom:'1.25rem'}}>
