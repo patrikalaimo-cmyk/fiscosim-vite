@@ -232,7 +232,11 @@ mark.copilot-highlight-inline{
 .tbl td{transition:background .14s ease-in-out,border-color .14s ease-in-out,color .14s ease-in-out}
 .tbl tr:hover td{background:rgba(255,255,255,.03)}
 .tbl-row-clickable.is-focused td{background:rgba(255,255,255,.018)}
-.tbl-row-clickable.is-selected td{background:rgba(212,175,55,.06)}
+.tbl-row-clickable.is-selected{
+  background-color:rgba(212,175,55,.045);
+  background-image:linear-gradient(90deg, rgba(255,255,255,.01) 0%, rgba(212,175,55,.03) 55%, rgba(212,175,55,.075) 100%);
+}
+.tbl-row-clickable.is-selected td{background:transparent}
 .tbl-row-clickable.is-selected td:first-child{border-left:3px solid var(--accent-gold)}
 .tbl-num{text-align:right}
 .tbl-actions{display:flex;gap:.3rem}
