@@ -153,6 +153,7 @@ function App() {
   const [sidebarPinned, setSidebarPinned] = useState(false)
   const [openSection, setOpenSection] = useState(null)
   const [workspaceContext, setWorkspaceContext] = useState('')
+  const [workspaceActions, setWorkspaceActions] = useState([])
 
   useEffect(() => {
     const h = e => { e.preventDefault(); setDeferredPrompt(e); setShowInstall(true) }
@@ -239,6 +240,7 @@ function App() {
   useEffect(() => {
     if (tab !== 'contabilita') {
       setWorkspaceContext('')
+      setWorkspaceActions([])
     }
   }, [tab])
 
@@ -418,6 +420,19 @@ function App() {
               </div>
               {workspaceSubtitle && <p className="workspace-subtitle">{workspaceSubtitle}</p>}
             </div>
+            <div className="workspace-actions">
+              {workspaceActions.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className={action.variant === 'primary' ? 'btn' : 'btn-sec'}
+                  disabled={action.disabled}
+                  onClick={action.onClick}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="workspace-content">
@@ -449,7 +464,13 @@ function App() {
           {tab === 'fatture_ade'       && <ModuloFattureADE />}
           {tab === 'lettura_mail'      && <ModuloLetturaMail />}
           {tab === 'richieste_fatture' && <ModuloRichiesteFatture />}
-          {tab === 'contabilita' && <ModuloContabilita ruolo={ruolo} onHeaderContextChange={setWorkspaceContext} />}
+          {tab === 'contabilita' && (
+            <ModuloContabilita
+              ruolo={ruolo}
+              onHeaderContextChange={setWorkspaceContext}
+              onHeaderActionsChange={setWorkspaceActions}
+            />
+          )}
           {tab === 'piano_conti' && <ModuloPianoConti />}
           {tab === 'partitario'  && <ModuloPartitario />}
           {tab === 'bilancio'    && <ModuloBilancio />}

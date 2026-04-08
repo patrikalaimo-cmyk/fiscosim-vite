@@ -157,7 +157,7 @@ const CONT_QUICK_STATS = [
   { key: 'registrati', label: 'Registrati' },
 ]
 
-export function ModuloContabilita({ruolo, onHeaderContextChange}){
+export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActionsChange}){
   const [societa,setSocieta]=useState([]);
   const [societaAttiva,setSocietaAttiva]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -423,6 +423,31 @@ export function ModuloContabilita({ruolo, onHeaderContextChange}){
     }
   };
 
+  useEffect(() => {
+    if (!onHeaderActionsChange) return
+    if (effectiveTab === 'da_validare') {
+      onHeaderActionsChange([
+        {
+          key: 'register-confirmed',
+          label: registrazioneInCorso ? 'Registrazione in corso...' : `Registra confermati (${stats.confermati})`,
+          variant: 'primary',
+          disabled: stats.confermati === 0 || registrazioneInCorso,
+          onClick: registraConfermati,
+        },
+        {
+          key: 'refresh-data',
+          label: 'Aggiorna dati',
+          variant: 'secondary',
+          disabled: false,
+          onClick: () => void caricaTutto(),
+        },
+      ])
+    } else {
+      onHeaderActionsChange([])
+    }
+    return () => onHeaderActionsChange([])
+  }, [onHeaderActionsChange, effectiveTab, registrazioneInCorso, stats.confermati, registraConfermati, caricaTutto])
+
   if(loading)return<div className="loading">Caricamento...</div>;
 
   return(
@@ -474,8 +499,8 @@ export function ModuloContabilita({ruolo, onHeaderContextChange}){
           <div className="empty"><div className="empty-ico">🏢</div><div className="empty-t">Seleziona o crea una società</div></div>
         ):(
           <div className="cont-module-shell compact-shell">
-            <div className={'cont-module-header compact-header' + (isDaValidareWorkspace ? ' header-actions-only' : '')}>
-              {!isDaValidareWorkspace && (
+            {!isDaValidareWorkspace && (
+              <div className="cont-module-header compact-header">
                 <div className="cont-module-title-wrap">
                   <div className="cont-module-eyebrow">Contabilità</div>
                   <div className="cont-module-title-row">
@@ -483,19 +508,16 @@ export function ModuloContabilita({ruolo, onHeaderContextChange}){
                   </div>
                   {headerSubtitle ? <div className="cont-module-subtitle">{headerSubtitle}</div> : null}
                 </div>
-              )}
-              <div className="cont-module-actions">
-                {effectiveTab === 'societa' && (
-                  <button className="btn" onClick={() => setModalSocieta(true)}>+ Nuova società</button>
-                )}
-                {effectiveTab === 'da_validare' && (
-                  <button className="btn" onClick={registraConfermati} disabled={stats.confermati === 0 || registrazioneInCorso}>
-                    {registrazioneInCorso ? 'Registrazione in corso...' : `Registra confermati (${stats.confermati})`}
-                  </button>
-                )}
-                <button className="btn-sec" onClick={() => void caricaTutto()}>Aggiorna dati</button>
+                <div className="cont-module-actions">
+                  {effectiveTab === 'societa' && (
+                    <button className="btn" onClick={() => setModalSocieta(true)}>+ Nuova società</button>
+                  )}
+                  {effectiveTab !== 'societa' && (
+                    <button className="btn-sec" onClick={() => void caricaTutto()}>Aggiorna dati</button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="cont-module-content">
                 {isSettingsArea && (
