@@ -378,7 +378,7 @@ mark.copilot-highlight-inline{
 /* Checkbox table */
 .tbl input[type="checkbox"]{width:16px;height:16px;accent-color:var(--gold);cursor:pointer}
 /* Contabilità sidebar */
-.cont-layout{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;height:calc(100vh - 150px);min-width:0}
+.cont-layout{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;height:calc(100vh - 150px);min-width:0;margin-left:-22px}
 .cont-sidebar{width:64px;background:var(--bg-sidebar);border:1px solid var(--border-subtle);border-radius:18px;padding:12px 8px;overflow:hidden;overflow-y:auto;transition:width .2s ease, padding .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;min-width:0;position:relative;z-index:3;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .cont-sidebar:hover{width:228px;padding:12px;background:var(--bg-sidebar);border-color:var(--border-strong);box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .cont-sidebar-top{display:flex;flex-direction:column;gap:10px;padding:0 4px 12px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.045)}
@@ -552,7 +552,7 @@ mark.copilot-highlight-inline{
 .erp-detail-modal-content{flex:1;min-height:0;display:flex;overflow:hidden}
 
 @media(max-width:960px){
-  .cont-layout{grid-template-columns:1fr;height:auto}
+  .cont-layout{grid-template-columns:1fr;height:auto;margin-left:0}
   .cont-sidebar{width:auto;padding:12px}
   .cont-sidebar:hover{width:auto;padding:12px}
   .cont-sidebar-top-label,.cont-sidebar-section,.cont-sidebar-label,.cont-sidebar-cta{opacity:1;pointer-events:auto;transform:none}
