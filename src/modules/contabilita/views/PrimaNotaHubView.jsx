@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../../utils/pipelineLogger.js'
 import { DaValidareSplitView } from '../da_validare_split_view.jsx'
 import { PrimaNotaGuidata } from '../prima_nota_guidata.jsx'
@@ -191,21 +191,23 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <div>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>📝 Prima Nota</div>
-          <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>{scritture.length} scritture registrate</div>
+    <div className="erp-view">
+      <div className="erp-header">
+        <div className="erp-header-copy">
+          <div className="erp-title">Prima nota</div>
         </div>
-        <button className="btn" onClick={() => setModalNuova(true)}>+ Nuova Scrittura</button>
+        <div className="erp-header-actions">
+          <button className="btn" onClick={() => setModalNuova(true)}>Nuova scrittura</button>
+        </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <div className="erp-filter-card">
+      <div className="erp-toolbar">
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', width: '100%' }}>
           <div className="fg" style={{ flex: 1, minWidth: 200 }}>
             <label>Cerca</label>
-            <input
-              placeholder="🔍 N° documento, descrizione..."
+              <input
+                placeholder="N° documento, descrizione..."
               value={searchTerm}
               onChange={(e) => {
                 const value = e.target.value
@@ -232,13 +234,28 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
               ))}
             </select>
           </div>
+          <div className="erp-toolbar-spacer" />
+          <div className="cont-toolbar-summary">
+            <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> righe</span>
+          </div>
         </div>
+      </div>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty"><div className="empty-ico">📝</div><div className="empty-t">Nessuna scrittura</div></div>
+        <div className="empty"><div className="empty-ico">??</div><div className="empty-t">Nessuna scrittura</div></div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="erp-table-shell erp-data-card">
+          <div className="erp-table-head">
+            <div>
+              <div className="erp-table-title">Registrazioni</div>
+              <div className="erp-table-meta">Vista operativa delle scritture di prima nota.</div>
+            </div>
+            <div className="erp-table-tools">
+              <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> righe</span>
+            </div>
+          </div>
+          <div className="erp-table-body">
           <table className="tbl">
             <thead><tr><th>N°</th><th>Data</th><th>Cod.Cli.</th><th>Cliente/Fornitore</th><th>Causale</th><th>Descrizione</th><th style={{ textAlign: 'right' }}>Dare</th><th style={{ textAlign: 'right' }}>Avere</th><th>Stato</th></tr></thead>
             <tbody>
@@ -251,6 +268,7 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -259,8 +277,8 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 650 }}>
             <div className="modal-hdr">
               <div className="modal-drag" />
-              <div className="modal-title">📝 Nuova Scrittura Prima Nota</div>
-              <button className="modal-close" onClick={() => setModalNuova(false)}>✕</button>
+              <div className="modal-title">?? Nuova Scrittura Prima Nota</div>
+              <button className="modal-close" onClick={() => setModalNuova(false)}>?</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -269,7 +287,7 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
                 <div className="fg"><label>N° Documento</label><input value={formData.numero_documento} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'numero_documento', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, numero_documento: value })) }} placeholder="Es. FT-001/2025" /></div>
                 <div className="fg"><label>Causale Contabile</label><select value={formData.causale_codice} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'causale_codice', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, causale_codice: value })) }}><option value="">-- Seleziona --</option>{causali.map((c) => <option key={c.id} value={c.codice}>{c.codice} - {c.descrizione}</option>)}</select></div>
                 <div className="fg full" style={{ background: 'rgba(200,164,94,.08)', padding: '.75rem', borderRadius: 8, border: '1px solid rgba(200,164,94,.2)' }}>
-                  <label style={{ color: 'var(--gold)', fontWeight: 600 }}>👤 Cliente</label>
+                  <label style={{ color: 'var(--gold)', fontWeight: 600 }}>?? Cliente</label>
                   <select value={formData.cliente_id} onChange={(e) => onClienteChange(e.target.value)} style={{ marginTop: '.35rem' }}>
                     <option value="">-- Seleziona Cliente --</option>
                     {clienti.map((c) => <option key={c.id} value={c.id}>{c.codice_cliente ? `[${c.codice_cliente}] ` : ''}{c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}</option>)}
@@ -285,7 +303,7 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
             </div>
             <div className="modal-foot">
               <button className="btn-sec" onClick={() => setModalNuova(false)}>Annulla</button>
-              <button className="btn" onClick={salvaScrittura}>💾 Registra</button>
+              <button className="btn" onClick={salvaScrittura}>?? Registra</button>
             </div>
           </div>
         </div>
@@ -296,14 +314,26 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
 
 function RegistrateView({ documenti }) {
   return (
-    <div>
-      <div style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '.25rem' }}>✓ Documenti Registrati</div>
-      <div style={{ fontSize: '.75rem', color: 'var(--mu)', marginBottom: '1rem' }}>{documenti.length} documenti registrati in contabilità</div>
+    <div className="erp-view">
+      <div className="erp-header">
+        <div className="erp-header-copy">
+          <div className="erp-kicker">Contabilita</div>
+          <div className="erp-title">Completate</div>
+          <div className="erp-subtitle">{documenti.length} documenti già registrati in contabilità.</div>
+        </div>
+      </div>
 
       {documenti.length === 0 ? (
-        <div className="empty"><div className="empty-ico">✓</div><div className="empty-t">Nessun documento registrato</div></div>
+        <div className="empty"><div className="empty-ico">?</div><div className="empty-t">Nessun documento registrato</div></div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="erp-table-shell">
+          <div className="erp-table-head">
+            <div>
+              <div className="erp-table-title">Documenti completati</div>
+              <div className="erp-table-meta">Storico operativo già contabilizzato, utile per controlli e consultazioni rapide.</div>
+            </div>
+          </div>
+          <div className="erp-table-body">
           <table className="tbl">
             <thead><tr><th>Tipo</th><th>N° Doc</th><th>Data</th><th>Soggetto</th><th>Totale</th><th>Registrato</th></tr></thead>
             <tbody>{documenti.map((d) => {
@@ -320,6 +350,7 @@ function RegistrateView({ documenti }) {
               )
             })}</tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -412,3 +443,4 @@ export default function PrimaNotaHubView({
     </>
   )
 }
+

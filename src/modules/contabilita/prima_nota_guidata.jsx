@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
 import { parseIvaPercent, classifyIvaRegime, formatIvaRegimeLabel } from '../../../domain/resolveIva.js'
 import {
@@ -101,7 +101,7 @@ function buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo
   }
 }
 
-function SearchSelect({ label, value, onChange, options, placeholder = 'Cerca…', formatOption, defaultValue }) {
+function SearchSelect({ label, value, onChange, options, placeholder = 'Cercaâ€¦', formatOption, defaultValue }) {
   const [q, setQ] = useState('')
   const defaultLoggedRef = useRef(false)
   useEffect(() => {
@@ -141,7 +141,7 @@ function SearchSelect({ label, value, onChange, options, placeholder = 'Cerca…
         }}
         style={{ marginTop: '.35rem' }}
       >
-        <option value="">— Seleziona —</option>
+        <option value="">â€” Seleziona â€”</option>
         {filtered.map(o => (
           <option key={o.id} value={o.id}>
             {formatOption ? formatOption(o) : (o.label || o.name || o.descrizione || o.codice || o.id)}
@@ -176,7 +176,7 @@ function CausaleIvaCombobox({
   }, [])
 
   const displayLabel = selected
-    ? `${buildCausaleIvaLabel(selected)} — ${selected.descrizione || ''}`.trim()
+    ? `${buildCausaleIvaLabel(selected)} â€” ${selected.descrizione || ''}`.trim()
     : ''
 
   const options = useMemo(() => {
@@ -206,7 +206,7 @@ function CausaleIvaCombobox({
           type="text"
           readOnly={!open}
           value={open ? filter : displayLabel}
-          placeholder="Cerca causale IVA…"
+          placeholder="Cerca causale IVAâ€¦"
           disabled={disabled}
           onFocus={() => {
             setOpen(true)
@@ -230,7 +230,7 @@ function CausaleIvaCombobox({
           }}
           style={{ padding: '.25rem .45rem', fontSize: '.7rem' }}
         >
-          ▼
+          â–¼
         </button>
       </div>
       {open && (
@@ -268,7 +268,7 @@ function CausaleIvaCombobox({
                 traceStep('UI_INPUT_CHANGE', { value: c.id, payload: { field: 'causale_iva_combobox', rowAliquota } })
               }}
             >
-              {buildCausaleIvaLabel(c)} — {c.descrizione || ''}
+              {buildCausaleIvaLabel(c)} â€” {c.descrizione || ''}
             </li>
           ))}
         </ul>
@@ -277,7 +277,7 @@ function CausaleIvaCombobox({
   )
 }
 
-/** Riga tabella scrittura guidata — log props per binding causale_iva_id (anche a livello riga se presente). */
+/** Riga tabella scrittura guidata â€” log props per binding causale_iva_id (anche a livello riga se presente). */
 function PrimaNotaGuidataRigaRow({
   r,
   rowIndex,
@@ -317,10 +317,10 @@ function PrimaNotaGuidataRigaRow({
           disabled={stato === 'confermata'}
           style={{ width: '100%' }}
         >
-          <option value="">— Seleziona conto —</option>
+          <option value="">â€” Seleziona conto â€”</option>
           {pianoConti.map(c => (
             <option key={c.id} value={c.id}>
-              {(c.codice ? `${c.codice} · ` : '') + (c.descrizione || c.nome || '')}
+              {(c.codice ? `${c.codice} Â· ` : '') + (c.descrizione || c.nome || '')}
             </option>
           ))}
         </select>
@@ -333,7 +333,7 @@ function PrimaNotaGuidataRigaRow({
             traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'descrizione', rowId: r.id, rowIndex } })
             updateRow(r.id, { descrizione: value })
           }}
-          placeholder="Descrizione riga…"
+          placeholder="Descrizione rigaâ€¦"
           disabled={stato === 'confermata'}
         />
       </td>
@@ -374,7 +374,7 @@ function PrimaNotaGuidataRigaRow({
           style={{ padding: '.25rem .45rem', fontSize: '.72rem' }}
           title="Elimina riga"
         >
-          🗑️
+          ðŸ—‘ï¸
         </button>
       </td>
     </tr>
@@ -423,7 +423,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
       setError(null)
       try {
         // Nota: niente backend nuovo. Usiamo in lettura `documenti_contabilita` filtrando per soggetto.
-        // "Aperte" qui = fatture del soggetto con totale>0 e non già “chiuse” nella UI corrente.
+        // "Aperte" qui = fatture del soggetto con totale>0 e non giÃ  â€œchiuseâ€ nella UI corrente.
         const { data, error: e } = soggettoKey.piva
           ? await contabilitaRepo.getDocumentiContabilitaBySoggettoPiva(soggettoKey.piva)
           : await contabilitaRepo.getDocumentiContabilitaBySoggettoCf(soggettoKey.cf)
@@ -499,7 +499,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
       </div>
 
       <div style={{ marginTop: '.75rem' }}>
-        {loading && <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>⏳ Carico fatture…</div>}
+        {loading && <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>â³ Carico fattureâ€¦</div>}
         {!loading && error && <div style={{ fontSize: '.8rem', color: 'var(--rd)' }}>{error}</div>}
         {!loading && !error && items.length === 0 && (
           <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>Nessuna fattura aperta trovata.</div>
@@ -530,7 +530,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
-                      <div style={{ fontWeight: 800, fontSize: '.85rem' }}>{f.numero_documento || '—'}</div>
+                      <div style={{ fontWeight: 800, fontSize: '.85rem' }}>{f.numero_documento || 'â€”'}</div>
                       <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>{fmtDate(f.data_documento)}</div>
                     </div>
                     <div style={{ fontSize: '.75rem', color: 'var(--mu)', marginTop: '.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -552,7 +552,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
 
         {selected && (
           <div style={{ marginTop: '.75rem', paddingTop: '.75rem', borderTop: '1px solid var(--bd)', fontSize: '.78rem', color: 'var(--mu)' }}>
-            Selezionata: <strong style={{ color: 'var(--tx)' }}>{selected.numero_documento || '—'}</strong> · importo chiusura impostato a <strong style={{ color: 'var(--gr)' }}>{fmtMoney(selected.totale)}</strong>
+            Selezionata: <strong style={{ color: 'var(--tx)' }}>{selected.numero_documento || 'â€”'}</strong> Â· importo chiusura impostato a <strong style={{ color: 'var(--gr)' }}>{fmtMoney(selected.totale)}</strong>
           </div>
         )}
       </div>
@@ -575,14 +575,14 @@ export function PrimaNotaGuidata({
   ,canNext = false
   ,onDraftChange = null
 }) {
-  // ─── HEADER (semplice) ────────────────────────────────────────
+  // â”€â”€â”€ HEADER (semplice) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [header, setHeaderInternal] = useState(() => ({
     data_registrazione: initialDraft?.header?.data_registrazione || todayStr(),
     causale_id: initialDraft?.header?.causale_id || '',
     cliente_fornitore_id: initialDraft?.header?.cliente_fornitore_id || ''
   }))
 
-  // ─── RIGHE (core) ─────────────────────────────────────────────
+  // â”€â”€â”€ RIGHE (core) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [rows, setRowsInternal] = useState(() => {
     const start = initialDraft?.rows?.length ? initialDraft.rows : []
     if (start.length) return start.map(r => ({ ...newRow(), ...r }))
@@ -766,7 +766,7 @@ export function PrimaNotaGuidata({
   const isFornitoreRow = (r) => {
     const d = String(r?.descrizione || '').toLowerCase()
     if (d.includes('fornitore')) return true
-    // Fallback: nella scrittura import, la riga fornitore è tipicamente quella con AVERE valorizzato
+    // Fallback: nella scrittura import, la riga fornitore Ã¨ tipicamente quella con AVERE valorizzato
     return toMoneyNumber(r?.avere) > 0
   }
 
@@ -933,7 +933,7 @@ export function PrimaNotaGuidata({
     const det = getPercDetraibileFromCausale(c)
     const aliqTxt = aliq != null ? `${aliq}%` : ''
     const detTxt = det === 100 ? 'detraibile 100%' : (det === 0 ? 'indetraibile 100%' : `detraibile ${det}%`)
-    return [c.codice, aliqTxt, detTxt].filter(Boolean).join(' · ')
+    return [c.codice, aliqTxt, detTxt].filter(Boolean).join(' Â· ')
   }
 
   const applyIvaToRows = useCallback(({ imponibile, iva, ivaIndetraibile }) => {
@@ -958,8 +958,8 @@ export function PrimaNotaGuidata({
     const aliq = parseAliquota(selectedCausaleIva.aliquota) ?? 0
     const percDet = getPercDetraibileFromCausale(selectedCausaleIva)
 
-    // Da import: imponibile/IVA arrivano dal documento (e da più DatiRiepilogo). NON ricalcolare da
-    // totale documento / (1+aliquota): con più aliquote (o 0% + 22%) produrrebbe IVA errata (es. 10,81 vs 10,45).
+    // Da import: imponibile/IVA arrivano dal documento (e da piÃ¹ DatiRiepilogo). NON ricalcolare da
+    // totale documento / (1+aliquota): con piÃ¹ aliquote (o 0% + 22%) produrrebbe IVA errata (es. 10,81 vs 10,45).
     if (fromImport) {
       const nextRegime = classifyIvaRegime({
         causale: selectedCausaleIva,
@@ -1085,18 +1085,18 @@ export function PrimaNotaGuidata({
           const missing = ivaRows.filter(r => !String(r.causale_iva_id || '').trim())
           if (missing.length) {
             missing.forEach(row => traceStep('IVA_ROW_MISSING_CAUSALE', { row }, {}))
-            alert('Una o più righe IVA non hanno causale assegnata')
+            alert('Una o piÃ¹ righe IVA non hanno causale assegnata')
             return null
           }
           const invalidRows = ivaRows.filter(r => !Number.isFinite(r.imponibile) || !Number.isFinite(r.iva))
           if (invalidRows.length) {
             invalidRows.forEach(row => traceStep('IVA_ROW_INVALID', { row }, {}))
-            alert('Una o piÃ¹ righe IVA hanno importi non validi')
+            alert('Una o piÃƒÂ¹ righe IVA hanno importi non validi')
             return null
           }
         } else if (!String(ivaUi.causale_iva_id || '').trim()) {
           traceStep('IVA_ROW_MISSING_CAUSALE', { row: null, legacy_ivaUi: true }, {})
-          alert('Una o più righe IVA non hanno causale assegnata')
+          alert('Una o piÃ¹ righe IVA non hanno causale assegnata')
           return null
         }
       }
@@ -1165,24 +1165,25 @@ export function PrimaNotaGuidata({
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>📝 Prima Nota (Guidata)</div>
-          <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>
+    <div className="erp-guided-shell">
+      <div className="erp-header">
+        <div className="erp-header-copy">
+          <div className="erp-kicker">Contabilita</div>
+          <div className="erp-title">Inserimento guidato</div>
+          <div className="erp-subtitle">
             {stato === 'confermata'
-              ? <>Confermata {progressivo ? <>· Progressivo <strong style={{ color: 'var(--gld2)' }}>{progressivo}</strong></> : null}</>
-              : 'Bozza · Modifica rapida'}
+              ? <>Confermata {progressivo ? <>Â· Progressivo <strong style={{ color: 'var(--gld2)' }}>{progressivo}</strong></> : null}</>
+              : 'Bozza Â· Modifica rapida'}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="erp-header-actions">
           <div style={{ display: 'flex', gap: '.35rem', alignItems: 'center' }}>
             <button className="btn-sec" onClick={() => onPrev && onPrev()} disabled={!onPrev || !canPrev} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
-              ← Fattura precedente
+              â† Fattura precedente
             </button>
             <button className="btn-sec" onClick={() => onNext && onNext()} disabled={!onNext || !canNext} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
-              Fattura successiva →
+              Fattura successiva â†’
             </button>
           </div>
           <span className={'bdg ' + (totals.bilanciata ? 'bdg-green' : 'bdg-red')} style={{ fontSize: '.65rem' }}>
@@ -1190,18 +1191,17 @@ export function PrimaNotaGuidata({
           </span>
           {stato !== 'confermata' ? (
             <button className="btn" onClick={onConfirm} disabled={!totals.bilanciata}>
-              ✓ Conferma
+              âœ“ Conferma
             </button>
           ) : (
             <button className="btn-sec" onClick={onBackToDraft}>
-              ↩ Torna in bozza
+              â†© Torna in bozza
             </button>
           )}
         </div>
       </div>
 
-      {/* HEADER */}
-      <div className="card" style={{ marginTop: '.9rem' }}>
+      <div className="erp-flat-panel">
         <div className="form-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(160px, 1fr))' }}>
           <div className="fg">
             <label>Data registrazione</label>
@@ -1222,8 +1222,8 @@ export function PrimaNotaGuidata({
             value={header.causale_id}
             onChange={(id) => runSetHeader(p => ({ ...p, causale_id: id }))}
             options={causali.map(c => ({ ...c, id: c.id }))}
-            formatOption={(c) => `${c.codice || '—'} · ${c.descrizione || c.label || ''}`.trim()}
-            placeholder="Cerca causale…"
+            formatOption={(c) => `${c.codice || 'â€”'} Â· ${c.descrizione || c.label || ''}`.trim()}
+            placeholder="Cerca causaleâ€¦"
           />
 
           <SearchSelect
@@ -1236,7 +1236,7 @@ export function PrimaNotaGuidata({
               const cod = c.codice_cliente ? `[${c.codice_cliente}] ` : ''
               return `${cod}${nome}`.trim()
             }}
-            placeholder="Cerca cliente/fornitore…"
+            placeholder="Cerca cliente/fornitoreâ€¦"
           />
 
           <div className="fg">
@@ -1250,10 +1250,10 @@ export function PrimaNotaGuidata({
       </div>
 
       {(ivaInsightsLoading || ivaInsightsLimited.length > 0) && (
-        <div className="card" style={{ marginTop: '.75rem' }}>
+        <div className="erp-flat-panel">
           {ivaInsightsLoading && ivaInsightsLimited.length === 0 && (
             <div className="alert alert-info" style={{ margin: 0 }}>
-              Analisi IVA in corso…
+              Analisi IVA in corsoâ€¦
             </div>
           )}
           {ivaInsightsLimited.map((ins) => {
@@ -1277,8 +1277,7 @@ export function PrimaNotaGuidata({
         </div>
       )}
 
-      {/* TABS DINAMICHE */}
-      <div className="card" style={{ marginTop: '.75rem' }}>
+      <div className="erp-flat-panel">
         <Tabs
           tabs={tabs}
           activeId={activeTab}
@@ -1289,15 +1288,14 @@ export function PrimaNotaGuidata({
         />
       </div>
 
-      {/* TAB: SCRITTURA */}
       {activeTab === 'scrittura' && (
-        <div className="card" style={{ marginTop: '.75rem', padding: 0, overflow: 'hidden' }}>
+        <div className="erp-table-shell">
           <div style={{ padding: '.75rem 1rem', borderBottom: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '.8rem', fontWeight: 700 }}>Righe Prima Nota</div>
             <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }}>
               <button className="btn-sec" onClick={addRow} disabled={stato === 'confermata'}>+ Riga</button>
               <div style={{ fontSize: '.72rem', color: 'var(--mu)' }}>
-                Totale Dare <strong style={{ color: 'var(--gr)' }}>{totals.totDare.toFixed(2)}</strong> · Totale Avere <strong style={{ color: 'var(--rd)' }}>{totals.totAvere.toFixed(2)}</strong>
+                Totale Dare <strong style={{ color: 'var(--gr)' }}>{totals.totDare.toFixed(2)}</strong> Â· Totale Avere <strong style={{ color: 'var(--rd)' }}>{totals.totAvere.toFixed(2)}</strong>
               </div>
             </div>
           </div>
@@ -1350,23 +1348,22 @@ export function PrimaNotaGuidata({
                 Scrittura sbilanciata: correggi Dare/Avere per confermare.
               </div>
               <div style={{ fontSize: '.72rem', color: 'var(--mu)' }}>
-                Ultima riga toccata: <strong>{lastFocusedRowId.current ? '✓' : '—'}</strong>
+                Ultima riga toccata: <strong>{lastFocusedRowId.current ? 'âœ“' : 'â€”'}</strong>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* TAB: MOVIMENTI IVA — una riga per aliquota (ivaRows) */}
       {activeTab === 'iva' && (
-        <div className="card" style={{ marginTop: '.75rem' }}>
+        <div className="erp-flat-panel">
           <div style={{ fontWeight: 800, marginBottom: '.35rem' }}>Movimenti IVA</div>
           <div style={{ fontSize: '.78rem', color: 'var(--mu)', marginBottom: '.75rem' }}>
-            Una riga per ogni aliquota presente nel documento. La verità IVA è in queste righe; la scrittura si aggiorna di conseguenza.
+            Una riga per ogni aliquota presente nel documento. La veritÃ  IVA Ã¨ in queste righe; la scrittura si aggiorna di conseguenza.
           </div>
           {regimeSummary.unknown && (
             <div className="alert alert-warn" style={{ marginBottom: '.6rem' }}>
-              Regime IVA non determinato su una o più righe. Verifica causale e natura FE.
+              Regime IVA non determinato su una o piÃ¹ righe. Verifica causale e natura FE.
             </div>
           )}
           {regimeSummary.mixed && (
@@ -1476,7 +1473,6 @@ export function PrimaNotaGuidata({
         </div>
       )}
 
-      {/* TAB: PARTITARIO (placeholder semplice) */}
       {activeTab === 'partitario' && (
         <Partitario
           clienteFornitoreId={header.cliente_fornitore_id}
@@ -1488,3 +1484,4 @@ export function PrimaNotaGuidata({
     </div>
   )
 }
+

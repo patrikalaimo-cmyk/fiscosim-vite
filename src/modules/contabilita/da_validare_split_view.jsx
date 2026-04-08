@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseXMLFattura } from '../../../domain/fatture.js'
 import { resolveIvaOrNull } from '../../../domain/resolveIva.js'
 import { evaluateDraftReliability, reliabilityTierLabel } from '../../../domain/draftReliability.js'
@@ -115,7 +115,7 @@ function PdfZoomPane({ doc, xmlPreview }) {
         <span style={{ fontWeight: 600, fontSize: '.85rem' }}>Documento</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
           <button type="button" className="btn-sec" style={{ padding: '.2rem .45rem', fontSize: '.65rem' }} onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10))}>
-            −
+            -
           </button>
           <span style={{ fontSize: '.68rem', color: 'var(--mu)', minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
           <button type="button" className="btn-sec" style={{ padding: '.2rem .45rem', fontSize: '.65rem' }} onClick={() => setZoom((z) => Math.min(2.5, Math.round((z + 0.1) * 10) / 10))}>
@@ -151,7 +151,7 @@ function PdfZoomPane({ doc, xmlPreview }) {
             <iframe title="pdf" src={fileUrl} style={{ width: '100%', height: '100%', minHeight: 480, border: 'none' }} />
           ) : (
             <div style={{ textAlign: 'center', color: 'var(--mu)', padding: '2rem' }}>
-              <div style={{ fontSize: '2rem' }}>📄</div>
+              <div style={{ fontSize: '2rem' }}>??</div>
               <div>Nessun file collegato</div>
             </div>
           )}
@@ -210,6 +210,20 @@ function normContoCode(c) {
     .replace(/\s+/g, '')
     .replace(/\./g, '')
     .trim()
+}
+
+function getDocImponibileIva(doc) {
+  const d = parseDati(doc?.dati_estratti)
+  const imponibile =
+    Number(doc?.imponibile ?? d?.imponibile ?? d?.totale_imponibile ?? d?.base_imponibile ?? 0) || 0
+  let iva =
+    Number(doc?.imposta ?? doc?.iva ?? d?.imposta ?? d?.iva ?? d?.totale_iva ?? 0) || 0
+
+  if ((!iva || iva === 0) && Array.isArray(d?.riepilogo_iva)) {
+    iva = d.riepilogo_iva.reduce((acc, row) => acc + (Number(row?.imposta ?? row?.iva ?? 0) || 0), 0)
+  }
+
+  return { imponibile, iva }
 }
 
 function AccountingForm({
@@ -322,27 +336,6 @@ function AccountingForm({
     }
   }
 
-  if (!doc) {
-    return (
-      <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div className="split-pane-header">
-          <span style={{ fontWeight: 600 }}>Scrittura</span>
-        </div>
-        <div className="split-pane-content" style={{ color: 'var(--mu)' }}>
-          Seleziona un documento dalla lista.
-        </div>
-      </div>
-    )
-  }
-
-  const learnFq = learningFrequenzaFromMeta(entryMeta)
-  const showLearningInsight = isAiLearningSource(entryMeta)
-
-  const hl = copilotHighlight && typeof copilotHighlight === 'object' ? copilotHighlight : null
-  const contoCodHl =
-    hl?.contoCodes?.length > 0 &&
-    selectedConto &&
-    hl.contoCodes.some((c) => normContoCode(c) === normContoCode(selectedConto.codice))
   const reliability = useMemo(() => evaluateDraftReliability({ doc }), [doc])
   const insightRows = useMemo(() => {
     if (!Array.isArray(ivaInsights)) return []
@@ -358,6 +351,27 @@ function AccountingForm({
   }, [ivaInsights])
   const insightRowsLimited = useMemo(() => insightRows.slice(0, 3), [insightRows])
   const insightExtraCount = insightRows.length > insightRowsLimited.length ? (insightRows.length - insightRowsLimited.length) : 0
+  const learnFq = learningFrequenzaFromMeta(entryMeta)
+  const showLearningInsight = isAiLearningSource(entryMeta)
+
+  const hl = copilotHighlight && typeof copilotHighlight === 'object' ? copilotHighlight : null
+  const contoCodHl =
+    hl?.contoCodes?.length > 0 &&
+    selectedConto &&
+    hl.contoCodes.some((c) => normContoCode(c) === normContoCode(selectedConto.codice))
+
+  if (!doc) {
+    return (
+      <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="split-pane-header">
+          <span style={{ fontWeight: 600 }}>Scrittura</span>
+        </div>
+        <div className="split-pane-content" style={{ color: 'var(--mu)' }}>
+          Seleziona un documento dalla lista.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -573,7 +587,7 @@ function AccountingForm({
             <div className="modal-hdr">
               <div className="modal-title">Learning rule</div>
               <button type="button" className="modal-close" disabled={learningRuleBusy} onClick={() => setLearningRuleModal(null)}>
-                ✕
+                ?
               </button>
             </div>
             <div className="modal-body" style={{ fontSize: '.85rem', lineHeight: 1.45 }}>
@@ -653,6 +667,8 @@ export function DaValidareSplitView({
   const [previewRows, setPreviewRows] = useState([])
   const [bulkLoading, setBulkLoading] = useState(false)
   const [pendingFlags, setPendingFlags] = useState(null)
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false)
+  const [detailMode, setDetailMode] = useState('form')
 
   const [autoValidateMode, setAutoValidateMode] = useState(false)
   const [entryMetaByDocId, setEntryMetaByDocId] = useState({})
@@ -967,6 +983,9 @@ export function DaValidareSplitView({
   }, [filtered, focusedId])
 
   const focusedDoc = useMemo(() => filtered.find((d) => d.id === focusedId) || null, [filtered, focusedId])
+  useEffect(() => {
+    if (!focusedDoc) setDetailPanelOpen(false)
+  }, [focusedDoc])
   const copilotContextDoc = useMemo(() => focusedDoc || filtered[0] || null, [focusedDoc, filtered])
   const copilotDocumentIdForApi = copilotContextDoc?.id || null
   const focusedEntryMetaDisplay = useMemo(() => {
@@ -1005,6 +1024,8 @@ export function DaValidareSplitView({
         lastAnchorRef.current = index
       } else {
         setFocusedId(d.id)
+        setDetailPanelOpen(true)
+        setDetailMode('form')
         lastAnchorRef.current = index
       }
     },
@@ -1107,181 +1128,88 @@ export function DaValidareSplitView({
   const allFilteredSelected = filtered.length > 0 && filtered.every((d) => selectedIds.includes(d.id))
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        flex: 1,
-        minHeight: 0,
-        height: 'calc(100vh - 72px)',
-        maxHeight: 'calc(100vh - 72px)',
-        gap: 0,
-      }}
-    >
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '.5rem',
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
-      >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: '.5rem' }}>
-        <div>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Da Validare</div>
-          <div style={{ fontSize: '.72rem', color: 'var(--mu)' }}>Anteprima documento, modifica e azioni massive</div>
+    <div className="erp-view erp-table-dominant" style={{ flex: 1, minHeight: 0 }}>
+      <div className="erp-filter-card">
+      <div className="erp-toolbar erp-toolbar-tight">
+        <div className="fg erp-search-field" style={{ flex: 1, minWidth: 220, marginBottom: 0 }}>
+          <input placeholder="Cerca numero documento o soggetto" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.5rem' }}>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '.35rem',
-              fontSize: '.72rem',
-              cursor: 'pointer',
-              userSelect: 'none',
-              padding: '.25rem .5rem',
-              borderRadius: 8,
-              border: '1px solid ' + (autoValidateMode ? 'var(--gold)' : 'var(--bd)'),
-              background: autoValidateMode ? 'rgba(200,164,94,.12)' : 'var(--s2)',
-            }}
-          >
-            <input type="checkbox" checked={autoValidateMode} onChange={toggleAutoValidateMode} />
-            Auto Validate Mode
-          </label>
+        <div className="fg" style={{ minWidth: 220, marginBottom: 0 }}>
+          <select value={filtroFornitore} onChange={(e) => setFiltroFornitore(e.target.value)}>
+            <option value="">Tutti i soggetti</option>
+            {fornitori.map((p) => (
+              <option key={p} value={p}>
+                {documenti.find((d) => d.soggetto_piva === p)?.soggetto_denominazione || p}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="erp-status-tabs erp-toolbar-tabs">
+          {[
+            ['tutti', filtered.length, 'Tutti'],
+            ['pending', stats.daValidare, 'In attesa'],
+            ['confirmed', stats.confermati, 'Confermati'],
+            ['error', stats.errori, 'Da rivedere'],
+          ].map(([value, count, label]) => (
+            <button
+              type="button"
+              key={value}
+              className={'erp-status-tab' + (filtroStato === value ? ' active' : '')}
+              onClick={() => setFiltroStato(value)}
+            >
+              <span>{label}</span>
+              <span className="erp-status-count">{count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="erp-toolbar-group">
+          <button type="button" className="btn-sec btn-sm" onClick={selectSameAnagrafica}>Stessa anagrafica</button>
+          <button type="button" className="btn-sec btn-sm" onClick={selectSameAiConto}>Stesso conto AI</button>
           {autoValidateMode && (
             <>
-              <button type="button" className="btn-sec" style={{ fontSize: '.68rem', padding: '.25rem .5rem' }} disabled={entriesLoading} onClick={() => void refreshAutoValidateScores()}>
-                {entriesLoading ? '…' : 'Aggiorna punteggi'}
+              <button type="button" className="btn-sec btn-sm" disabled={entriesLoading} onClick={() => void refreshAutoValidateScores()}>
+                {entriesLoading ? '...' : 'Aggiorna punteggi'}
               </button>
-              <button type="button" className="btn-sec" style={{ fontSize: '.68rem', padding: '.25rem .5rem' }} onClick={handleApproveAllHighConfidence}>
-                Approva tutti &gt;90%
-              </button>
-              <button type="button" className="btn-sec" style={{ fontSize: '.68rem', padding: '.25rem .5rem' }} onClick={handleApproveAllFilteredPending}>
-                Approva tutti (lista)
-              </button>
-              <button type="button" className="btn-sec" style={{ fontSize: '.68rem', padding: '.25rem .5rem' }} onClick={handleSelectLowConfidenceOnly}>
-                Solo bassa confidenza
-              </button>
+              <button type="button" className="btn-sec btn-sm" onClick={handleApproveAllHighConfidence}>Approva &gt;90%</button>
+              <button type="button" className="btn-sec btn-sm" onClick={handleApproveAllFilteredPending}>Approva lista</button>
             </>
           )}
-          <button
-            type="button"
-            className={copilotOpen ? 'btn' : 'btn-sec'}
-            style={{ fontSize: '.68rem', padding: '.25rem .55rem' }}
-            onClick={() => setCopilotOpen((v) => !v)}
-          >
-            {copilotOpen ? 'Chiudi Copilot' : '🤖 Copilot contabile'}
-          </button>
-          <button type="button" className="btn" onClick={registraConfermati} disabled={stats.confermati === 0 || registrazioneInCorso}>
-            {registrazioneInCorso ? 'Registrazione in corso...' : `Registra confermati (${stats.confermati})`}
+          <label className={'erp-inline-toggle' + (autoValidateMode ? ' active' : '')}>
+            <input type="checkbox" checked={autoValidateMode} onChange={toggleAutoValidateMode} />
+            <span>Auto Validate</span>
+          </label>
+          <button type="button" className={copilotOpen ? 'btn' : 'btn-sec'} onClick={() => setCopilotOpen((v) => !v)}>
+            {copilotOpen ? 'Chiudi Copilot' : 'Copilot contabile'}
           </button>
         </div>
-      </div>
-
-      {autoValidateMode && (
-        <div
-          style={{
-            fontSize: '.65rem',
-            color: 'var(--mu)',
-            padding: '.35rem .5rem',
-            background: 'var(--s2)',
-            borderRadius: 8,
-            border: '1px solid var(--bd)',
-          }}
-        >
-          Verde &gt;90% · Giallo 70–90% · Rosso &lt;70%. Passa il mouse sul punteggio o clicca per fissare il motivo sotto l’elenco (fonte: memoria / pattern / learning / fallback). Con la modalità attiva vengono selezionati automaticamente i documenti in attesa con punteggio &gt;90%.
+        <div className="erp-toolbar-spacer" />
+        <div className="cont-toolbar-summary">
+          <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> documenti</span>
+          {selectedIds.length > 0 && <span className="cont-toolbar-pill"><strong>{selectedIds.length}</strong> selezionati</span>}
         </div>
-      )}
-
-      <div style={{ display: 'flex', gap: '.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
-        {[
-          ['🟡', stats.daValidare, 'In attesa', 'pending'],
-          ['🟢', stats.confermati, 'Confermati', 'confirmed'],
-          ['🔴', stats.errori, 'Da rivedere', 'error'],
-        ].map(([ico, n, l, f]) => (
-          <button
-            type="button"
-            key={f}
-            className="btn-sec"
-            onClick={() => setFiltroStato((prev) => (prev === f ? 'tutti' : f))}
-            style={{
-              padding: '.4rem .75rem',
-              borderColor: filtroStato === f ? 'var(--gold)' : 'var(--bd)',
-              background: filtroStato === f ? 'rgba(200,164,94,.12)' : 'var(--s2)',
-            }}
-          >
-            {ico} <strong>{n}</strong> <span style={{ fontSize: '.7rem', color: 'var(--mu)' }}>{l}</span>
-          </button>
-        ))}
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem', flex: 1, minHeight: 0 }}>
-        <PdfZoomPane doc={focusedDoc} xmlPreview={xmlPreview} />
-        <AccountingForm
-          doc={focusedDoc}
-          pianoConti={pianoConti}
-          causaliIva={causaliIva}
-          onSave={onSingleSave}
-          onOpenGuidata={onEdit}
-          listIds={listIds}
-          idxInList={idxInList}
-          autoValidateMode={autoValidateMode}
-          entryMeta={focusedEntryMetaDisplay}
-          onRefreshEntryMeta={refreshEntryMetaForDocument}
-          copilotHighlight={copilotHighlights}
-          ivaInsights={focusedDoc ? (ivaInsightsByDocId[String(focusedDoc.id)] || []) : []}
-          ivaInsightsLoading={ivaInsightsLoading}
-          onTogglePinExplanation={
-            focusedDoc && autoValidateMode
-              ? () => togglePinExplanationForDoc(focusedDoc.id, focusedEntryMetaDisplay)
-              : null
-          }
-        />
       </div>
 
       {selectedIds.length >= 1 && (
-        <div
-          className="card"
-          style={{
-            padding: '.5rem .75rem',
-            flexShrink: 0,
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: '.5rem',
-            border: '1px solid var(--gold)',
-            background: 'rgba(200,164,94,.08)',
-          }}
-        >
+        <div className="erp-bulkbar">
           <strong style={{ fontSize: '.78rem' }}>Selezione: {selectedIds.length}</strong>
           <input type="date" value={bulkDataReg} onChange={(e) => setBulkDataReg(e.target.value)} style={{ fontSize: '.72rem' }} />
-          <select value={bulkContoId} onChange={(e) => setBulkContoId(e.target.value)} style={{ fontSize: '.72rem', maxWidth: 200 }}>
+          <select value={bulkContoId} onChange={(e) => setBulkContoId(e.target.value)} style={{ fontSize: '.72rem', maxWidth: 220 }}>
             <option value="">Conto (nessun cambio)</option>
             {pianoConti
               .filter((c) => c.livello >= 3)
               .slice(0, 400)
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.codice} — {c.descrizione}
+                  {c.codice} - {c.descrizione}
                 </option>
               ))}
           </select>
-          <input
-            placeholder="Tipo pagamento"
-            value={bulkTipoPag}
-            onChange={(e) => setBulkTipoPag(e.target.value)}
-            style={{ fontSize: '.72rem', width: 140 }}
-          />
+          <input placeholder="Tipo pagamento" value={bulkTipoPag} onChange={(e) => setBulkTipoPag(e.target.value)} style={{ fontSize: '.72rem', width: 140 }} />
           <select value={bulkCausaleIva} onChange={(e) => setBulkCausaleIva(e.target.value)} style={{ fontSize: '.72rem', maxWidth: 180 }}>
             <option value="">Causale IVA (nessun cambio)</option>
             {causaliIva.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.codice}
-              </option>
+              <option key={c.id} value={c.id}>{c.codice}</option>
             ))}
           </select>
           <label style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
@@ -1292,32 +1220,14 @@ export function DaValidareSplitView({
             <input type="checkbox" checked={bulkRegister} onChange={(e) => setBulkRegister(e.target.checked)} />
             Contabilizza
           </label>
-          <button
-            type="button"
-            className="btn-sec"
-            disabled={bulkLoading}
-            onClick={() => {
-              setBulkApprove(true)
-              setBulkRegister(false)
-              void runBulkPreview({ approve: true, approveAndRegister: false })
-            }}
-          >
-            Anteprima solo approva
+          <button type="button" className="btn-sec" disabled={bulkLoading} onClick={() => { setBulkApprove(true); setBulkRegister(false); void runBulkPreview({ approve: true, approveAndRegister: false }) }}>
+            Anteprima approva
           </button>
-          <button
-            type="button"
-            className="btn-sec"
-            disabled={bulkLoading}
-            onClick={() => {
-              setBulkApprove(true)
-              setBulkRegister(true)
-              void runBulkPreview({ approve: true, approveAndRegister: true })
-            }}
-          >
+          <button type="button" className="btn-sec" disabled={bulkLoading} onClick={() => { setBulkApprove(true); setBulkRegister(true); void runBulkPreview({ approve: true, approveAndRegister: true }) }}>
             Anteprima approva + contabilizza
           </button>
           <button type="button" className="btn-sec" disabled={bulkLoading} onClick={() => runBulkPreview()}>
-            Anteprima (usa caselle)
+            Anteprima (caselle)
           </button>
           <button type="button" className="btn" disabled={bulkLoading} onClick={() => setSelectedIds([])}>
             Deseleziona
@@ -1341,190 +1251,218 @@ export function DaValidareSplitView({
         </div>
       )}
 
-      <div className="card" style={{ flex: '0 0 220px', minHeight: 160, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '.4rem .6rem', borderBottom: '1px solid var(--bd)', display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <input placeholder="Cerca…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ flex: 1, minWidth: 120, fontSize: '.75rem' }} />
-          <select value={filtroFornitore} onChange={(e) => setFiltroFornitore(e.target.value)} style={{ fontSize: '.72rem', maxWidth: 160 }}>
-            <option value="">Tutti i soggetti</option>
-            {fornitori.map((p) => (
-              <option key={p} value={p}>
-                {documenti.find((d) => d.soggetto_piva === p)?.soggetto_denominazione || p}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="btn-sec" style={{ fontSize: '.65rem', padding: '.2rem .4rem' }} onClick={selectSameAnagrafica}>
-            + stessa anagrafica
-          </button>
-          <button type="button" className="btn-sec" style={{ fontSize: '.65rem', padding: '.2rem .4rem' }} onClick={selectSameAiConto}>
-            + stesso conto AI
-          </button>
+      {autoValidateMode && (
+        <div className="erp-inline-note">
+          Verde &gt;90%, giallo 70-90%, rosso &lt;70%. Passa sul punteggio o clicca per fissare il motivo sotto l'elenco.
+          <button type="button" className="btn-sec btn-sm" onClick={handleSelectLowConfidenceOnly}>Solo bassa confidenza</button>
         </div>
-        {autoValidateMode && pinnedExplanation && (
-          <div
-            style={{
-              padding: '.4rem .55rem',
-              borderBottom: '1px solid var(--bd)',
-              background: 'rgba(200,164,94,.06)',
-              fontSize: '.7rem',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: '.5rem',
-            }}
-          >
-            <span style={{ lineHeight: 1.35, wordBreak: 'break-word' }}>
-              <strong style={{ color: 'var(--gold)' }}>Motivo</strong> {pinnedExplanation.text}
-            </span>
-            <button
-              type="button"
-              className="btn-sec"
-              style={{ fontSize: '.62rem', padding: '.15rem .4rem', flexShrink: 0 }}
-              onClick={() => setPinnedExplanation(null)}
-            >
-              Chiudi
-            </button>
-          </div>
-        )}
-        <div style={{ overflow: 'auto', flex: 1 }}>
-          {filtered.length === 0 ? (
-            <div className="empty" style={{ padding: '1rem' }}>
-              <div className="empty-t">Nessun documento</div>
+      )}
+
+      <div className="erp-dominant-main">
+        <div className="erp-table-shell table-dominant erp-data-card" style={{ flex: 1, minHeight: 0 }}>
+            <div className="erp-table-head">
+              <div>
+                <div className="erp-table-title">Documenti da validare</div>
+                <div className="erp-table-meta">Elenco operativo per conferma, revisione e contabilizzazione.</div>
+              </div>
+              <div className="erp-table-tools">
+                <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> righe</span>
+                {selectedIds.length > 0 && <span className="cont-toolbar-pill"><strong>{selectedIds.length}</strong> selezionati</span>}
+              </div>
             </div>
-          ) : (
-            <table className="tbl" style={{ fontSize: '.74rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: 36 }}>
-                    <input type="checkbox" checked={allFilteredSelected} onChange={selectAllFiltered} />
-                  </th>
-                  <th>Stato</th>
-                  {autoValidateMode && <th style={{ width: 76 }}>AI %</th>}
-                  <th>N°</th>
-                  <th>Data</th>
-                  <th>Soggetto</th>
-                  <th>Totale</th>
-                  <th>Conto</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((d, i) => {
-                  const rh = focusedId === d.id ? copilotHighlights : null
-                  const pcRow = pianoConti.find((c) => c.id === d.conto_id)
-                  const contoCellHl =
-                    rh?.contoCodes?.length > 0 &&
-                    pcRow &&
-                    rh.contoCodes.some((c) => normContoCode(c) === normContoCode(pcRow.codice))
-                  return (
-                  <tr
-                    key={d.id}
-                    onClick={(e) => handleRowClick(e, d, i)}
-                    style={{
-                      cursor: 'pointer',
-                      outline: focusedId === d.id ? '2px solid var(--gold)' : 'none',
-                      background: selectedIds.includes(d.id) ? 'rgba(200,164,94,.12)' : undefined,
-                    }}
-                  >
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelected(d.id)} />
-                    </td>
-                    <td>
-                      <span className={'bdg status-' + d.validation_status}>
-                        {d.validation_status === 'pending' ? '🟡' : d.validation_status === 'confirmed' ? '🟢' : '🔴'}
-                      </span>
-                    </td>
-                    {autoValidateMode && (
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {(() => {
-                          const meta = entryMetaByDocId[d.id]
-                          const c = meta?.ai_confidence
-                          const label = c != null && Number.isFinite(Number(c)) ? `${Math.round(Number(c))}%` : '—'
-                          const tip = `${buildAutoValidateTooltip(meta)}\n\nClic per fissare sotto l’elenco.`
-                          const learnRow = isAiLearningSource(meta)
-                          const learnFqRow = learningFrequenzaFromMeta(meta)
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                title={tip}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  togglePinExplanationForDoc(d.id, meta)
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    togglePinExplanationForDoc(d.id, meta)
-                                  }
-                                }}
-                                style={{
-                                  display: 'inline-block',
-                                  minWidth: 40,
-                                  textAlign: 'center',
-                                  padding: '.12rem .35rem',
-                                  borderRadius: 6,
-                                  fontSize: '.68rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  ...confidenceBadgeStyle(c),
-                                }}
-                              >
-                                {label}
+            {autoValidateMode && pinnedExplanation && (
+              <div style={{ padding: '.55rem .75rem', borderBottom: '1px solid var(--bd)', background: 'rgba(200,164,94,.06)', fontSize: '.72rem', lineHeight: 1.4 }}>
+                <strong style={{ color: 'var(--gold)' }}>Motivo</strong> {pinnedExplanation.text}
+              </div>
+            )}
+            <div className="erp-table-body">
+              {filtered.length === 0 ? (
+                <div className="empty" style={{ padding: '1rem' }}>
+                  <div className="empty-t">Nessun documento</div>
+                </div>
+              ) : (
+                <div className="tbl-wrap">
+                  <table className="tbl" style={{ fontSize: '.74rem' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 36 }}></th>
+                        <th>Stato</th>
+                        {autoValidateMode && <th style={{ width: 76 }}>AI %</th>}
+                        <th>N° documento</th>
+                        <th>Data</th>
+                        <th>Soggetto</th>
+                        <th style={{ textAlign: 'right' }}>Imponibile</th>
+                        <th style={{ textAlign: 'right' }}>IVA</th>
+                        <th style={{ textAlign: 'right' }}>Totale</th>
+                        <th>Conto</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((d, i) => {
+                        const rh = focusedId === d.id ? copilotHighlights : null
+                        const pcRow = pianoConti.find((c) => c.id === d.conto_id)
+                        const { imponibile, iva } = getDocImponibileIva(d)
+                        const contoCellHl =
+                          rh?.contoCodes?.length > 0 &&
+                          pcRow &&
+                          rh.contoCodes.some((c) => normContoCode(c) === normContoCode(pcRow.codice))
+                        return (
+                          <tr
+                            key={d.id}
+                            onClick={(e) => handleRowClick(e, d, i)}
+                            style={{
+                              cursor: 'pointer',
+                              outline: focusedId === d.id ? '2px solid var(--gold)' : 'none',
+                              background: selectedIds.includes(d.id) ? 'rgba(200,164,94,.12)' : undefined,
+                            }}
+                          >
+                            <td onClick={(e) => e.stopPropagation()}>
+                              <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelected(d.id)} />
+                            </td>
+                            <td>
+                              <span className={'bdg status-' + d.validation_status}>
+                                {d.validation_status === 'pending' ? 'In attesa' : d.validation_status === 'confirmed' ? 'Confermato' : 'Errore'}
                               </span>
-                              {learnRow && (
-                                <span
-                                  style={{
-                                    fontSize: '.58rem',
-                                    color: 'var(--mu)',
-                                    lineHeight: 1.15,
-                                    textAlign: 'center',
-                                    maxWidth: 72,
-                                  }}
-                                  title="Learned from your past corrections"
-                                >
-                                  {learnFqRow != null ? `Used ${learnFqRow}×` : 'Learning'}
-                                </span>
+                            </td>
+                            {autoValidateMode && (
+                              <td onClick={(e) => e.stopPropagation()}>
+                                {(() => {
+                                  const meta = entryMetaByDocId[d.id]
+                                  const c = meta?.ai_confidence
+                                  const label = c != null && Number.isFinite(Number(c)) ? `${Math.round(Number(c))}%` : '—'
+                                  const tip = `${buildAutoValidateTooltip(meta)}\n\nClic per fissare sotto l'elenco.`
+                                  const learnRow = isAiLearningSource(meta)
+                                  const learnFqRow = learningFrequenzaFromMeta(meta)
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                      <span
+                                        role="button"
+                                        tabIndex={0}
+                                        title={tip}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          togglePinExplanationForDoc(d.id, meta)
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            togglePinExplanationForDoc(d.id, meta)
+                                          }
+                                        }}
+                                        style={{
+                                          display: 'inline-block',
+                                          minWidth: 40,
+                                          textAlign: 'center',
+                                          padding: '.12rem .35rem',
+                                          borderRadius: 6,
+                                          fontSize: '.68rem',
+                                          fontWeight: 700,
+                                          cursor: 'pointer',
+                                          ...confidenceBadgeStyle(c),
+                                        }}
+                                      >
+                                        {label}
+                                      </span>
+                                      {learnRow && (
+                                        <span style={{ fontSize: '.58rem', color: 'var(--mu)', lineHeight: 1.15, textAlign: 'center', maxWidth: 72 }} title="Learned from your past corrections">
+                                          {learnFqRow != null ? `Used ${learnFqRow}x` : 'Learning'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
+                              </td>
+                            )}
+                            <td className={rh?.numeroDocumento ? 'copilot-highlight' : undefined} style={{ fontWeight: 600, padding: rh?.numeroDocumento ? 6 : undefined }}>
+                              {d.numero_documento || '—'}
+                            </td>
+                            <td>{fmtDate(d.data_documento)}</td>
+                            <td className={rh?.soggetto || rh?.piva ? 'copilot-highlight' : undefined} style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', padding: rh?.soggetto || rh?.piva ? 6 : undefined }}>
+                              {d.soggetto_denominazione}
+                            </td>
+                            <td className={rh?.imponibile ? 'copilot-highlight' : undefined} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', padding: rh?.imponibile ? 6 : undefined }}>
+                              {fmt(imponibile)}
+                            </td>
+                            <td className={rh?.iva ? 'copilot-highlight' : undefined} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', padding: rh?.iva ? 6 : undefined }}>
+                              {fmt(iva)}
+                            </td>
+                            <td className={rh?.totale ? 'copilot-highlight' : undefined} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, padding: rh?.totale ? 6 : undefined }}>
+                              {fmt(d.totale)}
+                            </td>
+                            <td className={contoCellHl ? 'copilot-highlight' : undefined} style={{ color: 'var(--mu)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', padding: contoCellHl ? 6 : undefined }}>
+                              {pianoConti.find((c) => c.id === d.conto_id)?.descrizione || '—'}
+                            </td>
+                            <td onClick={(e) => e.stopPropagation()}>
+                              {d.validation_status === 'pending' && (
+                                <button type="button" className="btn-icon" title="Conferma" onClick={() => confermaDoc?.(d.id)}>
+                                  ✓
+                                </button>
                               )}
-                            </div>
-                          )
-                        })()}
-                      </td>
-                    )}
-                    <td className={rh?.numeroDocumento ? 'copilot-highlight' : undefined} style={{ fontWeight: 600, padding: rh?.numeroDocumento ? 6 : undefined }}>
-                      {d.numero_documento || '—'}
-                    </td>
-                    <td>{fmtDate(d.data_documento)}</td>
-                    <td
-                      className={rh?.soggetto || rh?.piva ? 'copilot-highlight' : undefined}
-                      style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', padding: rh?.soggetto || rh?.piva ? 6 : undefined }}
-                    >
-                      {d.soggetto_denominazione}
-                    </td>
-                    <td className={rh?.totale || rh?.imponibile || rh?.iva ? 'copilot-highlight' : undefined} style={{ padding: rh?.totale || rh?.imponibile || rh?.iva ? 6 : undefined }}>
-                      {fmt(d.totale)}
-                    </td>
-                    <td
-                      className={contoCellHl ? 'copilot-highlight' : undefined}
-                      style={{ color: 'var(--mu)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', padding: contoCellHl ? 6 : undefined }}
-                    >
-                      {pianoConti.find((c) => c.id === d.conto_id)?.descrizione || '—'}
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {d.validation_status === 'pending' && (
-                        <button type="button" className="btn-icon" title="Conferma" onClick={() => confermaDoc?.(d.id)}>
-                          ✓
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )})}
-              </tbody>
-            </table>
-          )}
-        </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
       </div>
+
+      {detailPanelOpen && focusedDoc && (
+        <div className="overlay" style={{ zIndex: 120 }} onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setDetailPanelOpen(false)
+        }}>
+          <div className="modal erp-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Documento selezionato</div>
+              <div className="modal-sub">{focusedDoc.numero_documento || 'Documento'} · {focusedDoc.soggetto_denominazione || 'Soggetto'}</div>
+              <button type="button" className="modal-close" onClick={() => setDetailPanelOpen(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body erp-detail-modal-body">
+              <div className="erp-detail-rail-tabs">
+                <button type="button" className={'erp-inline-tab' + (detailMode === 'form' ? ' active' : '')} onClick={() => setDetailMode('form')}>
+                  Registrazione
+                </button>
+                <button type="button" className={'erp-inline-tab' + (detailMode === 'preview' ? ' active' : '')} onClick={() => setDetailMode('preview')}>
+                  Anteprima
+                </button>
+              </div>
+              <div className="erp-detail-modal-content">
+                {detailMode === 'preview' ? (
+                  <PdfZoomPane doc={focusedDoc} xmlPreview={xmlPreview} />
+                ) : (
+                  <AccountingForm
+                    doc={focusedDoc}
+                    pianoConti={pianoConti}
+                    causaliIva={causaliIva}
+                    onSave={onSingleSave}
+                    onOpenGuidata={onEdit}
+                    listIds={listIds}
+                    idxInList={idxInList}
+                    autoValidateMode={autoValidateMode}
+                    entryMeta={focusedEntryMetaDisplay}
+                    onRefreshEntryMeta={refreshEntryMetaForDocument}
+                    copilotHighlight={copilotHighlights}
+                    ivaInsights={focusedDoc ? (ivaInsightsByDocId[String(focusedDoc.id)] || []) : []}
+                    ivaInsightsLoading={ivaInsightsLoading}
+                    onTogglePinExplanation={
+                      focusedDoc && autoValidateMode
+                        ? () => togglePinExplanationForDoc(focusedDoc.id, focusedEntryMetaDisplay)
+                        : null
+                    }
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewOpen && (
         <div
@@ -1547,7 +1485,7 @@ export function DaValidareSplitView({
                   setPendingFlags(null)
                 }}
               >
-                ✕
+                ×
               </button>
             </div>
             <div className="modal-body" style={{ overflow: 'auto', maxHeight: '58vh' }}>
@@ -1596,7 +1534,6 @@ export function DaValidareSplitView({
           </div>
         </div>
       )}
-      </div>
 
       {copilotOpen && (
         <ContabileCopilotPanel
@@ -1627,3 +1564,5 @@ export function DaValidareSplitView({
     </div>
   )
 }
+
+

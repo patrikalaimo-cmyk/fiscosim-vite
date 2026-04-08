@@ -67,6 +67,13 @@ function knowledgeNonDeductibleSignals(blob) {
   }
 }
 
+async function loadCausaliIva(db, societaId) {
+  return db
+    .from('causali_iva')
+    .select('id, codice, descrizione, aliquota, tipo, detraibile, percentuale_detraibilita')
+    .eq('attivo', true)
+}
+
 export function detectSpendCategory(contextText) {
   const t = String(contextText || '')
   if (RESTAURANT_RE.test(t)) return 'restaurant'
@@ -97,11 +104,7 @@ export async function analyzeIvaAnomalyEngine(db, societaId) {
     .join('\n')
   const kSignals = knowledgeNonDeductibleSignals(knowledgeBlob)
 
-  const { data: causali, error: cErr } = await db
-    .from('causali_iva')
-    .select('id, codice, descrizione, aliquota, tipo, detraibile, percentuale_detraibilita')
-    .eq('societa_id', societaId)
-    .eq('attivo', true)
+  const { data: causali, error: cErr } = await loadCausaliIva(db, societaId)
 
   if (cErr) {
     console.warn('[ivaAnomalyEngine] causali_iva', cErr.message)

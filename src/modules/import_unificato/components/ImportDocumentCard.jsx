@@ -157,11 +157,12 @@ export function ImportDocumentCard({
     }
   }, [doc?.id, form?.tipo_documento, pianoConti])
 
+  const reliability = useMemo(() => evaluateDraftReliability({ doc, form }), [doc, form])
+
   if (!form) return null
 
   const up = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const tipo = tipiDocumento.find((t) => t.id === form.tipo_documento)
-  const reliability = useMemo(() => evaluateDraftReliability({ doc, form }), [doc, form])
 
   const contiFiltered =
     pianoConti
