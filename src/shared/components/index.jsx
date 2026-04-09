@@ -1,4 +1,41 @@
-import { useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+
+const HeaderBridgeContext = createContext(null)
+
+export function HeaderBridgeProvider({ children }) {
+  const [header, setHeader] = useState(null)
+
+  const clearHeader = useCallback(() => setHeader(null), [])
+
+  const setHeaderSafe = useCallback((next) => {
+    setHeader((prev) => {
+      if (!prev && !next) return prev
+      if (!prev || !next) return next
+      // Avoid infinite loops: don't update if the meaningful copy didn't change.
+      // Actions may be passed as ReactNodes and can be referentially unstable; we intentionally ignore them here.
+      if (
+        prev.sectionLabel === next.sectionLabel &&
+        prev.title === next.title &&
+        prev.context === next.context
+      ) {
+        return prev
+      }
+      return next
+    })
+  }, [])
+
+  const value = useMemo(() => ({ header, setHeader: setHeaderSafe, clearHeader }), [header, setHeaderSafe, clearHeader])
+
+  return (
+    <HeaderBridgeContext.Provider value={value}>
+      {children}
+    </HeaderBridgeContext.Provider>
+  )
+}
+
+export function useHeaderBridge() {
+  return useContext(HeaderBridgeContext)
+}
 
 // ─── TAG INPUT ───────────────────────────────────────────────────
 export function ModuleHeader({
@@ -8,6 +45,16 @@ export function ModuleHeader({
   primaryAction = null,
   secondaryAction = null,
 }) {
+  const bridge = useHeaderBridge()
+
+  useEffect(() => {
+    if (!bridge) return undefined
+    bridge.setHeader({ sectionLabel, title, context, primaryAction, secondaryAction })
+    return () => bridge.clearHeader()
+  }, [bridge, sectionLabel, title, context])
+
+  if (bridge) return null
+
   return (
     <div className="page-hdr">
       <div className="page-hdr-main">

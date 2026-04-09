@@ -8,7 +8,7 @@ import { TestModeBadge } from './context/TestModeContext'
 // Shared
 import { NAV, RUOLI_INFO, PERMESSI_MODULI, FISCAL_KNOWLEDGE_PANEL_SHORTCUT_LABEL } from './shared/constants'
 import { getPermessi, canLeggi, canModifica, puoGestireUtenti, puoGestireRegoleFiscaliIA, tomorrowStr } from './shared/utils'
-import { AccessDenied } from './shared/components'
+import { AccessDenied, HeaderBridgeProvider, useHeaderBridge } from './shared/components'
 
 // Modules
 import { Dashboard }              from './modules/dashboard'
@@ -141,6 +141,52 @@ function buildNavIndex() {
 }
 
 const NAV_INDEX = buildNavIndex()
+
+function WorkspaceHeader({ activeVisibleSection, activeNavItem, activeShellIcon, workspaceSubtitle, workspaceActions }) {
+  const bridge = useHeaderBridge()
+  const bridgedHeader = bridge?.header || null
+  const eyebrow = bridgedHeader?.sectionLabel || activeVisibleSection?.section || 'Workspace'
+  const title = bridgedHeader?.title || activeNavItem.label
+  const subtitle = bridgedHeader?.context || workspaceSubtitle
+
+  return (
+    <div className="workspace-topbar">
+      <div className="workspace-title-wrap">
+        <div className="workspace-eyebrow">{eyebrow}</div>
+        <div className="workspace-title-row">
+          <h1 className="workspace-title">{title}</h1>
+          {activeShellIcon && (
+            <span className="workspace-title-ico">
+              <ShellIcon itemId={activeShellIcon} className="shell-icon shell-icon-title" />
+            </span>
+          )}
+        </div>
+        {subtitle && <p className="workspace-subtitle">{subtitle}</p>}
+      </div>
+      <div className="workspace-actions">
+        {bridgedHeader ? (
+          <>
+            {bridgedHeader.secondaryAction}
+            {bridgedHeader.primaryAction}
+          </>
+        ) : (
+          workspaceActions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              className={action.variant === 'primary' ? 'btn' : 'btn-sec'}
+              disabled={action.disabled}
+              onClick={action.onClick}
+            >
+              {action.label}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [tab, setTab] = useState('dashboard')
   const [alertCount, setAlertCount] = useState(0)
@@ -277,6 +323,7 @@ function App() {
 
   return (
     <AIStatusProvider>
+      <HeaderBridgeProvider>
       <div className={'app app-shell' + (sidebarPinned ? ' sidebar-pinned' : '')}>
         <AIBadge />
         <TestModeBadge />
@@ -407,33 +454,13 @@ function App() {
             </div>
         </aside>
         <main className="content workspace-shell">
-          <div className="workspace-topbar">
-            <div className="workspace-title-wrap">
-              <div className="workspace-eyebrow">{activeVisibleSection?.section || 'Workspace'}</div>
-              <div className="workspace-title-row">
-                <h1 className="workspace-title">{activeNavItem.label}</h1>
-                {activeShellIcon && (
-                  <span className="workspace-title-ico">
-                    <ShellIcon itemId={activeShellIcon} className="shell-icon shell-icon-title" />
-                  </span>
-                )}
-              </div>
-              {workspaceSubtitle && <p className="workspace-subtitle">{workspaceSubtitle}</p>}
-            </div>
-            <div className="workspace-actions">
-              {workspaceActions.map((action) => (
-                <button
-                  key={action.key}
-                  type="button"
-                  className={action.variant === 'primary' ? 'btn' : 'btn-sec'}
-                  disabled={action.disabled}
-                  onClick={action.onClick}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <WorkspaceHeader
+            activeVisibleSection={activeVisibleSection}
+            activeNavItem={activeNavItem}
+            activeShellIcon={activeShellIcon}
+            workspaceSubtitle={workspaceSubtitle}
+            workspaceActions={workspaceActions}
+          />
 
           <div className="workspace-content">
           {/* STUDIO */}
@@ -491,6 +518,7 @@ function App() {
           </div>
         </main>
       </div>
+      </HeaderBridgeProvider>
     </AIStatusProvider>
   )
 }

@@ -13,6 +13,9 @@ import { loadIvaInsightsForSocieta } from './application/ivaInsightsClient.js'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { createPrimaNotaCompleta } from '../../../services/primaNotaService.js'
 import { fmtCurrency as fmtMoney, fmtDate } from './ui/formatters.js'
+import { ModuleHeader } from '../../shared/components'
+import { BaseInput, BaseTable } from './ui/BaseControls.jsx'
+import { BaseCombobox } from './ui/BaseDropdown.jsx'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
 
@@ -101,7 +104,7 @@ function buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo
   }
 }
 
-function SearchSelect({ label, value, onChange, options, placeholder = 'Cercaâ€¦', formatOption, defaultValue }) {
+function SearchSelect({ label, value, onChange, options, placeholder = 'Cerca…', formatOption, defaultValue }) {
   const [q, setQ] = useState('')
   const defaultLoggedRef = useRef(false)
   useEffect(() => {
@@ -132,27 +135,24 @@ function SearchSelect({ label, value, onChange, options, placeholder = 'Cercaâ�
         }}
         placeholder={placeholder}
       />
-      <select
-        value={value || ''}
-        onChange={e => {
-          const v = e.target.value
-          traceStep('UI_INPUT_CHANGE', { value: v, payload: { field: label, control: 'SearchSelect' } })
-          onChange(v)
-        }}
-        style={{ marginTop: '.35rem' }}
-      >
-        <option value="">â€” Seleziona â€”</option>
-        {filtered.map(o => (
-          <option key={o.id} value={o.id}>
-            {formatOption ? formatOption(o) : (o.label || o.name || o.descrizione || o.codice || o.id)}
-          </option>
-        ))}
-      </select>
+      <div style={{ marginTop: '.35rem' }}>
+        <BaseCombobox
+          value={value || ''}
+          onChange={(v) => {
+            traceStep('UI_INPUT_CHANGE', { value: v, payload: { field: label, control: 'SearchSelect' } })
+            onChange(v)
+          }}
+          options={filtered}
+          getOptionId={(o) => o.id}
+          getOptionLabel={(o) => (formatOption ? formatOption(o) : (o.label || o.name || o.descrizione || o.codice || o.id || ''))}
+          placeholder="— Seleziona —"
+          searchable={false}
+        />
+      </div>
     </div>
   )
 }
 
-/** Combobox: input + filtro + elenco (un solo controllo, niente doppio select + stringa operatore). */
 function CausaleIvaCombobox({
   value,
   onChange,
@@ -162,26 +162,9 @@ function CausaleIvaCombobox({
   parseAliquota,
   disabled
 }) {
-  const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState('')
-  const wrapRef = useRef(null)
-  const selected = causaliIva.find(c => String(c.id) === String(value))
-
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (!wrapRef.current?.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-
-  const displayLabel = selected
-    ? `${buildCausaleIvaLabel(selected)} â€” ${selected.descrizione || ''}`.trim()
-    : ''
-
   const options = useMemo(() => {
     const ra = Math.round(Number(rowAliquota))
-    const sorted = [...(causaliIva || [])].sort((a, b) => {
+    return [...(causaliIva || [])].sort((a, b) => {
       const ma = parseAliquota(a?.aliquota)
       const mb = parseAliquota(b?.aliquota)
       const sa = ma === ra ? 0 : 1
@@ -191,89 +174,23 @@ function CausaleIvaCombobox({
       const lb = `${buildCausaleIvaLabel(b)} ${b?.descrizione || ''}`.toLowerCase()
       return la.localeCompare(lb, 'it')
     })
-    const q = (filter || '').trim().toLowerCase()
-    if (!q) return sorted
-    return sorted.filter(c => {
-      const t = `${buildCausaleIvaLabel(c)} ${c?.descrizione || ''} ${c?.codice || ''}`.toLowerCase()
-      return t.includes(q)
-    })
-  }, [causaliIva, filter, rowAliquota, buildCausaleIvaLabel, parseAliquota])
+  }, [causaliIva, rowAliquota, buildCausaleIvaLabel, parseAliquota])
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', minWidth: 0 }}>
-      <div style={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-        <input
-          type="text"
-          readOnly={!open}
-          value={open ? filter : displayLabel}
-          placeholder="Cerca causale IVAâ€¦"
-          disabled={disabled}
-          onFocus={() => {
-            setOpen(true)
-            setFilter(displayLabel)
-          }}
-          onChange={e => {
-            setFilter(e.target.value)
-            setOpen(true)
-            traceStep('UI_INPUT_CHANGE', { value: e.target.value, payload: { field: 'causale_iva_combobox_filter', rowAliquota } })
-          }}
-          style={{ flex: 1, minWidth: 0 }}
-        />
-        <button
-          type="button"
-          className="btn-sec"
-          disabled={disabled}
-          aria-label="Apri elenco causali IVA"
-          onClick={() => {
-            setOpen(o => !o)
-            if (!open) setFilter(displayLabel)
-          }}
-          style={{ padding: '.25rem .45rem', fontSize: '.7rem' }}
-        >
-          â–¼
-        </button>
-      </div>
-      {open && (
-        <ul
-          style={{
-            position: 'absolute',
-            zIndex: 50,
-            left: 0,
-            right: 0,
-            maxHeight: 220,
-            overflowY: 'auto',
-            margin: '.2rem 0 0',
-            padding: '.25rem 0',
-            listStyle: 'none',
-            background: 'var(--card, #fff)',
-            border: '1px solid var(--bd)',
-            borderRadius: 4,
-            boxShadow: '0 4px 12px rgba(0,0,0,.12)'
-          }}
-        >
-          {options.map(c => (
-            <li
-              key={c.id}
-              style={{
-                padding: '.35rem .6rem',
-                cursor: 'pointer',
-                fontSize: '.78rem',
-                background: String(c.id) === String(value) ? 'rgba(212,175,55,.12)' : undefined
-              }}
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => {
-                onChange(c.id)
-                setOpen(false)
-                setFilter('')
-                traceStep('UI_INPUT_CHANGE', { value: c.id, payload: { field: 'causale_iva_combobox', rowAliquota } })
-              }}
-            >
-              {buildCausaleIvaLabel(c)} â€” {c.descrizione || ''}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <BaseCombobox
+      value={value || ''}
+      onChange={(id) => {
+        traceStep('UI_INPUT_CHANGE', { value: id, payload: { field: 'causale_iva_combobox', rowAliquota } })
+        onChange(id)
+      }}
+      options={options}
+      getOptionId={(c) => c.id}
+      getOptionLabel={(c) => `${buildCausaleIvaLabel(c)} — ${c.descrizione || ''}`.trim()}
+      placeholder="Cerca causale IVA…"
+      searchable={true}
+      maxItems={140}
+      disabled={disabled}
+    />
   )
 }
 
@@ -307,38 +224,35 @@ function PrimaNotaGuidataRigaRow({
   return (
     <tr style={!totalsBilanciata ? { background: 'rgba(255,92,92,.05)' } : undefined}>
       <td onFocus={() => onFocusRow(r.id)}>
-        <select
+        <BaseCombobox
           value={r.conto_id || ''}
-          onChange={e => {
-            const value = e.target.value
+          onChange={(value) => {
             traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'conto_id', rowId: r.id, rowIndex } })
             updateRow(r.id, { conto_id: value })
           }}
           disabled={stato === 'confermata'}
-          style={{ width: '100%' }}
-        >
-          <option value="">â€” Seleziona conto â€”</option>
-          {pianoConti.map(c => (
-            <option key={c.id} value={c.id}>
-              {(c.codice ? `${c.codice} Â· ` : '') + (c.descrizione || c.nome || '')}
-            </option>
-          ))}
-        </select>
+          options={pianoConti}
+          getOptionId={(c) => c.id}
+          getOptionLabel={(c) => (c.codice ? `${c.codice} · ` : '') + (c.descrizione || c.nome || '')}
+          placeholder="— Seleziona conto —"
+          searchable={true}
+          maxItems={140}
+        />
       </td>
       <td onFocus={() => onFocusRow(r.id)}>
-        <input
+        <BaseInput
           value={r.descrizione || ''}
           onChange={e => {
             const value = e.target.value
             traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'descrizione', rowId: r.id, rowIndex } })
             updateRow(r.id, { descrizione: value })
           }}
-          placeholder="Descrizione rigaâ€¦"
+          placeholder="Descrizione riga…"
           disabled={stato === 'confermata'}
         />
       </td>
       <td style={{ textAlign: 'right' }} onFocus={() => onFocusRow(r.id)}>
-        <input
+        <BaseInput
           inputMode="decimal"
           style={{ textAlign: 'right' }}
           value={moneyInputValue(r.dare)}
@@ -353,7 +267,7 @@ function PrimaNotaGuidataRigaRow({
         />
       </td>
       <td style={{ textAlign: 'right' }} onFocus={() => onFocusRow(r.id)}>
-        <input
+        <BaseInput
           inputMode="decimal"
           style={{ textAlign: 'right' }}
           value={moneyInputValue(r.avere)}
@@ -374,7 +288,7 @@ function PrimaNotaGuidataRigaRow({
           style={{ padding: '.25rem .45rem', fontSize: '.72rem' }}
           title="Elimina riga"
         >
-          ðŸ—‘ï¸
+          Elimina
         </button>
       </td>
     </tr>
@@ -499,7 +413,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
       </div>
 
       <div style={{ marginTop: '.75rem' }}>
-        {loading && <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>â³ Carico fattureâ€¦</div>}
+        {loading && <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>Carico fatture…</div>}
         {!loading && error && <div style={{ fontSize: '.8rem', color: 'var(--rd)' }}>{error}</div>}
         {!loading && !error && items.length === 0 && (
           <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>Nessuna fattura aperta trovata.</div>
@@ -530,7 +444,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: '.5rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
-                      <div style={{ fontWeight: 800, fontSize: '.85rem' }}>{f.numero_documento || 'â€”'}</div>
+                      <div style={{ fontWeight: 800, fontSize: '.85rem' }}>{f.numero_documento || '—'}</div>
                       <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>{fmtDate(f.data_documento)}</div>
                     </div>
                     <div style={{ fontSize: '.75rem', color: 'var(--mu)', marginTop: '.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -552,7 +466,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
 
         {selected && (
           <div style={{ marginTop: '.75rem', paddingTop: '.75rem', borderTop: '1px solid var(--bd)', fontSize: '.78rem', color: 'var(--mu)' }}>
-            Selezionata: <strong style={{ color: 'var(--tx)' }}>{selected.numero_documento || 'â€”'}</strong> Â· importo chiusura impostato a <strong style={{ color: 'var(--gr)' }}>{fmtMoney(selected.totale)}</strong>
+            Selezionata: <strong style={{ color: 'var(--tx)' }}>{selected.numero_documento || '—'}</strong> · importo chiusura impostato a <strong style={{ color: 'var(--gr)' }}>{fmtMoney(selected.totale)}</strong>
           </div>
         )}
       </div>
@@ -933,7 +847,7 @@ export function PrimaNotaGuidata({
     const det = getPercDetraibileFromCausale(c)
     const aliqTxt = aliq != null ? `${aliq}%` : ''
     const detTxt = det === 100 ? 'detraibile 100%' : (det === 0 ? 'indetraibile 100%' : `detraibile ${det}%`)
-    return [c.codice, aliqTxt, detTxt].filter(Boolean).join(' Â· ')
+    return [c.codice, aliqTxt, detTxt].filter(Boolean).join(' · ')
   }
 
   const applyIvaToRows = useCallback(({ imponibile, iva, ivaIndetraibile }) => {
@@ -1085,18 +999,18 @@ export function PrimaNotaGuidata({
           const missing = ivaRows.filter(r => !String(r.causale_iva_id || '').trim())
           if (missing.length) {
             missing.forEach(row => traceStep('IVA_ROW_MISSING_CAUSALE', { row }, {}))
-            alert('Una o piÃ¹ righe IVA non hanno causale assegnata')
+            alert('Una o più righe IVA non hanno causale assegnata')
             return null
           }
           const invalidRows = ivaRows.filter(r => !Number.isFinite(r.imponibile) || !Number.isFinite(r.iva))
           if (invalidRows.length) {
             invalidRows.forEach(row => traceStep('IVA_ROW_INVALID', { row }, {}))
-            alert('Una o piÃƒÂ¹ righe IVA hanno importi non validi')
+            alert('Una o più righe IVA hanno importi non validi')
             return null
           }
         } else if (!String(ivaUi.causale_iva_id || '').trim()) {
           traceStep('IVA_ROW_MISSING_CAUSALE', { row: null, legacy_ivaUi: true }, {})
-          alert('Una o piÃ¹ righe IVA non hanno causale assegnata')
+          alert('Una o più righe IVA non hanno causale assegnata')
           return null
         }
       }
@@ -1166,40 +1080,39 @@ export function PrimaNotaGuidata({
 
   return (
     <div className="erp-guided-shell">
-      <div className="erp-header">
-        <div className="erp-header-copy">
-          <div className="erp-kicker">Contabilita</div>
-          <div className="erp-title">Inserimento guidato</div>
-          <div className="erp-subtitle">
-            {stato === 'confermata'
-              ? <>Confermata {progressivo ? <>Â· Progressivo <strong style={{ color: 'var(--gld2)' }}>{progressivo}</strong></> : null}</>
-              : 'Bozza Â· Modifica rapida'}
-          </div>
-        </div>
-
-        <div className="erp-header-actions">
-          <div style={{ display: 'flex', gap: '.35rem', alignItems: 'center' }}>
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title="Inserimento guidato"
+        context={
+          stato === 'confermata'
+            ? `Confermata${progressivo ? ` · Progressivo ${progressivo}` : ''}`
+            : 'Bozza · Modifica rapida'
+        }
+        secondaryAction={
+          <>
             <button className="btn-sec" onClick={() => onPrev && onPrev()} disabled={!onPrev || !canPrev} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
-              â† Fattura precedente
+              ← Fattura precedente
             </button>
             <button className="btn-sec" onClick={() => onNext && onNext()} disabled={!onNext || !canNext} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
-              Fattura successiva â†’
+              Fattura successiva →
             </button>
-          </div>
-          <span className={'bdg ' + (totals.bilanciata ? 'bdg-green' : 'bdg-red')} style={{ fontSize: '.65rem' }}>
-            {totals.bilanciata ? 'Bilanciata' : `Sbilanciata (${totals.diff > 0 ? '+' : ''}${totals.diff.toFixed(2)})`}
-          </span>
-          {stato !== 'confermata' ? (
+            <span className={'bdg ' + (totals.bilanciata ? 'bdg-green' : 'bdg-red')} style={{ fontSize: '.65rem' }}>
+              {totals.bilanciata ? 'Bilanciata' : `Sbilanciata (${totals.diff > 0 ? '+' : ''}${totals.diff.toFixed(2)})`}
+            </span>
+          </>
+        }
+        primaryAction={
+          stato !== 'confermata' ? (
             <button className="btn" onClick={onConfirm} disabled={!totals.bilanciata}>
-              âœ“ Conferma
+              ✓ Conferma
             </button>
           ) : (
             <button className="btn-sec" onClick={onBackToDraft}>
-              â†© Torna in bozza
+              ↩ Torna in bozza
             </button>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       <div className="erp-flat-panel">
         <div className="form-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(160px, 1fr))' }}>
@@ -1222,8 +1135,8 @@ export function PrimaNotaGuidata({
             value={header.causale_id}
             onChange={(id) => runSetHeader(p => ({ ...p, causale_id: id }))}
             options={causali.map(c => ({ ...c, id: c.id }))}
-            formatOption={(c) => `${c.codice || 'â€”'} Â· ${c.descrizione || c.label || ''}`.trim()}
-            placeholder="Cerca causaleâ€¦"
+            formatOption={(c) => `${c.codice || '—'} · ${c.descrizione || c.label || ''}`.trim()}
+            placeholder="Cerca causale…"
           />
 
           <SearchSelect
@@ -1236,7 +1149,7 @@ export function PrimaNotaGuidata({
               const cod = c.codice_cliente ? `[${c.codice_cliente}] ` : ''
               return `${cod}${nome}`.trim()
             }}
-            placeholder="Cerca cliente/fornitoreâ€¦"
+            placeholder="Cerca cliente/fornitore…"
           />
 
           <div className="fg">
@@ -1253,7 +1166,7 @@ export function PrimaNotaGuidata({
         <div className="erp-flat-panel">
           {ivaInsightsLoading && ivaInsightsLimited.length === 0 && (
             <div className="alert alert-info" style={{ margin: 0 }}>
-              Analisi IVA in corsoâ€¦
+              Analisi IVA in corso…
             </div>
           )}
           {ivaInsightsLimited.map((ins) => {
@@ -1290,27 +1203,28 @@ export function PrimaNotaGuidata({
 
       {activeTab === 'scrittura' && (
         <div className="erp-table-shell">
-          <div style={{ padding: '.75rem 1rem', borderBottom: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="erp-table-head">
             <div style={{ fontSize: '.8rem', fontWeight: 700 }}>Righe Prima Nota</div>
             <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }}>
               <button className="btn-sec" onClick={addRow} disabled={stato === 'confermata'}>+ Riga</button>
               <div style={{ fontSize: '.72rem', color: 'var(--mu)' }}>
-                Totale Dare <strong style={{ color: 'var(--gr)' }}>{totals.totDare.toFixed(2)}</strong> Â· Totale Avere <strong style={{ color: 'var(--rd)' }}>{totals.totAvere.toFixed(2)}</strong>
+                Totale Dare <strong style={{ color: 'var(--gr)' }}>{totals.totDare.toFixed(2)}</strong> · Totale Avere <strong style={{ color: 'var(--rd)' }}>{totals.totAvere.toFixed(2)}</strong>
               </div>
             </div>
           </div>
 
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th style={{ width: '34%' }}>Conto</th>
-                <th>Descrizione</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Dare</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Avere</th>
-                <th style={{ width: 56 }} />
-              </tr>
-            </thead>
-            <tbody>
+          <div className="erp-table-body">
+            <BaseTable wrap={false}>
+              <thead>
+                <tr>
+                  <th style={{ width: '34%' }}>Conto</th>
+                  <th>Descrizione</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Dare</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Avere</th>
+                  <th style={{ width: 56 }} />
+                </tr>
+              </thead>
+              <tbody>
               {(() => {
                 traceStep('UI_RENDER_RIGHE', {
                   righe: rows.map((row, i) => ({
@@ -1339,16 +1253,17 @@ export function PrimaNotaGuidata({
                   ivaUiCausaleIvaId={primaryIvaCausaleForTrace}
                 />
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </BaseTable>
+          </div>
 
           {!totals.bilanciata && (
-            <div style={{ padding: '.7rem 1rem', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
+            <div style={{ padding: '.7rem 1rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
               <div style={{ fontSize: '.78rem', color: 'var(--rd)', fontWeight: 700 }}>
                 Scrittura sbilanciata: correggi Dare/Avere per confermare.
               </div>
               <div style={{ fontSize: '.72rem', color: 'var(--mu)' }}>
-                Ultima riga toccata: <strong>{lastFocusedRowId.current ? 'âœ“' : 'â€”'}</strong>
+                Ultima riga toccata: <strong>{lastFocusedRowId.current ? '✓' : '—'}</strong>
               </div>
             </div>
           )}
@@ -1359,11 +1274,11 @@ export function PrimaNotaGuidata({
         <div className="erp-flat-panel">
           <div style={{ fontWeight: 800, marginBottom: '.35rem' }}>Movimenti IVA</div>
           <div style={{ fontSize: '.78rem', color: 'var(--mu)', marginBottom: '.75rem' }}>
-            Una riga per ogni aliquota presente nel documento. La veritÃ  IVA Ã¨ in queste righe; la scrittura si aggiorna di conseguenza.
+            Una riga per ogni aliquota presente nel documento. La verità IVA è in queste righe; la scrittura si aggiorna di conseguenza.
           </div>
           {regimeSummary.unknown && (
             <div className="alert alert-warn" style={{ marginBottom: '.6rem' }}>
-              Regime IVA non determinato su una o piÃ¹ righe. Verifica causale e natura FE.
+              Regime IVA non determinato su una o più righe. Verifica causale e natura FE.
             </div>
           )}
           {regimeSummary.mixed && (
@@ -1380,20 +1295,19 @@ export function PrimaNotaGuidata({
             <>
               <div style={{ display: 'grid', gap: '.5rem' }}>
                 {ivaRowsDisplay.map((row, idx) => {
-                  const hue = (row.aliquota * 17) % 360
-                  const bg = idx % 2 === 0 ? `hsla(${hue}, 32%, 93%, 0.55)` : 'transparent'
                   return (
                     <div
                       key={row.id}
+                      className="iva-row"
                       style={{
                         display: 'grid',
                         gridTemplateColumns: 'minmax(72px, 88px) minmax(100px, 1fr) minmax(100px, 1fr) minmax(180px, 2fr)',
                         gap: '.5rem',
                         alignItems: 'start',
                         padding: '.55rem .65rem',
-                        borderRadius: 6,
-                        border: '1px solid var(--bd)',
-                        background: bg
+                        borderRadius: 14,
+                        border: '1px solid var(--border-subtle)',
+                        background: 'var(--bg-secondary)',
                       }}
                     >
                       <div>

@@ -25,7 +25,7 @@ export function ImportActionsBar({
             opacity: busy ? 0.7 : 1,
           }}
         >
-          {busy ? 'Conferma in corso...' : 'âœ“ Conferma tutti'}
+          {busy ? 'Conferma in corso...' : 'Conferma tutti'}
         </button>
         <button
           onClick={onSvuotaTutto}
@@ -41,7 +41,7 @@ export function ImportActionsBar({
             opacity: busy ? 0.7 : 1,
           }}
         >
-          ðŸ—‘ Svuota tutto
+          Svuota tutto
         </button>
       </div>
     </div>

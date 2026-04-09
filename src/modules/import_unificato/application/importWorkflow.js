@@ -260,7 +260,7 @@ export async function confirmImportedDocument({
     return
   }
   if (!societaId) {
-    alert('SocietÃ  non selezionata.')
+    alert('Società non selezionata.')
     return
   }
   if (!form) {

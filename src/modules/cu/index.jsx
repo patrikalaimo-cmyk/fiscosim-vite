@@ -3,6 +3,8 @@ import { sb } from '../../lib/supabase'
 import { loadScript } from '../../shared/utils'
 import { TagInput, ModuleHeader } from '../../shared/components'
 import { callBackend } from '../../core/workflow'
+import * as contabilitaRepo from '../contabilita/data/contabilitaRepo.js'
+import { buildCuRowsFromPayments } from '../contabilita/application/paymentDrivenFiscalViews.js'
 
 const fmt0 = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
@@ -131,6 +133,34 @@ function generaTEL(sostituto, percipienti) {
   });
   lines.push(buildRecordZ(percipienti.length));
   return lines.join('\r\n') + '\r\n';
+}
+
+function getCuPercipienteTipo(cu) {
+  const cf = (cu?.percipienteCF || '').trim()
+  if (/^\d{11}$/.test(cf)) return 'persona giuridica'
+  if (cf.length === 16) return 'persona fisica'
+  return 'non classificato'
+}
+
+function getCuValidationIssues(cu) {
+  const issues = []
+  if (!(cu?.percipienteCF || '').trim()) issues.push('codice fiscale mancante')
+  if (!(cu?.percipientiNome || '').trim()) issues.push('percipiente non identificato')
+  if (!(cu?.sostitutoCF || '').trim()) issues.push('sostituto non identificato')
+  if (cu?.compensi === '' || cu?.compensi === null || typeof cu?.compensi === 'undefined') issues.push('compensi non valorizzati')
+  if (cu?.ritenute === '' || cu?.ritenute === null || typeof cu?.ritenute === 'undefined') issues.push('ritenute non valorizzate')
+  return issues
+}
+
+function getCuWorkflowState(cu, invioStato) {
+  if (invioStato === 'ok') return 'inviata'
+  if (getCuValidationIssues(cu).length === 0) return 'validata'
+  return 'bozza'
+}
+
+function fmtMoneyLoose(n) {
+  const parsed = typeof n === 'number' ? n : parseFloat(String(n || '').replace(',', '.'))
+  return Number.isFinite(parsed) ? fmt0(parsed) : '—'
 }
 
 // ── Estrazione dati da immagine/PDF con Claude AI ────────────
@@ -592,7 +622,7 @@ function WIPBanner({modulo="questo modulo"}){
 
 // ─── MODULO CERTIFICAZIONI UNICHE ────────────────────────────
 
-export function ModuloCU(){
+function LegacyModuloCU(){
   const [step,setStep]=useState('upload'); // upload | processing | review | sending
   const [anno,setAnno]=useState(new Date().getFullYear().toString());
   const [drag,setDrag]=useState(false);
@@ -605,11 +635,22 @@ export function ModuloCU(){
   const [invioStato,setInvioStato]=useState({}); // fileName → 'pending'|'ok'|'err'
   const [invioInCorso,setInvioInCorso]=useState(false);
   const [progresso,setProgresso]=useState({done:0,tot:0});
+  const [search,setSearch]=useState('');
+  const [societaFiltro,setSocietaFiltro]=useState('tutte');
+  const [tipoFiltro,setTipoFiltro]=useState('tutti');
+  const [statoFiltro,setStatoFiltro]=useState('tutti');
+  const [sortKey,setSortKey]=useState('percipiente');
+  const [sortDir,setSortDir]=useState('asc');
+  const [editingCu,setEditingCu]=useState(null);
   const fileRef=useRef();
 
+  const loadClienti = async () => {
+    const { data } = await sb.from('clienti').select('id,nome,cognome,ragione_sociale,email,email_cc,partita_iva,codice_fiscale').eq('attivo',true).order('nome')
+    setClienti(data || [])
+  }
+
   useEffect(()=>{
-    sb.from('clienti').select('id,nome,cognome,ragione_sociale,email,email_cc,partita_iva,codice_fiscale').eq('attivo',true).order('nome')
-      .then(({data})=>setClienti(data||[]));
+    loadClienti()
   },[]);
 
   // Raggruppa CU per sostituto
@@ -646,6 +687,34 @@ export function ModuloCU(){
     });
     setMailMap(newMap);
   },[risultati,clienti]);
+
+  useEffect(()=>{
+    if(!risultati.length){
+      setMailMap({})
+      return
+    }
+    setMailMap(prev=>{
+      const next={}
+      Object.keys(cuPerSostituto).forEach(k=>{
+        const existing=prev[k]||{}
+        const {sostitutoCF}=cuPerSostituto[k]
+        const match=clienti.find(c=>{
+          const piva=(c.partita_iva||'').replace(/\D/g,'')
+          const cf=(c.codice_fiscale||'').toUpperCase()
+          const searchValue=(sostitutoCF||'').replace(/\D/g,'')
+          return (piva&&piva===searchValue)||(cf&&cf===searchValue.toUpperCase())
+        })
+        next[k]={
+          email:existing.email||match?.email||'',
+          cc:existing.cc?.length?existing.cc:(match?.email_cc||[]),
+          nomeCliente:existing.nomeCliente||(match?(match.ragione_sociale||`${match.nome} ${match.cognome||''}`.trim()):''),
+          matched:!!match,
+          selezionato:typeof existing.selezionato==='boolean'?existing.selezionato:true,
+        }
+      })
+      return next
+    })
+  },[cuPerSostituto, risultati, clienti]);
 
   const handleFile=async(file)=>{
     if(!file||!file.name.endsWith('.pdf')){setErrore('Carica un file PDF');return;}
@@ -812,8 +881,19 @@ export function ModuloCU(){
           .replace(/\s+/g,'_').toUpperCase().substring(0,50);
         const fileName=`${nomePulito}_CU${anno}.pdf`;
 
-        risultatiArr.push({fileName,base64,percipienteCF,percipientiNome,sostitutoNome,sostitutoCF,
-          pagine:endPage-startPage+1,pageStart:startPage+1,pageEnd:endPage+1});
+        risultatiArr.push({
+          fileName,
+          base64,
+          percipienteCF,
+          percipientiNome,
+          sostitutoNome,
+          sostitutoCF,
+          compensi:'',
+          ritenute:'',
+          pagine:endPage-startPage+1,
+          pageStart:startPage+1,
+          pageEnd:endPage+1
+        });
       }
 
       setProgInfo({fase:'Completato!',pct:100,dettaglio:risultatiArr.length+' CU estratte'});
@@ -877,6 +957,68 @@ export function ModuloCU(){
   };
 
   const handleDrop=e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0]);};
+
+  const righeCu=useMemo(()=>{
+    const rows=risultati.map(cu=>{
+      const statoMail=invioStato[cu.fileName]
+      const stato=getCuWorkflowState(cu, statoMail)
+      return {
+        ...cu,
+        stato,
+        tipoPercipiente:getCuPercipienteTipo(cu),
+        issues:getCuValidationIssues(cu),
+      }
+    })
+
+    const filtered=rows.filter(cu=>{
+      const searchable=`${cu.percipientiNome||''} ${cu.percipienteCF||''} ${cu.sostitutoNome||''}`.toLowerCase()
+      if(search && !searchable.includes(search.toLowerCase())) return false
+      const societaKey=cu.sostitutoCF||cu.sostitutoNome||'SCONOSCIUTO'
+      if(societaFiltro!=='tutte' && societaKey!==societaFiltro) return false
+      if(tipoFiltro!=='tutti' && cu.tipoPercipiente!==tipoFiltro) return false
+      if(statoFiltro!=='tutti' && cu.stato!==statoFiltro) return false
+      return true
+    })
+
+    const dir=sortDir==='asc'?1:-1
+    return filtered.sort((a,b)=>{
+      const s=(x,y)=>String(x||'').localeCompare(String(y||''),'it')*dir
+      const n=(x,y)=>(parseFloat(x||0)-parseFloat(y||0))*dir
+      if(sortKey==='cf') return s(a.percipienteCF,b.percipienteCF)
+      if(sortKey==='compensi') return n(a.compensi,b.compensi)
+      if(sortKey==='ritenute') return n(a.ritenute,b.ritenute)
+      if(sortKey==='stato') return s(a.stato,b.stato)
+      return s(a.percipientiNome||a.percipienteCF,b.percipientiNome||b.percipienteCF)
+    })
+  },[risultati,invioStato,search,societaFiltro,tipoFiltro,statoFiltro,sortKey,sortDir])
+
+  const handleSort=key=>{
+    if(sortKey===key){setSortDir(prev=>prev==='asc'?'desc':'asc');return}
+    setSortKey(key)
+    setSortDir('asc')
+  }
+
+  const removeCu=fileName=>{
+    setRisultati(prev=>prev.filter(cu=>cu.fileName!==fileName))
+    setInvioStato(prev=>{
+      const next={...prev}
+      delete next[fileName]
+      return next
+    })
+  }
+
+  const openCuPreview=cu=>{
+    const bytes=Uint8Array.from(atob(cu.base64),c=>c.charCodeAt(0))
+    const blob=new Blob([bytes],{type:'application/pdf'})
+    const url=URL.createObjectURL(blob)
+    window.open(url,'_blank','noopener,noreferrer')
+    setTimeout(()=>URL.revokeObjectURL(url),10000)
+  }
+
+  const saveCuEdit=payload=>{
+    setRisultati(prev=>prev.map(cu=>cu.fileName===payload.fileName?{...cu,...payload}:cu))
+    setEditingCu(null)
+  }
 
   const downloadSingolo=(cu)=>{
     const bytes=Uint8Array.from(atob(cu.base64),c=>c.charCodeAt(0));
@@ -977,19 +1119,27 @@ export function ModuloCU(){
 
   // ── RENDER ────────────────────────────────────────────────
   const [cuTab,setCuTab]=useState('split'); // split | tel
+  const headerSecondaryAction=(
+    <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
+      <button className="btn-sec" onClick={downloadTutti} disabled={!risultati.length}>Esporta</button>
+      <button className="btn-sec" onClick={loadClienti}>Aggiorna dati</button>
+    </div>
+  )
 
   return(
     <div className="page">
       <ModuleHeader
         sectionLabel="Adempimenti"
-        title="📜 Certificazioni Uniche"
-        context="Split CU · invio mail · generazione file .TEL locazioni brevi"
+        title="Certificazioni Uniche"
+        context="Generazione, validazione ed export delle certificazioni"
+        primaryAction={<button className="btn" onClick={()=>fileRef.current?.click()}>Genera CU</button>}
+        secondaryAction={headerSecondaryAction}
       />
 
       {/* TAB selector */}
       <div className="pills" style={{marginBottom:'1.25rem'}}>
-        <span className={'pill'+(cuTab==='split'?' active':'')} onClick={()=>setCuTab('split')}>📄 Split e invio CU</span>
-        <span className={'pill'+(cuTab==='tel'?' active':'')} onClick={()=>setCuTab('tel')}>🏠 Genera .TEL locazioni brevi</span>
+        <span className={'pill'+(cuTab==='split'?' active':'')} onClick={()=>setCuTab('split')}>Workflow CU</span>
+        <span className={'pill'+(cuTab==='tel'?' active':'')} onClick={()=>setCuTab('tel')}>File .TEL locazioni brevi</span>
       </div>
 
       {cuTab==='tel'&&<ModuloTEL/>}
@@ -1051,6 +1201,103 @@ export function ModuloCU(){
       {/* STEP REVIEW */}
       {step==='review'&&(
         <>
+          <div className="card" style={{marginBottom:'1rem'}}>
+            <div className="card-hdr">
+              <div className="card-title-wrap">
+                <div className="card-title">Filtri e configurazione</div>
+                <div className="card-subtitle">Perimetro operativo per generazione, validazione e invio.</div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1.4fr',gap:'.75rem',alignItems:'end'}}>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Anno fiscale</label>
+                  <input type="number" value={anno} onChange={e=>setAnno(e.target.value)} />
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Società</label>
+                  <select value={societaFiltro} onChange={e=>setSocietaFiltro(e.target.value)}>
+                    <option value="tutte">Tutte</option>
+                    {Object.entries(cuPerSostituto).map(([key,gruppo])=>(
+                      <option key={key} value={key}>{gruppo.sostitutoNome||key}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Tipo percipiente</label>
+                  <select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}>
+                    <option value="tutti">Tutti</option>
+                    <option value="persona fisica">Persona fisica</option>
+                    <option value="persona giuridica">Persona giuridica</option>
+                    <option value="non classificato">Non classificato</option>
+                  </select>
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Stato</label>
+                  <select value={statoFiltro} onChange={e=>setStatoFiltro(e.target.value)}>
+                    <option value="tutti">Tutti</option>
+                    <option value="bozza">Bozza</option>
+                    <option value="validata">Validata</option>
+                    <option value="inviata">Inviata</option>
+                  </select>
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Ricerca</label>
+                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca per percipiente, CF o sostituto..." />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card" style={{marginBottom:'1rem'}}>
+            <div className="card-hdr">
+              <div className="card-title-wrap">
+                <div className="card-title">Elenco certificazioni</div>
+                <div className="card-subtitle">{righeCu.length} certificazioni disponibili nel perimetro selezionato.</div>
+              </div>
+            </div>
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th onClick={()=>handleSort('percipiente')} style={{cursor:'pointer'}}>Percipiente</th>
+                    <th onClick={()=>handleSort('cf')} style={{cursor:'pointer'}}>Codice fiscale</th>
+                    <th onClick={()=>handleSort('compensi')} style={{cursor:'pointer',textAlign:'right'}}>Compensi</th>
+                    <th onClick={()=>handleSort('ritenute')} style={{cursor:'pointer',textAlign:'right'}}>Ritenute</th>
+                    <th onClick={()=>handleSort('stato')} style={{cursor:'pointer'}}>Stato</th>
+                    <th style={{textAlign:'right'}}>Azioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {righeCu.map(cu=>(
+                    <tr key={cu.fileName} data-selected={cu.stato==='validata'}>
+                      <td>
+                        <div style={{fontWeight:600}}>{cu.percipientiNome||'Percipiente da completare'}</div>
+                        <div style={{fontSize:'.7rem',color:'var(--mu)'}}>{cu.sostitutoNome||'Sostituto non rilevato'} · {cu.tipoPercipiente}</div>
+                      </td>
+                      <td style={{fontFamily:'monospace'}}>{cu.percipienteCF||'—'}</td>
+                      <td style={{textAlign:'right'}}>{fmtMoneyLoose(cu.compensi)}</td>
+                      <td style={{textAlign:'right'}}>{fmtMoneyLoose(cu.ritenute)}</td>
+                      <td>
+                        <div style={{display:'flex',gap:'.35rem',flexWrap:'wrap'}}>
+                          <span className={`bdg ${cu.stato==='inviata'?'bdg-green':cu.stato==='validata'?'bdg-gold':'bdg-gray'}`}>{cu.stato}</span>
+                          {cu.issues.length>0 && <span className="bdg bdg-red">{cu.issues.length} warning</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{display:'flex',gap:'.35rem',justifyContent:'flex-end'}}>
+                          <button className="btn-ghost" onClick={()=>setEditingCu(cu)}>Modifica</button>
+                          <button className="btn-ghost" onClick={()=>openCuPreview(cu)}>Visualizza</button>
+                          <button className="btn-ghost" onClick={()=>removeCu(cu.fileName)} style={{color:'var(--rd)'}}>Elimina</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Stats */}
           <div className="stats-grid" style={{marginBottom:'1rem'}}>
             <div className="stat-card">
@@ -1177,7 +1424,312 @@ export function ModuloCU(){
           })}
         </>
       )}
+      {editingCu&&<ModalEditCU cu={editingCu} onSave={saveCuEdit} onClose={()=>setEditingCu(null)}/>}
       </>}
+    </div>
+  );
+}
+
+export function ModuloCU(){
+  const [cuTab,setCuTab]=useState('workflow')
+  const [loading,setLoading]=useState(true)
+  const [anno,setAnno]=useState(new Date().getFullYear())
+  const [societaId,setSocietaId]=useState('tutte')
+  const [tipoFiltro,setTipoFiltro]=useState('tutti')
+  const [statoFiltro,setStatoFiltro]=useState('tutti')
+  const [search,setSearch]=useState('')
+  const [societaOptions,setSocietaOptions]=useState([])
+  const [rows,setRows]=useState([])
+
+  useEffect(()=>{
+    caricaCu()
+  },[anno, societaId])
+
+  const caricaCu = async()=>{
+    setLoading(true)
+    try{
+      const { data: societaRows } = await contabilitaRepo.getSocietaAttiveBasic()
+      const options = societaRows || []
+      setSocietaOptions(options)
+      const scopeIds = societaId === 'tutte'
+        ? options.map((row)=>row.id)
+        : [societaId].filter(Boolean)
+
+      const chunks = await Promise.all(scopeIds.map(async(id)=>{
+        const [{data:perc},{data:docs},{data:payments}] = await Promise.all([
+          contabilitaRepo.getPercipientiBySocieta(id),
+          contabilitaRepo.getDocumenti(id),
+          contabilitaRepo.getRitenuteByAnnoPerPercipiente(id, anno),
+        ])
+        return {
+          percipienti: perc || [],
+          documenti: docs || [],
+          payments: payments || [],
+        }
+      }))
+
+      const fiscalRows = buildCuRowsFromPayments({
+        percipienti: chunks.flatMap((chunk)=>chunk.percipienti),
+        documenti: chunks.flatMap((chunk)=>chunk.documenti),
+        payments: chunks.flatMap((chunk)=>chunk.payments),
+        year: anno,
+      })
+      setRows(fiscalRows)
+    }finally{
+      setLoading(false)
+    }
+  }
+
+  const filteredRows = useMemo(()=>{
+    const query = search.trim().toLowerCase()
+    return rows.filter((row)=>{
+      const matchesTipo = tipoFiltro === 'tutti' || row.tipoPercipiente === tipoFiltro
+      const matchesStato = statoFiltro === 'tutti' || row.stato === statoFiltro
+      const matchesSearch = !query || [row.percipiente,row.codiceFiscale,row.causaleLabel]
+        .filter(Boolean)
+        .some((value)=>String(value).toLowerCase().includes(query))
+      return matchesTipo && matchesStato && matchesSearch
+    })
+  },[rows, search, statoFiltro, tipoFiltro])
+
+  const summary = useMemo(()=>({
+    count: filteredRows.length,
+    compensi: filteredRows.reduce((sum,row)=>sum+Number(row.compensi||0),0),
+    ritenute: filteredRows.reduce((sum,row)=>sum+Number(row.ritenute||0),0),
+    warnings: filteredRows.reduce((sum,row)=>sum+(row.warningCount||0),0),
+  }),[filteredRows])
+
+  const exportCsv = ()=>{
+    const lines = [
+      ['Percipiente','Codice fiscale','Causale','Compensi','Ritenute','Stato','Warning'].join(';'),
+      ...filteredRows.map((row)=>[
+        row.percipiente,
+        row.codiceFiscale || '',
+        `${row.causaleReddituale || ''} ${row.causaleLabel || ''}`.trim(),
+        Number(row.compensi || 0).toFixed(2).replace('.', ','),
+        Number(row.ritenute || 0).toFixed(2).replace('.', ','),
+        row.stato,
+        (row.warnings || []).join(' | '),
+      ].join(';')),
+    ].join('\n')
+    const blob = new Blob([lines], { type:'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `CU_${anno}.csv`
+    link.click()
+    setTimeout(()=>URL.revokeObjectURL(url), 1500)
+  }
+
+  const generateTxt = ()=>{
+    const content = [
+      `Certificazioni Uniche ${anno}`,
+      '',
+      ...filteredRows.map((row)=>`${row.percipiente} | ${row.codiceFiscale || 'CF mancante'} | ${row.causaleReddituale || 'N/D'} | ${fmtMoneyLoose(row.compensi)} | ${fmtMoneyLoose(row.ritenute)}`),
+    ].join('\n')
+    const blob = new Blob([content], { type:'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `CU_${anno}.txt`
+    link.click()
+    setTimeout(()=>URL.revokeObjectURL(url), 1500)
+  }
+
+  return(
+    <div className="page">
+      <ModuleHeader
+        sectionLabel="Adempimenti"
+        title="Certificazioni Uniche"
+        context={`Workflow contabile guidato dai pagamenti ${societaId === 'tutte' ? '— tutte le societa' : ''}`}
+        primaryAction={<button className="btn" onClick={generateTxt}>Genera CU</button>}
+        secondaryAction={
+          <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
+            <button className="btn-sec" onClick={exportCsv}>Esporta</button>
+            <button className="btn-sec" onClick={caricaCu}>Aggiorna dati</button>
+          </div>
+        }
+      />
+
+      <div className="pills" style={{marginBottom:'1.25rem'}}>
+        <span className={'pill'+(cuTab==='workflow'?' active':'')} onClick={()=>setCuTab('workflow')}>Workflow CU</span>
+        <span className={'pill'+(cuTab==='tel'?' active':'')} onClick={()=>setCuTab('tel')}>File .TEL locazioni brevi</span>
+      </div>
+
+      {cuTab === 'tel' && <ModuloTEL/>}
+
+      {cuTab === 'workflow' && (
+        <>
+          <div className="card" style={{marginBottom:'1rem'}}>
+            <div className="card-hdr">
+              <div className="card-title-wrap">
+                <div className="card-title">Filtri e configurazione</div>
+                <div className="card-subtitle">La CU legge solo parcelle pagate, con esclusione automatica dei forfettari.</div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div style={{display:'grid',gridTemplateColumns:'120px 1fr 180px 160px 1.2fr',gap:'.75rem',alignItems:'end'}}>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Anno fiscale</label>
+                  <input type="number" value={anno} onChange={e=>setAnno(parseInt(e.target.value || new Date().getFullYear()))} />
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Societa</label>
+                  <select value={societaId} onChange={e=>setSocietaId(e.target.value)}>
+                    <option value="tutte">Tutte le societa</option>
+                    {societaOptions.map((row)=><option key={row.id} value={row.id}>{row.denominazione}</option>)}
+                  </select>
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Tipo percipiente</label>
+                  <select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}>
+                    <option value="tutti">Tutti</option>
+                    <option value="professionista">Professionista</option>
+                    <option value="collaboratore">Collaboratore</option>
+                    <option value="altro">Altro</option>
+                  </select>
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Stato</label>
+                  <select value={statoFiltro} onChange={e=>setStatoFiltro(e.target.value)}>
+                    <option value="tutti">Tutti</option>
+                    <option value="validata">Validata</option>
+                    <option value="bozza">Bozza</option>
+                  </select>
+                </div>
+                <div className="fg" style={{marginBottom:0}}>
+                  <label>Ricerca</label>
+                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca per percipiente, CF o causale..." />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="stats-grid" style={{marginBottom:'1rem'}}>
+            <div className="stat-card"><div className="stat-val">{summary.count}</div><div className="stat-lbl">CU rilevanti</div></div>
+            <div className="stat-card"><div className="stat-val">{fmtMoneyLoose(summary.compensi)}</div><div className="stat-lbl">Compensi pagati</div></div>
+            <div className="stat-card"><div className="stat-val">{fmtMoneyLoose(summary.ritenute)}</div><div className="stat-lbl">Ritenute applicate</div></div>
+            <div className="stat-card"><div className="stat-val">{summary.warnings}</div><div className="stat-lbl">Warning aperti</div></div>
+          </div>
+
+          <div className="card" style={{marginBottom:'1rem'}}>
+            <div className="card-hdr">
+              <div className="card-title-wrap">
+                <div className="card-title">Elenco certificazioni</div>
+                <div className="card-subtitle">Ogni riga deriva da compensi maturati su pagamento, non da registrazioni preliminari.</div>
+              </div>
+            </div>
+            {loading ? (
+              <div className="card-body"><div className="loading">Caricamento...</div></div>
+            ) : filteredRows.length === 0 ? (
+              <div className="card-body">
+                <div className="alert alert-info">Nessuna CU rilevante nel perimetro selezionato. Controlla pagamenti, parcelle collegate e dati del percipiente.</div>
+              </div>
+            ) : (
+              <div className="tbl-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Percipiente</th>
+                      <th>Codice fiscale</th>
+                      <th>Causale</th>
+                      <th style={{textAlign:'right'}}>Compensi</th>
+                      <th style={{textAlign:'right'}}>Ritenute</th>
+                      <th>Stato</th>
+                      <th>Review</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row)=>(
+                      <tr key={row.key} data-selected={row.stato === 'validata'}>
+                        <td>
+                          <div style={{fontWeight:600}}>{row.percipiente}</div>
+                          <div style={{fontSize:'.7rem',color:'var(--mu)'}}>{row.tipoPercipiente || 'professionista'} · {row.nonSubjectCode ? `Cod. ${row.nonSubjectCode}` : 'Nessuna quota esclusa'}</div>
+                        </td>
+                        <td style={{fontFamily:'monospace'}}>{row.codiceFiscale || '—'}</td>
+                        <td>{row.causaleReddituale ? `${row.causaleReddituale} - ${row.causaleLabel}` : 'Da definire'}</td>
+                        <td style={{textAlign:'right'}}>{fmtMoneyLoose(row.compensi)}</td>
+                        <td style={{textAlign:'right'}}>{fmtMoneyLoose(row.ritenute)}</td>
+                        <td><span className={`bdg ${row.stato === 'validata' ? 'bdg-green' : 'bdg-gold'}`}>{row.stato}</span></td>
+                        <td>
+                          {row.warningCount ? (
+                            <div style={{display:'grid',gap:4}}>
+                              {row.warnings.slice(0,2).map((warning)=><span key={warning} className="bdg bdg-red">{warning}</span>)}
+                            </div>
+                          ) : (
+                            <span className="bdg bdg-green">Pronta</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-hdr">
+              <div className="card-title-wrap">
+                <div className="card-title">Azioni e output</div>
+                <div className="card-subtitle">La CU resta reviewable e auditabile: i warning non bloccano, ma restano visibili prima dell export.</div>
+              </div>
+            </div>
+            <div className="card-body" style={{display:'flex',justifyContent:'space-between',gap:'1rem',alignItems:'flex-start',flexWrap:'wrap'}}>
+              <div style={{display:'grid',gap:'.35rem',fontSize:'.82rem',color:'var(--mu)'}}>
+                <div>Compensi rilevanti: {fmtMoneyLoose(summary.compensi)}</div>
+                <div>Ritenute rilevanti: {fmtMoneyLoose(summary.ritenute)}</div>
+                <div>Forfettari esclusi automaticamente da CU, 770 e scadenziario.</div>
+              </div>
+              <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
+                <button className="btn-sec" onClick={exportCsv}>Esporta CSV</button>
+                <button className="btn" onClick={generateTxt}>Genera prospetto</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ModalEditCU({cu,onSave,onClose}){
+  const [form,setForm]=useState({
+    fileName:cu.fileName,
+    percipientiNome:cu.percipientiNome||'',
+    percipienteCF:cu.percipienteCF||'',
+    sostitutoNome:cu.sostitutoNome||'',
+    sostitutoCF:cu.sostitutoCF||'',
+    compensi:cu.compensi||'',
+    ritenute:cu.ritenute||'',
+  });
+
+  const up=(key,val)=>setForm(prev=>({...prev,[key]:val}));
+
+  return(
+    <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:640}}>
+        <div className="modal-hdr">
+          <div className="modal-drag"/>
+          <div className="modal-title">Modifica certificazione</div>
+          <div className="modal-sub">{cu.fileName}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-grid">
+            <div className="fg full"><label>Percipiente</label><input value={form.percipientiNome} onChange={e=>up('percipientiNome',e.target.value)} /></div>
+            <div className="fg"><label>Codice fiscale</label><input value={form.percipienteCF} onChange={e=>up('percipienteCF',e.target.value.toUpperCase())} /></div>
+            <div className="fg"><label>Sostituto</label><input value={form.sostitutoNome} onChange={e=>up('sostitutoNome',e.target.value)} /></div>
+            <div className="fg"><label>CF / P.IVA sostituto</label><input value={form.sostitutoCF} onChange={e=>up('sostitutoCF',e.target.value.toUpperCase())} /></div>
+            <div className="fg"><label>Compensi</label><input type="number" value={form.compensi} onChange={e=>up('compensi',e.target.value)} /></div>
+            <div className="fg"><label>Ritenute</label><input type="number" value={form.ritenute} onChange={e=>up('ritenute',e.target.value)} /></div>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-sec" onClick={onClose}>Annulla</button>
+          <button className="btn" onClick={()=>onSave(form)}>Salva modifiche</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1258,3 +1810,4 @@ function CalendarModal({regimeId,onClose}){
     </div>
   );
 }
+

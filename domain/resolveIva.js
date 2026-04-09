@@ -1,4 +1,4 @@
-import { traceStep } from '../src/utils/pipelineLogger.js'
+﻿import { traceStep } from '../src/utils/pipelineLogger.js'
 
 export const IVA_ALIQUOTE_SUPPORTATE = Object.freeze([0, 4, 5, 10, 22])
 export const IVA_REGIMI = Object.freeze({
@@ -200,7 +200,7 @@ export function resolveIva({ conto, aliquota, causaliIva, natura, pipelineContex
         causaliIva_count: causaliIva.length,
         candidati_stessa_aliquota: causaliIva.filter(c => aliquotaCausaleEquals(c, percentuale)).length,
         hint:
-          'Serve una riga con aliquota coerente e predefinita attiva. Verifica tipo boolean/1 su is_default_per_aliquota e ricarica ContabilitÃ  dopo aver salvato in Impostazioni Procedure.',
+          'Serve una riga con aliquota coerente e predefinita attiva. Verifica tipo boolean/1 su is_default_per_aliquota e ricarica Contabilità dopo aver salvato in Impostazioni Procedure.',
         causali_iva_debug_sample: debugRows,
       },
       { resolve_iva_error: true },
@@ -304,3 +304,4 @@ export function formatIvaRegimeLabel(regime) {
       return 'Regime IVA ?'
   }
 }
+

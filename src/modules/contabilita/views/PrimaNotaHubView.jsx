@@ -9,6 +9,8 @@ import {
   getPrimaNotaStatoBadgeClass,
   mapScritturaRowForTrace,
 } from '../ui/viewMappers.js'
+import { ModuleHeader } from '../../../shared/components'
+import { BaseCombobox } from '../ui/BaseDropdown.jsx'
 
 function PrimaNotaViewScritturaRow({ s, getClienteCodice, getClienteNome }) {
   traceStep(
@@ -192,14 +194,12 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
 
   return (
     <div className="erp-view">
-      <div className="erp-header">
-        <div className="erp-header-copy">
-          <div className="erp-title">Prima nota</div>
-        </div>
-        <div className="erp-header-actions">
-          <button className="btn" onClick={() => setModalNuova(true)}>Nuova scrittura</button>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title="Prima nota"
+        context="Vista operativa delle scritture contabili"
+        primaryAction={<button className="btn" onClick={() => setModalNuova(true)}>Nuova scrittura</button>}
+      />
 
       <div className="erp-filter-card">
       <div className="erp-toolbar">
@@ -218,21 +218,25 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
           </div>
           <div className="fg" style={{ minWidth: 200 }}>
             <label>Filtra per Cliente</label>
-            <select
+            <BaseCombobox
               value={filtroCliente}
-              onChange={(e) => {
-                const value = e.target.value
+              onChange={(value) => {
                 traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'filtroCliente', scope: 'PrimaNotaView_filtri' } })
-                setFiltroCliente(value)
+                setFiltroCliente(value || '')
               }}
-            >
-              <option value="">Tutti i clienti</option>
-              {clienti.filter((c) => c.codice_cliente).map((c) => (
-                <option key={c.id} value={c.id}>
-                  [{c.codice_cliente}] {c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}
-                </option>
-              ))}
-            </select>
+              options={[
+                { id: '', label: 'Tutti i clienti' },
+                ...clienti.filter((c) => c.codice_cliente).map((c) => ({
+                  id: c.id,
+                  label: `[${c.codice_cliente}] ${c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}`,
+                })),
+              ]}
+              getOptionId={(o) => o?.id}
+              getOptionLabel={(o) => o?.label}
+              placeholder="Tutti i clienti"
+              maxItems={140}
+              searchable
+            />
           </div>
           <div className="erp-toolbar-spacer" />
           <div className="cont-toolbar-summary">
@@ -243,7 +247,7 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty"><div className="empty-ico">??</div><div className="empty-t">Nessuna scrittura</div></div>
+        <div className="empty"><div className="empty-ico">□</div><div className="empty-t">Nessuna scrittura</div></div>
       ) : (
         <div className="erp-table-shell erp-data-card">
           <div className="erp-table-head">
@@ -277,33 +281,47 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 650 }}>
             <div className="modal-hdr">
               <div className="modal-drag" />
-              <div className="modal-title">?? Nuova Scrittura Prima Nota</div>
-              <button className="modal-close" onClick={() => setModalNuova(false)}>?</button>
+              <div className="modal-title">Nuova scrittura prima nota</div>
+              <button className="modal-close" onClick={() => setModalNuova(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
                 <div className="fg"><label>Data Registrazione *</label><input type="date" value={formData.data_registrazione} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'data_registrazione', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, data_registrazione: value })) }} /></div>
                 <div className="fg"><label>Data Documento</label><input type="date" value={formData.data_documento} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'data_documento', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, data_documento: value })) }} /></div>
                 <div className="fg"><label>N° Documento</label><input value={formData.numero_documento} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'numero_documento', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, numero_documento: value })) }} placeholder="Es. FT-001/2025" /></div>
-                <div className="fg"><label>Causale Contabile</label><select value={formData.causale_codice} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'causale_codice', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, causale_codice: value })) }}><option value="">-- Seleziona --</option>{causali.map((c) => <option key={c.id} value={c.codice}>{c.codice} - {c.descrizione}</option>)}</select></div>
+                <div className="fg"><label>Causale Contabile</label><BaseCombobox value={formData.causale_codice} onChange={(value) => { traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'causale_codice', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, causale_codice: value || '' })) }} options={[{ id: '', label: '-- Seleziona --' }, ...causali.map((c) => ({ id: c.codice, label: `${c.codice} - ${c.descrizione}` }))]} getOptionId={(o) => o?.id} getOptionLabel={(o) => o?.label} placeholder="-- Seleziona --" maxItems={140} searchable /></div>
                 <div className="fg full" style={{ background: 'rgba(200,164,94,.08)', padding: '.75rem', borderRadius: 8, border: '1px solid rgba(200,164,94,.2)' }}>
-                  <label style={{ color: 'var(--gold)', fontWeight: 600 }}>?? Cliente</label>
-                  <select value={formData.cliente_id} onChange={(e) => onClienteChange(e.target.value)} style={{ marginTop: '.35rem' }}>
-                    <option value="">-- Seleziona Cliente --</option>
-                    {clienti.map((c) => <option key={c.id} value={c.id}>{c.codice_cliente ? `[${c.codice_cliente}] ` : ''}{c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}</option>)}
-                  </select>
+                  <label style={{ color: 'var(--gold)', fontWeight: 600 }}>Cliente</label>
+                  <div style={{ marginTop: '.35rem' }}>
+                    <BaseCombobox
+                      value={formData.cliente_id}
+                      onChange={(value) => onClienteChange(value || '')}
+                      options={[
+                        { id: '', label: '-- Seleziona Cliente --' },
+                        ...clienti.map((c) => ({
+                          id: c.id,
+                          label: `${c.codice_cliente ? `[${c.codice_cliente}] ` : ''}${c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}`,
+                        })),
+                      ]}
+                      getOptionId={(o) => o?.id}
+                      getOptionLabel={(o) => o?.label}
+                      placeholder="-- Seleziona Cliente --"
+                      maxItems={140}
+                      searchable
+                    />
+                  </div>
                   <div style={{ fontSize: '.7rem', color: 'var(--mu)', marginTop: '.25rem' }}>Il codice cliente collegherà questa scrittura all'anagrafica</div>
                 </div>
                 <div className="fg full"><label>Descrizione</label><input value={formData.descrizione} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'descrizione', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, descrizione: value })) }} placeholder="Descrizione operazione" /></div>
                 <div className="fg"><label>Imponibile €</label><input type="number" step="0.01" value={formData.imponibile} onChange={(e) => onImponibileChange(e.target.value)} /></div>
-                <div className="fg"><label>Causale IVA</label><select value={formData.causale_iva_id} onChange={(e) => onCausaleIvaChange(e.target.value)}><option value="">-- Seleziona --</option>{causaliIva.map((c) => <option key={c.id} value={c.id}>{c.codice} - {c.descrizione} ({c.aliquota}%)</option>)}</select></div>
+                <div className="fg"><label>Causale IVA</label><BaseCombobox value={formData.causale_iva_id} onChange={(value) => onCausaleIvaChange(value || '')} options={[{ id: '', label: '-- Seleziona --' }, ...causaliIva.map((c) => ({ id: c.id, label: `${c.codice} - ${c.descrizione} (${c.aliquota}%)` }))]} getOptionId={(o) => o?.id} getOptionLabel={(o) => o?.label} placeholder="-- Seleziona --" maxItems={140} searchable /></div>
                 <div className="fg"><label>IVA €</label><input type="number" step="0.01" value={formData.imposta} readOnly style={{ background: 'var(--bg)' }} /></div>
                 <div className="fg"><label>Totale €</label><input type="number" step="0.01" value={formData.totale_dare} readOnly style={{ background: 'var(--bg)', fontWeight: 700, color: 'var(--gold)' }} /></div>
               </div>
             </div>
             <div className="modal-foot">
               <button className="btn-sec" onClick={() => setModalNuova(false)}>Annulla</button>
-              <button className="btn" onClick={salvaScrittura}>?? Registra</button>
+              <button className="btn" onClick={salvaScrittura}>Registra</button>
             </div>
           </div>
         </div>

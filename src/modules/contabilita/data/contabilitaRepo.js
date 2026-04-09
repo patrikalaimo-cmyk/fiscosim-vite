@@ -5,6 +5,7 @@ import {
   insertPrimaNotaPartitario as insertPrimaNotaPartitarioService,
   deletePrimaNotaById,
 } from '../../../../services/primaNotaService.js'
+import { syncPercipienteFromDocumentoContabilita } from '../application/percipientiRegistryService.js'
 export function getSocietaAttive() {
   return sb.from('societa').select('*').eq('attiva', true).order('denominazione')
 }
@@ -99,6 +100,10 @@ export function getPercipientiAttivi(societaId) {
   return sb.from('percipienti').select('*').eq('societa_id', societaId).eq('attivo', true).order('ragione_sociale')
 }
 
+export function getPercipientiBySocieta(societaId) {
+  return sb.from('percipienti').select('*').eq('societa_id', societaId).order('ragione_sociale')
+}
+
 export function getClientiBase() {
   return sb
     .from('clienti')
@@ -138,6 +143,10 @@ export function insertSocieta(payload) {
   return sb.from('societa').insert([payload]).select().single()
 }
 
+export function updateSocieta(id, updates) {
+  return sb.from('societa').update(updates).eq('id', id).select().single()
+}
+
 export function getImpostazioneStudio(chiave) {
   return sb.from('impostazioni_studio').select('chiave,valore').eq('chiave', chiave)
 }
@@ -147,7 +156,20 @@ export function getImpostazioneStudioValore(chiave) {
 }
 
 export function insertDocumentoContabilita(payload) {
-  return sb.from('documenti_contabilita').insert([payload]).select()
+  return sb
+    .from('documenti_contabilita')
+    .insert([payload])
+    .select()
+    .then(async (res) => {
+      if (!res.error && res.data?.[0]) {
+        try {
+          await syncPercipienteFromDocumentoContabilita(res.data[0])
+        } catch (e) {
+          console.warn('[Percipienti sync] contabilitaRepo', e?.message || e)
+        }
+      }
+      return res
+    })
 }
 
 export function uploadDocumento(filePath, file) {
@@ -419,6 +441,10 @@ export function deactivatePercipiente(id) {
   return sb.from('percipienti').update({ attivo: false }).eq('id', id)
 }
 
+export function deletePercipiente(id) {
+  return sb.from('percipienti').delete().eq('id', id)
+}
+
 export function getRitenuteByAnnoPerData(societaId, annoSel) {
   return sb
     .from('ritenute_dacconto')
@@ -430,7 +456,7 @@ export function getRitenuteByAnnoPerData(societaId, annoSel) {
 }
 
 export function insertRitenuta(record) {
-  return sb.from('ritenute_dacconto').insert([record])
+  return sb.from('ritenute_dacconto').insert([record]).select().single()
 }
 
 export function deleteRitenuta(id) {

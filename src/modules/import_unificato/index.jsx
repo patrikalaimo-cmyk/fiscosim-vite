@@ -15,7 +15,6 @@ import * as importRepo from './data/importRepo.js'
 import { ImportDropzone } from './components/ImportDropzone.jsx'
 import { ImportControlBar } from './components/ImportControlBar.jsx'
 import { ImportDocumentsList } from './components/ImportDocumentsList.jsx'
-import { ImportPageHeader } from './components/ImportPageHeader.jsx'
 import { TIPI_DOCUMENTO, ALIQUOTE_IVA, fmt } from './components/importUiConfig.js'
 
 export function ModuloImportUnificato({ ruolo }) {
@@ -177,8 +176,6 @@ export function ModuloImportUnificato({ ruolo }) {
 
   return (
     <div className="page">
-      <ImportPageHeader />
-
       <ImportControlBar
         societa={societa}
         societaId={societaId}

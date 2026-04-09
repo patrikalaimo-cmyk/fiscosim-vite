@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAIStatus } from '../../../context/AIStatusContext'
-import { TagInput } from '../../../shared/components'
+import { TagInput, ModuleHeader } from '../../../shared/components'
+import { ACCOUNTING_UI_TEXT, COMMON_UI_TEXT, deleteAllLabel, deleteSelectedLabel } from '../../../shared/constants'
 import { parseXMLFattura } from '../../../../domain/fatture.js'
 import { trace } from '../../../core/debug/trace'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../../utils/pipelineLogger.js'
@@ -23,11 +24,7 @@ export default function AnagraficheContabiliView({
   return (
     <>
       {contTab === 'societa' && (
-        <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '.5rem' }}>??</div>
-          <div style={{ fontSize: '1rem', fontWeight: 600 }}>Modulo in sviluppo</div>
-          <div style={{ fontSize: '.8rem', color: 'var(--mu)', marginTop: '.25rem' }}>Questa sezione sarà disponibile a breve</div>
-        </div>
+        <SocietaConfigView societa={societaAttiva} onRefresh={caricaTutto} />
       )}
 
       {contTab === 'piano_conti' && (
@@ -73,6 +70,227 @@ export default function AnagraficheContabiliView({
     </>
   )
 }
+
+function SocietaConfigView({ societa, onRefresh }) {
+  const createInitialForm = useMemo(
+    () => current => ({
+      ragione_sociale: current?.denominazione || '',
+      partita_iva: current?.partita_iva || '',
+      codice_fiscale: current?.codice_fiscale || '',
+      forma_giuridica: current?.forma_giuridica || '',
+      data_costituzione: current?.data_costituzione || '',
+      stato_attivita: current?.attiva === false ? 'inattiva' : 'attiva',
+      regime_fiscale: current?.regime_fiscale || current?.regime_contabile || 'ordinario',
+      regime_iva: current?.regime_iva || '',
+      liquidazione_iva: current?.tipo_liquidazione_iva || 'trimestrale',
+      ateco: current?.ateco || '',
+      opzioni_fiscali: current?.opzioni_fiscali || '',
+      esercizio_inizio: current?.esercizio_inizio || '',
+      esercizio_fine: current?.esercizio_fine || '',
+      valuta: current?.valuta || 'EUR',
+      schema_bilancio: current?.schema_bilancio || 'civilistico',
+      default_scritture: current?.default_scritture || '',
+      indirizzo: current?.indirizzo || '',
+      cap: current?.cap || '',
+      citta: current?.citta || '',
+      provincia: current?.provincia || '',
+      pec: current?.pec || '',
+      email: current?.email || '',
+      telefono: current?.telefono || '',
+      ai_attiva_default: typeof current?.ai_attiva_default === 'boolean' ? current.ai_attiva_default : true,
+      comportamento_import: current?.comportamento_import || 'revisione_guidata',
+      automatismi_base: current?.automatismi_base || 'controllo_documentale',
+    }),
+    []
+  )
+
+  const [form, setForm] = useState(() => createInitialForm(societa))
+  const [saving, setSaving] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+
+  useEffect(() => {
+    setForm(createInitialForm(societa))
+    setFeedback(null)
+  }, [societa, createInitialForm])
+
+  const updateField = (key, value) => {
+    setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  const resetForm = () => {
+    setForm(createInitialForm(societa))
+    setFeedback(null)
+  }
+
+  const availableColumns = useMemo(() => new Set(Object.keys(societa || {})), [societa])
+
+  const dirty = useMemo(() => {
+    const baseline = createInitialForm(societa)
+    return Object.keys(baseline).some(key => baseline[key] !== form[key])
+  }, [createInitialForm, form, societa])
+
+  const saveSocieta = async () => {
+    if (!societa?.id || !form.ragione_sociale.trim()) return
+
+    const updates = {
+      denominazione: form.ragione_sociale.trim(),
+      partita_iva: form.partita_iva.trim(),
+      codice_fiscale: form.codice_fiscale.trim().toUpperCase(),
+      indirizzo: form.indirizzo.trim(),
+      cap: form.cap.trim(),
+      citta: form.citta.trim(),
+      provincia: form.provincia.trim().toUpperCase(),
+      email: form.email.trim(),
+      telefono: form.telefono.trim(),
+      regime_contabile: form.regime_fiscale || 'ordinario',
+      tipo_liquidazione_iva: form.liquidazione_iva || 'trimestrale',
+      attiva: form.stato_attivita !== 'inattiva',
+    }
+
+    const optionalMappings = {
+      forma_giuridica: form.forma_giuridica.trim(),
+      data_costituzione: form.data_costituzione || null,
+      regime_fiscale: form.regime_fiscale || null,
+      regime_iva: form.regime_iva || null,
+      ateco: form.ateco.trim(),
+      opzioni_fiscali: form.opzioni_fiscali.trim(),
+      esercizio_inizio: form.esercizio_inizio || null,
+      esercizio_fine: form.esercizio_fine || null,
+      valuta: form.valuta || null,
+      schema_bilancio: form.schema_bilancio || null,
+      default_scritture: form.default_scritture.trim(),
+      pec: form.pec.trim(),
+      ai_attiva_default: form.ai_attiva_default,
+      comportamento_import: form.comportamento_import || null,
+      automatismi_base: form.automatismi_base || null,
+    }
+
+    Object.entries(optionalMappings).forEach(([key, value]) => {
+      if (availableColumns.has(key)) updates[key] = value
+    })
+
+    setSaving(true)
+    setFeedback(null)
+    const { error } = await contabilitaRepo.updateSocieta(societa.id, updates)
+    setSaving(false)
+
+    if (error) {
+      setFeedback({ type: 'error', message: error.message || 'Impossibile salvare le modifiche.' })
+      return
+    }
+
+    setFeedback({ type: 'ok', message: 'Anagrafica società aggiornata correttamente.' })
+    onRefresh?.()
+  }
+
+  const primaryAction = useMemo(
+    () => (
+      <button className="btn" onClick={saveSocieta} disabled={saving || !dirty || !form.ragione_sociale.trim()}>
+        {saving ? 'Salvo...' : 'Salva modifiche'}
+      </button>
+    ),
+    [dirty, form.ragione_sociale, saveSocieta, saving]
+  )
+
+  const secondaryAction = useMemo(
+    () => (
+      <button className="btn-sec" onClick={resetForm} disabled={saving || !dirty}>
+        Reset
+      </button>
+    ),
+    [dirty, saving]
+  )
+
+  const sectionCard = (title, subtitle, content) => (
+    <section className="card">
+      <div className="card-hdr">
+        <div className="card-title-wrap">
+          <div className="card-title">{title}</div>
+          {subtitle ? <div className="card-subtitle">{subtitle}</div> : null}
+        </div>
+      </div>
+      <div className="card-body">{content}</div>
+    </section>
+  )
+
+  return (
+    <>
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title="Anagrafica società"
+        context={societa?.denominazione || ''}
+        primaryAction={primaryAction}
+        secondaryAction={secondaryAction}
+      />
+
+      <div style={{ display: 'grid', gap: '1rem' }}>
+        {feedback ? <div className={`alert ${feedback.type === 'error' ? 'alert-err' : 'alert-ok'}`}>{feedback.message}</div> : null}
+
+        {sectionCard(
+          'Dati anagrafici',
+          'Identità giuridica e stato della società.',
+          <div className="form-grid">
+            <div className="fg full"><label>Ragione sociale</label><input value={form.ragione_sociale} onChange={e => updateField('ragione_sociale', e.target.value)} /></div>
+            <div className="fg"><label>Partita IVA</label><input value={form.partita_iva} onChange={e => updateField('partita_iva', e.target.value)} maxLength={11} /></div>
+            <div className="fg"><label>Codice fiscale</label><input value={form.codice_fiscale} onChange={e => updateField('codice_fiscale', e.target.value.toUpperCase())} maxLength={16} /></div>
+            <div className="fg"><label>Forma giuridica</label><input value={form.forma_giuridica} onChange={e => updateField('forma_giuridica', e.target.value)} placeholder="Es. SRL" /></div>
+            <div className="fg"><label>Data costituzione</label><input type="date" value={form.data_costituzione} onChange={e => updateField('data_costituzione', e.target.value)} /></div>
+            <div className="fg"><label>Stato attività</label><select value={form.stato_attivita} onChange={e => updateField('stato_attivita', e.target.value)}><option value="attiva">Attiva</option><option value="inattiva">Inattiva</option></select></div>
+          </div>
+        )}
+
+        {sectionCard(
+          'Dati fiscali',
+          'Regimi e opzioni che guidano il trattamento fiscale della società.',
+          <div className="form-grid">
+            <div className="fg"><label>Regime fiscale</label><select value={form.regime_fiscale} onChange={e => updateField('regime_fiscale', e.target.value)}><option value="ordinario">Ordinario</option><option value="semplificato">Semplificato</option><option value="forfettario">Forfettario</option></select></div>
+            <div className="fg"><label>Regime IVA</label><select value={form.regime_iva} onChange={e => updateField('regime_iva', e.target.value)}><option value="">Non specificato</option><option value="ordinario">Ordinario</option><option value="split_payment">Split payment</option><option value="reverse_charge">Reverse charge</option><option value="esente">Esente</option></select></div>
+            <div className="fg"><label>Liquidazione IVA</label><select value={form.liquidazione_iva} onChange={e => updateField('liquidazione_iva', e.target.value)}><option value="mensile">Mensile</option><option value="trimestrale">Trimestrale</option></select></div>
+            <div className="fg"><label>Codice attività (ATECO)</label><input value={form.ateco} onChange={e => updateField('ateco', e.target.value)} placeholder="Es. 62.01.00" /></div>
+            <div className="fg full"><label>Opzioni fiscali</label><textarea value={form.opzioni_fiscali} onChange={e => updateField('opzioni_fiscali', e.target.value)} rows={3} placeholder="Annotazioni, opzioni o regimi particolari." /></div>
+          </div>
+        )}
+
+        {sectionCard(
+          'Impostazioni contabili',
+          'Parametri base per l’esercizio e la gestione delle scritture.',
+          <div className="form-grid">
+            <div className="fg"><label>Esercizio contabile dal</label><input type="date" value={form.esercizio_inizio} onChange={e => updateField('esercizio_inizio', e.target.value)} /></div>
+            <div className="fg"><label>Esercizio contabile al</label><input type="date" value={form.esercizio_fine} onChange={e => updateField('esercizio_fine', e.target.value)} /></div>
+            <div className="fg"><label>Valuta</label><select value={form.valuta} onChange={e => updateField('valuta', e.target.value)}><option value="EUR">EUR</option><option value="USD">USD</option><option value="GBP">GBP</option></select></div>
+            <div className="fg"><label>Schema bilancio</label><select value={form.schema_bilancio} onChange={e => updateField('schema_bilancio', e.target.value)}><option value="civilistico">Civilistico</option><option value="abbreviato">Abbreviato</option><option value="micro">Microimpresa</option></select></div>
+            <div className="fg full"><label>Default scritture</label><textarea value={form.default_scritture} onChange={e => updateField('default_scritture', e.target.value)} rows={3} placeholder="Regole operative di default per registrazioni e contropartite." /></div>
+          </div>
+        )}
+
+        {sectionCard(
+          'Contatti e riferimenti',
+          'Recapiti e indirizzi usati nei flussi documentali e amministrativi.',
+          <div className="form-grid">
+            <div className="fg full"><label>Indirizzo</label><input value={form.indirizzo} onChange={e => updateField('indirizzo', e.target.value)} /></div>
+            <div className="fg"><label>CAP</label><input value={form.cap} onChange={e => updateField('cap', e.target.value)} maxLength={5} /></div>
+            <div className="fg"><label>Città</label><input value={form.citta} onChange={e => updateField('citta', e.target.value)} /></div>
+            <div className="fg"><label>Provincia</label><input value={form.provincia} onChange={e => updateField('provincia', e.target.value.toUpperCase())} maxLength={2} placeholder="RM" /></div>
+            <div className="fg"><label>PEC</label><input type="email" value={form.pec} onChange={e => updateField('pec', e.target.value)} placeholder="pec@azienda.it" /></div>
+            <div className="fg"><label>Email</label><input type="email" value={form.email} onChange={e => updateField('email', e.target.value)} placeholder="amministrazione@azienda.it" /></div>
+            <div className="fg"><label>Telefono</label><input value={form.telefono} onChange={e => updateField('telefono', e.target.value)} placeholder="+39 06 1234567" /></div>
+          </div>
+        )}
+
+        {sectionCard(
+          'Parametri operativi',
+          'Comportamenti predefiniti per AI, import documenti e automatismi di base.',
+          <div className="form-grid">
+            <div className="fg"><label>AI attiva di default</label><select value={form.ai_attiva_default ? 'attiva' : 'disattiva'} onChange={e => updateField('ai_attiva_default', e.target.value === 'attiva')}><option value="attiva">Attiva</option><option value="disattiva">Non attiva</option></select></div>
+            <div className="fg"><label>Comportamento import documenti</label><select value={form.comportamento_import} onChange={e => updateField('comportamento_import', e.target.value)}><option value="revisione_guidata">Revisione guidata</option><option value="proposta_automatica">Proposta automatica</option><option value="manuale">Solo manuale</option></select></div>
+            <div className="fg"><label>Automatismi base</label><select value={form.automatismi_base} onChange={e => updateField('automatismi_base', e.target.value)}><option value="controllo_documentale">Controllo documentale</option><option value="match_anagrafica">Match anagrafica</option><option value="match_conto_ai">Match conto AI</option></select></div>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
 function ImportFattureView({societaId,onComplete}){
   const [uploading,setUploading]=useState(false);
   const [progress,setProgress]=useState(null);
@@ -116,7 +334,7 @@ function ImportFattureView({societaId,onComplete}){
   const handleUpload=async(e)=>{
     const files=Array.from(e.target.files);
     if(!files.length)return;
-    if(!societaId){alert('Nessuna societÃ  selezionata. Seleziona una societÃ  prima di importare.');return;}
+    if(!societaId){alert('Nessuna società selezionata. Seleziona una società prima di importare.');return;}
     
     setUploading(true);
     setProgress({current:0,total:files.length});
@@ -163,7 +381,7 @@ function ImportFattureView({societaId,onComplete}){
         const{data:urlData}=contabilitaRepo.getDocumentoPublicUrl(filePath);
 
         // Salva documento (con validazione societaId)
-        if(!societaId){console.error('ERRORE: societaId Ã¨ null/undefined!');throw new Error('SocietÃ  non selezionata');}
+        if(!societaId){console.error('ERRORE: societaId è null/undefined!');throw new Error('Società non selezionata');}
         const docUploadPayload={
           societa_id:societaId,
           filename:file.name,
@@ -210,13 +428,13 @@ function ImportFattureView({societaId,onComplete}){
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'.5rem'}}>
         <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸ“¥ Import Fatture</div>
+          <div style={{fontSize:'1.1rem',fontWeight:700}}>Import fatture</div>
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>
-            {aiEnabled?'AI analizza e propone registrazione':'XML: parsing locale Â· PDF: classificazione manuale'}
+            {aiEnabled?'AI analizza e propone registrazione':'XML: parsing locale · PDF: classificazione manuale'}
           </div>
         </div>
         <span className={'bdg '+(aiEnabled?'bdg-green':'bdg-orange')} style={{fontSize:'.65rem'}}>
-          {aiEnabled?'ðŸ¤– AI':'âš¡ Locale'}
+          {aiEnabled?'AI':'Locale'}
         </span>
       </div>
 
@@ -224,15 +442,15 @@ function ImportFattureView({societaId,onComplete}){
         <div className="upload-zone" onClick={()=>!uploading&&fileRef.current.click()} style={{cursor:uploading?'wait':'pointer'}}>
           {uploading?(
             <>
-              <div className="upload-zone-ico">â³</div>
+              <div className="upload-zone-ico">...</div>
               <div className="upload-zone-t">Elaborazione {progress?.file}...</div>
               <div className="upload-zone-s">{progress?.current}/{progress?.total} file</div>
             </>
           ):(
             <>
-              <div className="upload-zone-ico">ðŸ“„</div>
+              <div className="upload-zone-ico">File</div>
               <div className="upload-zone-t">Carica fatture</div>
-              <div className="upload-zone-s">PDF, XML Â· Trascina o clicca per selezionare</div>
+              <div className="upload-zone-s">PDF, XML · Trascina o clicca per selezionare</div>
             </>
           )}
         </div>
@@ -241,9 +459,9 @@ function ImportFattureView({societaId,onComplete}){
 
       <div className="alert alert-info" style={{marginTop:'1rem'}}>
         {aiEnabled?(
-          <>â„¹ï¸ L'AI analizzerÃ  ogni fattura e proporrÃ  la registrazione contabile.<br/>ðŸŸ¡ Proposta da confermare Â· ðŸŸ¢ Confermata Â· ðŸ”´ Richiede intervento</>
+          <>L'AI analizzerà ogni fattura e proporrà la registrazione contabile.<br/>Proposta da confermare · Confermata · Richiede intervento</>
         ):(
-          <>âš¡ <strong>ModalitÃ  locale:</strong> Le fatture XML vengono analizzate senza AI (dati estratti dal file). I PDF vengono salvati per classificazione manuale. Vai nelle impostazioni per attivare l'AI.</>
+          <><strong>Modalità locale:</strong> Le fatture XML vengono analizzate senza AI (dati estratti dal file). I PDF vengono salvati per classificazione manuale. Vai nelle impostazioni per attivare l'AI.</>
         )}
       </div>
     </div>
@@ -255,12 +473,12 @@ function ImportFattureView({societaId,onComplete}){
 // â”€â”€â”€ MODAL NUOVO CONTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
   const MASTRI = [
-    {codice:'1',label:'1 â€” AttivitÃ '},
-    {codice:'2',label:'2 â€” PassivitÃ '},
-    {codice:'3',label:'3 â€” Ricavi'},
-    {codice:'4',label:'4 â€” Costi'},
-    {codice:'5',label:'5 â€” Costi diversi'},
-    {codice:'6',label:'6 â€” Conti d\'ordine'},
+    {codice:'1',label:'1 — Attività'},
+    {codice:'2',label:'2 — Passività'},
+    {codice:'3',label:'3 — Ricavi'},
+    {codice:'4',label:'4 — Costi'},
+    {codice:'5',label:'5 — Costi diversi'},
+    {codice:'6',label:'6 — Conti d\'ordine'},
   ];
 
   // Livelli del piano conti per scegliere dove inserire
@@ -321,8 +539,8 @@ function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
         <div className="modal-hdr">
           <div className="modal-drag"/>
-          <div className="modal-title">âž• Nuovo Conto</div>
-          <button className="modal-close" onClick={onClose}>âœ•</button>
+          <div className="modal-title">Nuovo conto</div>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           <div className="form-grid">
@@ -336,18 +554,18 @@ function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
             </div>
             <div className="fg"><label>Inserisci sotto (opzionale)</label>
               <select value={parentCode} onChange={e=>setParentCode(e.target.value)}>
-                <option value="">â€” Direttamente sotto il mastro {mastro} â€”</option>
-                {contiFiglio.map(c=><option key={c.id} value={c.codice}>{c.codice} â€” {c.descrizione}</option>)}
+                <option value="">— Direttamente sotto il mastro {mastro} —</option>
+                {contiFiglio.map(c=><option key={c.id} value={c.codice}>{c.codice} — {c.descrizione}</option>)}
               </select>
             </div>
           </div>
           <div style={{marginTop:'.75rem',padding:'.6rem .8rem',background:'var(--s2)',borderRadius:7,fontSize:'.75rem',color:'var(--mu)'}}>
-            â„¹ï¸ Il codice verrÃ  calcolato automaticamente come progressivo nell'area selezionata
+            Il codice verrà calcolato automaticamente come progressivo nell'area selezionata
           </div>
         </div>
         <div className="modal-foot">
           <button className="btn-sec" onClick={onClose}>Annulla</button>
-          <button className="btn" disabled={saving||!descrizione} onClick={handleSave}>{saving?'â³ Salvo...':'ðŸ’¾ Crea conto'}</button>
+          <button className="btn" disabled={saving||!descrizione} onClick={handleSave}>{saving?'Salvo...':'Crea conto'}</button>
         </div>
       </div>
     </div>
@@ -376,8 +594,8 @@ function ModalNuovaCausale({tipo, societaId, onSave, onClose}){
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:500}}>
         <div className="modal-hdr">
           <div className="modal-drag"/>
-          <div className="modal-title">âž• Nuova {isIva?'Causale IVA':'Causale Contabile'}</div>
-          <button className="modal-close" onClick={onClose}>âœ•</button>
+          <div className="modal-title">Nuova {isIva?'causale IVA':'causale contabile'}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           <div className="form-grid">
@@ -399,7 +617,7 @@ function ModalNuovaCausale({tipo, societaId, onSave, onClose}){
                   <option value="Escluso">Escluso</option>
                 </select>
               </div>
-              <div className="fg"><label>% IndetraibilitÃ </label>
+              <div className="fg"><label>% Indetraibilità</label>
                 <input type="number" value={form.percentuale_indetraibilita} onChange={e=>up('percentuale_indetraibilita',parseFloat(e.target.value)||0)} min={0} max={100}/>
               </div>
             </>}
@@ -420,7 +638,7 @@ function ModalNuovaCausale({tipo, societaId, onSave, onClose}){
         </div>
         <div className="modal-foot">
           <button className="btn-sec" onClick={onClose}>Annulla</button>
-          <button className="btn" disabled={saving||!form.codice||!form.descrizione} onClick={handleSave}>{saving?'â³ Salvo...':'ðŸ’¾ Crea causale'}</button>
+          <button className="btn" disabled={saving||!form.codice||!form.descrizione} onClick={handleSave}>{saving?'Salvo...':'Crea causale'}</button>
         </div>
       </div>
     </div>
@@ -454,7 +672,7 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
     if(!rows.length) return [];
 
     const header = rows[0].map(h=>(h||'').toString().toLowerCase().trim());
-    // Detecta se Ã¨ clienti o fornitori dal header
+    // Detecta se è clienti o fornitori dal header
     const isClienti = header.some(h=>h.includes('soggetto iva differita'));
 
     const idx = {
@@ -463,7 +681,7 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
       ragSoc2:     header.findIndex(h=>h.includes('ragione sociale aggiuntiva')),
       indirizzo:   header.findIndex(h=>h==='indirizzo'),
       cap:         header.findIndex(h=>h==='cap'),
-      citta:       header.findIndex(h=>h==="cittÃ "),
+      citta:       header.findIndex(h=>h==="città"),
       provincia:   header.findIndex(h=>h==='provincia'),
       nazione:     header.findIndex(h=>h==='nazione'),
       cf:          header.findIndex(h=>h.includes('codice fiscale')),
@@ -589,31 +807,31 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:640}}>
         <div className="modal-hdr">
           <div className="modal-drag"/>
-          <div className="modal-title">ðŸ‘¥ Import Anagrafica NES â†’ Piano dei Conti</div>
+          <div className="modal-title">Import Anagrafica NES → Piano dei Conti</div>
           <div className="modal-sub">Aggiorna CF, P.IVA, indirizzo, PEC, split payment dai file Excel NES</div>
-          <button className="modal-close" onClick={onClose}>âœ•</button>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           {!file&&(
             <>
               <div className="alert alert-info" style={{marginBottom:'1rem',fontSize:'.8rem'}}>
                 Carica il file Excel <strong>Anagrafica Clienti</strong> o <strong>Anagrafica Fornitori</strong> esportato da NES.<br/>
-                Il sistema farÃ  <strong>UPDATE</strong> sui conti giÃ  presenti nel piano (match per codice NES).
+                Il sistema farà <strong>UPDATE</strong> sui conti già presenti nel piano (match per codice NES).
               </div>
               <div className="upload-zone" onClick={()=>fileRef.current.click()} style={{cursor:'pointer'}}>
-                <div className="upload-zone-ico">ðŸ“Š</div>
+                <div className="upload-zone-ico">Excel</div>
                 <div className="upload-zone-t">Carica Excel NES</div>
                 <div className="upload-zone-s">Anagraficaclienti.xlsx o Anagraficafornitori.xlsx</div>
               </div>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" hidden onChange={e=>handleFile(e.target.files?.[0])}/>
             </>
           )}
-          {loading&&<div style={{textAlign:'center',padding:'1.5rem',color:'var(--mu)'}}>â³ {progress}</div>}
+          {loading&&<div style={{textAlign:'center',padding:'1.5rem',color:'var(--mu)'}}>{progress}</div>}
           {done&&(
             <div className="alert alert-success">
-              âœ… Completato â€” <strong>{done.aggiornati}</strong> conti aggiornati, <strong>{done.errori}</strong> errori
-              {done.nuovi>0&&<div style={{marginTop:'.3rem',fontSize:'.8rem'}}>â„¹ï¸ {done.nuovi} codici NES non trovati nel piano dei conti (conti non ancora importati)</div>}
-              <div style={{marginTop:'.75rem'}}><button className="btn" onClick={onComplete}>âœ“ Chiudi</button></div>
+              Completato — <strong>{done.aggiornati}</strong> conti aggiornati, <strong>{done.errori}</strong> errori
+              {done.nuovi>0&&<div style={{marginTop:'.3rem',fontSize:'.8rem'}}>{done.nuovi} codici NES non trovati nel piano dei conti (conti non ancora importati)</div>}
+              <div style={{marginTop:'.75rem'}}><button className="btn" onClick={onComplete}>Chiudi</button></div>
             </div>
           )}
           {preview&&!done&&(
@@ -646,7 +864,7 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
           <div className="modal-foot">
             <button className="btn-sec" onClick={onClose}>Annulla</button>
             <button className="btn" disabled={importing||!preview.aggiornati.length} onClick={importa}>
-              {importing?'â³ Aggiorno...':'âœ… Aggiorna '+preview.aggiornati.length+' conti'}
+              {importing?'Aggiorno...':'Aggiorna '+preview.aggiornati.length+' conti'}
             </button>
           </div>
         )}
@@ -721,7 +939,7 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
   };
 
   const deleteAll=async()=>{
-    if(!confirm(`âš ï¸ Eliminare TUTTI i ${pianoConti.length} conti del piano? Questa azione non Ã¨ reversibile.`))return;
+    if(!confirm(`Eliminare TUTTI i ${pianoConti.length} conti del piano? Questa azione non è reversibile.`))return;
     setDeleting(true);
     // Elimina in batch da 100
     const ids=pianoConti.map(c=>c.id);
@@ -769,11 +987,11 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
         >
           {/* Checkbox */}
           <div onClick={e=>{e.stopPropagation();toggleSel(node.id);}} style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${isSelected?'var(--gold)':'var(--bd2)'}`,background:isSelected?'var(--gold)':'transparent',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-            {isSelected&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>âœ“</span>}
+            {isSelected&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>✓</span>}
           </div>
           {/* Toggle espansione */}
           {hasChildren?(
-            <div onClick={()=>toggleOpen(node.codice)} style={{width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'var(--mu)',fontSize:'.7rem',transition:'transform .15s',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>â–¶</div>
+            <div onClick={()=>toggleOpen(node.codice)} style={{width:16,height:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'var(--mu)',fontSize:'.7rem',transition:'transform .15s',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</div>
           ):<div style={{width:16,flexShrink:0}}/>}
           {/* Codice + Descrizione */}
           <code style={{fontSize:'.7rem',color:lvlColors[depth]||'var(--mu)',minWidth:depth===3?90:depth===2?70:depth===1?50:30,flexShrink:0}}>{node.codice}</code>
@@ -788,14 +1006,14 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
           <div onClick={e=>{e.stopPropagation();setEditConto(node);}} style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer',flexShrink:0}}
             onMouseEnter={e=>{e.currentTarget.style.background='rgba(200,164,94,.15)';e.currentTarget.style.color='var(--gold)';}}
             onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--mu)';}}>
-            âœï¸
+            Modifica
           </div>
         </div>
         {isOpen&&hasChildren&&visibleChildren.map(child=>renderNode(child,depth+1))}
         {hasMore&&(
           <div onClick={e=>{e.stopPropagation();setNodePage(p=>({...p,[node.codice]:(p[node.codice]||1)+1}));}}
             style={{padding:'.4rem 1rem',cursor:'pointer',color:'var(--cy)',fontSize:'.75rem',background:'rgba(78,142,247,.05)',borderBottom:'1px solid var(--bd)'}}>
-            â¬‡ Mostra altri {Math.min(PAGE_SIZE, node.children.length-currentPage*PAGE_SIZE)} di {node.children.length-currentPage*PAGE_SIZE} rimasti...
+            ↓ Mostra altri {Math.min(PAGE_SIZE, node.children.length-currentPage*PAGE_SIZE)} di {node.children.length-currentPage*PAGE_SIZE} rimasti...
           </div>
         )}
       </div>
@@ -809,40 +1027,48 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
     return(
       <div key={c.codice} style={{display:'flex',alignItems:'center',gap:'.4rem',padding:'.3rem .65rem',borderBottom:'1px solid rgba(33,40,58,.35)'}}>
         <div onClick={()=>toggleSel(c.id)} style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel.has(c.id)?'var(--gold)':'var(--bd2)'}`,background:sel.has(c.id)?'var(--gold)':'transparent',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-          {sel.has(c.id)&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>âœ“</span>}
+          {sel.has(c.id)&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>✓</span>}
         </div>
         <code style={{fontSize:'.7rem',color:lvlColors[depth]||'var(--mu)',minWidth:90,flexShrink:0}}>{c.codice}</code>
         <span style={{flex:1,fontSize:'.8rem',color:'var(--tx)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.descrizione}</span>
         <div onClick={()=>setEditConto(c)} style={{padding:'.15rem .35rem',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer'}}
           onMouseEnter={e=>{e.currentTarget.style.color='var(--gold)';}}
-          onMouseLeave={e=>{e.currentTarget.style.color='var(--mu)';}}>âœï¸</div>
+          onMouseLeave={e=>{e.currentTarget.style.color='var(--mu)';}}>Modifica</div>
       </div>
     );
   });
 
   return(
     <div>
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title="Piano dei conti"
+        context={`${pianoConti.length} conti configurati`}
+        primaryAction={<button className="btn-sec" onClick={()=>setNuovoConto({open:true})}>{ACCOUNTING_UI_TEXT.newAccount}</button>}
+        secondaryAction={
+          <>
+            <button className="btn-sec" onClick={()=>setImportAnagrafica(true)}>Import anagrafica</button>
+            <button className="btn" onClick={onImport}>{COMMON_UI_TEXT.importPdfExcel}</button>
+            {pianoConti.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?COMMON_UI_TEXT.deleting:deleteAllLabel(pianoConti.length)}</button>}
+          </>
+        }
+      />
       {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{await contabilitaRepo.updatePianoConto(editConto.id,updates);setEditConto(null);onRefresh();}} onClose={()=>setEditConto(null)}/>}
       {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{const{error}=await contabilitaRepo.insertPianoConto({...rec,societa_id:societaId,attivo:true});if(error){alert('Errore: '+error.message);return;}setNuovoConto({open:false});onRefresh();}} onClose={()=>setNuovoConto({open:false})}/>}
       {importAnagrafica&&<ModalImportAnagraficaNESPianoConti societaId={societaId} pianoConti={pianoConti} onComplete={()=>{setImportAnagrafica(false);onRefresh();}} onClose={()=>setImportAnagrafica(false)}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-        <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸ—‚ï¸ Piano dei Conti</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>{pianoConti.length} conti Â· <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={expandAll}>espandi tutto</span> Â· <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={collapseAll}>collassa tutto</span></div>
+        <div style={{fontSize:'.75rem',color:'var(--mu)'}}>
+          {pianoConti.length} conti · <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={expandAll}>{ACCOUNTING_UI_TEXT.expandAll}</span> · <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={collapseAll}>{ACCOUNTING_UI_TEXT.collapseAll}</span>
         </div>
         <div style={{display:'flex',gap:'.5rem'}}>
-          {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?'â³':'ðŸ—‘'} Elimina ({sel.size})</button>}
-          <button className="btn-sec" onClick={()=>setNuovoConto({open:true})}>âž• Nuovo conto</button>
-          <button className="btn-sec" onClick={()=>setImportAnagrafica(true)}>ðŸ‘¥ Import Anagrafica</button>
-          <button className="btn" onClick={onImport}>ðŸ“¤ Import PDF/Excel</button>
-          {pianoConti.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?'â³':'ðŸ—‘'} Elimina tutto ({pianoConti.length})</button>}
+          {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?COMMON_UI_TEXT.deleting:deleteSelectedLabel(sel.size)}</button>}
         </div>
       </div>
 
-      <input placeholder="ðŸ” Cerca conto per codice o descrizione..." value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:'1rem',width:'100%'}}/>
+      <input placeholder={ACCOUNTING_UI_TEXT.searchAccountPlaceholder} value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:'1rem',width:'100%'}}/>
 
       {pianoConti.length===0?(
-        <div className="empty"><div className="empty-ico">ðŸ—‚ï¸</div><div className="empty-t">Nessun conto</div><div className="empty-s">Importa il piano dei conti da PDF</div></div>
+        <div className="empty"><div className="empty-ico">□</div><div className="empty-t">{ACCOUNTING_UI_TEXT.noAccount}</div><div className="empty-s">Importa il piano dei conti da PDF</div></div>
       ):(
         <div className="card" style={{padding:0,maxHeight:'calc(100vh - 280px)',overflow:'auto'}}>
           {search
@@ -896,20 +1122,20 @@ function SelettoreContropartita({value, onChange, societaId}){
     ? conti.filter(c=>(c.codice+' '+c.descrizione).toLowerCase().includes(search.toLowerCase())).slice(0,50)
     : conti.slice(0,50);
 
-  const label=value?conti.find(c=>c.codice===value||c.id===value)?.let?.(c=>`${c.codice} â€” ${c.descrizione}`)||value:'-- Nessuna contropartita --';
+  const label=value?conti.find(c=>c.codice===value||c.id===value)?.let?.(c=>`${c.codice} — ${c.descrizione}`)||value:'-- Nessuna contropartita --';
 
   return(
     <div ref={ref} style={{position:'relative'}}>
       <div onClick={()=>setOpen(p=>!p)}
         style={{background:'var(--s1)',border:`1px solid ${open?'var(--gold)':'var(--bd)'}`,borderRadius:7,padding:'.45rem .7rem',cursor:'pointer',fontSize:'.8rem',color:value?'var(--tx)':'var(--mu)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:'.4rem'}}>
         <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{label}</span>
-        <span style={{color:'var(--mu)',fontSize:'.65rem',flexShrink:0}}>{open?'â–²':'â–¼'}</span>
+        <span style={{color:'var(--mu)',fontSize:'.65rem',flexShrink:0}}>{open?'▲':'▼'}</span>
       </div>
       {open&&(
         <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:200,background:'var(--s1)',border:'1px solid var(--bd)',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.4)',marginTop:2,maxHeight:300,display:'flex',flexDirection:'column'}}>
           <div style={{padding:'.5rem .6rem',borderBottom:'1px solid var(--bd)'}}>
             <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
-              placeholder="ðŸ” Cerca per codice o descrizione..."
+              placeholder="Cerca per codice o descrizione..."
               style={{width:'100%',background:'var(--s2)',border:'1px solid var(--bd)',borderRadius:5,padding:'.35rem .55rem',fontSize:'.78rem',color:'var(--tx)'}}/>
           </div>
           <div style={{overflow:'auto',flex:1}}>
@@ -919,7 +1145,7 @@ function SelettoreContropartita({value, onChange, societaId}){
               onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
               -- Nessuna contropartita --
             </div>
-            {loading?<div style={{padding:'.75rem',fontSize:'.75rem',color:'var(--mu)',textAlign:'center'}}>â³ Caricamento...</div>
+            {loading?<div style={{padding:'.75rem',fontSize:'.75rem',color:'var(--mu)',textAlign:'center'}}>Caricamento...</div>
               :filtered.map(c=>(
               <div key={c.id} onClick={()=>{onChange(c.codice);setOpen(false);}}
                 style={{padding:'.4rem .7rem',cursor:'pointer',display:'flex',gap:'.5rem',alignItems:'center',borderBottom:'1px solid rgba(33,40,58,.3)',background:value===c.codice?'rgba(200,164,94,.08)':'transparent'}}
@@ -953,14 +1179,14 @@ function AnagraficaTab({form, up, conto, B}){
         <div className="fg full"><label>Ragione Sociale 2</label><input value={form.rag_sociale_2} onChange={e=>up('rag_sociale_2',e.target.value)}/></div>
         <div className="fg full"><label>Indirizzo</label><input value={form.indirizzo} onChange={e=>up('indirizzo',e.target.value)}/></div>
         <div className="fg"><label>CAP</label><input value={form.cap} onChange={e=>up('cap',e.target.value)} maxLength={5}/></div>
-        <div className="fg"><label>CittÃ </label><input value={form.citta} onChange={e=>up('citta',e.target.value)}/></div>
+        <div className="fg"><label>Città</label><input value={form.citta} onChange={e=>up('citta',e.target.value)}/></div>
         <div className="fg"><label>Provincia</label><input value={form.provincia} onChange={e=>up('provincia',e.target.value)} maxLength={2} placeholder="RM"/></div>
 
         {/* Codice ISO â€” dropdown nazioni */}
         <div className="fg">
           <label>Nazione (ISO)</label>
           <select value={form.codice_iso||'IT'} onChange={e=>{up('codice_iso',e.target.value);up('nazione',ISO_NAZIONI.find(n=>n[0]===e.target.value)?.[1]||e.target.value);}}>
-            {ISO_NAZIONI.map(([cod,nome])=><option key={cod} value={cod}>{cod} â€” {nome}</option>)}
+            {ISO_NAZIONI.map(([cod,nome])=><option key={cod} value={cod}>{cod} — {nome}</option>)}
           </select>
         </div>
 
@@ -971,7 +1197,7 @@ function AnagraficaTab({form, up, conto, B}){
           <select value={form.tipo_soggetto} onChange={e=>up('tipo_soggetto',e.target.value)}>
             <option value="Privato">Privato</option>
             <option value="Persona fisica">Persona fisica</option>
-            <option value="Normale">Normale (SocietÃ /Ditta)</option>
+            <option value="Normale">Normale (Società/Ditta)</option>
             <option value="Dogana">Dogana</option>
             <option value="Estero">Estero</option>
           </select>
@@ -1002,7 +1228,7 @@ function AnagraficaTab({form, up, conto, B}){
             up('aliquota_iva',c?String(c.aliquota??''):'')
           }}>
             <option value="">-- Standard (da causale) --</option>
-            {causaliIva.map(c=><option key={c.id} value={c.id}>{c.codice} â€” {c.descrizione}{c.aliquota?` (${c.aliquota}%)`:''}</option>)}
+            {causaliIva.map(c=><option key={c.id} value={c.id}>{c.codice} — {c.descrizione}{c.aliquota?` (${c.aliquota}%)`:''}</option>)}
           </select>
         </div>
 
@@ -1055,7 +1281,7 @@ function AnagraficaTab({form, up, conto, B}){
       <div style={{marginTop:'1.25rem',background:'rgba(200,164,94,.06)',border:'1px solid rgba(200,164,94,.2)',borderRadius:8,padding:'.75rem 1rem'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'.4rem'}}>
           <div>
-            <div style={{fontWeight:700,fontSize:'.82rem',color:'var(--gold)'}}>ðŸ› Split Payment</div>
+            <div style={{fontWeight:700,fontSize:'.82rem',color:'var(--gold)'}}>Split Payment</div>
             <div style={{fontSize:'.72rem',color:'var(--mu)',marginTop:'.15rem'}}>
               L'IVA di questo cliente viene trattenuta dalla PA e non versata al fornitore (art. 17-ter DPR 633/72)
             </div>
@@ -1067,7 +1293,7 @@ function AnagraficaTab({form, up, conto, B}){
         </div>
         {form.split_payment&&(
           <div style={{fontSize:'.72rem',color:'#fb923c',marginTop:'.3rem',padding:'.35rem .6rem',background:'rgba(251,146,60,.08)',borderRadius:5}}>
-            âš¡ Attivo â€” nella liquidazione IVA l'imposta di questo cliente sarÃ  dedotta dall'IVA a debito come "IVA Split Payment"
+            Attivo — nella liquidazione IVA l'imposta di questo cliente sarà dedotta dall'IVA a debito come "IVA Split Payment"
           </div>
         )}
       </div>
@@ -1139,15 +1365,15 @@ function ModalEditConto({conto,onSave,onClose}){
   const [saving,setSaving]=useState(false);
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
   const save=async()=>{setSaving(true);await onSave(form);setSaving(false);};
-  const TABS=[['generale','âš™ï¸ Generale'],['anagrafica','ðŸ‘¤ Anagrafica'],['fattura','ðŸ§¾ Fattura Elett.']];
+  const TABS=[['generale','Generale'],['anagrafica','Anagrafica'],['fattura','Fattura elett.']];
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600}}>
         <div className="modal-hdr">
           <div className="modal-drag"/>
-          <div className="modal-title">âœï¸ Modifica Conto</div>
-          <div className="modal-sub"><code style={{fontSize:'.8rem',color:'var(--gold)'}}>{conto.codice}</code> Â· Livello {conto.livello}</div>
-          <button className="modal-close" onClick={onClose}>âœ•</button>
+          <div className="modal-title">Modifica conto</div>
+          <div className="modal-sub"><code style={{fontSize:'.8rem',color:'var(--gold)'}}>{conto.codice}</code> · Livello {conto.livello}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div style={{display:'flex',borderBottom:'1px solid var(--bd)',padding:'0 1.25rem'}}>
           {TABS.map(([id,lbl])=>(
@@ -1186,7 +1412,7 @@ function ModalEditConto({conto,onSave,onClose}){
             <div style={{marginTop:'1rem'}}>
               <div style={{fontSize:'.72rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--mu)',marginBottom:'.5rem'}}>Tipo anagrafica</div>
               <div style={{display:'flex',flexWrap:'wrap',gap:'.5rem'}}>
-                {[['is_cliente','ðŸ‘¤ Cliente'],['is_fornitore','ðŸ­ Fornitore'],['is_banca','ðŸ¦ Banca/C/C'],['is_cassa','ðŸ’µ Cassa'],['is_professionista','ðŸ‘” Professionista']].map(([k,l])=>(
+                {[['is_cliente','Cliente'],['is_fornitore','Fornitore'],['is_banca','Banca/C/C'],['is_cassa','Cassa'],['is_professionista','Professionista']].map(([k,l])=>(
                   <div key={k} onClick={()=>up(k,!form[k])} style={{padding:'.3rem .7rem',borderRadius:20,border:`1.5px solid ${form[k]?'var(--gold)':'var(--bd)'}`,background:form[k]?'rgba(200,164,94,.12)':'transparent',cursor:'pointer',fontSize:'.78rem',color:form[k]?'var(--gold)':'var(--mu)'}}>{l}</div>
                 ))}
               </div>
@@ -1212,7 +1438,7 @@ function ModalEditConto({conto,onSave,onClose}){
         </div>
         <div className="modal-foot">
           <button className="btn-sec" onClick={onClose}>Annulla</button>
-          <button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'â³ Salvo...':'ðŸ’¾ Salva'}</button>
+          <button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'Salvo...':'Salva'}</button>
         </div>
       </div>
     </div>
@@ -1240,7 +1466,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
 
   const deleteAll=async()=>{
     const label=tipo==='iva'?'causali IVA':'causali contabili';
-    if(!confirm(`âš ï¸ Eliminare TUTTE le ${causali.length} ${label}? Questa azione non Ã¨ reversibile.`))return;
+    if(!confirm(`Eliminare TUTTE le ${causali.length} ${label}? Questa azione non è reversibile.`))return;
     setDeleting(true);
     const table=tipo==='iva'?'causali_iva':'causali_contabili';
     const ids=causali.map(c=>c.id);
@@ -1250,30 +1476,35 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
 
   return(
     <div>
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title={tipo==='contabili' ? 'Causali contabili' : 'Causali IVA'}
+        context={`${causali.length} causali configurate`}
+        primaryAction={<button className="btn-sec" onClick={()=>setNuovaCausale(true)}>{ACCOUNTING_UI_TEXT.newCausale}</button>}
+        secondaryAction={
+          <>
+            <button className="btn" onClick={onImport}>{COMMON_UI_TEXT.importPdfExcel}</button>
+            {causali.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?COMMON_UI_TEXT.deleting:deleteAllLabel(causali.length)}</button>}
+          </>
+        }
+      />
       {editCausale&&<ModalEditCausale causale={editCausale} tipo={tipo} onSave={async(updates)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';await contabilitaRepo.updateCausale(table,editCausale.id,updates);setEditCausale(null);onRefresh();}} onClose={()=>setEditCausale(null)}/>}
       {nuovaCausale&&<ModalNuovaCausale tipo={tipo} societaId={societaId} onSave={async(rec)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const row=tipo==='iva'?{...rec,attivo:true}:{...rec,societa_id:societaId,attivo:true};const{error}=await contabilitaRepo.insertCausale(table,row);if(error){alert('Errore: '+error.message);return;}setNuovaCausale(false);onRefresh();}} onClose={()=>setNuovaCausale(false)}/>}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-        <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>{tipo==='contabili'?'ðŸ“‹ Causali Contabili':'ðŸ’§ Causali IVA'}</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>{causali.length} causali configurate</div>
-        </div>
+      <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',marginBottom:'1rem'}}>
         <div style={{display:'flex',gap:'.5rem'}}>
-          {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?'â³':'ðŸ—‘'} Elimina ({sel.size})</button>}
-          <button className="btn-sec" onClick={()=>setNuovaCausale(true)}>âž• Nuova causale</button>
-          <button className="btn" onClick={onImport}>ðŸ“¤ Import PDF/Excel</button>
-          {causali.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?'â³':'ðŸ—‘'} Elimina tutto ({causali.length})</button>}
+          {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?COMMON_UI_TEXT.deleting:deleteSelectedLabel(sel.size)}</button>}
         </div>
       </div>
 
       {causali.length===0?(
-        <div className="empty"><div className="empty-ico">{tipo==='contabili'?'ðŸ“‹':'ðŸ’§'}</div><div className="empty-t">Nessuna causale</div></div>
+        <div className="empty"><div className="empty-ico">□</div><div className="empty-t">{ACCOUNTING_UI_TEXT.noCausale}</div></div>
       ):(
         <div className="card" style={{padding:0,overflow:'hidden'}}>
           <table className="tbl">
             <thead><tr>
               <th style={{width:32}}>
                 <div onClick={toggleAll} style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel.size===causali.length?'var(--gold)':'var(--bd2)'}`,background:sel.size===causali.length?'var(--gold)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  {sel.size===causali.length&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>âœ“</span>}
+                  {sel.size===causali.length&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>✓</span>}
                 </div>
               </th>
               <th>Codice</th>
@@ -1287,7 +1518,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
               <tr key={c.id} style={sel.has(c.id)?{background:'rgba(200,164,94,.06)'}:{}}>
                 <td>
                   <div onClick={()=>toggleSel(c.id)} style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel.has(c.id)?'var(--gold)':'var(--bd2)'}`,background:sel.has(c.id)?'var(--gold)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    {sel.has(c.id)&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>âœ“</span>}
+                    {sel.has(c.id)&&<span style={{color:'#0d1117',fontSize:'.5rem',fontWeight:900}}>✓</span>}
                   </div>
                 </td>
                 <td><code style={{fontSize:'.8rem'}}>{c.codice}</code></td>
@@ -1296,7 +1527,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
                 {tipo==='iva'&&<td><span style={{fontSize:'.72rem',color:'var(--mu)'}}>{c.tipo}</span></td>}
                 {tipo==='contabili'&&<td style={{fontSize:'.75rem',color:'var(--mu)'}}>{c.tipo}</td>}
                 <td>
-                  <button className="btn-icon" style={{fontSize:'.75rem'}} onClick={()=>setEditCausale(c)}>âœï¸</button>
+                  <button className="btn-icon" style={{fontSize:'.75rem'}} onClick={()=>setEditCausale(c)}>Modifica</button>
                 </td>
               </tr>
             ))}</tbody>
@@ -1420,8 +1651,8 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
   const save=async()=>{setSaving(true);await onSave(form);setSaving(false);};
 
-  const TABS_IVA=[['principale','ðŸ“‹ Principale'],['operazioni','ðŸ“Š Operazioni'],['rc','ðŸ”„ Rev. Charge'],['efat','ðŸ§¾ E-Fattura']];
-  const TABS_CONT=[['principale','ðŸ“‹ Principale'],['iva','ðŸ’§ IVA'],['flags','âš™ï¸ Flag'],['cee','ðŸŒ CEE/Differita']];
+  const TABS_IVA=[['principale','Principale'],['operazioni','Operazioni'],['rc','Rev. Charge'],['efat','E-Fattura']];
+  const TABS_CONT=[['principale','Principale'],['iva','IVA'],['flags','Flag'],['cee','CEE/Differita']];
   const TABS=isIva?TABS_IVA:TABS_CONT;
 
   const TD_OPTIONS=[
@@ -1442,9 +1673,9 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600}}>
         <div className="modal-hdr">
           <div className="modal-drag"/>
-          <div className="modal-title">âœï¸ {isIva?'Causale IVA':'Causale Contabile'}</div>
+          <div className="modal-title">{isIva?'Causale IVA':'Causale contabile'}</div>
           <div className="modal-sub"><code style={{color:'var(--gold)'}}>{causale.codice}</code></div>
-          <button className="modal-close" onClick={onClose}>âœ•</button>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div style={{display:'flex',borderBottom:'1px solid var(--bd)',padding:'0 1.25rem'}}>
           {TABS.map(([id,lbl])=>(
@@ -1458,7 +1689,7 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
             <div className="fg"><label>Codice</label><input value={form.codice} onChange={e=>up('codice',e.target.value.toUpperCase())} style={{fontFamily:'monospace'}}/></div>
             <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
             <div className="fg"><label>% Imposta</label><input type="number" value={form.percentuale_imposta} onChange={e=>up('aliquota',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
-            <div className="fg"><label>% IndetraibilitÃ </label><input type="number" value={form.percentuale_indetraibilita} onChange={e=>up('percentuale_indetraibilita',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
+            <div className="fg"><label>% Indetraibilità</label><input type="number" value={form.percentuale_indetraibilita} onChange={e=>up('percentuale_indetraibilita',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
             <div className="fg"><label>% Compensazione</label><input type="number" value={form.percentuale_compensazione} onChange={e=>up('percentuale_compensazione',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
             <div className="fg"><label>Regime IVA</label>
               <select value={form.regime_iva} onChange={e=>up('regime_iva',e.target.value)}>
@@ -1533,7 +1764,7 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
               <B k="installazione_impianti" lbl="Installazione impianti"/>
               <B k="completamento_edifici" lbl="Completamento edifici"/>
               <B k="trasf_quote" lbl="Trasf. quote"/>
-              <B k="trasf_unita_certif" lbl="Trasf. unitÃ  e certif."/>
+              <B k="trasf_unita_certif" lbl="Trasf. unità e certif."/>
               <B k="gas_energia" lbl="Gas ed energia elettrica"/>
             </div>
           </div>}
@@ -1692,7 +1923,7 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
         </div>
         <div className="modal-foot">
           <button className="btn-sec" onClick={onClose}>Annulla</button>
-          <button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'â³ Salvo...':'ðŸ’¾ Salva'}</button>
+          <button className="btn" disabled={saving||!form.descrizione} onClick={save}>{saving?'Salvo...':'Salva'}</button>
         </div>
       </div>
     </div>
@@ -1777,20 +2008,20 @@ function ModalNuovaSocieta({onSave,onClose}){
   const renderDuplicaSection=()=>(
     <div style={{background:'rgba(200,164,94,.06)',border:'1px solid rgba(200,164,94,.25)',borderRadius:10,padding:'.85rem 1rem',marginTop:'1rem'}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'.5rem'}}>
-        <div style={{fontSize:'.82rem',fontWeight:600,color:'var(--gold)'}}>ðŸ“‹ Duplica piano conti e causali</div>
+        <div style={{fontSize:'.82rem',fontWeight:600,color:'var(--gold)'}}>Duplica piano conti e causali</div>
         <div onClick={()=>{setShowDuplica(p=>!p);if(!showDuplica)setDuplicaDa(null);}} className={'tgl'+(showDuplica?' on':'')} style={{cursor:'pointer'}}/>
       </div>
       {showDuplica&&(
         societa.length===0?(
-          <div style={{fontSize:'.78rem',color:'var(--mu)'}}>Nessuna societÃ  esistente da cui duplicare.</div>
+          <div style={{fontSize:'.78rem',color:'var(--mu)'}}>Nessuna società esistente da cui duplicare.</div>
         ):(
           <>
-            <div style={{fontSize:'.75rem',color:'var(--mu)',marginBottom:'.5rem'}}>Seleziona la societÃ  da cui copiare Piano dei Conti, Causali Contabili e Causali IVA:</div>
+            <div style={{fontSize:'.75rem',color:'var(--mu)',marginBottom:'.5rem'}}>Seleziona la società da cui copiare Piano dei Conti, Causali Contabili e Causali IVA:</div>
             <select value={duplicaDa||''} onChange={e=>setDuplicaDa(e.target.value||null)} style={{width:'100%',background:'var(--s2)',border:'1px solid var(--bd)',borderRadius:7,color:'var(--tx)',padding:'.45rem .7rem',fontSize:'.82rem'}}>
-              <option value="">â€” Seleziona societÃ  â€”</option>
+              <option value="">— Seleziona società —</option>
               {societa.map(s=><option key={s.id} value={s.id}>{s.denominazione}</option>)}
             </select>
-            {duplicaDa&&<div className="alert alert-info" style={{marginTop:'.5rem',padding:'.45rem .65rem',fontSize:'.72rem'}}>âœ“ Verranno duplicati piano conti e causali da <strong>{societa.find(s=>s.id===duplicaDa)?.denominazione}</strong></div>}
+            {duplicaDa&&<div className="alert alert-info" style={{marginTop:'.5rem',padding:'.45rem .65rem',fontSize:'.72rem'}}>Verranno duplicati piano conti e causali da <strong>{societa.find(s=>s.id===duplicaDa)?.denominazione}</strong></div>}
           </>
         )
       )}
@@ -1800,27 +2031,27 @@ function ModalNuovaSocieta({onSave,onClose}){
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:650,maxHeight:'85vh',overflow:'auto'}}>
-        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">ðŸ¢ Nuova SocietÃ </div><button className="modal-close" onClick={onClose}>âœ•</button></div>
+        <div className="modal-hdr"><div className="modal-drag"/><div className="modal-title">Nuova società</div><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="modal-body">
           <div style={{display:'flex',gap:'.5rem',marginBottom:'1rem'}}>
-            <button className={mode==='select'?'btn':'btn-sec'} onClick={()=>setMode('select')} style={{flex:1}}>ðŸ‘¥ Da Anagrafica Clienti</button>
-            <button className={mode==='create'?'btn':'btn-sec'} onClick={()=>setMode('create')} style={{flex:1}}>âž• Crea Manualmente</button>
+            <button className={mode==='select'?'btn':'btn-sec'} onClick={()=>setMode('select')} style={{flex:1}}>Da Anagrafica Clienti</button>
+            <button className={mode==='create'?'btn':'btn-sec'} onClick={()=>setMode('create')} style={{flex:1}}>Crea manualmente</button>
           </div>
 
           {mode==='select'?(
             <>
-              <input placeholder="ðŸ” Cerca per nome, P.IVA o C.F..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{width:'100%',padding:'.6rem',borderRadius:6,border:'1px solid var(--bd)',background:'var(--s2)',color:'var(--tx)',marginBottom:'1rem'}}/>
+              <input placeholder="Cerca per nome, P.IVA o C.F..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} style={{width:'100%',padding:'.6rem',borderRadius:6,border:'1px solid var(--bd)',background:'var(--s2)',color:'var(--tx)',marginBottom:'1rem'}}/>
               <div style={{maxHeight:260,overflowY:'auto',border:'1px solid var(--bd)',borderRadius:8}}>
-                {loading?<div style={{padding:'2rem',textAlign:'center',color:'var(--mu)'}}>â³</div>
+                {loading?<div style={{padding:'2rem',textAlign:'center',color:'var(--mu)'}}>Caricamento...</div>
                 :clientiFiltrati.length===0?<div style={{padding:'2rem',textAlign:'center',color:'var(--mu)'}}>Nessun cliente</div>
                 :clientiFiltrati.map(c=>(
                   <div key={c.id} onClick={()=>setSelectedCliente(c)} style={{padding:'.75rem 1rem',borderBottom:'1px solid var(--bd)',cursor:'pointer',background:selectedCliente?.id===c.id?'rgba(200,164,94,.15)':'transparent',borderLeft:selectedCliente?.id===c.id?'3px solid var(--gold)':'3px solid transparent'}}>
                     <div style={{fontWeight:600,fontSize:'.85rem'}}>{c.ragione_sociale||`${c.nome} ${c.cognome}`.trim()}</div>
-                    <div style={{fontSize:'.72rem',color:'var(--mu)',marginTop:'.2rem'}}>{c.partita_iva&&`P.IVA: ${c.partita_iva}`}{c.partita_iva&&c.codice_fiscale&&' Â· '}{c.codice_fiscale&&`C.F.: ${c.codice_fiscale}`}</div>
+                    <div style={{fontSize:'.72rem',color:'var(--mu)',marginTop:'.2rem'}}>{c.partita_iva&&`P.IVA: ${c.partita_iva}`}{c.partita_iva&&c.codice_fiscale&&' · '}{c.codice_fiscale&&`C.F.: ${c.codice_fiscale}`}</div>
                   </div>
                 ))}
               </div>
-              {selectedCliente&&<div style={{marginTop:'1rem',padding:'.75rem',background:'rgba(52,194,122,.1)',borderRadius:8,border:'1px solid rgba(52,194,122,.3)'}}><div style={{fontSize:'.75rem',color:'var(--gr)',fontWeight:600}}>âœ“ Selezionato:</div><div style={{fontWeight:600}}>{selectedCliente.ragione_sociale||`${selectedCliente.nome} ${selectedCliente.cognome}`}</div></div>}
+              {selectedCliente&&<div style={{marginTop:'1rem',padding:'.75rem',background:'rgba(52,194,122,.1)',borderRadius:8,border:'1px solid rgba(52,194,122,.3)'}}><div style={{fontSize:'.75rem',color:'var(--gr)',fontWeight:600}}>Selezionato:</div><div style={{fontWeight:600}}>{selectedCliente.ragione_sociale||`${selectedCliente.nome} ${selectedCliente.cognome}`}</div></div>}
             </>
           ):(
             <div className="form-grid">
@@ -1829,7 +2060,7 @@ function ModalNuovaSocieta({onSave,onClose}){
               <div className="fg"><label>Codice Fiscale</label><input value={formData.codice_fiscale} onChange={e=>setFormData(p=>({...p,codice_fiscale:e.target.value.toUpperCase()}))} maxLength={16}/></div>
               <div className="fg full"><label>Indirizzo</label><input value={formData.indirizzo} onChange={e=>setFormData(p=>({...p,indirizzo:e.target.value}))}/></div>
               <div className="fg"><label>CAP</label><input value={formData.cap} onChange={e=>setFormData(p=>({...p,cap:e.target.value}))} maxLength={5}/></div>
-              <div className="fg"><label>CittÃ </label><input value={formData.citta} onChange={e=>setFormData(p=>({...p,citta:e.target.value}))}/></div>
+              <div className="fg"><label>Città</label><input value={formData.citta} onChange={e=>setFormData(p=>({...p,citta:e.target.value}))}/></div>
               <div className="fg"><label>Provincia</label><input value={formData.provincia} onChange={e=>setFormData(p=>({...p,provincia:e.target.value.toUpperCase()}))} maxLength={2}/></div>
               <div className="fg"><label>Regime Contabile</label><select value={formData.regime_contabile} onChange={e=>setFormData(p=>({...p,regime_contabile:e.target.value}))}><option value="ordinario">Ordinario</option><option value="semplificato">Semplificato</option><option value="forfettario">Forfettario</option></select></div>
               <div className="fg"><label>Liquidazione IVA</label><select value={formData.tipo_liquidazione_iva} onChange={e=>setFormData(p=>({...p,tipo_liquidazione_iva:e.target.value}))}><option value="mensile">Mensile</option><option value="trimestrale">Trimestrale</option></select></div>
@@ -1842,8 +2073,8 @@ function ModalNuovaSocieta({onSave,onClose}){
         <div className="modal-foot">
           <button className="btn-sec" onClick={onClose}>Annulla</button>
           {mode==='select'
-            ?<button className="btn" onClick={handleSelectCliente} disabled={saving||!selectedCliente}>{saving?'â³ Salvo...':'âœ“ Crea SocietÃ '}</button>
-            :<button className="btn" onClick={handleSaveManual} disabled={saving||!formData.denominazione}>{saving?'â³ Salvo...':'ðŸ’¾ Crea SocietÃ '}</button>
+            ?<button className="btn" onClick={handleSelectCliente} disabled={saving||!selectedCliente}>{saving?'Salvo...':'Crea società'}</button>
+            :<button className="btn" onClick={handleSaveManual} disabled={saving||!formData.denominazione}>{saving?'Salvo...':'Crea società'}</button>
           }
         </div>
       </div>
@@ -2209,9 +2440,9 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
   const ai=useAIStatus();
 
   const tipi={
-    piano_conti:{title:'Piano dei Conti',icon:'ðŸ—‚ï¸',table:'piano_conti',keyField:'codice'},
-    causali:{title:'Causali Contabili',icon:'ðŸ“‹',table:'causali_contabili',keyField:'codice'},
-    causali_iva:{title:'Causali IVA',icon:'ðŸ’§',table:'causali_iva',keyField:'codice'}
+    piano_conti:{title:'Piano dei Conti',icon:'PC',table:'piano_conti',keyField:'codice'},
+    causali:{title:'Causali Contabili',icon:'CC',table:'causali_contabili',keyField:'codice'},
+    causali_iva:{title:'Causali IVA',icon:'IVA',table:'causali_iva',keyField:'codice'}
   };
   const cfg=tipi[tipo];
 
@@ -2370,8 +2601,8 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
         <div className="modal-hdr">
           <div className="modal-drag"/>
           <div className="modal-title">{cfg.icon} Import {cfg.title}</div>
-          <div className="modal-sub">PDF o Excel NES Â· parsing locale Â· zero costi AI</div>
-          <button className="modal-close" onClick={onClose}>âœ•</button>
+          <div className="modal-sub">PDF o Excel NES · parsing locale · zero costi AI</div>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           {!result?(
@@ -2383,11 +2614,11 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
                 onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0]);}}
                 onClick={()=>fileRef.current.click()}>
                 <input ref={fileRef} type="file" accept='.pdf,.xlsx,.xls' hidden onChange={e=>handleFile(e.target.files[0])}/>
-                <div className="upload-zone-ico">ðŸ“„</div>
+                <div className="upload-zone-ico">File</div>
                 <div className="upload-zone-t">{file?file.name:'Trascina PDF qui o clicca'}</div>
-                <div className="upload-zone-s">NES Â· BLUENEXT Â· PROFIS e altri formati contabili</div>
+                <div className="upload-zone-s">NES · BLUENEXT · PROFIS e altri formati contabili</div>
               </div>
-              {progress&&<div style={{textAlign:'center',color:'var(--gold)',fontSize:'.8rem',padding:'.5rem'}}>â³ {progress}</div>}
+              {progress&&<div style={{textAlign:'center',color:'var(--gold)',fontSize:'.8rem',padding:'.5rem'}}>{progress}</div>}
               {error&&<div className="alert alert-err">{error}</div>}
             </>
           ):(
@@ -2396,11 +2627,11 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'.65rem',marginBottom:'1rem'}}>
                 <div style={{background:'rgba(52,194,122,.08)',border:'1px solid rgba(52,194,122,.25)',borderRadius:10,padding:'.85rem 1rem',textAlign:'center'}}>
                   <div style={{fontSize:'1.6rem',fontWeight:700,color:'var(--gr)'}}>{result.nuovi.length}</div>
-                  <div style={{fontSize:'.72rem',color:'var(--gr)',fontWeight:600}}>âœ¨ Nuovi da importare</div>
+                  <div style={{fontSize:'.72rem',color:'var(--gr)',fontWeight:600}}>Nuovi da importare</div>
                 </div>
                 <div style={{background:'rgba(200,164,94,.08)',border:'1px solid rgba(200,164,94,.25)',borderRadius:10,padding:'.85rem 1rem',textAlign:'center'}}>
                   <div style={{fontSize:'1.6rem',fontWeight:700,color:'var(--gold)'}}>{result.duplicati.length}</div>
-                  <div style={{fontSize:'.72rem',color:'var(--gold)',fontWeight:600}}>âš  GiÃ  presenti (skip)</div>
+                  <div style={{fontSize:'.72rem',color:'var(--gold)',fontWeight:600}}>Già presenti (skip)</div>
                 </div>
               </div>
 
@@ -2438,12 +2669,12 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
               {/* â”€â”€ DUPLICATI â”€â”€ */}
               {result.duplicati.length>0&&(
                 <div className="alert alert-warn" style={{marginBottom:'1rem'}}>
-                  âš  <strong>{result.duplicati.length} codici giÃ  presenti</strong> verranno saltati automaticamente.
+                  <strong>{result.duplicati.length} codici già presenti</strong> verranno saltati automaticamente.
                   {result.duplicati.length<=5&&<span style={{opacity:.7}}> ({result.duplicati.map(d=>d.codice).join(', ')})</span>}
                 </div>
               )}
 
-              {progress&&<div style={{textAlign:'center',color:'var(--gold)',fontSize:'.8rem',padding:'.4rem'}}>â³ {progress}</div>}
+              {progress&&<div style={{textAlign:'center',color:'var(--gold)',fontSize:'.8rem',padding:'.4rem'}}>{progress}</div>}
               {error&&<div className="alert alert-err">{error}</div>}
             </div>
           )}
@@ -2451,24 +2682,24 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
 
         <div className="modal-foot">
           <button className="btn-sec" onClick={()=>result?((setResult(null)||true)&&setError(null)):onClose()}>
-            {result?'â† Ricarica':'Annulla'}
+            {result?'← Ricarica':'Annulla'}
           </button>
           {!result?(
             <button className="btn" onClick={handleUpload} disabled={!file||loading}>
-              {loading?`â³ ${progress||'Analisi...'}`:'ðŸ” Analizza PDF'}
+              {loading?`${progress||'Analisi...'}`:'Analizza PDF'}
             </button>
           ):(
             <div style={{display:'flex',gap:'.5rem'}}>
               {tipo!=='piano_conti'&&(
                 <button className="btn-sec" onClick={handleRetryAI} disabled={loading} title="Riprova con AI">
-                  ðŸ¤– AI
+                  AI
                 </button>
               )}
               {result.nuovi.length===0?(
                 <button className="btn" disabled style={{opacity:.5}}>Nessun nuovo da importare</button>
               ):(
                 <button className="btn" onClick={()=>handleImport(true)} disabled={loading}>
-                  {loading?`â³ ${progress}`:`ðŸ“¥ Importa ${result.nuovi.length} nuovi`}
+                  {loading?`${progress}`:`Importa ${result.nuovi.length} nuovi`}
                 </button>
               )}
             </div>

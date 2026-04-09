@@ -7,8 +7,28 @@ import { FatturaCourtesyViewer } from './FatturaCourtesyViewer.jsx'
 import { ContabileCopilotPanel } from './ContabileCopilotPanel.jsx'
 import { buildCopilotFixPromptFromInsight } from './CopilotInsightsBlock.jsx'
 import { loadIvaInsightsForSocieta } from './application/ivaInsightsClient.js'
+import {
+  buildParcellaAudit,
+  buildParcellaAuditRecord,
+  buildParcellaDecision,
+  isProfessionalParcellaDocument,
+} from './application/parcellaDecisionEngine.js'
+import {
+  buildAvailableColumns,
+  buildInsertRecord,
+  classifyPercipienteOutcome,
+  findExistingPercipiente as findExistingPercipienteByCandidate,
+  inferPercipienteCandidate,
+  mergeForUpdate,
+} from './application/percipientiRegistryService.js'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { fmtCurrency as fmt, fmtDate } from './ui/formatters.js'
+import { BaseInput } from './ui/BaseControls.jsx'
+import { BaseCombobox } from './ui/BaseDropdown.jsx'
+import {
+  CAUSALI_REDDITUALI_OPTIONS,
+  SOMME_NON_SOGGETTE_OPTIONS,
+} from '../../shared/constants/fiscalCatalog.js'
 
 function parseDati(raw) {
   if (!raw) return {}
@@ -20,6 +40,81 @@ function parseDati(raw) {
     }
   }
   return typeof raw === 'object' ? { ...raw } : {}
+}
+
+function normalizeTextMatch(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+}
+
+function normalizeVatMatch(value) {
+  return String(value || '').replace(/\s+/g, '').trim().toUpperCase()
+}
+
+function findMatchingPercipiente(percipienti, doc) {
+  const dati = parseDati(doc?.dati_estratti)
+  const cf = normalizeTextMatch(doc?.soggetto_cf || dati?.cedente_cf || '')
+  const piva = normalizeVatMatch(doc?.soggetto_piva || dati?.cedente_piva || '')
+  const denom = normalizeTextMatch(doc?.soggetto_denominazione || dati?.cedente_denom || '')
+  return (percipienti || []).find((row) => {
+    if (cf && normalizeTextMatch(row?.codice_fiscale) === cf) return true
+    if (piva && normalizeVatMatch(row?.partita_iva) === piva) return true
+    const rowName = normalizeTextMatch(row?.ragione_sociale || `${row?.cognome || ''} ${row?.nome || ''}`.trim())
+    return denom && rowName === denom
+  }) || null
+}
+
+function toDecimal(value, fallback = 0) {
+  const parsed = Number(String(value ?? '').replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function mapPaymentCausale(registrationCausale) {
+  if (registrationCausale === 'FF') return 'PF'
+  if (registrationCausale === 'RPPC') return 'PPPC'
+  return 'PF80'
+}
+
+function buildPercipienteFromConfirmation({ societaId, doc, matchedPercipiente, finalValues }) {
+  const inferred = inferPercipienteCandidate(doc)
+  const candidate = inferred?.candidate ? { ...inferred.candidate } : {}
+  const displayName = doc?.soggetto_denominazione || matchedPercipiente?.ragione_sociale || ''
+  const isCompany = /\b(SRL|SPA|SNC|SAS|STP|ASSOCIATI|STUDIO)\b/i.test(displayName || '')
+  return {
+    ...candidate,
+    societa_id: societaId,
+    tipo_persona: matchedPercipiente?.tipo_persona || candidate.tipo_persona || (isCompany ? 'giuridica' : 'fisica'),
+    ragione_sociale: matchedPercipiente?.ragione_sociale || candidate.ragione_sociale || (isCompany ? displayName : ''),
+    nome: matchedPercipiente?.nome || candidate.nome || '',
+    cognome: matchedPercipiente?.cognome || candidate.cognome || '',
+    codice_fiscale: matchedPercipiente?.codice_fiscale || candidate.codice_fiscale || doc?.soggetto_cf || '',
+    partita_iva: matchedPercipiente?.partita_iva || candidate.partita_iva || doc?.soggetto_piva || '',
+    causale_prevalente: finalValues?.causaleReddituale || matchedPercipiente?.causale_prevalente || candidate.causale_prevalente || 'A',
+    codice_somme_non_soggette: finalValues?.codiceSommeNonSoggette || matchedPercipiente?.codice_somme_non_soggette || '',
+    soggetto_ritenuta: finalValues?.withholdingRate > 0,
+    aliquota_ritenuta: finalValues?.withholdingRate ?? matchedPercipiente?.aliquota_ritenuta ?? candidate.aliquota_ritenuta ?? 0,
+    tipo_ritenuta: finalValues?.withholdingRate > 0 ? 'acconto' : (matchedPercipiente?.tipo_ritenuta || candidate.tipo_ritenuta || 'nessuna'),
+    soggetto_cu: finalValues?.downstream?.updateCu ?? matchedPercipiente?.soggetto_cu ?? candidate.soggetto_cu ?? true,
+    soggetto_770: finalValues?.downstream?.update770 ?? matchedPercipiente?.soggetto_770 ?? candidate.soggetto_770 ?? true,
+    cassa_previdenziale: finalValues?.cassaFlag ? finalValues?.cassaPercent : 0,
+    inps_flag: Boolean(finalValues?.inpsFlag),
+    enasarco_flag: Boolean(finalValues?.enasarcoFlag),
+    payment_schedule_1040: finalValues?.downstream?.paymentSchedule1040 ?? matchedPercipiente?.payment_schedule_1040 ?? candidate.payment_schedule_1040 ?? false,
+    regime_fiscale: finalValues?.codiceSommeNonSoggette === '24' ? 'forfettario' : (matchedPercipiente?.regime_fiscale || candidate.regime_fiscale || 'ordinario'),
+    validation_state: !String(doc?.soggetto_cf || matchedPercipiente?.codice_fiscale || '').trim()
+      ? 'incomplete'
+      : finalValues?.withholdingRate > 0 && !finalValues?.causaleReddituale
+        ? 'da_validare'
+        : 'complete',
+    linked_documents_count: Math.max(Number(matchedPercipiente?.linked_documents_count || 0), 0) + 1,
+    last_invoice_date: doc?.data_documento || matchedPercipiente?.last_invoice_date || null,
+    compensi_ytd: Math.max(Number(matchedPercipiente?.compensi_ytd || 0), 0) + Number(finalValues?.imponibileCompenso || 0),
+    ritenute_ytd: Math.max(Number(matchedPercipiente?.ritenute_ytd || 0), 0) + Number(finalValues?.withholdingAmount || 0),
+    auto_imported: true,
+    attivo: matchedPercipiente?.attivo ?? true,
+  }
 }
 
 /** Stile badge punteggio 0–100 */
@@ -151,7 +246,7 @@ function PdfZoomPane({ doc, xmlPreview }) {
             <iframe title="pdf" src={fileUrl} style={{ width: '100%', height: '100%', minHeight: 480, border: 'none' }} />
           ) : (
             <div style={{ textAlign: 'center', color: 'var(--mu)', padding: '2rem' }}>
-              <div style={{ fontSize: '2rem' }}>??</div>
+              <div style={{ fontSize: '2rem' }}>□</div>
               <div>Nessun file collegato</div>
             </div>
           )}
@@ -231,6 +326,7 @@ function AccountingForm({
   pianoConti,
   causaliIva,
   onSave,
+  onClose,
   onOpenGuidata,
   listIds,
   idxInList,
@@ -251,9 +347,24 @@ function AccountingForm({
   const [saving, setSaving] = useState(false)
   const [learningRuleModal, setLearningRuleModal] = useState(null)
   const [learningRuleBusy, setLearningRuleBusy] = useState(false)
+  const [percipienti, setPercipienti] = useState([])
+  const [percipientiLoading, setPercipientiLoading] = useState(false)
+  const [parcellaForm, setParcellaForm] = useState(null)
+  const [showParcellaAudit, setShowParcellaAudit] = useState(false)
+  const [possiblePercipienteModalOpen, setPossiblePercipienteModalOpen] = useState(false)
+  const [possiblePercipienteDecision, setPossiblePercipienteDecision] = useState(null) // 'create' | 'leave' | 'defer'
+  const possiblePercipienteDecisionRef = useRef(null)
+  const pendingPersistArgsRef = useRef(null)
+  const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false)
+  const xmlPreviewLocal = useXmlPreview(doc)
 
   useEffect(() => {
     setLearningRuleModal(null)
+    setShowParcellaAudit(false)
+    setPossiblePercipienteModalOpen(false)
+    setPossiblePercipienteDecision(null)
+    possiblePercipienteDecisionRef.current = null
+    setInvoicePreviewOpen(false)
   }, [doc?.id])
 
   useEffect(() => {
@@ -289,7 +400,180 @@ function AccountingForm({
     }
   }, [causaliIva?.length, doc?.id])
 
+  const isProfessionalDoc = useMemo(() => isProfessionalParcellaDocument(doc), [doc])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!isProfessionalDoc || !doc?.societa_id) {
+      setPercipienti([])
+      setParcellaForm(null)
+      return () => {}
+    }
+    setPercipientiLoading(true)
+    contabilitaRepo
+      .getPercipientiAttivi(doc.societa_id)
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) {
+          console.warn('[DaValidare] percipienti load', error)
+          setPercipienti([])
+        } else {
+          setPercipienti(Array.isArray(data) ? data : [])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPercipientiLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [doc?.societa_id, doc?.id, isProfessionalDoc])
+
+  const matchedPercipiente = useMemo(
+    () => (isProfessionalDoc ? findMatchingPercipiente(percipienti, doc) : null),
+    [doc, isProfessionalDoc, percipienti]
+  )
+
+  useEffect(() => {
+    if (!doc || !isProfessionalDoc || percipientiLoading) return
+    const savedData = parseDati(doc.dati_estratti)
+    const saved = savedData?.parcella_confirmation
+    const savedAuditRecord = savedData?.parcella_audit
+    const initialPercipiente =
+      percipienti.find((row) => String(row.id) === String(saved?.finalValues?.percipienteId || '')) ||
+      matchedPercipiente ||
+      null
+    const decision = buildParcellaDecision({ percipiente: initialPercipiente, documentRow: doc, draft: {} })
+    const proposal = decision.proposal
+    const finalValues = saved?.finalValues || {}
+    setParcellaForm({
+      percipienteId: finalValues.percipienteId || initialPercipiente?.id || '',
+      causaleReddituale: finalValues.causaleReddituale || proposal.causaleReddituale,
+      cassaFlag: finalValues.cassaFlag ?? proposal.cassaFlag,
+      cassaPercent: finalValues.cassaPercent ?? proposal.cassaPercent,
+      inpsFlag: finalValues.inpsFlag ?? proposal.inpsFlag,
+      enasarcoFlag: finalValues.enasarcoFlag ?? proposal.enasarcoFlag,
+      compensoLordo: finalValues.imponibileCompenso ?? proposal.imponibileCompenso,
+      quotaNonSoggetta: finalValues.quotaNonSoggetta ?? proposal.quotaNonSoggetta,
+      codiceSommeNonSoggette: finalValues.codiceSommeNonSoggette ?? proposal.codiceSommeNonSoggette,
+      withholdingRate: finalValues.withholdingRate ?? proposal.withholdingRate,
+      withholdingAmount: finalValues.withholdingAmount ?? proposal.withholdingAmount,
+      registrationCausale: finalValues.registrationCausale || proposal.registrationCausale,
+      paymentCausale: finalValues.paymentCausale || proposal.paymentCausale,
+      downstream: finalValues.downstream || proposal.downstream,
+      auditStatus: savedAuditRecord?.status || saved?.audit?.status || '',
+      savedStatus: saved?.status || '',
+    })
+  }, [doc, isProfessionalDoc, matchedPercipiente, percipienti, percipientiLoading])
+
   const selectedConto = pianoConti.find((c) => c.id === contoId)
+  const selectedPercipiente = useMemo(() => {
+    if (!isProfessionalDoc) return null
+    return (
+      percipienti.find((row) => String(row.id) === String(parcellaForm?.percipienteId || matchedPercipiente?.id || '')) ||
+      matchedPercipiente ||
+      null
+    )
+  }, [isProfessionalDoc, matchedPercipiente, parcellaForm?.percipienteId, percipienti])
+
+  const parcellaDecision = useMemo(() => {
+    if (!doc || !isProfessionalDoc) return null
+    return buildParcellaDecision({ percipiente: selectedPercipiente, documentRow: doc, draft: {} })
+  }, [doc, isProfessionalDoc, selectedPercipiente])
+
+  const parcellaFinalValues = useMemo(() => {
+    if (!parcellaDecision || !parcellaForm) return null
+    const compensoLordo = toDecimal(parcellaForm.compensoLordo, parcellaDecision.proposal.imponibileCompenso)
+    const quotaNonSoggetta = toDecimal(parcellaForm.quotaNonSoggetta, parcellaDecision.proposal.quotaNonSoggetta)
+    const withholdingRate = toDecimal(parcellaForm.withholdingRate, parcellaDecision.proposal.withholdingRate)
+    const withholdingAmount = toDecimal(parcellaForm.withholdingAmount, parcellaDecision.proposal.withholdingAmount)
+    const registrationCausale = parcellaForm.registrationCausale || parcellaDecision.proposal.registrationCausale
+    return {
+      percipienteId: parcellaForm.percipienteId || selectedPercipiente?.id || '',
+      causaleReddituale: parcellaForm.causaleReddituale || parcellaDecision.proposal.causaleReddituale,
+      cassaFlag: Boolean(parcellaForm.cassaFlag),
+      cassaPercent: toDecimal(parcellaForm.cassaPercent, parcellaDecision.proposal.cassaPercent),
+      inpsFlag: Boolean(parcellaForm.inpsFlag),
+      enasarcoFlag: Boolean(parcellaForm.enasarcoFlag),
+      imponibileCompenso: compensoLordo,
+      quotaNonSoggetta,
+      codiceSommeNonSoggette: parcellaForm.codiceSommeNonSoggette || '',
+      withholdingRate,
+      withholdingAmount,
+      compensoNetto: Math.round((compensoLordo - withholdingAmount) * 100) / 100,
+      deductionRule: parcellaDecision.proposal.deductionRule,
+      registrationCausale,
+      paymentCausale: parcellaForm.paymentCausale || mapPaymentCausale(registrationCausale),
+      downstream: parcellaForm.downstream || parcellaDecision.proposal.downstream,
+    }
+  }, [parcellaDecision, parcellaForm, selectedPercipiente])
+
+  const percipienteIntake = useMemo(() => {
+    if (!doc) return null
+    const inferred = inferPercipienteCandidate(doc)
+    const cls = classifyPercipienteOutcome({
+      documentRow: doc,
+      inferred,
+      matchedPercipiente: selectedPercipiente,
+    })
+    return { inferred, ...cls }
+  }, [doc, selectedPercipiente])
+
+  const percipienteIntakeSummary = useMemo(() => {
+    if (!percipienteIntake?.inferred?.relevant) return null
+    const cand = percipienteIntake?.inferred?.candidate || {}
+    const denom = doc?.soggetto_denominazione || cand.ragione_sociale || ''
+    return {
+      denominazione: denom || 'Soggetto',
+      codiceFiscale: String(cand.codice_fiscale || doc?.soggetto_cf || '').trim(),
+      partitaIva: String(cand.partita_iva || doc?.soggetto_piva || '').trim(),
+      reasons: percipienteIntake.reasons || [],
+      outcome: percipienteIntake.outcome,
+    }
+  }, [percipienteIntake, doc])
+
+  const buildPercipienteReviewAudit = useCallback(
+    ({ decision, d0, classification }) => {
+      const existingAuditId = d0?.percipiente_review_audit?.audit_id || null
+      const auditId = existingAuditId || `pr_${Math.random().toString(16).slice(2)}_${Date.now()}`
+      return {
+        audit_id: auditId,
+        version: 1,
+        document_id: doc?.id || null,
+        classification,
+        reasons: percipienteIntake?.reasons || [],
+        signals: percipienteIntake?.signals || percipienteIntake?.inferred?.signals || {},
+        operator_decision: decision,
+        user: 'Operatore',
+        timestamp: new Date().toISOString(),
+      }
+    },
+    [doc?.id, percipienteIntake]
+  )
+
+  const parcellaWarnings = useMemo(() => {
+    if (!parcellaDecision) return []
+    const extra = []
+    if (!selectedPercipiente) extra.push('Percipiente non collegato: verifica anagrafica e classificazione prima della conferma.')
+    if (selectedPercipiente?.validation_state && selectedPercipiente.validation_state !== 'complete') {
+      extra.push(`Percipiente ${selectedPercipiente.validation_state === 'da_validare' ? 'da validare' : 'incompleto'}: controllare i dati fiscali.`)
+    }
+    return [...new Set([...(parcellaDecision.warnings || []), ...extra])]
+  }, [parcellaDecision, selectedPercipiente])
+
+  const parcellaAuditPreview = useMemo(() => {
+    if (!parcellaDecision || !parcellaFinalValues) return null
+    return buildParcellaAudit({
+      proposal: parcellaDecision.proposal,
+      finalValues: parcellaFinalValues,
+      userLabel: 'Operatore',
+    })
+  }, [parcellaDecision, parcellaFinalValues])
+
+  const proposedPayable = useMemo(() => {
+    if (!doc || !parcellaFinalValues) return 0
+    return Math.round((toDecimal(doc.totale, parcellaFinalValues.imponibileCompenso) - parcellaFinalValues.withholdingAmount) * 100) / 100
+  }, [doc, parcellaFinalValues])
   const filteredConti = pianoConti
     .filter((c) => {
       if (c.livello < 3) return false
@@ -302,38 +586,163 @@ function AccountingForm({
     })
     .slice(0, 80)
 
-  const handleSave = async () => {
+  const persistRegistration = async ({ confirmRegistration = false } = {}) => {
     if (!doc) return
     setSaving(true)
     try {
       const d0 = parseDati(doc.dati_estratti)
-      const nextDati = {
+      let nextDati = {
         ...d0,
         ...(dataReg ? { data_registrazione: dataReg } : {}),
         ...(tipoPag ? { tipo_pagamento: tipoPag } : {}),
       }
+
+      if (isProfessionalDoc && parcellaDecision && parcellaFinalValues) {
+        const availableColumns = buildAvailableColumns(percipienti)
+        const percipienteCandidate = buildPercipienteFromConfirmation({
+          societaId: doc.societa_id,
+          doc,
+          matchedPercipiente: selectedPercipiente,
+          finalValues: parcellaFinalValues,
+        })
+        const matchedByCandidate = findExistingPercipienteByCandidate(percipienti, percipienteCandidate)
+        let persistedPercipienteId = selectedPercipiente?.id || matchedByCandidate?.id || ''
+
+        const currentDecision = possiblePercipienteDecisionRef.current || possiblePercipienteDecision || null
+        const needsOperatorConfirmForPercipiente =
+          percipienteIntake?.outcome === 'possible_percipiente' &&
+          !persistedPercipienteId &&
+          !currentDecision
+
+        if (needsOperatorConfirmForPercipiente) {
+          pendingPersistArgsRef.current = { confirmRegistration }
+          setPossiblePercipienteModalOpen(true)
+          setSaving(false)
+          return
+        }
+
+        const intakeDecision = currentDecision
+        const classification = percipienteIntake?.outcome || null
+        const shouldCreatePercipiente =
+          !persistedPercipienteId &&
+          (classification === 'confirmed_percipiente' || intakeDecision === 'create')
+
+        if (persistedPercipienteId) {
+          const updates = mergeForUpdate(
+            matchedByCandidate || selectedPercipiente || {},
+            percipienteCandidate,
+            availableColumns
+          )
+          if (Object.keys(updates).length > 0) {
+            const { error } = await contabilitaRepo.updatePercipiente(persistedPercipienteId, updates)
+            if (error) throw error
+          }
+        } else if (shouldCreatePercipiente) {
+          const insertPayload = buildInsertRecord(doc.societa_id, percipienteCandidate, availableColumns)
+          const { data, error } = await sb.from('percipienti').insert([insertPayload]).select('id').single()
+          if (error) throw error
+          persistedPercipienteId = data?.id || ''
+        }
+
+        const finalValuesWithPercipiente = {
+          ...parcellaFinalValues,
+          percipienteId: persistedPercipienteId || parcellaFinalValues.percipienteId || '',
+        }
+        const audit = buildParcellaAudit({
+          proposal: parcellaDecision.proposal,
+          finalValues: finalValuesWithPercipiente,
+          userLabel: 'Operatore',
+        })
+        const auditRecord = buildParcellaAuditRecord({
+          proposal: parcellaDecision.proposal,
+          finalValues: finalValuesWithPercipiente,
+          warnings: parcellaWarnings,
+          userLabel: 'Operatore',
+          existingAuditId: d0?.parcella_audit?.audit_id || null,
+        })
+
+        const percipienteReviewAudit =
+          classification === 'possible_percipiente'
+            ? buildPercipienteReviewAudit({ decision: intakeDecision || 'pending', d0, classification })
+            : null
+        nextDati = {
+          ...nextDati,
+          parcella_confirmation: {
+            status: confirmRegistration ? 'confirmed' : 'draft',
+            saved_at: new Date().toISOString(),
+            existing_percipiente: Boolean(selectedPercipiente?.id || matchedByCandidate?.id),
+            proposal: parcellaDecision.proposal,
+            finalValues: finalValuesWithPercipiente,
+            warnings: parcellaWarnings,
+            audit,
+          },
+          parcella_audit: auditRecord,
+          ...(percipienteReviewAudit ? { percipiente_review_audit: percipienteReviewAudit } : {}),
+        }
+
+        // reset decision after a successful write path
+        if (currentDecision) {
+          setPossiblePercipienteDecision(null)
+          possiblePercipienteDecisionRef.current = null
+        }
+      }
+
+      const now = new Date().toISOString()
+      const updatePayload = {
+        conto_id: contoId || null,
+        causale_iva: causaleIva || null,
+        dati_estratti: nextDati,
+      }
+      if (confirmRegistration) {
+        updatePayload.validation_status = 'confirmed'
+        updatePayload.validated_at = now
+      }
+
       await sb
         .from('documenti_contabilita')
-        .update({
-          conto_id: contoId || null,
-          causale_iva: causaleIva || null,
-          dati_estratti: nextDati,
-        })
+        .update(updatePayload)
         .eq('id', doc.id)
+
       const prevConto = String(doc.conto_id ?? '')
       const nextConto = String(contoId ?? '')
       if (prevConto !== nextConto && nextConto !== '') {
         setLearningRuleModal({ documentId: doc.id, contoId: contoId || null })
       }
+
       await onSave?.({
         id: doc.id,
-        conto_id: contoId || null,
-        causale_iva: causaleIva || null,
-        dati_estratti: nextDati,
+        ...updatePayload,
       })
+
+      if (confirmRegistration) onClose?.()
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSave = async () => persistRegistration()
+  const handleConfirmRegistration = async () => persistRegistration({ confirmRegistration: true })
+
+  const handlePercipienteChange = (value) => {
+    const nextPercipiente = percipienti.find((row) => String(row.id) === String(value || '')) || null
+    const nextDecision = buildParcellaDecision({ percipiente: nextPercipiente, documentRow: doc, draft: {} })
+    setParcellaForm((prev) => ({
+      ...(prev || {}),
+      percipienteId: value || '',
+      causaleReddituale: nextDecision.proposal.causaleReddituale,
+      cassaFlag: nextDecision.proposal.cassaFlag,
+      cassaPercent: nextDecision.proposal.cassaPercent,
+      inpsFlag: nextDecision.proposal.inpsFlag,
+      enasarcoFlag: nextDecision.proposal.enasarcoFlag,
+      compensoLordo: nextDecision.proposal.imponibileCompenso,
+      quotaNonSoggetta: nextDecision.proposal.quotaNonSoggetta,
+      codiceSommeNonSoggette: nextDecision.proposal.codiceSommeNonSoggette,
+      withholdingRate: nextDecision.proposal.withholdingRate,
+      withholdingAmount: nextDecision.proposal.withholdingAmount,
+      registrationCausale: nextDecision.proposal.registrationCausale,
+      paymentCausale: nextDecision.proposal.paymentCausale,
+      downstream: nextDecision.proposal.downstream,
+    }))
   }
 
   const reliability = useMemo(() => evaluateDraftReliability({ doc }), [doc])
@@ -360,6 +769,40 @@ function AccountingForm({
     selectedConto &&
     hl.contoCodes.some((c) => normContoCode(c) === normContoCode(selectedConto.codice))
 
+  const blockStyle = {
+    background: 'var(--s2)',
+    borderRadius: 10,
+    padding: '.75rem',
+    marginBottom: '.7rem',
+  }
+  const blockTitleStyle = {
+    fontSize: '.72rem',
+    textTransform: 'uppercase',
+    letterSpacing: '.06em',
+    color: 'var(--mu)',
+    marginBottom: '.55rem',
+    fontWeight: 700,
+  }
+  const changedPillStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    marginLeft: '.35rem',
+    padding: '.08rem .35rem',
+    borderRadius: 999,
+    fontSize: '.62rem',
+    fontWeight: 700,
+    background: 'rgba(212,175,55,.12)',
+    color: 'var(--gold)',
+    border: '1px solid rgba(212,175,55,.24)',
+  }
+  const isChangedFromProposal = useCallback(
+    (key, transform = (value) => value) => {
+      if (!parcellaDecision || !parcellaFinalValues) return false
+      return transform(parcellaDecision.proposal?.[key]) !== transform(parcellaFinalValues?.[key])
+    },
+    [parcellaDecision, parcellaFinalValues]
+  )
+
   if (!doc) {
     return (
       <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -375,11 +818,40 @@ function AccountingForm({
 
   return (
     <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div className="split-pane-header" style={{ flexShrink: 0 }}>
-        <span style={{ fontWeight: 600, fontSize: '.85rem' }}>Registrazione</span>
-        <span className={'bdg status-' + doc.validation_status}>
-          {doc.validation_status === 'pending' ? 'In attesa' : doc.validation_status === 'confirmed' ? 'Confermato' : 'Errore'}
-        </span>
+      <div className="split-pane-header" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', minWidth: 0 }}>
+          <span style={{ fontWeight: 600, fontSize: '.85rem' }}>
+            {isProfessionalDoc ? 'Conferma parcella' : 'Registrazione'}
+          </span>
+          <span className={'bdg status-' + doc.validation_status}>
+            {doc.validation_status === 'pending' ? 'In attesa' : doc.validation_status === 'confirmed' ? 'Confermato' : 'Errore'}
+          </span>
+          {isProfessionalDoc && parcellaForm?.savedStatus === 'draft' && <span className="bdg bdg-gray">Bozza</span>}
+          {isProfessionalDoc && parcellaAuditPreview?.status && (
+            <button
+              type="button"
+              className={'bdg ' + (parcellaAuditPreview.status === 'Variato' ? 'bdg-gold' : 'bdg-green')}
+              onClick={() => setShowParcellaAudit((v) => !v)}
+              style={{ border: 'none', cursor: 'pointer' }}
+              title="Apri differenze tra proposta FiscoSim e conferma operatore"
+            >
+              {parcellaAuditPreview.status}
+            </button>
+          )}
+        </div>
+        {isProfessionalDoc ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn-sec" disabled={saving} onClick={handleSave}>
+              {saving ? '...' : 'Salva bozza'}
+            </button>
+            <button type="button" className="btn-sec" disabled={saving} onClick={() => onClose?.()}>
+              Annulla
+            </button>
+            <button type="button" className="btn" disabled={saving} onClick={handleConfirmRegistration}>
+              {saving ? '...' : 'Conferma registrazione'}
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="split-pane-content" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {showLearningInsight && (
@@ -397,6 +869,55 @@ function AccountingForm({
           >
             <div style={{ fontWeight: 700, marginBottom: '.15rem' }}>Learned from your past corrections</div>
             <div style={{ opacity: 0.95 }}>{learnFq != null ? `Used ${learnFq} times` : 'Based on your usage history'}</div>
+          </div>
+        )}
+        {isProfessionalDoc && showParcellaAudit && parcellaAuditPreview && (
+          <div
+            style={{
+              marginBottom: '.65rem',
+              padding: '.7rem .8rem',
+              borderRadius: 10,
+              background: 'var(--s2)',
+              border: '1px solid var(--bd)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem', marginBottom: '.45rem' }}>
+              <div>
+                <div style={{ fontSize: '.74rem', fontWeight: 700 }}>Differenze proposta / conferma</div>
+                <div style={{ fontSize: '.68rem', color: 'var(--mu)' }}>
+                  {parcellaAuditPreview.changedFields.length
+                    ? `${parcellaAuditPreview.changedFields.length} campi modificati · ${parcellaAuditPreview.user} · ${new Date(parcellaAuditPreview.timestamp).toLocaleString('it-IT')}`
+                    : 'Nessuna modifica rispetto alla proposta FiscoSim.'}
+                </div>
+              </div>
+              <button type="button" className="btn-sec btn-sm" onClick={() => setShowParcellaAudit(false)}>
+                Chiudi
+              </button>
+            </div>
+            {parcellaAuditPreview.diffRows.length > 0 ? (
+              <div className="tbl-wrap">
+                <table className="tbl" style={{ fontSize: '.72rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Campo</th>
+                      <th>Proposta</th>
+                      <th>Finale</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parcellaAuditPreview.diffRows.map((row) => (
+                      <tr key={row.label}>
+                        <td>{row.label}</td>
+                        <td>{String(row.proposta)}</td>
+                        <td>{String(row.finale)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>Conferma pienamente allineata alla proposta FiscoSim.</div>
+            )}
           </div>
         )}
         {autoValidateMode && (
@@ -491,88 +1012,361 @@ function AccountingForm({
           </div>
         )}
 
-        <div className="fg" style={{ marginBottom: '.65rem' }}>
-          <label>Data registrazione</label>
-          <input type="date" value={dataReg || ''} onChange={(e) => setDataReg(e.target.value)} />
-        </div>
-        <div className="fg" style={{ marginBottom: '.65rem' }}>
-          <label>Tipo pagamento</label>
-          <input value={tipoPag} onChange={(e) => setTipoPag(e.target.value)} placeholder="es. MP05 Bonifico" />
-        </div>
+        {isProfessionalDoc && parcellaDecision && parcellaForm && parcellaFinalValues ? (
+          <>
+            <div style={blockStyle}>
+              <div style={blockTitleStyle}>Percipiente</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '.65rem' }}>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Selezione percipiente</label>
+                  <BaseCombobox
+                    value={parcellaForm.percipienteId || ''}
+                    onChange={(v) => handlePercipienteChange(v || '')}
+                    options={[
+                      { id: '', label: matchedPercipiente ? 'Usa percipiente rilevato' : 'Nuovo / non collegato' },
+                      ...(percipienti || []).map((p) => ({
+                        id: p.id,
+                        label: `${p.ragione_sociale || `${p.cognome || ''} ${p.nome || ''}`.trim()} (${p.codice_fiscale || 'CF mancante'})`,
+                      })),
+                    ]}
+                    getOptionId={(o) => o?.id}
+                    getOptionLabel={(o) => o?.label}
+                    placeholder="Seleziona..."
+                    maxItems={140}
+                    searchable
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'end', gap: '.4rem', flexWrap: 'wrap' }}>
+                  <span className={'bdg ' + (selectedPercipiente?.id ? 'bdg-green' : 'bdg-gold')}>
+                    {selectedPercipiente?.id ? 'Percipiente esistente' : 'Nuovo percipiente'}
+                  </span>
+                  {selectedPercipiente?.validation_state && selectedPercipiente.validation_state !== 'complete' && (
+                    <span className="bdg bdg-gold">Dati incompleti</span>
+                  )}
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Denominazione</div>
+                  <strong>{selectedPercipiente?.ragione_sociale || `${selectedPercipiente?.cognome || ''} ${selectedPercipiente?.nome || ''}`.trim() || doc.soggetto_denominazione || 'Da verificare'}</strong>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Codice fiscale / Partita IVA</div>
+                  <strong>{selectedPercipiente?.codice_fiscale || doc.soggetto_cf || 'CF mancante'}</strong>
+                  <span style={{ color: 'var(--mu)' }}> · {selectedPercipiente?.partita_iva || doc.soggetto_piva || 'P.IVA n/d'}</span>
+                </div>
+              </div>
+            </div>
 
-        <div
-          className={`fg${contoCodHl ? ' copilot-highlight' : ''}`}
-          style={{ marginBottom: '.65rem', position: 'relative', padding: contoCodHl ? '.35rem' : undefined, borderRadius: 8 }}
-        >
-          <label>Conto {doc.tipo_documento?.includes('attiva') ? 'Cliente' : 'Fornitore/Costo'}</label>
-          <input
-            placeholder="Cerca conto…"
-            value={contoSearch || (selectedConto ? `${selectedConto.codice} — ${selectedConto.descrizione}` : '')}
-            onChange={(e) => {
-              setContoSearch(e.target.value)
-              setShowDd(true)
-              if (!e.target.value) setContoId('')
-            }}
-            onFocus={() => setShowDd(true)}
-            style={{ width: '100%' }}
-          />
-          {showDd && contoSearch && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                zIndex: 50,
-                background: 'var(--s1)',
-                border: '1px solid var(--bd)',
-                borderRadius: 8,
-                maxHeight: 200,
-                overflow: 'auto',
-                boxShadow: '0 8px 24px rgba(0,0,0,.25)',
-              }}
-            >
-              {filteredConti.length === 0 ? (
-                <div style={{ padding: '.5rem', fontSize: '.75rem', color: 'var(--mu)' }}>Nessun risultato</div>
-              ) : (
-                filteredConti.map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => {
-                      setContoId(c.id)
-                      setContoSearch('')
-                      setShowDd(false)
-                    }}
-                    style={{ padding: '.4rem .6rem', cursor: 'pointer', fontSize: '.75rem', borderBottom: '1px solid var(--s2)' }}
-                  >
-                    <code style={{ color: 'var(--gold)', fontSize: '.65rem' }}>{c.codice}</code> {c.descrizione}
+            <div style={blockStyle}>
+              <div style={blockTitleStyle}>Classificazione fiscale</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '.65rem' }}>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Causale reddituale{isChangedFromProposal('causaleReddituale') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <BaseCombobox
+                    value={parcellaForm.causaleReddituale || ''}
+                    onChange={(v) => setParcellaForm((prev) => ({ ...prev, causaleReddituale: v || '' }))}
+                    options={CAUSALI_REDDITUALI_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }))}
+                    getOptionId={(o) => o?.id}
+                    getOptionLabel={(o) => o?.label}
+                    searchable
+                    maxItems={80}
+                    placeholder="Seleziona..."
+                  />
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.2rem' }}>Regime</div>
+                  <strong>{parcellaDecision.signals.isForfettario || selectedPercipiente?.regime_fiscale === 'forfettario' ? 'Forfettario' : selectedPercipiente?.regime_fiscale || 'Ordinario'}</strong>
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Cassa previdenza{isChangedFromProposal('cassaPercent', (v) => `${Boolean(parcellaForm?.cassaFlag)}-${v}`) ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }}>
+                    <label className={'erp-inline-toggle' + (parcellaForm.cassaFlag ? ' active' : '')} style={{ margin: 0 }}>
+                      <input type="checkbox" checked={Boolean(parcellaForm.cassaFlag)} onChange={(e) => setParcellaForm((prev) => ({ ...prev, cassaFlag: e.target.checked }))} />
+                      <span>Attiva</span>
+                    </label>
+                    <input style={{ maxWidth: 80 }} value={parcellaForm.cassaPercent ?? ''} onChange={(e) => setParcellaForm((prev) => ({ ...prev, cassaPercent: e.target.value }))} />
                   </div>
-                ))
+                </div>
+                <div style={{ display: 'grid', gap: '.35rem', alignContent: 'start' }}>
+                  <label className={'erp-inline-toggle' + (parcellaForm.inpsFlag ? ' active' : '')} style={{ margin: 0 }}>
+                    <input type="checkbox" checked={Boolean(parcellaForm.inpsFlag)} onChange={(e) => setParcellaForm((prev) => ({ ...prev, inpsFlag: e.target.checked }))} />
+                    <span>INPS</span>
+                  </label>
+                  <label className={'erp-inline-toggle' + (parcellaForm.enasarcoFlag ? ' active' : '')} style={{ margin: 0 }}>
+                    <input type="checkbox" checked={Boolean(parcellaForm.enasarcoFlag)} onChange={(e) => setParcellaForm((prev) => ({ ...prev, enasarcoFlag: e.target.checked }))} />
+                    <span>Enasarco</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div style={blockStyle}>
+              <div style={blockTitleStyle}>Importi fiscali</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '.65rem' }}>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Compenso lordo{isChangedFromProposal('imponibileCompenso') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <input value={parcellaForm.compensoLordo ?? ''} onChange={(e) => setParcellaForm((prev) => ({ ...prev, compensoLordo: e.target.value }))} />
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Imponibile soggetto a ritenuta</div>
+                  <strong>{fmt(Math.max(0, toDecimal(parcellaForm.compensoLordo, 0) - toDecimal(parcellaForm.quotaNonSoggetta, 0)))}</strong>
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Quota non soggetta{isChangedFromProposal('quotaNonSoggetta') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <input value={parcellaForm.quotaNonSoggetta ?? ''} onChange={(e) => setParcellaForm((prev) => ({ ...prev, quotaNonSoggetta: e.target.value }))} />
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Codice somme non soggette{isChangedFromProposal('codiceSommeNonSoggette') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <BaseCombobox
+                    value={parcellaForm.codiceSommeNonSoggette || ''}
+                    onChange={(v) => setParcellaForm((prev) => ({ ...prev, codiceSommeNonSoggette: v || '' }))}
+                    options={[{ id: '', label: 'Nessuno' }, ...SOMME_NON_SOGGETTE_OPTIONS.map((opt) => ({ id: opt.value, label: opt.label }))]}
+                    getOptionId={(o) => o?.id}
+                    getOptionLabel={(o) => o?.label}
+                    searchable={false}
+                    placeholder="Nessuno"
+                    maxItems={80}
+                  />
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Ritenuta % {isChangedFromProposal('withholdingRate') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <input value={parcellaForm.withholdingRate ?? ''} onChange={(e) => setParcellaForm((prev) => ({ ...prev, withholdingRate: e.target.value }))} />
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Ritenuta importo{isChangedFromProposal('withholdingAmount') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <input value={parcellaForm.withholdingAmount ?? ''} onChange={(e) => setParcellaForm((prev) => ({ ...prev, withholdingAmount: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+
+            <div style={blockStyle}>
+              <div style={blockTitleStyle}>Regole speciali</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.1fr 1fr 1fr', gap: '.65rem' }}>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Diritti d'autore</div>
+                  <strong>{parcellaDecision.signals.isDirittiAutore ? parcellaDecision.proposal.deductionRule : 'Non rilevati'}</strong>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Art. 15</div>
+                  <strong>{parcellaDecision.signals.isArt15 ? `Si · ${fmt(parcellaDecision.signals.art15Amount)}` : 'No'}</strong>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>CU / 770 / Scadenziario</div>
+                  <strong>{parcellaFinalValues.downstream?.updateCu ? 'CU' : 'No CU'}</strong>
+                  <span style={{ color: 'var(--mu)' }}> · {parcellaFinalValues.downstream?.update770 ? '770' : 'No 770'}</span>
+                  <span style={{ color: 'var(--mu)' }}> · {parcellaFinalValues.downstream?.updateWithholdingSchedule ? 'Scadenz.' : 'No scadenz.'}</span>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Pagamento fiscale</div>
+                  <strong>{parcellaFinalValues.paymentCausale}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div style={blockStyle}>
+              <div style={blockTitleStyle}>Contabilità proposta</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '.65rem' }}>
+                <div
+                  className={`fg${contoCodHl ? ' copilot-highlight' : ''}`}
+                  style={{ marginBottom: 0, position: 'relative', padding: contoCodHl ? '.35rem' : undefined, borderRadius: 8 }}
+                >
+                  <label>Conto proposto</label>
+                  <input
+                    placeholder="Cerca conto…"
+                    value={contoSearch || (selectedConto ? `${selectedConto.codice} — ${selectedConto.descrizione}` : '')}
+                    onChange={(e) => {
+                      setContoSearch(e.target.value)
+                      setShowDd(true)
+                      if (!e.target.value) setContoId('')
+                    }}
+                    onFocus={() => setShowDd(true)}
+                    style={{ width: '100%' }}
+                  />
+                  {showDd && contoSearch && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: 'var(--s1)', border: '1px solid var(--bd)', borderRadius: 8, maxHeight: 200, overflow: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.25)' }}>
+                      {filteredConti.length === 0 ? (
+                        <div style={{ padding: '.5rem', fontSize: '.75rem', color: 'var(--mu)' }}>Nessun risultato</div>
+                      ) : (
+                        filteredConti.map((c) => (
+                          <div
+                            key={c.id}
+                            onClick={() => {
+                              setContoId(c.id)
+                              setContoSearch('')
+                              setShowDd(false)
+                            }}
+                            style={{ padding: '.4rem .6rem', cursor: 'pointer', fontSize: '.75rem', borderBottom: '1px solid var(--s2)' }}
+                          >
+                            <code style={{ color: 'var(--gold)', fontSize: '.65rem' }}>{c.codice}</code> {c.descrizione}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Causale contabile{isChangedFromProposal('registrationCausale') ? <span style={changedPillStyle}>Variato</span> : null}</label>
+                  <BaseCombobox
+                    value={parcellaForm.registrationCausale || ''}
+                    onChange={(v) => setParcellaForm((prev) => ({ ...prev, registrationCausale: v || '', paymentCausale: mapPaymentCausale(v || '') }))}
+                    options={[
+                      { id: 'RP', label: 'RP' },
+                      { id: 'RPPC', label: 'RPPC' },
+                      { id: 'FF', label: 'FF' },
+                    ]}
+                    getOptionId={(o) => o?.id}
+                    getOptionLabel={(o) => o?.label}
+                    searchable={false}
+                    placeholder="Seleziona..."
+                    maxItems={10}
+                  />
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Debito professionista</div>
+                  <strong>{fmt(proposedPayable)}</strong>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--mu)', fontSize: '.68rem', marginBottom: '.15rem' }}>Debito ritenuta</div>
+                  <strong>{fmt(parcellaFinalValues.withholdingAmount)}</strong>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '.65rem', marginTop: '.65rem' }}>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Data registrazione</label>
+                  <input type="date" value={dataReg || ''} onChange={(e) => setDataReg(e.target.value)} />
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Tipo pagamento</label>
+                  <input value={tipoPag} onChange={(e) => setTipoPag(e.target.value)} placeholder="es. MP05 Bonifico" />
+                </div>
+                <div className={`fg${hl?.causaleIva ? ' copilot-highlight' : ''}`} style={{ marginBottom: 0, padding: hl?.causaleIva ? '.35rem' : undefined, borderRadius: 8 }}>
+                  <label>Causale IVA</label>
+                  <BaseCombobox
+                    value={causaleIva}
+                    onChange={(v) => setCausaleIva(v || '')}
+                    options={[
+                      { id: '', label: 'Seleziona...' },
+                      ...(causaliIva || []).map((c) => ({
+                        id: c.id,
+                        label: `${c.codice} - ${c.descrizione} (${c.aliquota}%)`,
+                      })),
+                    ]}
+                    getOptionId={(o) => o?.id}
+                    getOptionLabel={(o) => o?.label}
+                    placeholder="Seleziona..."
+                    searchable
+                    maxItems={160}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {parcellaWarnings.length > 0 && (
+              <div style={{ ...blockStyle, marginBottom: 0 }}>
+                <div style={blockTitleStyle}>Warnings</div>
+                <div style={{ display: 'grid', gap: '.4rem' }}>
+                  {parcellaWarnings.map((warning) => (
+                    <div key={warning} className="alert alert-warn" style={{ margin: 0, padding: '.5rem .65rem' }}>
+                      {warning}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="fg" style={{ marginBottom: '.65rem' }}>
+              <label>Data registrazione</label>
+              <input type="date" value={dataReg || ''} onChange={(e) => setDataReg(e.target.value)} />
+            </div>
+            <div className="fg" style={{ marginBottom: '.65rem' }}>
+              <label>Tipo pagamento</label>
+              <input value={tipoPag} onChange={(e) => setTipoPag(e.target.value)} placeholder="es. MP05 Bonifico" />
+            </div>
+
+            <div
+              className={`fg${contoCodHl ? ' copilot-highlight' : ''}`}
+              style={{ marginBottom: '.65rem', position: 'relative', padding: contoCodHl ? '.35rem' : undefined, borderRadius: 8 }}
+            >
+              <label>Conto {doc.tipo_documento?.includes('attiva') ? 'Cliente' : 'Fornitore/Costo'}</label>
+              <input
+                placeholder="Cerca conto…"
+                value={contoSearch || (selectedConto ? `${selectedConto.codice} — ${selectedConto.descrizione}` : '')}
+                onChange={(e) => {
+                  setContoSearch(e.target.value)
+                  setShowDd(true)
+                  if (!e.target.value) setContoId('')
+                }}
+                onFocus={() => setShowDd(true)}
+                style={{ width: '100%' }}
+              />
+              {showDd && contoSearch && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    zIndex: 50,
+                    background: 'var(--s1)',
+                    border: '1px solid var(--bd)',
+                    borderRadius: 8,
+                    maxHeight: 200,
+                    overflow: 'auto',
+                    boxShadow: '0 8px 24px rgba(0,0,0,.25)',
+                  }}
+                >
+                  {filteredConti.length === 0 ? (
+                    <div style={{ padding: '.5rem', fontSize: '.75rem', color: 'var(--mu)' }}>Nessun risultato</div>
+                  ) : (
+                    filteredConti.map((c) => (
+                      <div
+                        key={c.id}
+                        onClick={() => {
+                          setContoId(c.id)
+                          setContoSearch('')
+                          setShowDd(false)
+                        }}
+                        style={{ padding: '.4rem .6rem', cursor: 'pointer', fontSize: '.75rem', borderBottom: '1px solid var(--s2)' }}
+                      >
+                        <code style={{ color: 'var(--gold)', fontSize: '.65rem' }}>{c.codice}</code> {c.descrizione}
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
 
-        <div className={`fg${hl?.causaleIva ? ' copilot-highlight' : ''}`} style={{ marginBottom: '.75rem', padding: hl?.causaleIva ? '.35rem' : undefined, borderRadius: 8 }}>
-          <label>Causale IVA</label>
-          <select value={causaleIva} onChange={(e) => setCausaleIva(e.target.value)}>
-            <option value="">Seleziona…</option>
-            {causaliIva.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.codice} — {c.descrizione} ({c.aliquota}%)
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className={`fg${hl?.causaleIva ? ' copilot-highlight' : ''}`} style={{ marginBottom: '.75rem', padding: hl?.causaleIva ? '.35rem' : undefined, borderRadius: 8 }}>
+              <label>Causale IVA</label>
+              <BaseCombobox
+                value={causaleIva}
+                onChange={(v) => setCausaleIva(v || '')}
+                options={[
+                  { id: '', label: 'Seleziona...' },
+                  ...(causaliIva || []).map((c) => ({
+                    id: c.id,
+                    label: `${c.codice} - ${c.descrizione} (${c.aliquota}%)`,
+                  })),
+                ]}
+                getOptionId={(o) => o?.id}
+                getOptionLabel={(o) => o?.label}
+                placeholder="Seleziona..."
+                searchable
+                maxItems={160}
+              />
+            </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.4rem' }}>
-          <button type="button" className="btn" disabled={saving} onClick={handleSave}>
-            {saving ? '…' : 'Salva bozza'}
-          </button>
-          <button type="button" className="btn-sec" onClick={() => onOpenGuidata?.(doc, listIds, idxInList)}>
-            Scheda completa (guidata)
-          </button>
-        </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.4rem' }}>
+              <button type="button" className="btn" disabled={saving} onClick={handleSave}>
+                {saving ? '…' : 'Salva bozza'}
+              </button>
+              <button type="button" className="btn-sec" onClick={() => onOpenGuidata?.(doc, listIds, idxInList)}>
+                Scheda completa (guidata)
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {learningRuleModal && (
@@ -629,6 +1423,122 @@ function AccountingForm({
                   {learningRuleBusy ? '…' : 'Save rule'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {possiblePercipienteModalOpen && percipienteIntakeSummary?.outcome === 'possible_percipiente' && (
+        <div
+          className="overlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPossiblePercipienteModalOpen(false)
+          }}
+        >
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720, width: '92%' }}>
+            <div className="modal-hdr">
+              <div className="modal-title">Possibile percipiente</div>
+              <button type="button" className="modal-close" onClick={() => setPossiblePercipienteModalOpen(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body" style={{ fontSize: '.85rem', lineHeight: 1.45 }}>
+              <div className="alert alert-warn" style={{ margin: '0 0 .75rem', padding: '.55rem .65rem' }}>
+                Individuata possibile parcella / possibile percipiente. Vuoi creare l’anagrafica Percipiente?
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.65rem', marginBottom: '.75rem' }}>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Soggetto</label>
+                  <div style={{ padding: '.55rem .65rem', borderRadius: 10, border: '1px solid var(--bd)', background: 'var(--s1)' }}>
+                    <div style={{ fontWeight: 700 }}>{percipienteIntakeSummary.denominazione}</div>
+                    <div style={{ color: 'var(--mu)', fontSize: '.78rem', marginTop: 4 }}>
+                      CF: <span style={{ color: 'var(--tx)' }}>{percipienteIntakeSummary.codiceFiscale || '—'}</span> · P.IVA:{' '}
+                      <span style={{ color: 'var(--tx)' }}>{percipienteIntakeSummary.partitaIva || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="fg" style={{ marginBottom: 0 }}>
+                  <label>Motivi</label>
+                  <div style={{ padding: '.55rem .65rem', borderRadius: 10, border: '1px solid var(--bd)', background: 'var(--s1)' }}>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {(percipienteIntakeSummary.reasons || []).slice(0, 6).map((r) => (
+                        <div key={r} style={{ color: 'var(--mu)', fontSize: '.78rem' }}>
+                          • {r}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
+                <button type="button" className="btn-sec" onClick={() => setInvoicePreviewOpen(true)}>
+                  Anteprima fattura
+                </button>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="btn-sec"
+                    onClick={async () => {
+                      possiblePercipienteDecisionRef.current = 'defer'
+                      setPossiblePercipienteDecision('defer')
+                      setPossiblePercipienteModalOpen(false)
+                      pendingPersistArgsRef.current = null
+                      await persistRegistration({ confirmRegistration: false })
+                    }}
+                  >
+                    Rivedi dopo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-sec"
+                    onClick={async () => {
+                      possiblePercipienteDecisionRef.current = 'leave'
+                      setPossiblePercipienteDecision('leave')
+                      setPossiblePercipienteModalOpen(false)
+                      const args = pendingPersistArgsRef.current || { confirmRegistration: false }
+                      pendingPersistArgsRef.current = null
+                      await persistRegistration(args)
+                    }}
+                  >
+                    Lascia come fornitore
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={async () => {
+                      possiblePercipienteDecisionRef.current = 'create'
+                      setPossiblePercipienteDecision('create')
+                      setPossiblePercipienteModalOpen(false)
+                      const args = pendingPersistArgsRef.current || { confirmRegistration: false }
+                      pendingPersistArgsRef.current = null
+                      await persistRegistration(args)
+                    }}
+                  >
+                    Crea percipiente
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {invoicePreviewOpen && (
+        <div
+          className="overlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setInvoicePreviewOpen(false)
+          }}
+        >
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 980, width: '94%', maxHeight: '86vh' }}>
+            <div className="modal-hdr">
+              <div className="modal-title">Anteprima fattura</div>
+              <button type="button" className="modal-close" onClick={() => setInvoicePreviewOpen(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: 0, overflow: 'hidden', maxHeight: '76vh' }}>
+              <PdfZoomPane doc={doc} xmlPreview={xmlPreviewLocal} />
             </div>
           </div>
         </div>
@@ -759,8 +1669,34 @@ export function DaValidareSplitView({
     })
   }, [documenti, filtroStato, filtroFornitore, searchTerm])
 
+  const fornitori = useMemo(
+    () => [...new Set((documenti || []).map((d) => d.soggetto_piva).filter(Boolean))],
+    [documenti]
+  )
+
   const listIds = useMemo(() => filtered.map((d) => d.id), [filtered])
   const filteredIdsKey = useMemo(() => filtered.map((d) => d.id).join(','), [filtered])
+
+  const fornitoriOptions = useMemo(() => {
+    const denomByPiva = new Map()
+    ;(documenti || []).forEach((d) => {
+      const piva = d?.soggetto_piva
+      if (!piva) return
+      if (!denomByPiva.has(piva) && d?.soggetto_denominazione) denomByPiva.set(piva, d.soggetto_denominazione)
+    })
+    return [
+      { id: '', label: 'Tutti i soggetti' },
+      ...(fornitori || []).map((piva) => ({
+        id: piva,
+        label: denomByPiva.get(piva) || piva,
+      })),
+    ]
+  }, [fornitori, documenti])
+
+  const handleSelectAllVisible = useCallback(() => {
+    // Explicit: select only the currently visible (filtered) rows.
+    setSelectedIds(listIds)
+  }, [listIds])
 
   const loadAccountingEntryMeta = useCallback(async (docIds, opts = {}) => {
     const merge = opts.merge === true
@@ -995,8 +1931,6 @@ export function DaValidareSplitView({
   const xmlPreview = useXmlPreview(focusedDoc)
   const idxInList = focusedDoc ? listIds.indexOf(focusedDoc.id) : -1
 
-  const fornitori = [...new Set(documenti.map((d) => d.soggetto_piva).filter(Boolean))]
-
   const toggleSelected = useCallback((id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }, [])
@@ -1118,12 +2052,23 @@ export function DaValidareSplitView({
   }
 
   const onSingleSave = async (partial) => {
-    patchDocumento?.(partial.id, {
-      conto_id: partial.conto_id,
-      causale_iva: partial.causale_iva,
-      dati_estratti: partial.dati_estratti,
-    })
+    const nextPartial = { ...partial }
+    delete nextPartial.id
+    patchDocumento?.(partial.id, nextPartial)
   }
+
+  const handleQuickConfirm = useCallback(
+    (row) => {
+      if (isProfessionalParcellaDocument(row)) {
+        setFocusedId(row.id)
+        setDetailPanelOpen(true)
+        setDetailMode('form')
+        return
+      }
+      void confermaDoc?.(row.id)
+    },
+    [confermaDoc]
+  )
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((d) => selectedIds.includes(d.id))
 
@@ -1136,14 +2081,16 @@ export function DaValidareSplitView({
             <input placeholder="Cerca numero documento o soggetto" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="fg" style={{ minWidth: 220, marginBottom: 0 }}>
-            <select value={filtroFornitore} onChange={(e) => setFiltroFornitore(e.target.value)}>
-              <option value="">Tutti i soggetti</option>
-              {fornitori.map((p) => (
-                <option key={p} value={p}>
-                  {documenti.find((d) => d.soggetto_piva === p)?.soggetto_denominazione || p}
-                </option>
-              ))}
-            </select>
+            <BaseCombobox
+              value={filtroFornitore}
+              onChange={(v) => setFiltroFornitore(v || '')}
+              options={fornitoriOptions}
+              getOptionId={(o) => o?.id}
+              getOptionLabel={(o) => o?.label}
+              placeholder="Tutti i soggetti"
+              maxItems={120}
+              searchable
+            />
           </div>
           <div className="cont-toolbar-summary">
             <span className="cont-toolbar-pill"><strong>{filtered.length}</strong> documenti</span>
@@ -1196,62 +2143,112 @@ export function DaValidareSplitView({
 
       {selectedIds.length >= 1 && (
         <div className="erp-bulkbar">
-          <strong style={{ fontSize: '.78rem' }}>Selezione: {selectedIds.length}</strong>
-          <input type="date" value={bulkDataReg} onChange={(e) => setBulkDataReg(e.target.value)} style={{ fontSize: '.72rem' }} />
-          <select value={bulkContoId} onChange={(e) => setBulkContoId(e.target.value)} style={{ fontSize: '.72rem', maxWidth: 220 }}>
-            <option value="">Conto (nessun cambio)</option>
-            {pianoConti
-              .filter((c) => c.livello >= 3)
-              .slice(0, 400)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.codice} - {c.descrizione}
-                </option>
-              ))}
-          </select>
-          <input placeholder="Tipo pagamento" value={bulkTipoPag} onChange={(e) => setBulkTipoPag(e.target.value)} style={{ fontSize: '.72rem', width: 140 }} />
-          <select value={bulkCausaleIva} onChange={(e) => setBulkCausaleIva(e.target.value)} style={{ fontSize: '.72rem', maxWidth: 180 }}>
-            <option value="">Causale IVA (nessun cambio)</option>
-            {causaliIva.map((c) => (
-              <option key={c.id} value={c.id}>{c.codice}</option>
-            ))}
-          </select>
-          <label style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
-            <input type="checkbox" checked={bulkApprove} onChange={(e) => setBulkApprove(e.target.checked)} />
-            Approva
-          </label>
-          <label style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
-            <input type="checkbox" checked={bulkRegister} onChange={(e) => setBulkRegister(e.target.checked)} />
-            Contabilizza
-          </label>
-          <button type="button" className="btn-sec" disabled={bulkLoading} onClick={() => { setBulkApprove(true); setBulkRegister(false); void runBulkPreview({ approve: true, approveAndRegister: false }) }}>
-            Anteprima approva
-          </button>
-          <button type="button" className="btn-sec" disabled={bulkLoading} onClick={() => { setBulkApprove(true); setBulkRegister(true); void runBulkPreview({ approve: true, approveAndRegister: true }) }}>
-            Anteprima approva + contabilizza
-          </button>
-          <button type="button" className="btn-sec" disabled={bulkLoading} onClick={() => runBulkPreview()}>
-            Anteprima (caselle)
-          </button>
-          <button type="button" className="btn" disabled={bulkLoading} onClick={() => setSelectedIds([])}>
-            Deseleziona
-          </button>
-          <button
-            type="button"
-            className="btn-sec"
-            style={{ borderColor: 'rgba(224,82,82,.35)', color: '#ff8585' }}
-            disabled={bulkLoading}
-            onClick={async () => {
-              if (!confirm(`Eliminare ${selectedIds.length} documenti selezionati?`)) return
-              for (const id of selectedIds) {
-                await contabilitaRepo.deleteDocumentoContabilita(id)
-              }
-              setSelectedIds([])
-              await onRefresh?.()
-            }}
-          >
-            Elimina selezionati
-          </button>
+          <div className="erp-bulkbar-group erp-bulkbar-group-select">
+            <div className="erp-bulkbar-title">
+              Selezione: <strong>{selectedIds.length}</strong>
+            </div>
+            <button type="button" className="btn-sec btn-sm" disabled={bulkLoading} onClick={handleSelectAllVisible}>
+              Seleziona tutte
+            </button>
+            <button type="button" className="btn btn-sm" disabled={bulkLoading} onClick={() => setSelectedIds([])}>
+              Deseleziona
+            </button>
+          </div>
+
+          <div className="erp-bulkbar-group erp-bulkbar-group-overrides">
+            <BaseInput
+              type="date"
+              value={bulkDataReg}
+              onChange={(e) => setBulkDataReg(e.target.value)}
+              className="erp-bulkbar-field erp-bulkbar-field-date"
+              aria-label="Data registrazione (massivo)"
+            />
+            <BaseCombobox
+              value={bulkContoId}
+              onChange={(v) => setBulkContoId(v)}
+              options={(pianoConti || []).filter((c) => c.livello >= 3).slice(0, 400)}
+              getOptionId={(c) => c?.id}
+              getOptionLabel={(c) => `${c?.codice || ''} - ${c?.descrizione || ''}`.trim()}
+              placeholder="Conto (nessun cambio)"
+              className="erp-bulkbar-field erp-bulkbar-field-wide"
+              maxItems={220}
+            />
+            <BaseInput
+              placeholder="Tipo pagamento"
+              value={bulkTipoPag}
+              onChange={(e) => setBulkTipoPag(e.target.value)}
+              className="erp-bulkbar-field erp-bulkbar-field-tipo"
+              aria-label="Tipo pagamento (massivo)"
+            />
+            <BaseCombobox
+              value={bulkCausaleIva}
+              onChange={(v) => setBulkCausaleIva(v)}
+              options={causaliIva || []}
+              getOptionId={(c) => c?.id}
+              getOptionLabel={(c) => String(c?.codice || '').trim()}
+              placeholder="Causale IVA (nessun cambio)"
+              className="erp-bulkbar-field erp-bulkbar-field-iva"
+              maxItems={120}
+              searchable
+            />
+          </div>
+
+          <div className="erp-bulkbar-group erp-bulkbar-group-flags">
+            <label className={'erp-inline-toggle' + (bulkApprove ? ' active' : '')}>
+              <input type="checkbox" checked={bulkApprove} onChange={(e) => setBulkApprove(e.target.checked)} />
+              <span>Approva</span>
+            </label>
+            <label className={'erp-inline-toggle' + (bulkRegister ? ' active' : '')}>
+              <input type="checkbox" checked={bulkRegister} onChange={(e) => setBulkRegister(e.target.checked)} />
+              <span>Contabilizza</span>
+            </label>
+          </div>
+
+          <div className="erp-bulkbar-group erp-bulkbar-group-actions">
+            <button
+              type="button"
+              className="btn-sec btn-sm"
+              disabled={bulkLoading}
+              onClick={() => {
+                setBulkApprove(true)
+                setBulkRegister(false)
+                void runBulkPreview({ approve: true, approveAndRegister: false })
+              }}
+            >
+              Anteprima approva
+            </button>
+            <button
+              type="button"
+              className="btn-sec btn-sm"
+              disabled={bulkLoading}
+              onClick={() => {
+                setBulkApprove(true)
+                setBulkRegister(true)
+                void runBulkPreview({ approve: true, approveAndRegister: true })
+              }}
+            >
+              Anteprima approva + contabilizza
+            </button>
+            <button type="button" className="btn-sec btn-sm" disabled={bulkLoading} onClick={() => runBulkPreview()}>
+              Anteprima (caselle)
+            </button>
+            <button
+              type="button"
+              className="btn-sec btn-sm"
+              style={{ borderColor: 'rgba(224,82,82,.35)', color: '#ff8585' }}
+              disabled={bulkLoading}
+              onClick={async () => {
+                if (!confirm(`Eliminare ${selectedIds.length} documenti selezionati?`)) return
+                for (const id of selectedIds) {
+                  await contabilitaRepo.deleteDocumentoContabilita(id)
+                }
+                setSelectedIds([])
+                await onRefresh?.()
+              }}
+            >
+              Elimina selezionati
+            </button>
+          </div>
         </div>
       )}
 
@@ -1401,7 +2398,7 @@ export function DaValidareSplitView({
                             </td>
                             <td onClick={(e) => e.stopPropagation()}>
                               {d.validation_status === 'pending' && (
-                                <button type="button" className="btn-icon" title="Conferma" onClick={() => confermaDoc?.(d.id)}>
+                                <button type="button" className="btn-icon" title="Conferma" onClick={() => handleQuickConfirm(d)}>
                                   ✓
                                 </button>
                               )}
@@ -1447,6 +2444,7 @@ export function DaValidareSplitView({
                     pianoConti={pianoConti}
                     causaliIva={causaliIva}
                     onSave={onSingleSave}
+                    onClose={() => setDetailPanelOpen(false)}
                     onOpenGuidata={onEdit}
                     listIds={listIds}
                     idxInList={idxInList}

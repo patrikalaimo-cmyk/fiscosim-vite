@@ -1,4 +1,5 @@
 import { sb } from '../../../lib/supabase'
+import { syncPercipienteFromDocumentoContabilita } from '../../contabilita/application/percipientiRegistryService.js'
 
 export function findPianoContiByPiva(societaId, pivaNorm) {
   return sb
@@ -132,7 +133,20 @@ export function findCausaleIvaByCodice(codice) {
 }
 
 export function insertDocumentoContabilita(payload) {
-  return sb.from('documenti_contabilita').insert([payload]).select()
+  return sb
+    .from('documenti_contabilita')
+    .insert([payload])
+    .select()
+    .then(async (res) => {
+      if (!res.error && res.data?.[0]) {
+        try {
+          await syncPercipienteFromDocumentoContabilita(res.data[0])
+        } catch (e) {
+          console.warn('[Percipienti sync] import_unificato', e?.message || e)
+        }
+      }
+      return res
+    })
 }
 
 export function insertAvvisoAde(payload) {

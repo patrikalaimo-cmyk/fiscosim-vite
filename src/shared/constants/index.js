@@ -181,7 +181,6 @@ export const NAV = [
     section: 'CONTABILITÀ',
     items: [
       { id: 'contabilita', ico: '📒', label: 'Prima Nota' },
-      { id: 'piano_conti', ico: '🗂️', label: 'Piano dei Conti' },
       { id: 'partitario',  ico: '💳', label: 'Partitario' },
       { id: 'bilancio',    ico: '📊', label: 'Bilancio' }
     ]
@@ -246,3 +245,6 @@ export const MODULI_DISPONIBILI = [
 ]
 
 export const MODULI_DEFAULT = ['iva', 'f24', 'ammortamenti', 'adempimenti', 'simulatore']
+
+export * from './uiText.js'
+export * from './fiscalCatalog.js'

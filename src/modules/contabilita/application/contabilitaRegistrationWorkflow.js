@@ -1,4 +1,4 @@
-import {
+﻿import {
   buildPrimaNotaHeaderPayload,
   buildPrimaNotaRighePayload,
   normalizeRigaForPrimaNotaPayload,
@@ -9,8 +9,19 @@ import { createPrimaNotaCompleta } from '../../../../services/primaNotaService.j
 import { syncRegistriIvaFromAccountingEntry } from '../../../../services/ivaRegistriSyncService.js'
 import { sb } from '../../../lib/supabase.js'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
+import { buildRegistrationWorkflowState } from './parcellaWorkflowState.js'
 
 const EPS = 0.01
+
+function safeJsonParse(value) {
+  if (!value) return {}
+  if (typeof value === 'object') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return {}
+  }
+}
 
 function toNum(v) {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'))
@@ -74,11 +85,23 @@ async function buildIvaAwarePayload({
   let ivaRows = Array.isArray(draft?.ivaRows) ? draft.ivaRows : []
   const isPassiva = doc?.tipo_documento?.includes('passiva')
   const isAttiva = doc?.tipo_documento?.includes('attiva')
+  const datiEstratti = safeJsonParse(doc?.dati_estratti)
+  const parcellaConfirmation = datiEstratti?.parcella_confirmation && typeof datiEstratti.parcella_confirmation === 'object'
+    ? datiEstratti.parcella_confirmation
+    : null
+  const registrationCausaleCode = String(
+    parcellaConfirmation?.finalValues?.registrationCausale ||
+    parcellaConfirmation?.proposal?.registrationCausale ||
+    ''
+  ).trim().toUpperCase()
   if (!isPassiva && !isAttiva) {
     return { error: 'Tipo documento non supportato' }
   }
 
   const causaleContabile =
+    (registrationCausaleCode
+      ? causaliContabili.find((c) => String(c.codice || '').trim().toUpperCase() === registrationCausaleCode)
+      : null) ||
     (draft?.header?.causale_id
       ? causaliContabili.find((c) => String(c.id) === String(draft.header.causale_id))
       : null) || pickCausaleContabile(causaliContabili, isPassiva)
@@ -118,7 +141,10 @@ async function buildIvaAwarePayload({
   if (error) return { error }
 
   const dataReg = draft?.header?.data_registrazione || doc?.data_documento || new Date().toISOString().slice(0, 10)
-  const descr = `${isPassiva ? 'Fatt. passiva' : 'Fatt. attiva'} ${doc?.soggetto_denominazione || ''} n.${doc?.numero_documento || '?'}`
+  const descrBase = registrationCausaleCode === 'RP' || registrationCausaleCode === 'RPPC'
+    ? 'Parcella passiva'
+    : isPassiva ? 'Fatt. passiva' : 'Fatt. attiva'
+  const descr = `${descrBase} ${doc?.soggetto_denominazione || ''} n.${doc?.numero_documento || '?'}`
   const docIdForPayload = draft?.meta?.documento_import_id || doc?.source_document_id || doc?.id || null
 
   const pnPayload = buildPrimaNotaHeaderPayload({
@@ -127,7 +153,7 @@ async function buildIvaAwarePayload({
     data_documento: doc?.data_documento,
     numero_documento: doc?.numero_documento,
     causale_id: causaleContabile?.id || null,
-    causale_codice: causaleContabile?.codice || (isPassiva ? 'FF' : 'FC'),
+    causale_codice: causaleContabile?.codice || registrationCausaleCode || (isPassiva ? 'FF' : 'FC'),
     descrizione: descr,
     cliente_fornitore_nome: doc?.soggetto_denominazione,
     totale_dare: doc?.totale || 0,
@@ -334,7 +360,7 @@ export async function registraDocumentiConfermati({
   for (const doc of daRegistrare) {
     try {
       if (!societaId) {
-        errors.push({ docId: doc?.id, error: 'SocietÃ  non selezionata' })
+        errors.push({ docId: doc?.id, error: 'Società non selezionata' })
         continue
       }
       if (!doc?.id) {
@@ -481,6 +507,20 @@ export async function registraDocumentiConfermati({
         workflow_status: 'registered',
         registered_at: new Date().toISOString(),
         prima_nota_id: pn.id,
+        dati_estratti: (() => {
+          const d0 = safeJsonParse(doc?.dati_estratti)
+          const registrationWorkflow = buildRegistrationWorkflowState(doc)
+          return registrationWorkflow?.registrationCausale
+            ? {
+                ...d0,
+                parcella_workflow: {
+                  ...registrationWorkflow,
+                  primaNotaId: pn.id,
+                  registeredAt: new Date().toISOString(),
+                },
+              }
+            : d0
+        })(),
       })
       if (updRes?.error) throw updRes.error
 
@@ -493,3 +533,4 @@ export async function registraDocumentiConfermati({
 
   return { registrati, skipped: false, total: daRegistrare.length, errors, warnings, blocked }
 }
+
