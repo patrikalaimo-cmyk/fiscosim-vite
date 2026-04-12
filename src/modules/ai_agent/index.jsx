@@ -612,7 +612,7 @@ export function ModuloAIAgent({ utente }) {
               <span style={{ fontSize: '.72rem', color: 'var(--mu)' }}>Voce</span>
               <div onClick={() => setVoiceMode(p => !p)}
                 style={{ width: 36, height: 20, borderRadius: 10, background: voiceMode ? 'var(--gold)' : 'var(--bd2)', position: 'relative', cursor: 'pointer', transition: 'background .2s' }}>
-                <div style={{ width: 14, height: 14, borderRadius: 7, background: '#fff', position: 'absolute', top: 3, left: voiceMode ? 19 : 3, transition: 'left .2s' }} />
+                <div style={{ width: 14, height: 14, borderRadius: 7, background: 'var(--bg-main)', position: 'absolute', top: 3, left: voiceMode ? 19 : 3, transition: 'left .2s' }} />
               </div>
             </div>
           )}

@@ -77,6 +77,24 @@ export function synthesizeAccountingForMemory(acc) {
   return ''
 }
 
+function synthesizeClarificationsForMemory(parsing, accounting) {
+  const chunks = []
+  const parsingClarifications = parsing && typeof parsing === 'object' ? parsing.operator_clarifications : null
+  const accountingClarifications = accounting && typeof accounting === 'object' ? accounting.operator_clarifications : null
+  const all = []
+  if (Array.isArray(parsingClarifications)) all.push(...parsingClarifications)
+  if (Array.isArray(accountingClarifications)) all.push(...accountingClarifications)
+  for (const row of all.slice(0, 3)) {
+    const type = String(row?.type || '').trim()
+    const sel = String(row?.selected_label || row?.selected || '').trim()
+    const answer = String(row?.selected_answer || '').trim()
+    const title = String(row?.title || '').trim()
+    if (!type && !sel && !answer) continue
+    chunks.push(`${title || type}: ${answer || sel}`)
+  }
+  return chunks.join(' | ')
+}
+
 /**
  * Estrae prima P.IVA italiana plausibile dal testo grezzo.
  *
@@ -247,8 +265,9 @@ export function buildSimilarDocumentsPromptBlock(rows, opts = {}) {
     const r = rows[i]
     const synP = synthesizeParsingForMemory(r.parsing_result)
     const synA = synthesizeAccountingForMemory(r.accounting_result)
+    const synC = synthesizeClarificationsForMemory(r.parsing_result, r.accounting_result)
     const verified = r?.operatore_corrections != null ? ' — verificato operatore' : ''
-    const one = `ESEMPIO PRECEDENTE CORRETTO ${i + 1}${verified}\n  • parsing: ${synP}\n  • conti: ${synA}`
+    const one = `ESEMPIO PRECEDENTE CORRETTO ${i + 1}${verified}\n  • parsing: ${synP}\n  • conti: ${synA}${synC ? `\n  • chiarimenti: ${synC}` : ''}`
     lines.push(one)
   }
 

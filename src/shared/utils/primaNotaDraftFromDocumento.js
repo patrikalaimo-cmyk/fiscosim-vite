@@ -21,6 +21,7 @@ import {
   todayStr,
 } from '../../../domain/primaNotaDraftPure.js'
 import { getContoFornitore } from './primaNotaDraftLookups.js'
+import { matchContropartePerDocumento } from './pianoContiSuggestions.js'
 
 export {
   resolveIva,
@@ -250,13 +251,9 @@ export async function buildInitialDraftFromDocumento(
   const contoBySoggettoObj = soggettoDen
     ? (pianoConti.find(c => String(c?.descrizione || '').trim() === String(soggettoDen).trim()) || null)
     : null
-  const isLikelyFornitoreAccount = !!(contoBySoggettoObj && (
-    contoBySoggettoObj.is_fornitore === true ||
-    (pivaSoggetto && (contoBySoggettoObj.partita_iva === pivaSoggetto || contoBySoggettoObj.anagrafica_piva === pivaSoggetto))
-  ))
-  const contoBySoggetto = (!isLikelyFornitoreAccount && contoBySoggettoObj) ? contoBySoggettoObj.id : ''
-  const contoFallback = pianoConti.find(c => String(c?.codice || '').trim().toUpperCase() === 'COSTI_DA_CLASSIFICARE')?.id || ''
-  const contoCostoRicavoId = contoStoricoId || contoBySoggetto || contoFallback || ''
+  const contoBySoggetto = contoBySoggettoObj ? contoBySoggettoObj.id : ''
+  const contoControparteMatch = matchContropartePerDocumento({ doc, pianoConti })
+  const contoCostoRicavoId = contoStoricoId || contoBySoggetto || ''
 
   const contoIva = pianoConti.find(c =>
     c?.is_iva && c?.livello >= 3 &&
@@ -264,13 +261,13 @@ export async function buildInitialDraftFromDocumento(
   ) || null
 
   const contoControparte = (
-    (pivaSoggetto
+    contoControparteMatch?.conto
+    || (pivaSoggetto
       ? pianoConti.find(c => (c?.partita_iva === pivaSoggetto || c?.anagrafica_piva === pivaSoggetto) && c?.livello >= 3)
       : null)
     || (soggettoDen
       ? pianoConti.find(c => String(c?.descrizione || '').trim() === String(soggettoDen).trim() && c?.livello >= 3)
       : null)
-    || pianoConti.find(c => (isPassiva ? c?.is_fornitore : c?.is_cliente) && c?.livello >= 4)
     || null
   )
 
@@ -326,12 +323,8 @@ export async function buildInitialDraftFromDocumento(
       : causaliContabili.find(c => /FC|fatt.*cli/i.test(String((c?.codice || '') + (c?.descrizione || '')))))
   )
 
-  const cf = (doc?.soggetto_cf || datiEst?.cedente_cf || datiEst?.soggetto_cf || '').toUpperCase()
-  const clienteMatch = clienti.find(x =>
-    (pivaSoggetto && (x?.partita_iva === pivaSoggetto)) ||
-    (cf && (String(x?.codice_fiscale || '').toUpperCase() === cf))
-  ) || null
-  const splitPayment = !isPassiva && clienteMatch?.split_payment === true
+  // Split payment is a counterparty fiscal flag and lives in Piano dei Conti (anagrafica contabile).
+  const splitPayment = !isPassiva && contoControparte?.split_payment === true
 
   const soggettoNome =
     doc?.soggetto_denominazione
@@ -447,7 +440,9 @@ export async function buildInitialDraftFromDocumento(
     header: {
       data_registrazione: dataReg,
       causale_id: causale?.id || '',
-      cliente_fornitore_id: clienteMatch?.id || ''
+      // Counterparty is always a Piano dei Conti anagrafica (per-societa).
+      // Strong match: P.IVA / CF; weak match: denominazione.
+      cliente_fornitore_id: contoControparte?.id || ''
     },
     ivaUi: {
       causale_iva_id: primaryForMeta?.causale_iva_id ?? causaleIvaId ?? null,

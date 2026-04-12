@@ -185,10 +185,36 @@ mark.copilot-highlight-inline{
 .sb-badge{margin-left:auto;background:rgba(224,82,82,.14);color:#ff9c9c;border-radius:999px;font-size:.6rem;font-weight:700;padding:2px 7px;min-width:18px;text-align:center}
 .sb-footer{margin-top:auto;padding:16px 16px 0;border-top:1px solid rgba(255,255,255,.045);margin:18px 12px 0}
 .sb-footer-entry{margin-bottom:.5rem}
+.sb-engine-entry{position:relative}
 .sb-footer-item{width:100%;margin:0;padding:.4rem .6rem;border-radius:7px;font-size:.72rem;border:none;background:transparent;appearance:none;-webkit-appearance:none;text-align:left}
 .sb-footer-item .sb-item-ico{color:inherit}
 .sb-footer-guide{border:1px solid var(--bd);background:var(--s2);color:var(--gold)}
 .sb-footer-guide:hover{border-color:var(--gold);background:rgba(200,164,94,.08)}
+.sb-engine-toggle{display:flex;align-items:center;gap:10px;justify-content:flex-start;border:1px solid rgba(255,255,255,.05);background:rgba(255,255,255,.02);color:var(--tx)}
+.sb-engine-toggle:hover{border-color:rgba(255,255,255,.08);background:rgba(255,255,255,.04)}
+.sb-engine-toggle .sb-item-ico{width:18px;min-width:18px}
+.sb-engine-inline-status{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:.66rem;color:var(--mu);white-space:nowrap}
+.sb-engine-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sb-engine-popover{margin:8px 8px 12px;padding:12px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.03));box-shadow:0 12px 28px rgba(0,0,0,.24)}
+.sb-engine-popover-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.sb-engine-popover-kicker{font-size:.54rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.sb-engine-popover-title{font-size:.9rem;font-weight:700;letter-spacing:-.01em}
+.sb-engine-popover-time{font-size:.66rem;color:var(--mu);white-space:nowrap}
+.sb-engine-error{margin-bottom:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(224,82,82,.22);background:rgba(224,82,82,.08);color:var(--tx);font-size:.72rem;line-height:1.45}
+.sb-engine-actions{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.sb-engine-actions .btn,.sb-engine-actions .btn-sec{padding:7px 10px;font-size:.7rem;border-radius:10px}
+.sb-engine-grid{display:grid;gap:8px}
+.sb-engine-card{border:1px solid var(--border-subtle);border-radius:12px;padding:10px;background:rgba(255,255,255,.03)}
+.sb-engine-card-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.sb-engine-card-title{display:flex;align-items:center;gap:8px;min-width:0}
+.sb-engine-card-title strong{font-size:.75rem;line-height:1.2}
+.sb-engine-card-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.sb-engine-card-state{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);white-space:nowrap}
+.sb-engine-card-message{font-size:.72rem;line-height:1.45;color:var(--tx);margin-bottom:6px}
+.sb-engine-card-meta{font-size:.63rem;line-height:1.45;color:var(--mu);display:grid;gap:2px}
+.sb-engine-card-meta strong{color:var(--tx)}
+.sb-engine-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.app-shell:not(.sidebar-pinned) .sidebar:not(:hover) .sb-engine-inline-status{display:none}
 .sb-user{display:flex;align-items:center;gap:.6rem}
 .sb-avatar{width:28px;height:28px;background:linear-gradient(135deg,var(--gold),var(--gld2));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#0d1117;flex-shrink:0}
 .sb-user-name{font-size:.78rem;font-weight:600}
@@ -235,6 +261,12 @@ mark.copilot-highlight-inline{
 .tbl tbody tr:nth-child(even) td{background:rgba(255,255,255,.012)}
 .tbl td{transition:background .14s ease-in-out,border-color .14s ease-in-out,color .14s ease-in-out}
 .tbl tr:hover td{background:rgba(255,255,255,.03)}
+.table, table{color:var(--text-primary)}
+table:not([data-theme='light']){border-color:var(--border-subtle)}
+table:not([data-theme='light']) thead th{background:var(--bg-surface);color:var(--text-secondary);border-bottom:1px solid var(--border-subtle)}
+table:not([data-theme='light']) tbody td{border-bottom:1px solid var(--border-subtle)}
+table:not([data-theme='light']) tbody tr:nth-child(even) td{background:var(--bg-row)}
+table:not([data-theme='light']) tbody tr:hover td{background:var(--bg-row-hover)}
 .tbl-row-clickable.is-focused td{background:rgba(255,255,255,.018)}
 .tbl-row-clickable.is-selected,
 .tbl tbody tr.is-selected,
@@ -268,6 +300,8 @@ mark.copilot-highlight-inline{
 .fg input,.fg select,.fg textarea{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:14px;color:var(--text-primary);padding:var(--pad-small);font-size:.84rem;transition:border-color .2s, background .2s;-webkit-appearance:none;appearance:none;width:100%}
 .fg input:hover,.fg select:hover,.fg textarea:hover{background:var(--bg-card)}
 .fg select,.base-select,.cont-sidebar select{color-scheme:dark}
+select, input:not([type="checkbox"]):not([type="radio"]), textarea{color-scheme:dark}
+select option{background:var(--bg-main);color:var(--text-primary)}
 .fg input::placeholder,.fg textarea::placeholder{color:var(--text-secondary)}
 .fg textarea{resize:vertical;min-height:80px;line-height:1.5}
 .fg select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7a99' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .7rem center;padding-right:2rem}
@@ -299,7 +333,7 @@ mark.copilot-highlight-inline{
 .tgl-row{display:flex;align-items:center;gap:.6rem;cursor:pointer;padding:.35rem 0;user-select:none}
 .tgl{width:34px;height:19px;background:var(--bd2);border-radius:10px;position:relative;transition:background .2s;flex-shrink:0}
 .tgl.on{background:var(--gold)}
-.tgl::after{content:'';position:absolute;width:13px;height:13px;background:white;border-radius:50%;top:3px;left:3px;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.tgl::after{content:'';position:absolute;width:13px;height:13px;background:var(--bg-main);border-radius:50%;top:3px;left:3px;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 .tgl.on::after{transform:translateX(15px)}
 .tgl-lbl{font-size:.82rem}
 
@@ -659,6 +693,34 @@ mark.copilot-highlight-inline{
 .erp-guided-summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .erp-flat-panel{border:1px solid var(--border);border-radius:16px;background:var(--bg-card);padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .erp-flat-panel .form-grid{gap:12px}
+.erp-fattura-viewer{display:flex;flex-direction:column;gap:14px;min-height:0;padding:16px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:18px;color:var(--text-primary);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.erp-fattura-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border-subtle)}
+.erp-fattura-title{font-size:1.35rem;font-weight:700;letter-spacing:-.03em}
+.erp-fattura-subtitle{font-size:.72rem;color:var(--mu);margin-top:4px}
+.erp-fattura-meta{text-align:right}
+.erp-fattura-number{font-size:1rem;font-weight:700}
+.erp-fattura-date,.erp-fattura-currency{font-size:.78rem;color:var(--mu)}
+.erp-fattura-currency{margin-top:2px}
+.erp-fattura-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.erp-fattura-box{border:1px solid var(--border-subtle);border-radius:14px;padding:12px 14px;background:rgba(255,255,255,.03)}
+.erp-fattura-kicker{font-size:.58rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.erp-fattura-name{font-size:.9rem;font-weight:700;line-height:1.35}
+.erp-fattura-line,.erp-fattura-payment{font-size:.75rem;color:var(--mu);line-height:1.45}
+.erp-fattura-address{margin-top:3px}
+.erp-fattura-section{overflow:auto;border:1px solid var(--border-subtle);border-radius:14px;background:rgba(255,255,255,.02)}
+.erp-fattura-table{width:100%;border-collapse:separate;border-spacing:0;font-size:.78rem}
+.erp-fattura-table th{position:sticky;top:0;z-index:1;background:var(--bg-surface);color:var(--text-secondary);text-align:left;padding:.55rem .7rem;font-size:.58rem;text-transform:uppercase;letter-spacing:.14em;border-bottom:1px solid var(--border-subtle)}
+.erp-fattura-table td{padding:.45rem .7rem;border-bottom:1px solid var(--border-subtle);vertical-align:top;color:var(--text-primary)}
+.erp-fattura-table tbody tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.erp-fattura-table tbody tr:hover td{background:rgba(255,255,255,.045)}
+.erp-fattura-index{color:var(--mu)}
+.erp-fattura-amount{font-weight:600}
+.erp-fattura-total-wrap{display:flex;justify-content:flex-end}
+.erp-fattura-total{min-width:280px;border:1px solid var(--border-subtle);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.03)}
+.erp-fattura-total-label,.erp-fattura-total-value{display:flex;justify-content:space-between;align-items:center;padding:.75rem .95rem}
+.erp-fattura-total-label{background:rgba(255,255,255,.05);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary)}
+.erp-fattura-total-value{font-size:1rem;font-weight:800;color:var(--tx)}
+.erp-fattura-footer{margin-top:2px;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:.66rem;color:var(--mu)}
 .erp-tabsbar{display:flex;gap:8px;flex-wrap:wrap}
 .erp-tabbtn{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:transparent;color:var(--mu);font-size:.74rem;font-weight:600;cursor:pointer;transition:all .15s ease}
 .erp-tabbtn.active{color:var(--gld2);border-color:var(--accent-gold-border);background:var(--accent-gold-soft)}

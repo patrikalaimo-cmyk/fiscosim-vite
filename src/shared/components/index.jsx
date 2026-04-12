@@ -46,12 +46,16 @@ export function ModuleHeader({
   secondaryAction = null,
 }) {
   const bridge = useHeaderBridge()
+  const setHeader = bridge?.setHeader
+  const clearHeader = bridge?.clearHeader
 
   useEffect(() => {
-    if (!bridge) return undefined
-    bridge.setHeader({ sectionLabel, title, context, primaryAction, secondaryAction })
-    return () => bridge.clearHeader()
-  }, [bridge, sectionLabel, title, context])
+    if (!setHeader || !clearHeader) return undefined
+    // Important: depend on stable functions, not on the context object (which changes when header updates),
+    // otherwise we can trigger cleanup/re-set loops and hit "Maximum update depth exceeded".
+    setHeader({ sectionLabel, title, context, primaryAction, secondaryAction })
+    return () => clearHeader()
+  }, [setHeader, clearHeader, sectionLabel, title, context])
 
   if (bridge) return null
 

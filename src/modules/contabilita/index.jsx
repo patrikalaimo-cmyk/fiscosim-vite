@@ -55,7 +55,10 @@ const CONT_SIDEBAR_MENU = [
     section: 'OPERATIVO',
     items: [
       { id: 'da_validare', icon: 'inbox', label: 'Da validare', badge: true },
+      { id: 'import_storico_nes', icon: 'file', label: 'Import storico NES' },
       { id: 'prima_nota_guidata', icon: 'wand', label: 'Inserimento guidato' },
+      { id: 'consultazione_partite', icon: 'ledger', label: 'Consultazione e partite' },
+      { id: 'archivio_storico_ai', icon: 'chart', label: 'Archivio Storico AI' },
       { id: 'prima_nota', icon: 'book', label: 'Registrazioni' },
     ],
   },
@@ -102,6 +105,10 @@ const CONT_TAB_META = {
     title: 'Da validare',
     subtitle: 'Controllo rapido dei documenti in ingresso, conferma operativa e passaggio alla registrazione.',
   },
+  import_storico_nes: {
+    title: 'Import storico NES',
+    subtitle: 'Migrazione controllata di dati storici con preview, duplicati e memoria AI derivata.',
+  },
   registrate: {
     title: 'Completate',
     subtitle: 'Documenti gia registrati in contabilita, utili per verifiche veloci e controlli di quadratura.',
@@ -113,6 +120,14 @@ const CONT_TAB_META = {
   prima_nota_guidata: {
     title: 'Prima nota guidata',
     subtitle: 'Percorso assistito per costruire e controllare una registrazione completa prima del salvataggio.',
+  },
+  consultazione_partite: {
+    title: 'Consultazione e partite',
+    subtitle: 'Ricerca prima nota, scheda conto e partitario con saldo progressivo e stampe operative.',
+  },
+  archivio_storico_ai: {
+    title: 'Archivio Storico AI',
+    subtitle: 'Ricerca della memoria storica globale usata dai suggerimenti AI.',
   },
   movimenti_banca: {
     title: 'Movimenti bancari',
@@ -184,6 +199,7 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
   
   const [pnGuidataDraft,setPnGuidataDraft]=useState(null);
   const [pnGuidataNav,setPnGuidataNav]=useState({ ids: [], idx: -1 });
+  const [pnGuidataDoc, setPnGuidataDoc] = useState(null);
   const [splitMode,setSplitMode]=useState('split'); // split, pdf, scrittura
   const [registrazioneInCorso, setRegistrazioneInCorso] = useState(false);
   const [settingsTab, setSettingsTab] = useState('societa');
@@ -249,6 +265,7 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
         }
       : computedDraft
     setPnGuidataDraft(initialDraft)
+    setPnGuidataDoc(doc || null)
     // Aggiorna anche localStorage per evitare rientri incoerenti
     persistGuidataDraft(initialDraft)
     setPnGuidataNav({ ids, idx })
@@ -592,6 +609,7 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
                   documenti={documenti}
                   scritture={scritture}
                   pianoConti={pianoConti}
+                  societaList={societa}
                   causaliIva={causaliIva}
                   causaliContabili={causaliContabili}
                   clienti={clienti}
@@ -604,6 +622,7 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
                   registrazioneInCorso={registrazioneInCorso}
                   openGuidataAt={openGuidataAt}
                   pnGuidataDraft={pnGuidataDraft}
+                  pnGuidataDoc={pnGuidataDoc}
                   pnGuidataNav={pnGuidataNav}
                   gotoGuidataRelative={gotoGuidataRelative}
                   setPnGuidataDraft={setPnGuidataDraft}

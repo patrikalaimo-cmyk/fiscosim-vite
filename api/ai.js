@@ -1,5 +1,6 @@
 import { aiChatHandler } from '../services/api/ai/chat.js'
 import { claudeHandler } from '../services/api/ai/claude.js'
+import { diagnosticsHandler, startLocalHandler } from '../services/api/ai/diagnostics.js'
 import { ollamaAnalyzeHandler } from '../services/api/ai/ollama.js'
 import { testClaudeHandler } from '../services/api/ai/test-claude.js'
 
@@ -11,6 +12,8 @@ export const config = {
 const handlers = {
   chat: aiChatHandler,
   claude: claudeHandler,
+  diagnostics: diagnosticsHandler,
+  start_local: startLocalHandler,
   ollama_analyze: ollamaAnalyzeHandler,
   test_claude: testClaudeHandler,
 }
@@ -44,4 +47,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e?.message || String(e) })
   }
 }
-

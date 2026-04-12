@@ -2,6 +2,9 @@
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../../utils/pipelineLogger.js'
 import { DaValidareSplitView } from '../da_validare_split_view.jsx'
 import { PrimaNotaGuidata } from '../prima_nota_guidata.jsx'
+import { ConsultazionePartiteView } from './ConsultazionePartiteView.jsx'
+import ArchivioStoricoAIView from './ArchivioStoricoAIView.jsx'
+import ImportStoricoNesView from './ImportStoricoNesView.jsx'
 import { createPrimaNota } from '../../../../services/primaNotaService.js'
 import { fmtCurrency as fmt, fmtDate } from '../ui/formatters.js'
 import {
@@ -12,13 +15,13 @@ import {
 import { ModuleHeader } from '../../../shared/components'
 import { BaseCombobox } from '../ui/BaseDropdown.jsx'
 
-function PrimaNotaViewScritturaRow({ s, getClienteCodice, getClienteNome }) {
+function PrimaNotaViewScritturaRow({ s, getControparteCodice, getControparteNome }) {
   traceStep(
     'UI_ROW_PROPS',
     {
       id: s.id,
       numero_registrazione: s.numero_registrazione,
-      cliente_id: s.cliente_id,
+      cliente_fornitore_id: s.cliente_fornitore_id,
       causale_codice: s.causale_codice,
       causale_iva_codice: s.causale_iva_codice ?? null,
     },
@@ -40,11 +43,11 @@ function PrimaNotaViewScritturaRow({ s, getClienteCodice, getClienteNome }) {
             fontSize: '.7rem',
           }}
         >
-          {getClienteCodice(s.cliente_id)}
+          {getControparteCodice(s.cliente_fornitore_id)}
         </span>
       </td>
       <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {s.cliente_fornitore_nome || getClienteNome(s.cliente_id)}
+        {s.cliente_fornitore_nome || getControparteNome(s.cliente_fornitore_id)}
       </td>
       <td>
         <span className="bdg bdg-blue">{s.causale_codice || '—'}</span>
@@ -61,15 +64,15 @@ function PrimaNotaViewScritturaRow({ s, getClienteCodice, getClienteNome }) {
   )
 }
 
-function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onRefresh }) {
+function PrimaNotaView({ scritture, causali, causaliIva, pianoConti, societaId, onRefresh }) {
   const [modalNuova, setModalNuova] = useState(false)
-  const [filtroCliente, setFiltroCliente] = useState('')
+  const [filtroControparte, setFiltroControparte] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({
     data_registrazione: new Date().toISOString().split('T')[0],
     data_documento: '',
     numero_documento: '',
-    cliente_id: '',
+    cliente_fornitore_id: '',
     causale_codice: '',
     causale_iva_id: '',
     descrizione: '',
@@ -81,19 +84,19 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
     imposta: 0,
   })
 
-  const getClienteNome = (id) => {
-    const c = clienti.find((x) => x.id === id)
+  const getControparteNome = (id) => {
+    const c = pianoConti.find((x) => x.id === id)
     if (!c) return '—'
-    return c.ragione_sociale || `${c.nome || ''} ${c.cognome || ''}`.trim()
+    return c.descrizione || c.ragione_sociale || `${c.nome || ''} ${c.cognome || ''}`.trim()
   }
 
-  const getClienteCodice = (id) => {
-    const c = clienti.find((x) => x.id === id)
-    return c?.codice_cliente || '—'
+  const getControparteCodice = (id) => {
+    const c = pianoConti.find((x) => x.id === id)
+    return c?.codice || '—'
   }
 
   const filtered = scritture.filter((s) => {
-    if (filtroCliente && s.cliente_id !== filtroCliente) return false
+    if (filtroControparte && s.cliente_fornitore_id !== filtroControparte) return false
     if (searchTerm) {
       const q = searchTerm.toLowerCase()
       return (
@@ -106,12 +109,12 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
   })
 
   const onClienteChange = (id) => {
-    traceStep('UI_INPUT_CHANGE', { value: id, payload: { field: 'cliente_id', scope: 'PrimaNotaView_modal' } })
-    const c = clienti.find((x) => x.id === id)
+    traceStep('UI_INPUT_CHANGE', { value: id, payload: { field: 'cliente_fornitore_id', scope: 'PrimaNotaView_modal' } })
+    const c = pianoConti.find((x) => x.id === id)
     setFormData((p) => ({
       ...p,
-      cliente_id: id,
-      descrizione: c ? `${c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}` : '',
+      cliente_fornitore_id: id,
+      descrizione: c ? `${c.descrizione || c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}` : '',
     }))
   }
 
@@ -136,7 +139,7 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
   }
 
   const salvaScrittura = async () => {
-    const cliente = clienti.find((c) => c.id === formData.cliente_id)
+    const cliente = pianoConti.find((c) => c.id === formData.cliente_fornitore_id)
     const nextNum = scritture.length > 0 ? Math.max(...scritture.map((s) => s.numero_registrazione || 0)) + 1 : 1
 
     const record = {
@@ -145,9 +148,9 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
       data_registrazione: formData.data_registrazione,
       data_documento: formData.data_documento || formData.data_registrazione,
       numero_documento: formData.numero_documento,
-      cliente_id: formData.cliente_id || null,
+      cliente_fornitore_id: formData.cliente_fornitore_id || null,
       cliente_fornitore_nome: cliente
-        ? cliente.ragione_sociale || `${cliente.nome} ${cliente.cognome || ''}`.trim()
+        ? cliente.descrizione || cliente.ragione_sociale || `${cliente.nome} ${cliente.cognome || ''}`.trim()
         : formData.descrizione,
       causale_codice: formData.causale_codice,
       causale_iva_codice: causaliIva.find((c) => c.id === formData.causale_iva_id)?.codice || '',
@@ -178,7 +181,7 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
       data_registrazione: new Date().toISOString().split('T')[0],
       data_documento: '',
       numero_documento: '',
-      cliente_id: '',
+      cliente_fornitore_id: '',
       causale_codice: '',
       causale_iva_id: '',
       descrizione: '',
@@ -217,23 +220,23 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
             />
           </div>
           <div className="fg" style={{ minWidth: 200 }}>
-            <label>Filtra per Cliente</label>
+            <label>Filtra per Controparte</label>
             <BaseCombobox
-              value={filtroCliente}
+              value={filtroControparte}
               onChange={(value) => {
-                traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'filtroCliente', scope: 'PrimaNotaView_filtri' } })
-                setFiltroCliente(value || '')
+                traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'filtroControparte', scope: 'PrimaNotaView_filtri' } })
+                setFiltroControparte(value || '')
               }}
               options={[
-                { id: '', label: 'Tutti i clienti' },
-                ...clienti.filter((c) => c.codice_cliente).map((c) => ({
+                { id: '', label: 'Tutte le controparti' },
+                ...pianoConti.filter((c) => c.is_cliente || c.is_fornitore || Number(c.livello || 0) >= 3).map((c) => ({
                   id: c.id,
-                  label: `[${c.codice_cliente}] ${c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}`,
+                  label: `${c.codice ? `[${c.codice}] ` : ''}${c.descrizione || c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}`,
                 })),
               ]}
               getOptionId={(o) => o?.id}
               getOptionLabel={(o) => o?.label}
-              placeholder="Tutti i clienti"
+              placeholder="Tutte le controparti"
               maxItems={140}
               searchable
             />
@@ -261,14 +264,19 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
           </div>
           <div className="erp-table-body">
           <table className="tbl">
-            <thead><tr><th>N°</th><th>Data</th><th>Cod.Cli.</th><th>Cliente/Fornitore</th><th>Causale</th><th>Descrizione</th><th style={{ textAlign: 'right' }}>Dare</th><th style={{ textAlign: 'right' }}>Avere</th><th>Stato</th></tr></thead>
+            <thead><tr><th>N°</th><th>Data</th><th>Cod.CP.</th><th>Cliente/Fornitore</th><th>Causale</th><th>Descrizione</th><th style={{ textAlign: 'right' }}>Dare</th><th style={{ textAlign: 'right' }}>Avere</th><th>Stato</th></tr></thead>
             <tbody>
               {(() => {
                 traceStep('UI_RENDER_RIGHE', { righe: filtered.map(mapScritturaRowForTrace) }, { component: 'PrimaNotaView' })
                 return null
               })()}
               {filtered.map((s) => (
-                <PrimaNotaViewScritturaRow key={s.id} s={s} getClienteCodice={getClienteCodice} getClienteNome={getClienteNome} />
+                <PrimaNotaViewScritturaRow
+                  key={s.id}
+                  s={s}
+                  getControparteCodice={getControparteCodice}
+                  getControparteNome={getControparteNome}
+                />
               ))}
             </tbody>
           </table>
@@ -291,26 +299,26 @@ function PrimaNotaView({ scritture, causali, causaliIva, clienti, societaId, onR
                 <div className="fg"><label>N° Documento</label><input value={formData.numero_documento} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'numero_documento', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, numero_documento: value })) }} placeholder="Es. FT-001/2025" /></div>
                 <div className="fg"><label>Causale Contabile</label><BaseCombobox value={formData.causale_codice} onChange={(value) => { traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'causale_codice', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, causale_codice: value || '' })) }} options={[{ id: '', label: '-- Seleziona --' }, ...causali.map((c) => ({ id: c.codice, label: `${c.codice} - ${c.descrizione}` }))]} getOptionId={(o) => o?.id} getOptionLabel={(o) => o?.label} placeholder="-- Seleziona --" maxItems={140} searchable /></div>
                 <div className="fg full" style={{ background: 'rgba(200,164,94,.08)', padding: '.75rem', borderRadius: 8, border: '1px solid rgba(200,164,94,.2)' }}>
-                  <label style={{ color: 'var(--gold)', fontWeight: 600 }}>Cliente</label>
+                  <label style={{ color: 'var(--gold)', fontWeight: 600 }}>Cliente / Fornitore</label>
                   <div style={{ marginTop: '.35rem' }}>
                     <BaseCombobox
-                      value={formData.cliente_id}
+                      value={formData.cliente_fornitore_id}
                       onChange={(value) => onClienteChange(value || '')}
                       options={[
-                        { id: '', label: '-- Seleziona Cliente --' },
-                        ...clienti.map((c) => ({
+                        { id: '', label: '-- Seleziona controparte --' },
+                        ...pianoConti.filter((c) => c.is_cliente || c.is_fornitore || Number(c.livello || 0) >= 3).map((c) => ({
                           id: c.id,
-                          label: `${c.codice_cliente ? `[${c.codice_cliente}] ` : ''}${c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}`,
+                          label: `${c.codice ? `[${c.codice}] ` : ''}${c.descrizione || c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}`,
                         })),
                       ]}
                       getOptionId={(o) => o?.id}
                       getOptionLabel={(o) => o?.label}
-                      placeholder="-- Seleziona Cliente --"
+                      placeholder="-- Seleziona controparte --"
                       maxItems={140}
                       searchable
                     />
                   </div>
-                  <div style={{ fontSize: '.7rem', color: 'var(--mu)', marginTop: '.25rem' }}>Il codice cliente collegherà questa scrittura all'anagrafica</div>
+                  <div style={{ fontSize: '.7rem', color: 'var(--mu)', marginTop: '.25rem' }}>La scrittura verrà agganciata alla controparte del piano dei conti.</div>
                 </div>
                 <div className="fg full"><label>Descrizione</label><input value={formData.descrizione} onChange={(e) => { const value = e.target.value; traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'descrizione', scope: 'PrimaNotaView_modal' } }); setFormData((p) => ({ ...p, descrizione: value })) }} placeholder="Descrizione operazione" /></div>
                 <div className="fg"><label>Imponibile €</label><input type="number" step="0.01" value={formData.imponibile} onChange={(e) => onImponibileChange(e.target.value)} /></div>
@@ -380,9 +388,9 @@ export default function PrimaNotaHubView({
   documenti,
   scritture,
   pianoConti,
+  societaList = [],
   causaliIva,
   causaliContabili,
-  clienti,
   societaAttiva,
   stats,
   caricaTutto,
@@ -392,6 +400,7 @@ export default function PrimaNotaHubView({
   registrazioneInCorso = false,
   openGuidataAt,
   pnGuidataDraft,
+  pnGuidataDoc,
   pnGuidataNav,
   gotoGuidataRelative,
   setPnGuidataDraft,
@@ -429,7 +438,7 @@ export default function PrimaNotaHubView({
           scritture={scritture}
           causali={causaliContabili}
           causaliIva={causaliIva}
-          clienti={clienti}
+          pianoConti={pianoConti}
           societaId={societaAttiva.id}
           onRefresh={caricaTutto}
         />
@@ -440,8 +449,10 @@ export default function PrimaNotaHubView({
           pianoConti={pianoConti}
           causali={causaliContabili}
           causaliIva={causaliIva}
-          clientiFornitori={clienti}
+          // Controparti: Piano dei conti (per-societa), non tabella "clienti" globale.
+          clientiFornitori={pianoConti}
           initialDraft={pnGuidataDraft}
+          sourceDoc={pnGuidataDoc}
           fromImport={true}
           societaId={societaAttiva?.id}
           onPrev={() => gotoGuidataRelative(-1)}
@@ -452,6 +463,32 @@ export default function PrimaNotaHubView({
             setPnGuidataDraft(d)
             persistGuidataDraft(d)
           }}
+        />
+      )}
+
+      {contTab === 'consultazione_partite' && (
+        <ConsultazionePartiteView
+          societaAttiva={societaAttiva}
+          pianoConti={pianoConti}
+          causaliContabili={causaliContabili}
+          causaliIva={causaliIva}
+        />
+      )}
+
+      {contTab === 'archivio_storico_ai' && (
+        <ArchivioStoricoAIView
+          societaAttiva={societaAttiva}
+          societaList={societaList}
+        />
+      )}
+
+      {contTab === 'import_storico_nes' && (
+        <ImportStoricoNesView
+          societaAttiva={societaAttiva}
+          pianoConti={pianoConti}
+          causaliContabili={causaliContabili}
+          causaliIva={causaliIva}
+          onRefresh={caricaTutto}
         />
       )}
 

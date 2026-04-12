@@ -129,16 +129,28 @@ export function resolveIva({ conto, aliquota, causaliIva, natura, pipelineContex
   const natStr = String(natura ?? '').trim()
   const forceZeroByNatura = isNaturaFatturaPA(natStr)
 
+  // If the account has a preferred VAT "causale", we should only reuse it when it is
+  // compatible with the document's aliquota. Otherwise it would incorrectly override
+  // the XML/PDF-derived VAT rate (e.g. forcing 20% on a 22% invoice).
+  const effectiveAliquotaForConfronto = forceZeroByNatura ? 0 : aliquota
+  const percentualeDoc = parseIvaPercent(effectiveAliquotaForConfronto)
+
   if (conto?.causale_iva_id) {
     const want = String(conto.causale_iva_id).trim()
     const c0 = causaliIva.find(c => String(c?.id ?? '').trim() === want)
     if (c0) {
-      if (!forceZeroByNatura || aliquotaCausaleEquals(c0, 0)) {
+      const compatibile =
+        // No aliquota info on the document: keep existing behavior (use conto as fallback).
+        percentualeDoc === null
+        // Natura forces 0%: only keep conto default if it is also 0%.
+        || (forceZeroByNatura ? aliquotaCausaleEquals(c0, 0) : aliquotaCausaleEquals(c0, percentualeDoc))
+
+      if (compatibile) {
         return normCausaleId(c0.id)
       }
       traceStep(
         'RESOLVE_IVA_CONTO_SKIP_NATURA_ZERO',
-        { causale_conto_id: want, natura: natStr },
+        { causale_conto_id: want, natura: natStr, doc_aliquota_percent: percentualeDoc, note: 'causale conto non compatibile con aliquota documento' },
         { resolve_iva_note: true },
         pipelineContext
       )

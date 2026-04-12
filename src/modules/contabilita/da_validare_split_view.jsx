@@ -1,9 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { parseXMLFattura } from '../../../domain/fatture.js'
 import { resolveIvaOrNull } from '../../../domain/resolveIva.js'
 import { evaluateDraftReliability, reliabilityTierLabel } from '../../../domain/draftReliability.js'
 import { sb } from '../../lib/supabase.js'
-import { FatturaCourtesyViewer } from './FatturaCourtesyViewer.jsx'
 import { ContabileCopilotPanel } from './ContabileCopilotPanel.jsx'
 import { buildCopilotFixPromptFromInsight } from './CopilotInsightsBlock.jsx'
 import { loadIvaInsightsForSocieta } from './application/ivaInsightsClient.js'
@@ -11,6 +9,7 @@ import {
   buildParcellaAudit,
   buildParcellaAuditRecord,
   buildParcellaDecision,
+  extractParcellaInvoiceSignals,
   isProfessionalParcellaDocument,
 } from './application/parcellaDecisionEngine.js'
 import {
@@ -25,6 +24,12 @@ import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { fmtCurrency as fmt, fmtDate } from './ui/formatters.js'
 import { BaseInput } from './ui/BaseControls.jsx'
 import { BaseCombobox } from './ui/BaseDropdown.jsx'
+import { DocumentPreviewModal } from '../../shared/ui/DocumentPreviewModal.jsx'
+import { suggestContiPerDocumento } from '../../shared/utils/pianoContiSuggestions.js'
+import { buildHistoricalContoSuggestions, extractHistoricalSearchIdentity } from '../../shared/utils/historicalContoSuggestions.js'
+import { buildOperatorAssistItems, appendOperatorClarification } from '../../shared/utils/operatorAssist.js'
+import { OperatorAssistPanel } from '../../shared/components/OperatorAssistPanel.jsx'
+import { OperatorClarificationModal } from '../../shared/components/OperatorClarificationModal.jsx'
 import {
   CAUSALI_REDDITUALI_OPTIONS,
   SOMME_NON_SOGGETTE_OPTIONS,
@@ -187,119 +192,6 @@ function latestEntryByDocumentId(rows) {
   return map
 }
 
-function PdfZoomPane({ doc, xmlPreview }) {
-  const [zoom, setZoom] = useState(1)
-  const wrapRef = useRef(null)
-
-  useEffect(() => {
-    setZoom(1)
-  }, [doc?.id])
-
-  const fileUrl = useMemo(() => {
-    if (doc?.file_url) return doc.file_url
-    if (doc?.file_path) {
-      const { data } = contabilitaRepo.getDocumentoPublicUrl(doc.file_path)
-      return data?.publicUrl || ''
-    }
-    return ''
-  }, [doc?.id, doc?.file_url, doc?.file_path])
-
-  return (
-    <div className="split-pane" style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div className="split-pane-header" style={{ flexShrink: 0 }}>
-        <span style={{ fontWeight: 600, fontSize: '.85rem' }}>Documento</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
-          <button type="button" className="btn-sec" style={{ padding: '.2rem .45rem', fontSize: '.65rem' }} onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10))}>
-            -
-          </button>
-          <span style={{ fontSize: '.68rem', color: 'var(--mu)', minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-          <button type="button" className="btn-sec" style={{ padding: '.2rem .45rem', fontSize: '.65rem' }} onClick={() => setZoom((z) => Math.min(2.5, Math.round((z + 0.1) * 10) / 10))}>
-            +
-          </button>
-          <button type="button" className="btn-sec" style={{ padding: '.2rem .45rem', fontSize: '.65rem' }} onClick={() => setZoom(1)}>
-            Reset
-          </button>
-        </div>
-      </div>
-      <div
-        ref={wrapRef}
-        className="split-pane-content"
-        style={{
-          overflow: 'auto',
-          padding: 0,
-          minHeight: 0,
-          flex: 1,
-          background: 'var(--s2)',
-        }}
-      >
-        <div
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'top left',
-            width: `${100 / zoom}%`,
-            minHeight: `${100 / zoom}%`,
-          }}
-        >
-          {xmlPreview ? (
-            <FatturaCourtesyViewer data={xmlPreview} />
-          ) : fileUrl ? (
-            <iframe title="pdf" src={fileUrl} style={{ width: '100%', height: '100%', minHeight: 480, border: 'none' }} />
-          ) : (
-            <div style={{ textAlign: 'center', color: 'var(--mu)', padding: '2rem' }}>
-              <div style={{ fontSize: '2rem' }}>□</div>
-              <div>Nessun file collegato</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function useXmlPreview(doc) {
-  const [xmlPreview, setXmlPreview] = useState(null)
-  useEffect(() => {
-    setXmlPreview(null)
-    if (!doc?.id) return
-    const isXML =
-      doc.mime_type?.includes('xml') ||
-      doc.filename?.toLowerCase().endsWith('.xml') ||
-      doc.filename?.toLowerCase().endsWith('.p7m') ||
-      doc.tipo_documento?.includes('fattura')
-    if (!isXML) return
-
-    const datiEst = parseDati(doc.dati_estratti)
-    const tryParseXml = (text) => {
-      try {
-        setXmlPreview(parseXMLFattura(text))
-      } catch (e) {
-        console.error('XML parse:', e)
-      }
-    }
-
-    if (datiEst?.xml_filename) {
-      contabilitaRepo.getFatturaXmlByFilename(datiEst.xml_filename)
-        .then(({ data }) => {
-          if (data?.[0]?.xml_content) tryParseXml(data[0].xml_content)
-        })
-      return
-    }
-
-    let url = doc.file_url
-    if (!url && doc.file_path) {
-      const { data: u } = contabilitaRepo.getDocumentoPublicUrl(doc.file_path)
-      url = u?.publicUrl
-    }
-    if (!url) return
-    fetch(url)
-      .then((r) => r.text())
-      .then(tryParseXml)
-      .catch((e) => console.error('XML fetch:', e))
-  }, [doc?.id, doc?.file_url, doc?.file_path, doc?.filename, doc?.mime_type, doc?.tipo_documento, doc?.dati_estratti])
-
-  return xmlPreview
-}
-
 function normContoCode(c) {
   return String(c || '')
     .replace(/\s+/g, '')
@@ -328,6 +220,7 @@ function AccountingForm({
   onSave,
   onClose,
   onOpenGuidata,
+  onOpenDocumentPreview,
   listIds,
   idxInList,
   autoValidateMode = false,
@@ -355,8 +248,12 @@ function AccountingForm({
   const [possiblePercipienteDecision, setPossiblePercipienteDecision] = useState(null) // 'create' | 'leave' | 'defer'
   const possiblePercipienteDecisionRef = useRef(null)
   const pendingPersistArgsRef = useRef(null)
-  const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false)
-  const xmlPreviewLocal = useXmlPreview(doc)
+  const [historicalContoSuggestions, setHistoricalContoSuggestions] = useState([])
+  const [historicalContoLoading, setHistoricalContoLoading] = useState(false)
+  const [historicalLearningRows, setHistoricalLearningRows] = useState([])
+  const [operatorClarifications, setOperatorClarifications] = useState([])
+  const [clarificationModalItem, setClarificationModalItem] = useState(null)
+  const [parcellaConfirmationOverride, setParcellaConfirmationOverride] = useState(null)
 
   useEffect(() => {
     setLearningRuleModal(null)
@@ -364,7 +261,9 @@ function AccountingForm({
     setPossiblePercipienteModalOpen(false)
     setPossiblePercipienteDecision(null)
     possiblePercipienteDecisionRef.current = null
-    setInvoicePreviewOpen(false)
+    setClarificationModalItem(null)
+    setParcellaConfirmationOverride(null)
+    setOperatorClarifications(parseDati(doc?.dati_estratti)?.operator_clarifications || [])
   }, [doc?.id])
 
   useEffect(() => {
@@ -400,7 +299,40 @@ function AccountingForm({
     }
   }, [causaliIva?.length, doc?.id])
 
-  const isProfessionalDoc = useMemo(() => isProfessionalParcellaDocument(doc), [doc])
+  const engineSource = useMemo(() => {
+    const metodo = String(doc?.ai_raw_response?.metodo || '').toLowerCase()
+    if (metodo.includes('ollama') || metodo.includes('xml_deterministico') || metodo.includes('local')) return 'locale'
+    if (metodo.includes('openai') || metodo.includes('online') || metodo.includes('gateway') || metodo.includes('api')) return 'online'
+    return 'sconosciuto'
+  }, [doc?.ai_raw_response?.metodo])
+
+  const parcellaAssistRaw = useMemo(() => {
+    const txt = [
+      doc?.tipo_documento,
+      doc?.ai_raw_response?.tipo_documento,
+      doc?.ai_raw_response?.xml_content,
+      doc?.ai_raw_response?.causale,
+      doc?.soggetto_denominazione,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return /parcella|onorario|ritenuta|cassa|inps|enasarco|compenso|prestazione|consulenza/.test(txt)
+  }, [doc?.tipo_documento, doc?.ai_raw_response?.tipo_documento, doc?.ai_raw_response?.xml_content, doc?.ai_raw_response?.causale, doc?.soggetto_denominazione])
+
+  const effectiveDocForParcella = useMemo(() => {
+    if (parcellaConfirmationOverride == null) return doc
+    const parsed = parseDati(doc?.dati_estratti)
+    return {
+      ...doc,
+      dati_estratti: {
+        ...parsed,
+        parcella_confirmation: parcellaConfirmationOverride,
+      },
+    }
+  }, [doc, parcellaConfirmationOverride])
+
+  const isProfessionalDoc = useMemo(() => isProfessionalParcellaDocument(effectiveDocForParcella), [effectiveDocForParcella])
 
   useEffect(() => {
     let cancelled = false
@@ -443,7 +375,7 @@ function AccountingForm({
       percipienti.find((row) => String(row.id) === String(saved?.finalValues?.percipienteId || '')) ||
       matchedPercipiente ||
       null
-    const decision = buildParcellaDecision({ percipiente: initialPercipiente, documentRow: doc, draft: {} })
+    const decision = buildParcellaDecision({ percipiente: initialPercipiente, documentRow: effectiveDocForParcella, draft: {} })
     const proposal = decision.proposal
     const finalValues = saved?.finalValues || {}
     setParcellaForm({
@@ -467,6 +399,102 @@ function AccountingForm({
   }, [doc, isProfessionalDoc, matchedPercipiente, percipienti, percipientiLoading])
 
   const selectedConto = pianoConti.find((c) => c.id === contoId)
+  const contoSuggestions = useMemo(
+    () => suggestContiPerDocumento({ doc, pianoConti, maxResults: 3 }),
+    [
+      doc?.id,
+      doc?.tipo_documento,
+      doc?.soggetto_denominazione,
+      doc?.soggetto_piva,
+      doc?.soggetto_cf,
+      doc?.dati_estratti,
+      pianoConti,
+    ]
+  )
+
+  const historicalIdentity = useMemo(
+    () => extractHistoricalSearchIdentity(doc),
+    [doc?.id, doc?.soggetto_piva, doc?.soggetto_cf, doc?.soggetto_denominazione, doc?.dati_estratti, doc?.ai_raw_response]
+  )
+
+  useEffect(() => {
+    let alive = true
+    if (!doc?.societa_id) {
+      setHistoricalLearningRows([])
+      return () => {
+        alive = false
+      }
+    }
+    contabilitaRepo
+      .getArchivioStoricoAiLearning([doc.societa_id], { limit: 5000 })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[DaValidare] historical learning rows', error.message)
+          setHistoricalLearningRows([])
+          return
+        }
+        setHistoricalLearningRows(Array.isArray(data) ? data : [])
+      })
+      .catch((error) => {
+        if (!alive) return
+        console.warn('[DaValidare] historical learning rows', error?.message || error)
+        setHistoricalLearningRows([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [doc?.societa_id])
+
+  useEffect(() => {
+    let alive = true
+    const { piva, cf, nomeLike, nome } = historicalIdentity || {}
+    if (!doc?.id || (!piva && !cf && !nomeLike)) {
+      setHistoricalContoSuggestions([])
+      return () => {
+        alive = false
+      }
+    }
+    setHistoricalContoLoading(true)
+    contabilitaRepo
+      .getHistoricalConfirmedDocumentsForCounterparty({
+        piva,
+        cf,
+        nomeLike: nomeLike || nome,
+        limit: 80,
+      })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[DaValidare] historical conto suggestions', error.message)
+          setHistoricalContoSuggestions([])
+          return
+        }
+        const label = piva
+          ? `${(data || []).length} fatture confermate con stessa P.IVA`
+          : cf
+            ? `${(data || []).length} fatture confermate con stesso CF`
+            : `${(data || []).length} documenti confermati con ragione sociale simile`
+        setHistoricalContoSuggestions(
+          buildHistoricalContoSuggestions({
+            historicalDocs: data || [],
+            learningRows: historicalLearningRows,
+            pianoConti,
+            maxResults: 3,
+            sourceLabel: label,
+            currentDoc: doc,
+            currentSocietaId: doc?.societa_id,
+          })
+        )
+      })
+      .finally(() => {
+        if (alive) setHistoricalContoLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [doc?.id, historicalIdentity?.piva, historicalIdentity?.cf, historicalIdentity?.nomeLike, historicalLearningRows, pianoConti, doc?.societa_id])
+
   const selectedPercipiente = useMemo(() => {
     if (!isProfessionalDoc) return null
     return (
@@ -478,8 +506,8 @@ function AccountingForm({
 
   const parcellaDecision = useMemo(() => {
     if (!doc || !isProfessionalDoc) return null
-    return buildParcellaDecision({ percipiente: selectedPercipiente, documentRow: doc, draft: {} })
-  }, [doc, isProfessionalDoc, selectedPercipiente])
+    return buildParcellaDecision({ percipiente: selectedPercipiente, documentRow: effectiveDocForParcella, draft: {} })
+  }, [effectiveDocForParcella, isProfessionalDoc, selectedPercipiente])
 
   const parcellaFinalValues = useMemo(() => {
     if (!parcellaDecision || !parcellaForm) return null
@@ -688,6 +716,12 @@ function AccountingForm({
       }
 
       const now = new Date().toISOString()
+      if (parcellaConfirmationOverride != null) {
+        nextDati.parcella_confirmation = parcellaConfirmationOverride
+      }
+      if (operatorClarifications.length > 0) {
+        nextDati.operator_clarifications = operatorClarifications
+      }
       const updatePayload = {
         conto_id: contoId || null,
         causale_iva: causaleIva || null,
@@ -725,7 +759,7 @@ function AccountingForm({
 
   const handlePercipienteChange = (value) => {
     const nextPercipiente = percipienti.find((row) => String(row.id) === String(value || '')) || null
-    const nextDecision = buildParcellaDecision({ percipiente: nextPercipiente, documentRow: doc, draft: {} })
+    const nextDecision = buildParcellaDecision({ percipiente: nextPercipiente, documentRow: effectiveDocForParcella, draft: {} })
     setParcellaForm((prev) => ({
       ...(prev || {}),
       percipienteId: value || '',
@@ -746,6 +780,22 @@ function AccountingForm({
   }
 
   const reliability = useMemo(() => evaluateDraftReliability({ doc }), [doc])
+  const operatorAssistItems = useMemo(
+    () =>
+      buildOperatorAssistItems({
+        doc,
+        form: { conto_id: contoId, causale_iva_id: causaleIva, operator_clarifications: operatorClarifications },
+        reliability,
+        contoSuggestions,
+        historicalContoSuggestions,
+        causaliIva,
+        includeDocumentType: false,
+        includeAccountMapping: true,
+        includeVatCausale: true,
+        includeParcellaConfirmation: parcellaAssistRaw && !isProfessionalDoc,
+      }),
+    [doc, contoId, causaleIva, operatorClarifications, reliability, contoSuggestions, historicalContoSuggestions, causaliIva, parcellaAssistRaw, isProfessionalDoc]
+  )
   const insightRows = useMemo(() => {
     if (!Array.isArray(ivaInsights)) return []
     const seen = new Set()
@@ -802,6 +852,52 @@ function AccountingForm({
     },
     [parcellaDecision, parcellaFinalValues]
   )
+
+  const parcellaSignals = useMemo(() => extractParcellaInvoiceSignals(effectiveDocForParcella), [effectiveDocForParcella])
+  const showBorderlineParcellaWarning = useMemo(() => {
+    if (!doc || isProfessionalDoc) return false
+    if (!parcellaSignals) return false
+    const strong =
+      parcellaSignals.hasExplicitWithholding ||
+      parcellaSignals.hasCassa ||
+      parcellaSignals.hasInps ||
+      parcellaSignals.hasEnasarco ||
+      parcellaSignals.isDirittiAutore ||
+      parcellaSignals.isOccasionale ||
+      parcellaSignals.hasParcellaWord
+    if (strong) return false
+    return Boolean(parcellaSignals.weakProfessionalWording || parcellaSignals.isArt15)
+  }, [doc, isProfessionalDoc, parcellaSignals])
+
+  const resolveOperatorAssist = (item, option, manualText = '', context = {}) => {
+    if (!item) return
+    if (item.type === 'uncertain_account_mapping') {
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'conto_id')) {
+        setContoId(option?.patch?.conto_id || '')
+      }
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'conto_search')) {
+        setContoSearch(option?.patch?.conto_search || '')
+      } else if (manualText) {
+        setContoSearch(manualText)
+      }
+    }
+    if (item.type === 'uncertain_vat_causale') {
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'causale_iva_id')) {
+        setCausaleIva(option?.patch?.causale_iva_id || '')
+      }
+    }
+    if (item.type === 'uncertain_parcella_confirmation' && option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'parcella_confirmation')) {
+      setParcellaConfirmationOverride(Boolean(option?.patch?.parcella_confirmation))
+    }
+    setOperatorClarifications((prev) => appendOperatorClarification(prev, item, option, manualText, {
+      issue_type: item.type,
+      shown_options: item.options,
+      selected_answer: option?.label || manualText || 'Manuale',
+      rerun_result: context.rerun_result || 'continue',
+      engine_source: engineSource,
+    }))
+    setClarificationModalItem(null)
+  }
 
   if (!doc) {
     return (
@@ -869,6 +965,25 @@ function AccountingForm({
           >
             <div style={{ fontWeight: 700, marginBottom: '.15rem' }}>Learned from your past corrections</div>
             <div style={{ opacity: 0.95 }}>{learnFq != null ? `Used ${learnFq} times` : 'Based on your usage history'}</div>
+          </div>
+        )}
+        {showBorderlineParcellaWarning && (
+          <div
+            style={{
+              marginBottom: '.65rem',
+              padding: '.55rem .65rem',
+              borderRadius: 10,
+              fontSize: '.75rem',
+              lineHeight: 1.35,
+              background: 'rgba(212,175,55,.08)',
+              border: '1px solid rgba(212,175,55,.22)',
+              color: 'var(--tx)',
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: '.15rem' }}>Segnali parcella (deboli)</div>
+            <div style={{ color: 'var(--mu)' }}>
+              Il documento contiene indicatori compatibili con parcella/prestazione, ma senza evidenze fiscali forti (ritenuta/cassa). Manteniamo la registrazione standard.
+            </div>
           </div>
         )}
         {isProfessionalDoc && showParcellaAudit && parcellaAuditPreview && (
@@ -984,6 +1099,24 @@ function AccountingForm({
             )}
           </div>
         )}
+        <OperatorAssistPanel
+          items={operatorAssistItems}
+          onResolve={resolveOperatorAssist}
+          onManualResolve={(item, value) => resolveOperatorAssist(item, { id: 'manual', label: value, patch: {} }, value)}
+          onRequestClarification={setClarificationModalItem}
+          title="Chiarimenti guidati"
+        />
+        <OperatorClarificationModal
+          open={Boolean(clarificationModalItem)}
+          item={clarificationModalItem}
+          onClose={() => setClarificationModalItem(null)}
+          engineSource={engineSource}
+          subtitle={doc?.filename || doc?.numero_documento || 'Documento da validare'}
+          onOpenPreview={() => setDocumentPreviewOpen(true)}
+          onContinue={(item, option, manualText) => resolveOperatorAssist(item, option, manualText, { rerun_result: 'continue' })}
+          onSkip={(item) => resolveOperatorAssist(item, { id: 'skip', label: 'Salta e gestisci manualmente', patch: {} }, '', { rerun_result: 'skip' })}
+          onReviewLater={(item) => resolveOperatorAssist(item, { id: 'review_later', label: 'Rivedi dopo', patch: {} }, '', { rerun_result: 'review_later' })}
+        />
         {(ivaInsightsLoading || insightRowsLimited.length > 0) && (
           <div style={{ marginBottom: '.75rem', display: 'grid', gap: '.4rem' }}>
             {ivaInsightsLoading && insightRowsLimited.length === 0 && (
@@ -1337,6 +1470,94 @@ function AccountingForm({
               )}
             </div>
 
+            <div style={{ marginBottom: '.75rem' }}>
+              <div style={{ fontSize: '.68rem', fontWeight: 700, color: 'var(--mu)', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+                SUGGERIMENTI AI
+              </div>
+              {Array.isArray(contoSuggestions) && contoSuggestions.length > 0 ? (
+                <div style={{ display: 'grid', gap: '.35rem' }}>
+                  {contoSuggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="btn-sec"
+                      onClick={() => {
+                        setContoId(s.id)
+                        setContoSearch(`${s.codice} — ${s.descrizione}`)
+                        setShowDd(false)
+                      }}
+                      style={{ textAlign: 'left', padding: '.4rem .55rem', borderRadius: 8 }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                        <div style={{ fontWeight: 700 }}>
+                          <code style={{ color: 'var(--gold)' }}>{s.codice}</code> {s.descrizione}
+                        </div>
+                        <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                      </div>
+                      {Array.isArray(s.reasons) && s.reasons.length > 0 && (
+                        <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                          {s.reasons.join(' · ')}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                  Nessun conto da suggerire con sufficiente confidenza.
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '.75rem' }}>
+              <div style={{ fontSize: '.68rem', fontWeight: 700, color: '#34c27a', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+                STORICO CONFERMATO
+              </div>
+              {historicalContoLoading ? (
+                <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                  Cerco fatture confermate nello storico...
+                </div>
+              ) : Array.isArray(historicalContoSuggestions) && historicalContoSuggestions.length > 0 ? (
+                <div style={{ display: 'grid', gap: '.35rem' }}>
+                  {historicalContoSuggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="btn-sec"
+                      onClick={() => {
+                        setContoId(s.id)
+                        setContoSearch(`${s.codice} — ${s.descrizione}`)
+                        setShowDd(false)
+                      }}
+                      style={{
+                        textAlign: 'left',
+                        width: '100%',
+                        background: 'rgba(52,194,122,.08)',
+                        border: '1px solid rgba(52,194,122,.25)',
+                        color: 'var(--tx)',
+                        borderRadius: 8,
+                        padding: '.45rem .55rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                        <div style={{ fontWeight: 700 }}>
+                          <code style={{ color: '#34c27a' }}>{s.codice}</code> {s.descrizione}
+                        </div>
+                        <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                      </div>
+                      <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                        {Array.isArray(s.reasons) && s.reasons.length > 0 ? s.reasons.join(' · ') : 'Storico confermato'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                  Nessun storico confermato utile trovato.
+                </div>
+              )}
+            </div>
+
             <div className={`fg${hl?.causaleIva ? ' copilot-highlight' : ''}`} style={{ marginBottom: '.75rem', padding: hl?.causaleIva ? '.35rem' : undefined, borderRadius: 8 }}>
               <label>Causale IVA</label>
               <BaseCombobox
@@ -1471,7 +1692,7 @@ function AccountingForm({
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
-                <button type="button" className="btn-sec" onClick={() => setInvoicePreviewOpen(true)}>
+                <button type="button" className="btn-sec" onClick={() => onOpenDocumentPreview?.(doc)}>
                   Anteprima fattura
                 </button>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', justifyContent: 'flex-end' }}>
@@ -1522,27 +1743,6 @@ function AccountingForm({
           </div>
         </div>
       )}
-
-      {invoicePreviewOpen && (
-        <div
-          className="overlay"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setInvoicePreviewOpen(false)
-          }}
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 980, width: '94%', maxHeight: '86vh' }}>
-            <div className="modal-hdr">
-              <div className="modal-title">Anteprima fattura</div>
-              <button type="button" className="modal-close" onClick={() => setInvoicePreviewOpen(false)}>
-                ×
-              </button>
-            </div>
-            <div className="modal-body" style={{ padding: 0, overflow: 'hidden', maxHeight: '76vh' }}>
-              <PdfZoomPane doc={doc} xmlPreview={xmlPreviewLocal} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -1578,7 +1778,8 @@ export function DaValidareSplitView({
   const [bulkLoading, setBulkLoading] = useState(false)
   const [pendingFlags, setPendingFlags] = useState(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const [detailMode, setDetailMode] = useState('form')
+  const [documentPreviewOpen, setDocumentPreviewOpen] = useState(false)
+  const [documentPreviewDoc, setDocumentPreviewDoc] = useState(null)
 
   const [autoValidateMode, setAutoValidateMode] = useState(false)
   const [entryMetaByDocId, setEntryMetaByDocId] = useState({})
@@ -1611,6 +1812,28 @@ export function DaValidareSplitView({
     },
     [documenti, onEdit]
   )
+
+  const openDocumentPreview = useCallback((doc) => {
+    if (!doc) return
+    setDocumentPreviewDoc(doc)
+    setDocumentPreviewOpen(true)
+  }, [])
+
+  const resolveDocPublicUrl = useCallback((filePath) => {
+    if (!filePath) return ''
+    try {
+      const { data } = contabilitaRepo.getDocumentoPublicUrl(filePath)
+      return data?.publicUrl || ''
+    } catch {
+      return ''
+    }
+  }, [])
+
+  const fetchXmlForPreview = useCallback(async (xmlFilename) => {
+    if (!xmlFilename) return ''
+    const { data } = await contabilitaRepo.getFatturaXmlByFilename(xmlFilename)
+    return data?.[0]?.xml_content || ''
+  }, [])
 
   useEffect(() => {
     if (!copilotOpen || !insightToPromptOnOpen) return
@@ -1928,7 +2151,6 @@ export function DaValidareSplitView({
     if (!focusedDoc) return null
     return entryMetaByDocId[focusedDoc.id] ?? focusedOnlyEntryMeta
   }, [focusedDoc, entryMetaByDocId, focusedOnlyEntryMeta])
-  const xmlPreview = useXmlPreview(focusedDoc)
   const idxInList = focusedDoc ? listIds.indexOf(focusedDoc.id) : -1
 
   const toggleSelected = useCallback((id) => {
@@ -1959,7 +2181,6 @@ export function DaValidareSplitView({
       } else {
         setFocusedId(d.id)
         setDetailPanelOpen(true)
-        setDetailMode('form')
         lastAnchorRef.current = index
       }
     },
@@ -2062,7 +2283,6 @@ export function DaValidareSplitView({
       if (isProfessionalParcellaDocument(row)) {
         setFocusedId(row.id)
         setDetailPanelOpen(true)
-        setDetailMode('form')
         return
       }
       void confermaDoc?.(row.id)
@@ -2428,44 +2648,77 @@ export function DaValidareSplitView({
             </div>
             <div className="modal-body erp-detail-modal-body">
               <div className="erp-detail-rail-tabs">
-                <button type="button" className={'erp-inline-tab' + (detailMode === 'form' ? ' active' : '')} onClick={() => setDetailMode('form')}>
+                <button type="button" className="erp-inline-tab active" onClick={() => {}}>
                   Registrazione
                 </button>
-                <button type="button" className={'erp-inline-tab' + (detailMode === 'preview' ? ' active' : '')} onClick={() => setDetailMode('preview')}>
+                <button type="button" className="erp-inline-tab" onClick={() => openDocumentPreview(focusedDoc)}>
                   Anteprima
                 </button>
               </div>
               <div className="erp-detail-modal-content">
-                {detailMode === 'preview' ? (
-                  <PdfZoomPane doc={focusedDoc} xmlPreview={xmlPreview} />
-                ) : (
-                  <AccountingForm
-                    doc={focusedDoc}
-                    pianoConti={pianoConti}
-                    causaliIva={causaliIva}
-                    onSave={onSingleSave}
-                    onClose={() => setDetailPanelOpen(false)}
-                    onOpenGuidata={onEdit}
-                    listIds={listIds}
-                    idxInList={idxInList}
-                    autoValidateMode={autoValidateMode}
-                    entryMeta={focusedEntryMetaDisplay}
-                    onRefreshEntryMeta={refreshEntryMetaForDocument}
-                    copilotHighlight={copilotHighlights}
-                    ivaInsights={focusedDoc ? (ivaInsightsByDocId[String(focusedDoc.id)] || []) : []}
-                    ivaInsightsLoading={ivaInsightsLoading}
-                    onTogglePinExplanation={
-                      focusedDoc && autoValidateMode
-                        ? () => togglePinExplanationForDoc(focusedDoc.id, focusedEntryMetaDisplay)
-                        : null
-                    }
-                  />
-                )}
+                <AccountingForm
+                  doc={focusedDoc}
+                  pianoConti={pianoConti}
+                  causaliIva={causaliIva}
+                  onSave={onSingleSave}
+                  onClose={() => setDetailPanelOpen(false)}
+                  onOpenGuidata={onEdit}
+                  onOpenDocumentPreview={openDocumentPreview}
+                  listIds={listIds}
+                  idxInList={idxInList}
+                  autoValidateMode={autoValidateMode}
+                  entryMeta={focusedEntryMetaDisplay}
+                  onRefreshEntryMeta={refreshEntryMetaForDocument}
+                  copilotHighlight={copilotHighlights}
+                  ivaInsights={focusedDoc ? (ivaInsightsByDocId[String(focusedDoc.id)] || []) : []}
+                  ivaInsightsLoading={ivaInsightsLoading}
+                  onTogglePinExplanation={
+                    focusedDoc && autoValidateMode
+                      ? () => togglePinExplanationForDoc(focusedDoc.id, focusedEntryMetaDisplay)
+                      : null
+                  }
+                />
               </div>
             </div>
           </div>
         </div>
       )}
+
+      <DocumentPreviewModal
+        open={documentPreviewOpen}
+        onClose={() => setDocumentPreviewOpen(false)}
+        title="Anteprima documento"
+        subtitle={
+          documentPreviewDoc
+            ? `${documentPreviewDoc.numero_documento || 'Documento'} · ${documentPreviewDoc.soggetto_denominazione || 'Soggetto'}`
+            : ''
+        }
+        document={documentPreviewDoc}
+        resolvePublicUrl={resolveDocPublicUrl}
+        fetchXmlByFilename={fetchXmlForPreview}
+        fallback={(() => {
+          const d = documentPreviewDoc
+          if (!d) return null
+          const de = parseDati(d.dati_estratti)
+          return {
+            tipo_documento: d.tipo_documento,
+            numero_documento: d.numero_documento,
+            data_documento: d.data_documento,
+            soggetto_denominazione: d.soggetto_denominazione,
+            soggetto_piva: d.soggetto_piva,
+            soggetto_cf: d.soggetto_cf,
+            imponibile: d.imponibile,
+            iva: d.iva,
+            totale: d.totale,
+            cedente_denom: de?.cedente_denom,
+            cedente_piva: de?.cedente_piva,
+            cedente_cf: de?.cedente_cf,
+            cessionario_denom: de?.cessionario_denom,
+            cessionario_piva: de?.cessionario_piva,
+            cessionario_cf: de?.cessionario_cf,
+          }
+        })()}
+      />
 
       {previewOpen && (
         <div

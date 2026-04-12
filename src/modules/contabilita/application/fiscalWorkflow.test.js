@@ -182,7 +182,7 @@ test('CU rows follow payment year, not registration year', () => {
   assert.equal(rows2026[0].compensi, 1000)
 })
 
-test('possible percipiente classification triggers operator confirmation path', () => {
+test('parcella-like wording without withholding does NOT create a percipiente (guardrail against false positives)', () => {
   const documentRow = {
     id: 'doc-poss',
     societa_id: 'soc-1',
@@ -198,8 +198,8 @@ test('possible percipiente classification triggers operator confirmation path', 
   const inferred = inferPercipienteCandidate(documentRow)
   assert.equal(inferred.relevant, true)
   const cls = classifyPercipienteOutcome({ documentRow, inferred, matchedPercipiente: null })
-  assert.equal(cls.outcome, 'possible_percipiente')
-  assert.ok(cls.reasons.some((r) => /codice fiscale/i.test(r)))
+  assert.equal(cls.outcome, 'generic_supplier')
+  assert.ok(cls.reasons.some((r) => /nessuna ritenuta/i.test(r)))
 })
 
 test('confirmed percipiente classification on strong evidence (TD06 + CF)', () => {

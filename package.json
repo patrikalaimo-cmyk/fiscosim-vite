@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:api": "set PORT=3001&& node scripts/dev-api.mjs",
+    "dev:api": "set PORT=3001&& node -r dotenv/config scripts/dev-api.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

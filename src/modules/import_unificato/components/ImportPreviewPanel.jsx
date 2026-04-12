@@ -13,6 +13,10 @@ export function ImportPreviewPanel({
   cercaConto,
   setCercaConto,
   contiFiltered,
+  showAnteprimaDocumento = false,
+  onAnteprimaDocumento = null,
+  historicalContoSuggestions = [],
+  historicalContoLoading = false,
 }) {
   const isFattura = form.tipo_documento?.startsWith('fattura')
   const isF24 = form.tipo_documento === 'f24'
@@ -33,6 +37,10 @@ export function ImportPreviewPanel({
             setCercaConto={setCercaConto}
             contiFiltered={contiFiltered}
             pianoConti={pianoConti}
+            historicalContoSuggestions={historicalContoSuggestions}
+            historicalContoLoading={historicalContoLoading}
+            showAnteprimaDocumento={showAnteprimaDocumento}
+            onAnteprimaDocumento={onAnteprimaDocumento}
           />
         </div>
       )}

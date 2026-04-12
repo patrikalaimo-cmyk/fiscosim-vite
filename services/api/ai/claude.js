@@ -1,7 +1,7 @@
 export async function claudeHandler({ body }) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return { status: 500, json: { error: 'ANTHROPIC_API_KEY non configurata sul server' } }
+    return { status: 200, json: { error: 'ANTHROPIC_API_KEY non configurata sul server', configured: false } }
   }
 
   try {
@@ -32,4 +32,3 @@ export async function claudeHandler({ body }) {
     return { status: 500, json: { error: err.message } }
   }
 }
-

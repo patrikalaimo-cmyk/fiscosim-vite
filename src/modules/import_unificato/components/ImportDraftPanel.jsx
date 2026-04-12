@@ -1,4 +1,5 @@
 import { ImportRow } from './ImportRow.jsx'
+import { BaseCombobox } from '../../../shared/ui/BaseDropdown.jsx'
 
 export function ImportDraftPanel({
   form,
@@ -9,8 +10,29 @@ export function ImportDraftPanel({
   cercaConto,
   setCercaConto,
   contiFiltered,
+  contoSuggestions = [],
+  historicalContoSuggestions = [],
+  historicalContoLoading = false,
   pianoConti,
+  showAnteprimaDocumento = false,
+  onAnteprimaDocumento = null,
 }) {
+  const ivaOptions = (causaliIva || [])
+    ?.filter((c) => c.aliquota > 0 || ['esente', 'escluso', 'non_imponibile'].includes(c.tipo))
+    .map((c) => ({
+      id: String(c.id),
+      aliquota: Number(c.aliquota || 0),
+      label: `${Number(c.aliquota || 0)}% - ${c.descrizione}`,
+    })) || []
+
+  const pickDefaultIvaId = (row) => {
+    const explicit = row?.causale_iva_id ? String(row.causale_iva_id) : ''
+    if (explicit) return explicit
+    const pct = Math.round(parseFloat(String(row?.aliquota ?? '0').replace(/[%\\s]/g, '').replace(',', '.')) || 0)
+    const match = ivaOptions.find((o) => Math.round(o.aliquota) === pct)
+    return match?.id || ''
+  }
+
   return (
     <div>
       <div
@@ -39,6 +61,26 @@ export function ImportDraftPanel({
               {form.riepilogo_iva.map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid var(--bd)' }}>
                   <td style={{ padding: '.25rem' }}>
+                    <BaseCombobox
+                      value={String(r?.causale_iva_id ?? pickDefaultIvaId(r) ?? '')}
+                      onChange={(id) => {
+                        const sel = (causaliIva || []).find((c) => String(c.id) === String(id)) || null
+                        const nv = [...form.riepilogo_iva]
+                        nv[i] = {
+                          ...nv[i],
+                          causale_iva_id: id || '',
+                          // Keep old behavior: switching the "aliquota" selector changes the underlying aliquota too.
+                          aliquota: sel?.aliquota != null ? String(sel.aliquota) : nv[i].aliquota,
+                        }
+                        up('riepilogo_iva', nv)
+                      }}
+                      options={[{ id: '', label: 'Seleziona...' }, ...ivaOptions]}
+                      getOptionId={(o) => o?.id}
+                      getOptionLabel={(o) => o?.label}
+                      searchable
+                      maxItems={160}
+                    />
+                    {/*
                     <select
                       value={r.aliquota}
                       onChange={(e) => {
@@ -64,6 +106,7 @@ export function ImportDraftPanel({
                           </option>
                         ))}
                     </select>
+                    */}
                   </td>
                   <td style={{ padding: '.25rem' }}>
                     <input
@@ -233,6 +276,20 @@ export function ImportDraftPanel({
             proposta AI
           </span>
         )}
+        {form.conto_da_storico && (
+          <span
+            style={{
+              fontSize: '.65rem',
+              background: 'rgba(52,194,122,.12)',
+              border: '1px solid rgba(52,194,122,.3)',
+              color: '#34c27a',
+              borderRadius: 4,
+              padding: '.1rem .4rem',
+            }}
+          >
+            da storico
+          </span>
+        )}
       </div>
       <input
         placeholder="Cerca conto (es. fornitori, acquisti...)"
@@ -253,6 +310,108 @@ export function ImportDraftPanel({
           marginBottom: '.3rem',
         }}
       />
+      <div style={{ marginBottom: '.5rem' }}>
+        <div style={{ fontSize: '.68rem', fontWeight: 700, color: 'var(--mu)', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+          SUGGERIMENTI AI
+        </div>
+        {Array.isArray(contoSuggestions) && contoSuggestions.length > 0 ? (
+          <div style={{ display: 'grid', gap: '.35rem' }}>
+            {contoSuggestions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  up('conto_id', s.id)
+                  up('conto_search', `${s.codice} — ${s.descrizione}`)
+                  up('conto_da_ai', true)
+                  up('conto_da_storico', false)
+                  setCercaConto('')
+                }}
+                style={{
+                  textAlign: 'left',
+                  width: '100%',
+                  background: 'rgba(200,164,94,.08)',
+                  border: '1px solid rgba(200,164,94,.25)',
+                  color: 'var(--tx)',
+                  borderRadius: 8,
+                  padding: '.45rem .55rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                  <div style={{ fontWeight: 700 }}>
+                    <code style={{ color: 'var(--gold)' }}>{s.codice}</code> {s.descrizione}
+                  </div>
+                  <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                </div>
+                {Array.isArray(s.reasons) && s.reasons.length > 0 && (
+                  <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                    {s.reasons.join(' · ')}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+            Nessun conto da suggerire con sufficiente confidenza.
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: '.5rem' }}>
+        <div style={{ fontSize: '.68rem', fontWeight: 700, color: '#34c27a', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+          STORICO CONFERMATO
+        </div>
+        {historicalContoLoading ? (
+          <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+            Cerco fatture confermate nello storico...
+          </div>
+        ) : Array.isArray(historicalContoSuggestions) && historicalContoSuggestions.length > 0 ? (
+          <div style={{ display: 'grid', gap: '.35rem' }}>
+            {historicalContoSuggestions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  up('conto_id', s.id)
+                  up('conto_search', `${s.codice} â€” ${s.descrizione}`)
+                  up('conto_da_storico', true)
+                  up('conto_da_ai', false)
+                  setCercaConto('')
+                }}
+                style={{
+                  textAlign: 'left',
+                  width: '100%',
+                  background: 'rgba(52,194,122,.08)',
+                  border: '1px solid rgba(52,194,122,.25)',
+                  color: 'var(--tx)',
+                  borderRadius: 8,
+                  padding: '.45rem .55rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                  <div style={{ fontWeight: 700 }}>
+                    <code style={{ color: '#34c27a' }}>{s.codice}</code> {s.descrizione}
+                  </div>
+                  <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                </div>
+                {Array.isArray(s.reasons) && s.reasons.length > 0 && (
+                  <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                    {s.reasons.join(' Â· ')}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+            Nessun storico confermato utile trovato.
+          </div>
+        )}
+      </div>
+
       {cercaConto && contiFiltered.length > 0 && (
         <div
           style={{
@@ -269,6 +428,8 @@ export function ImportDraftPanel({
               key={c.id}
               onClick={() => {
                 up('conto_id', c.id)
+                up('conto_da_ai', false)
+                up('conto_da_storico', false)
                 up('conto_search', `${c.codice} — ${c.descrizione}`)
                 setCercaConto('')
               }}
@@ -325,13 +486,34 @@ export function ImportDraftPanel({
                   width: 14,
                   height: 14,
                   borderRadius: '50%',
-                  background: '#fff',
+                  background: 'var(--bg-main)',
                   transition: 'left .2s',
                 }}
               />
             </div>
             <span>Usa questo conto per le future registrazioni di questo fornitore</span>
           </label>
+
+          {showAnteprimaDocumento && typeof onAnteprimaDocumento === 'function' && (
+            <div style={{ marginTop: '.6rem' }}>
+              <button
+                type="button"
+                onClick={onAnteprimaDocumento}
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: '1px solid var(--bd)',
+                  color: 'var(--mu)',
+                  borderRadius: 6,
+                  padding: '.35rem .6rem',
+                  fontSize: '.78rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Anteprima documento
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
+import { suggestContiPerDocumento } from '../../../shared/utils/pianoContiSuggestions.js'
+import { buildHistoricalContoSuggestions, extractHistoricalSearchIdentity } from '../../../shared/utils/historicalContoSuggestions.js'
 import { pickContoFromAiAccountingRows } from '../../../utils/matchAiAccountingRowsToPianoConti.js'
+import { buildOperatorAssistItems, appendOperatorClarification } from '../../../shared/utils/operatorAssist.js'
 import * as importRepo from '../data/importRepo.js'
+import * as contabilitaRepo from '../../contabilita/data/contabilitaRepo.js'
 import { ImportPreviewPanel } from './ImportPreviewPanel.jsx'
 import { evaluateDraftReliability, reliabilityTierLabel } from '../../../../domain/draftReliability.js'
+import { OperatorAssistPanel } from '../../../shared/components/OperatorAssistPanel.jsx'
+import { OperatorClarificationModal } from '../../../shared/components/OperatorClarificationModal.jsx'
+import { DocumentPreviewModal } from '../../../shared/ui/DocumentPreviewModal.jsx'
 
 export function ImportDocumentCard({
   doc,
@@ -19,9 +26,43 @@ export function ImportDocumentCard({
   const [form, setForm] = useState(null)
   const [cercaConto, setCercaConto] = useState('')
   const [saving, setSaving] = useState(false)
+  const [sourcePreviewOpen, setSourcePreviewOpen] = useState(false)
+  const [historicalContoSuggestions, setHistoricalContoSuggestions] = useState([])
+  const [historicalContoLoading, setHistoricalContoLoading] = useState(false)
+  const [historicalLearningRows, setHistoricalLearningRows] = useState([])
+  const [clarificationModalItem, setClarificationModalItem] = useState(null)
+
+  const sanitizeRiepilogoIva = (riepilogo) => {
+    if (!Array.isArray(riepilogo) || !Array.isArray(causaliIva) || causaliIva.length === 0) return riepilogo
+
+    const pct = (v) => {
+      if (v === null || v === undefined || v === '') return null
+      const raw = String(v).trim().replace(/[%\s]/g, '').replace(',', '.')
+      const n = parseFloat(raw)
+      if (!Number.isFinite(n)) return null
+      return Math.round(n)
+    }
+
+    return riepilogo.map((r) => {
+      const id = r?.causale_iva_id != null ? String(r.causale_iva_id) : ''
+      if (!id) return r
+      const c = causaliIva.find((x) => String(x?.id) === id) || null
+      if (!c) return { ...r, causale_iva_id: '' }
+
+      const rowAliq = pct(r?.aliquota ?? r?.Aliquota)
+      const causAliq = pct(c?.aliquota)
+      // If row aliquota is known and the selected "causale" doesn't match it, this is a stale/broken state.
+      // Resetting the id lets the UI pick the correct default by aliquota without changing amounts.
+      if (rowAliq !== null && causAliq !== null && rowAliq !== causAliq) {
+        return { ...r, causale_iva_id: '' }
+      }
+      return r
+    })
+  }
 
   useEffect(() => {
     if (!doc) return
+    setClarificationModalItem(null)
     const d = doc.ai_raw_response || {}
     let causaleIvaDefault = ''
     if (causaliIva?.length && d.riepilogo_iva?.length > 0) {
@@ -44,11 +85,13 @@ export function ImportDocumentCard({
       imponibile: d.imponibile ?? '',
       iva_totale: d.iva ?? '',
       totale: d.totale ?? '',
-      riepilogo_iva: d.riepilogo_iva || [],
+      riepilogo_iva: sanitizeRiepilogoIva(d.riepilogo_iva || []),
       causale: d.causale || '',
       causale_iva_id: causaleIvaDefault,
       conto_id: null,
       conto_search: '',
+      operator_clarifications: Array.isArray(d.operator_clarifications) ? d.operator_clarifications : [],
+      parcella_confirmation: d.parcella_confirmation ?? null,
       contribuente: d.contribuente || '',
       cf_f24: d.codice_fiscale || '',
       data_versamento: d.data_versamento || '',
@@ -67,53 +110,87 @@ export function ImportDocumentCard({
   }, [doc, causaliIva])
 
   useEffect(() => {
-    if (!form || !pianoConti?.length || !societaId) return
-    const piva = form.cedente_piva || form.cessionario_piva
-    const cf = form.cedente_cf || form.cessionario_piva
-    const nome = form.cedente_denom || form.cessionario_denom
-    if (!piva && !cf && !nome) return
-
-    const norm = (v) => (v || '').replace(/\s|-/g, '').replace(/^IT/i, '').toUpperCase().trim()
-
-    const match = pianoConti.find(
-      (c) =>
-        (piva &&
-          piva.length >= 8 &&
-          (norm(c.partita_iva) === norm(piva) || norm(c.anagrafica_piva) === norm(piva))) ||
-        (cf &&
-          cf.length >= 11 &&
-          (norm(c.codice_fiscale) === norm(cf) || norm(c.anagrafica_cf) === norm(cf))) ||
-        (nome?.length > 4 &&
-          (c.is_fornitore || c.is_cliente) &&
-          (c.descrizione || '').toLowerCase().includes(nome.toLowerCase().substring(0, 12)))
-    )
-    if (!match) return
-
-    const updates = {
-      fornitore_conto_id: match.id,
-      fornitore_conto_search: `${match.codice} — ${match.descrizione}`,
-    }
-
-    if (match.contropartita && !form.conto_id) {
-      const contoCosto = pianoConti.find((c) => c.codice === match.contropartita)
-      if (contoCosto) {
-        updates.conto_id = contoCosto.id
-        updates.conto_search = `${contoCosto.codice} — ${contoCosto.descrizione}`
-        updates.conto_da_anagrafica = true
-      } else {
-        updates.conto_search = match.contropartita
-        updates.conto_da_anagrafica = true
+    let alive = true
+    if (!societaId) {
+      setHistoricalLearningRows([])
+      return () => {
+        alive = false
       }
     }
-
-    if (match.aliquota_iva && (!form.riepilogo_iva?.length || form.riepilogo_iva[0]?.aliquota === '22')) {
-      updates.aliquota_iva_default = match.aliquota_iva
+    contabilitaRepo
+      .getArchivioStoricoAiLearning([societaId], { limit: 5000 })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[Import] historical learning rows', error.message)
+          setHistoricalLearningRows([])
+          return
+        }
+        setHistoricalLearningRows(Array.isArray(data) ? data : [])
+      })
+      .catch((error) => {
+        if (!alive) return
+        console.warn('[Import] historical learning rows', error?.message || error)
+        setHistoricalLearningRows([])
+      })
+    return () => {
+      alive = false
     }
+  }, [societaId])
 
-    setForm((f) => ({ ...f, ...updates }))
-  }, [form?.cedente_piva, form?.cedente_cf, form?.cedente_denom, pianoConti, societaId])
+  const historicalIdentity = useMemo(() => extractHistoricalSearchIdentity(doc), [doc?.id, doc?.soggetto_piva, doc?.soggetto_cf, doc?.soggetto_denominazione, doc?.dati_estratti, doc?.ai_raw_response])
 
   useEffect(() => {
+    let alive = true
+    const { piva, cf, nomeLike, nome } = historicalIdentity || {}
+    if (!doc?.id || (!piva && !cf && !nomeLike)) {
+      setHistoricalContoSuggestions([])
+      return () => {
+        alive = false
+      }
+    }
+    setHistoricalContoLoading(true)
+    importRepo
+      .getHistoricalConfirmedDocumentsForCounterparty({
+        piva,
+        cf,
+        nomeLike: nomeLike || nome,
+        limit: 80,
+      })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[Import] historical conto suggestions', error.message)
+          setHistoricalContoSuggestions([])
+          return
+        }
+        const label = piva
+          ? `${(data || []).length} fatture confermate con stessa P.IVA`
+          : cf
+            ? `${(data || []).length} fatture confermate con stesso CF`
+            : `${(data || []).length} documenti confermati con ragione sociale simile`
+        setHistoricalContoSuggestions(
+          buildHistoricalContoSuggestions({
+            historicalDocs: data || [],
+            learningRows: historicalLearningRows,
+            pianoConti,
+            maxResults: 3,
+            sourceLabel: label,
+            currentDoc: doc,
+            currentSocietaId: societaId,
+          })
+        )
+      })
+      .finally(() => {
+        if (alive) setHistoricalContoLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [doc?.id, historicalIdentity?.piva, historicalIdentity?.cf, historicalIdentity?.nomeLike, historicalLearningRows, pianoConti, societaId])
+
+  useEffect(() => {
+    return
     if (!doc?.id || !form?.tipo_documento || !pianoConti?.length) return
     let cancelled = false
 
@@ -157,7 +234,70 @@ export function ImportDocumentCard({
     }
   }, [doc?.id, form?.tipo_documento, pianoConti])
 
+  const contoSuggestions = useMemo(
+    () => suggestContiPerDocumento({ doc, pianoConti, maxResults: 3 }),
+    [
+      doc?.id,
+      doc?.tipo_documento,
+      doc?.soggetto_denominazione,
+      doc?.soggetto_piva,
+      doc?.soggetto_cf,
+      doc?.dati_estratti,
+      pianoConti,
+    ]
+  )
+
   const reliability = useMemo(() => evaluateDraftReliability({ doc, form }), [doc, form])
+  const engineSource = useMemo(() => {
+    const metodo = String(doc?.ai_raw_response?.metodo || '').toLowerCase()
+    if (metodo.includes('ollama') || metodo.includes('xml_deterministico') || metodo.includes('local')) return 'locale'
+    if (metodo.includes('openai') || metodo.includes('online') || metodo.includes('gateway') || metodo.includes('api')) return 'online'
+    return 'sconosciuto'
+  }, [doc?.ai_raw_response?.metodo])
+  const parcellaAssistRaw = useMemo(() => {
+    const txt = [
+      doc?.tipo_documento,
+      doc?.ai_raw_response?.tipo_documento,
+      doc?.ai_raw_response?.xml_content,
+      doc?.ai_raw_response?.causale,
+      doc?.soggetto_denominazione,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return /parcella|onorario|ritenuta|cassa|inps|enasarco|compenso|prestazione|consulenza/.test(txt)
+  }, [doc?.tipo_documento, doc?.ai_raw_response?.tipo_documento, doc?.ai_raw_response?.xml_content, doc?.ai_raw_response?.causale, doc?.soggetto_denominazione])
+  const operatorAssistItems = useMemo(
+    () =>
+      buildOperatorAssistItems({
+        doc,
+        form,
+        reliability,
+        tipiDocumento,
+        contoSuggestions,
+        historicalContoSuggestions,
+        causaliIva,
+        includeDocumentType: true,
+        includeAccountMapping: true,
+        includeVatCausale: true,
+        includeParcellaConfirmation: parcellaAssistRaw,
+      }),
+    [doc, form, reliability, tipiDocumento, contoSuggestions, historicalContoSuggestions, causaliIva, parcellaAssistRaw]
+  )
+
+  const xmlContent = doc?.ai_raw_response?.xml_content || null
+  // Avoid hook-order issues: this is a cheap sync computation and does not need a hook.
+  let publicUrl = ''
+  if (doc?.file_path) {
+    try {
+      const { data } = importRepo.getDocumentoPublicUrl(doc.file_path)
+      publicUrl = data?.publicUrl || ''
+    } catch {
+      publicUrl = ''
+    }
+  }
+
+  const canPreviewSource = Boolean(publicUrl) || Boolean(xmlContent)
 
   if (!form) return null
 
@@ -195,7 +335,7 @@ export function ImportDocumentCard({
           aliquota_iva: aliquotaIva || null,
         })
         if (!updErr) {
-          console.log('[Import] ✓ Contropartita', codContoCosto, 'salvata su conto fornitore', contoFornId)
+          console.log('[Import] OK contropartita', codContoCosto, 'salvata su conto fornitore', contoFornId)
         } else {
           console.error('[Import] Errore update contropartita:', updErr.message)
         }
@@ -203,6 +343,38 @@ export function ImportDocumentCard({
     }
     await onConferma(doc, form)
     setSaving(false)
+  }
+
+  const resolveOperatorAssist = (item, option, manualText = '', context = {}) => {
+    if (!item) return
+    setForm((prev) => {
+      if (!prev) return prev
+      const next = { ...prev }
+      if (option?.patch && typeof option.patch === 'object') {
+        Object.assign(next, option.patch)
+      }
+      if (item.type === 'uncertain_account_mapping' && manualText && !option?.patch?.conto_id) {
+        next.conto_search = manualText
+      }
+      if (item.type === 'uncertain_parcella_confirmation' && option?.patch && typeof option.patch === 'object') {
+        Object.assign(next, option.patch)
+      }
+      next.operator_clarifications = appendOperatorClarification(prev.operator_clarifications, item, option, manualText, {
+        issue_type: item.type,
+        shown_options: item.options,
+        selected_answer: option?.label || manualText || 'Manuale',
+        rerun_result: context.rerun_result || 'continue',
+        engine_source: engineSource,
+      })
+      return next
+    })
+    if (item.type === 'uncertain_account_mapping') {
+      setCercaConto('')
+    }
+    if (item.type === 'uncertain_parcella_confirmation') {
+      setClarificationModalItem(null)
+    }
+    if (context?.closeModal !== false) setClarificationModalItem(null)
   }
 
   return (
@@ -253,7 +425,7 @@ export function ImportDocumentCard({
           </div>
           <div style={{ fontSize: '.7rem', color: 'var(--mu)' }}>
             {doc.confidence != null && `Confidenza AI: ${Math.round(doc.confidence * 100)}%`}
-            {doc.ai_raw_response?.metodo === 'xml_deterministico' && ' · XML deterministico ✓'}
+            {doc.ai_raw_response?.metodo === 'xml_deterministico' && ' · XML deterministico'}
           </div>
           {reliability && (
             <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.1rem' }}>
@@ -286,6 +458,28 @@ export function ImportDocumentCard({
         </select>
       </div>
 
+      <div style={{ padding: '0 1rem' }}>
+        <OperatorAssistPanel
+          items={operatorAssistItems}
+          onResolve={resolveOperatorAssist}
+          onManualResolve={(item, value) => resolveOperatorAssist(item, { id: 'manual', label: value, patch: {} }, value)}
+          onRequestClarification={setClarificationModalItem}
+          title="Chiarimenti guidati"
+        />
+      </div>
+
+      <OperatorClarificationModal
+        open={Boolean(clarificationModalItem)}
+        item={clarificationModalItem}
+        onClose={() => setClarificationModalItem(null)}
+        engineSource={engineSource}
+        subtitle={doc?.filename || form?.numero || 'Documento importato'}
+        onOpenPreview={() => setSourcePreviewOpen(true)}
+        onContinue={(item, option, manualText) => resolveOperatorAssist(item, option, manualText, { rerun_result: 'continue' })}
+        onSkip={(item) => resolveOperatorAssist(item, { id: 'skip', label: 'Salta e gestisci manualmente', patch: {} }, '', { rerun_result: 'skip' })}
+        onReviewLater={(item) => resolveOperatorAssist(item, { id: 'review_later', label: 'Rivedi dopo', patch: {} }, '', { rerun_result: 'review_later' })}
+      />
+
       <ImportPreviewPanel
         form={form}
         up={up}
@@ -297,6 +491,35 @@ export function ImportDocumentCard({
         cercaConto={cercaConto}
         setCercaConto={setCercaConto}
         contiFiltered={contiFiltered}
+        contoSuggestions={contoSuggestions}
+        historicalContoSuggestions={historicalContoSuggestions}
+        historicalContoLoading={historicalContoLoading}
+        showAnteprimaDocumento={canPreviewSource}
+        onAnteprimaDocumento={() => setSourcePreviewOpen(true)}
+      />
+
+      <DocumentPreviewModal
+        open={sourcePreviewOpen}
+        onClose={() => setSourcePreviewOpen(false)}
+        title="Anteprima documento"
+        subtitle={`${form.numero || 'Documento'} · ${form.cedente_denom || form.cessionario_denom || 'Soggetto'}${form.data ? ` · ${form.data}` : ''}`}
+        fileUrl={publicUrl || ''}
+        filename={doc?.filename || ''}
+        mimeType={doc?.mime_type || ''}
+        xmlContent={xmlContent || ''}
+        fallback={{
+          tipo_doc: form.tipo_doc || form.tipo_documento,
+          numero: form.numero,
+          data: form.data,
+          cedente_denom: form.cedente_denom,
+          cedente_piva: form.cedente_piva,
+          cedente_cf: form.cedente_cf,
+          cessionario_denom: form.cessionario_denom,
+          cessionario_piva: form.cessionario_piva,
+          imponibile: form.imponibile,
+          iva: form.iva_totale,
+          totale: form.totale,
+        }}
       />
 
       <div
@@ -321,7 +544,7 @@ export function ImportDocumentCard({
             cursor: 'pointer',
           }}
         >
-          🗑 Scarta
+          Scarta
         </button>
         <button
           onClick={handleConferma}
@@ -338,7 +561,7 @@ export function ImportDocumentCard({
             opacity: saving ? 0.4 : 1,
           }}
         >
-          {saving ? '⏳ Conferma...' : '✓ Conferma e invia'}
+          {saving ? 'Conferma...' : 'Conferma e invia'}
         </button>
       </div>
     </div>

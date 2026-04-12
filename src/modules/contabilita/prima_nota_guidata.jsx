@@ -16,6 +16,13 @@ import { fmtCurrency as fmtMoney, fmtDate } from './ui/formatters.js'
 import { ModuleHeader } from '../../shared/components'
 import { BaseInput, BaseTable } from './ui/BaseControls.jsx'
 import { BaseCombobox } from './ui/BaseDropdown.jsx'
+import { DocumentPreviewModal } from '../../shared/ui/DocumentPreviewModal.jsx'
+import { suggestContiPerDocumento } from '../../shared/utils/pianoContiSuggestions.js'
+import { buildHistoricalContoSuggestions, extractHistoricalSearchIdentity } from '../../shared/utils/historicalContoSuggestions.js'
+import { buildOperatorAssistItems, appendOperatorClarification } from '../../shared/utils/operatorAssist.js'
+import { OperatorAssistPanel } from '../../shared/components/OperatorAssistPanel.jsx'
+import { OperatorClarificationModal } from '../../shared/components/OperatorClarificationModal.jsx'
+import { evaluateDraftReliability } from '../../../domain/draftReliability.js'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
 
@@ -100,7 +107,7 @@ function buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo
       avere: r?.avere,
       causale_iva_id: r?.causale_iva_id ?? null
     })),
-    partitarioClosedMap_count: Object.keys(partitarioClosedMap || {}).length
+    partitarioClosedMap_count: Object.keys(partitarioClosedMap || {}).length,
   }
 }
 
@@ -480,6 +487,7 @@ export function PrimaNotaGuidata({
   causaliIva = [],
   clientiFornitori = [],
   initialDraft = null,
+  sourceDoc = null,
   fromImport = false
   // societaId viene passato dal parent (no backend change)
   ,societaId = null
@@ -516,6 +524,8 @@ export function PrimaNotaGuidata({
   const [progressivo, setProgressivoInternal] = useState(() => initialDraft?.progressivo || null)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTabInternal] = useState('scrittura')
+  const [docPreviewOpen, setDocPreviewOpen] = useState(false)
+  const [clarificationModalItem, setClarificationModalItem] = useState(null)
 
   const [ivaRows, setIvaRowsInternal] = useState(() => normalizeIvaRowsFromDraft(initialDraft))
 
@@ -532,6 +542,10 @@ export function PrimaNotaGuidata({
   }))
   const [ivaInsights, setIvaInsights] = useState([])
   const [ivaInsightsLoading, setIvaInsightsLoading] = useState(false)
+  const [historicalContoSuggestions, setHistoricalContoSuggestions] = useState([])
+  const [historicalContoLoading, setHistoricalContoLoading] = useState(false)
+  const [historicalLearningRows, setHistoricalLearningRows] = useState([])
+  const [operatorClarifications, setOperatorClarifications] = useState(() => initialDraft?.operatorClarifications || [])
   const ivaInsightsDisplay = useMemo(() => {
     if (!Array.isArray(ivaInsights)) return []
     const seen = new Set()
@@ -549,6 +563,131 @@ export function PrimaNotaGuidata({
 
   const latestGuidataRef = useRef({})
   latestGuidataRef.current = { header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap }
+
+  const sourceDatiEstratti = useMemo(() => {
+    if (!sourceDoc?.dati_estratti) return {}
+    if (typeof sourceDoc.dati_estratti === 'object') return sourceDoc.dati_estratti
+    try {
+      return JSON.parse(sourceDoc.dati_estratti)
+    } catch {
+      return {}
+    }
+  }, [sourceDoc?.dati_estratti])
+
+  const sourceFileUrl = useMemo(() => {
+    if (!sourceDoc) return ''
+    if (sourceDoc.file_url) return sourceDoc.file_url
+    if (sourceDoc.file_path) {
+      const { data } = contabilitaRepo.getDocumentoPublicUrl(sourceDoc.file_path)
+      return data?.publicUrl || ''
+    }
+    return ''
+  }, [sourceDoc?.id, sourceDoc?.file_url, sourceDoc?.file_path])
+
+  const preferPdfPreview = useMemo(() => {
+    const mt = String(sourceDoc?.mime_type || '').toLowerCase()
+    const name = String(sourceDoc?.filename || '').toLowerCase()
+    const url = String(sourceFileUrl || '').toLowerCase()
+    return Boolean(sourceFileUrl) && (mt.includes('pdf') || name.endsWith('.pdf') || url.includes('.pdf'))
+  }, [sourceDoc?.mime_type, sourceDoc?.filename, sourceFileUrl])
+
+  const canPreviewSource = Boolean(sourceDoc && (sourceFileUrl || sourceDatiEstratti?.xml_content))
+
+  const contoSuggestions = useMemo(
+    () => suggestContiPerDocumento({ doc: sourceDoc, pianoConti, maxResults: 3 }),
+    [
+      sourceDoc?.id,
+      sourceDoc?.tipo_documento,
+      sourceDoc?.soggetto_denominazione,
+      sourceDoc?.soggetto_piva,
+      sourceDoc?.soggetto_cf,
+      sourceDoc?.dati_estratti,
+      pianoConti,
+    ]
+  )
+
+  const historicalIdentity = useMemo(
+    () => extractHistoricalSearchIdentity(sourceDoc),
+    [sourceDoc?.id, sourceDoc?.soggetto_piva, sourceDoc?.soggetto_cf, sourceDoc?.soggetto_denominazione, sourceDoc?.dati_estratti, sourceDoc?.ai_raw_response]
+  )
+
+  useEffect(() => {
+    let alive = true
+    if (!societaId) {
+      setHistoricalLearningRows([])
+      return () => {
+        alive = false
+      }
+    }
+    contabilitaRepo
+      .getArchivioStoricoAiLearning([societaId], { limit: 5000 })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[PrimaNotaGuidata] historical learning rows', error.message)
+          setHistoricalLearningRows([])
+          return
+        }
+        setHistoricalLearningRows(Array.isArray(data) ? data : [])
+      })
+      .catch((error) => {
+        if (!alive) return
+        console.warn('[PrimaNotaGuidata] historical learning rows', error?.message || error)
+        setHistoricalLearningRows([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [societaId])
+
+  useEffect(() => {
+    let alive = true
+    const { piva, cf, nomeLike, nome } = historicalIdentity || {}
+    if (!sourceDoc?.id || (!piva && !cf && !nomeLike)) {
+      setHistoricalContoSuggestions([])
+      return () => {
+        alive = false
+      }
+    }
+    setHistoricalContoLoading(true)
+    contabilitaRepo
+      .getHistoricalConfirmedDocumentsForCounterparty({
+        piva,
+        cf,
+        nomeLike: nomeLike || nome,
+        limit: 80,
+      })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[PrimaNotaGuidata] historical conto suggestions', error.message)
+          setHistoricalContoSuggestions([])
+          return
+        }
+        const label = piva
+          ? `${(data || []).length} fatture confermate con stessa P.IVA`
+          : cf
+            ? `${(data || []).length} fatture confermate con stesso CF`
+            : `${(data || []).length} documenti confermati con ragione sociale simile`
+        setHistoricalContoSuggestions(
+          buildHistoricalContoSuggestions({
+            historicalDocs: data || [],
+            learningRows: historicalLearningRows,
+            pianoConti,
+            maxResults: 3,
+            sourceLabel: label,
+            currentDoc: sourceDoc,
+            currentSocietaId: societaId,
+          })
+        )
+      })
+      .finally(() => {
+        if (alive) setHistoricalContoLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [sourceDoc?.id, historicalIdentity?.piva, historicalIdentity?.cf, historicalIdentity?.nomeLike, historicalLearningRows, pianoConti, societaId])
 
   const runSetHeader = useCallback((updaterOrValue) => {
     setHeaderInternal(prevH => {
@@ -646,6 +785,82 @@ export function PrimaNotaGuidata({
       return nextM
     })
   }, [])
+
+  const reliability = useMemo(() => {
+    if (!sourceDoc) return null
+    const raw = Number(sourceDoc?.ai_confidence)
+    const score = Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : 0
+    const tier = score >= 75 ? 'high' : score >= 50 ? 'medium' : 'low'
+    return { score, tier }
+  }, [sourceDoc?.ai_confidence])
+
+  const engineSource = useMemo(() => {
+    const metodo = String(sourceDoc?.ai_raw_response?.metodo || '').toLowerCase()
+    if (metodo.includes('ollama') || metodo.includes('xml_deterministico') || metodo.includes('local')) return 'locale'
+    if (metodo.includes('openai') || metodo.includes('online') || metodo.includes('gateway') || metodo.includes('api')) return 'online'
+    return 'sconosciuto'
+  }, [sourceDoc?.ai_raw_response?.metodo])
+
+  const operatorAssistItems = useMemo(
+    () =>
+      buildOperatorAssistItems({
+        doc: sourceDoc,
+        form: {
+          cliente_fornitore_id: header.cliente_fornitore_id,
+          causale_iva_id: ivaUi.causale_iva_id,
+          operator_clarifications: operatorClarifications,
+        },
+        reliability,
+        contoSuggestions,
+        historicalContoSuggestions,
+        causaliIva,
+        includeDocumentType: false,
+        includeAccountMapping: true,
+        includeVatCausale: true,
+        accountFieldName: 'cliente_fornitore_id',
+        accountSearchFieldName: null,
+        aiSourceFieldName: 'cliente_fornitore_da_ai',
+        historicalSourceFieldName: 'cliente_fornitore_da_storico',
+      }),
+    [
+      sourceDoc,
+      header.cliente_fornitore_id,
+      ivaUi.causale_iva_id,
+      operatorClarifications,
+      reliability,
+      contoSuggestions,
+      historicalContoSuggestions,
+      causaliIva,
+    ]
+  )
+
+  const resolveOperatorAssist = (item, option, manualText = '', context = {}) => {
+    if (!item) return
+    if (item.type === 'uncertain_account_mapping') {
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'cliente_fornitore_id')) {
+        runSetHeader((prev) => ({
+          ...prev,
+          cliente_fornitore_id: option?.patch?.cliente_fornitore_id ?? '',
+        }))
+      }
+    }
+    if (item.type === 'uncertain_vat_causale') {
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'causale_iva_id')) {
+        runSetIvaUi((prev) => ({
+          ...prev,
+          causale_iva_id: option?.patch?.causale_iva_id || '',
+        }))
+      }
+    }
+    setOperatorClarifications((prev) => appendOperatorClarification(prev, item, option, manualText, {
+      issue_type: item.type,
+      shown_options: item.options,
+      selected_answer: option?.label || manualText || 'Manuale',
+      rerun_result: context.rerun_result || 'continue',
+      engine_source: engineSource,
+    }))
+    setClarificationModalItem(null)
+  }
 
   useEffect(() => {
     traceStep('STATE_UPDATED', buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap }))
@@ -768,6 +983,8 @@ export function PrimaNotaGuidata({
     runSetPartitarioClosedMap(initialDraft?.partitarioClosedMap || {})
     runSetStato(initialDraft?.stato || 'bozza')
     runSetProgressivo(initialDraft?.progressivo || null)
+    setOperatorClarifications(initialDraft?.operatorClarifications || [])
+    setClarificationModalItem(null)
 
     // Reset completo (evita di trascinare label/aliquota dal documento precedente)
     runSetIvaUi({
@@ -794,10 +1011,11 @@ export function PrimaNotaGuidata({
       meta: initialDraft?.meta || {},
       partitarioClosedMap,
       ivaRows,
-      ivaUi
+      ivaUi,
+      operatorClarifications,
     }
     onDraftChange(draft)
-  }, [stato, progressivo, header, rows, partitarioClosedMap, ivaRows, ivaUi])
+  }, [stato, progressivo, header, rows, partitarioClosedMap, ivaRows, ivaUi, operatorClarifications])
 
   const selectedCausaleIva = useMemo(
     () => causaliIva.find(c => String(c.id) === String(ivaUi.causale_iva_id)) || null,
@@ -962,6 +1180,20 @@ export function PrimaNotaGuidata({
 
   const lastFocusedRowId = useRef(null)
   const onFocusRow = (rowId) => { lastFocusedRowId.current = rowId }
+  const applySuggestedContoToRow = useCallback((suggestion) => {
+    if (!suggestion?.id || stato === 'confermata') return
+    const targetRowId = lastFocusedRowId.current || rows.find((r) => !r.conto_id)?.id || rows[0]?.id
+    if (!targetRowId) return
+    runSetRows((prev) => prev.map((r) => (
+      r.id === targetRowId
+        ? {
+            ...r,
+            conto_id: suggestion.id,
+            descrizione: r.descrizione || suggestion.descrizione,
+          }
+        : r
+    )))
+  }, [rows, runSetRows, stato])
 
   const onConfirm = () => {
     const year = new Date(header.data_registrazione || todayStr()).getFullYear()
@@ -1069,6 +1301,34 @@ export function PrimaNotaGuidata({
       if (complete.error) throw complete.error
       if (complete.partIns?.error) console.error('[PrimaNotaGuidata] partitario insert error', complete.partIns.error)
 
+      const learningCandidate = [...rows]
+        .filter((r) => {
+          const conto = String(r?.conto_id || '').trim()
+          if (!conto) return false
+          if (String(conto) === String(header?.cliente_fornitore_id || '')) return false
+          const desc = String(r?.descrizione || '').toLowerCase()
+          return !desc.includes('iva')
+        })
+        .sort((a, b) => {
+          const va = Math.max(toMoneyNumber(a?.dare), toMoneyNumber(a?.avere))
+          const vb = Math.max(toMoneyNumber(b?.dare), toMoneyNumber(b?.avere))
+          return vb - va
+        })[0] || null
+
+      if (sourceDoc?.id && learningCandidate?.conto_id) {
+        void fetch('/api/accounting/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentId: sourceDoc.id,
+            finalContoId: learningCandidate.conto_id,
+            primaNotaRigaId: learningCandidate.id || null,
+          }),
+        }).catch((error) => {
+          console.warn('[PrimaNotaGuidata] learning feedback', error?.message || error)
+        })
+      }
+
       return { primaNotaId: complete.data?.primaNotaId }
     } catch (e) {
       console.error('[PrimaNotaGuidata] handleSave error', e)
@@ -1090,6 +1350,17 @@ export function PrimaNotaGuidata({
         }
         secondaryAction={
           <>
+            <button
+              className="btn-sec"
+              onClick={() => {
+                setDocPreviewOpen(true)
+              }}
+              disabled={!canPreviewSource}
+              style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}
+              title={canPreviewSource ? 'Apri anteprima documento' : 'Anteprima non disponibile'}
+            >
+              Anteprima
+            </button>
             <button className="btn-sec" onClick={() => onPrev && onPrev()} disabled={!onPrev || !canPrev} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
               ← Fattura precedente
             </button>
@@ -1112,6 +1383,34 @@ export function PrimaNotaGuidata({
             </button>
           )
         }
+      />
+
+      <DocumentPreviewModal
+        open={docPreviewOpen}
+        onClose={() => setDocPreviewOpen(false)}
+        title="Anteprima documento"
+        subtitle={`${sourceDoc?.numero_documento || sourceDatiEstratti?.numero || 'Documento'} · ${sourceDoc?.soggetto_denominazione || sourceDatiEstratti?.cedente_denom || 'Soggetto'}`}
+        fileUrl={sourceFileUrl || ''}
+        filename={sourceDoc?.filename || ''}
+        mimeType={sourceDoc?.mime_type || ''}
+        xmlContent={sourceDatiEstratti?.xml_content || ''}
+        fallback={{
+          tipo_documento: sourceDoc?.tipo_documento,
+          numero_documento: sourceDoc?.numero_documento,
+          data_documento: sourceDoc?.data_documento,
+          soggetto_denominazione: sourceDoc?.soggetto_denominazione,
+          soggetto_piva: sourceDoc?.soggetto_piva,
+          soggetto_cf: sourceDoc?.soggetto_cf,
+          imponibile: sourceDoc?.imponibile,
+          iva: sourceDoc?.iva,
+          totale: sourceDoc?.totale,
+          cedente_denom: sourceDatiEstratti?.cedente_denom,
+          cedente_piva: sourceDatiEstratti?.cedente_piva,
+          cedente_cf: sourceDatiEstratti?.cedente_cf,
+          cessionario_denom: sourceDatiEstratti?.cessionario_denom,
+          cessionario_piva: sourceDatiEstratti?.cessionario_piva,
+          cessionario_cf: sourceDatiEstratti?.cessionario_cf,
+        }}
       />
 
       <div className="erp-flat-panel">
@@ -1145,8 +1444,8 @@ export function PrimaNotaGuidata({
             onChange={(id) => runSetHeader(p => ({ ...p, cliente_fornitore_id: id }))}
             options={clientiFornitori.map(c => ({ ...c, id: c.id }))}
             formatOption={(c) => {
-              const nome = c.ragione_sociale || `${c.nome || ''} ${c.cognome || ''}`.trim()
-              const cod = c.codice_cliente ? `[${c.codice_cliente}] ` : ''
+              const nome = c.descrizione || c.ragione_sociale || `${c.nome || ''} ${c.cognome || ''}`.trim()
+              const cod = c.codice ? `[${c.codice}] ` : ''
               return `${cod}${nome}`.trim()
             }}
             placeholder="Cerca cliente/fornitore…"
@@ -1255,6 +1554,111 @@ export function PrimaNotaGuidata({
               ))}
               </tbody>
             </BaseTable>
+          </div>
+
+          <div style={{ margin: '.75rem 1rem 0' }}>
+            <OperatorAssistPanel
+              items={operatorAssistItems}
+              onResolve={resolveOperatorAssist}
+              onManualResolve={(item, value) => resolveOperatorAssist(item, { id: 'manual', label: value, patch: {} }, value)}
+              onRequestClarification={setClarificationModalItem}
+              title="Chiarimenti guidati"
+            />
+          </div>
+
+          <OperatorClarificationModal
+            open={Boolean(clarificationModalItem)}
+            item={clarificationModalItem}
+            onClose={() => setClarificationModalItem(null)}
+            engineSource={engineSource}
+            subtitle={sourceDoc?.filename || sourceDoc?.numero_documento || 'Scrittura guidata'}
+            onOpenPreview={() => setDocPreviewOpen(true)}
+            onContinue={(item, option, manualText) => resolveOperatorAssist(item, option, manualText, { rerun_result: 'continue' })}
+            onSkip={(item) => resolveOperatorAssist(item, { id: 'skip', label: 'Salta e gestisci manualmente', patch: {} }, '', { rerun_result: 'skip' })}
+            onReviewLater={(item) => resolveOperatorAssist(item, { id: 'review_later', label: 'Rivedi dopo', patch: {} }, '', { rerun_result: 'review_later' })}
+          />
+
+          <div className="erp-flat-panel" style={{ margin: '.75rem 1rem 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+                  SUGGERIMENTI AI
+                </div>
+                {Array.isArray(contoSuggestions) && contoSuggestions.length > 0 ? (
+                  <div style={{ display: 'grid', gap: '.35rem' }}>
+                    {contoSuggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="btn-sec"
+                        onClick={() => applySuggestedContoToRow(s)}
+                        disabled={stato === 'confermata'}
+                        style={{ textAlign: 'left', padding: '.45rem .55rem', borderRadius: 8 }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                          <div style={{ fontWeight: 700 }}>
+                            <code style={{ color: 'var(--gold)' }}>{s.codice}</code> {s.descrizione}
+                          </div>
+                          <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                        </div>
+                        {Array.isArray(s.reasons) && s.reasons.length > 0 && (
+                          <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                            {s.reasons.join(' · ')}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                    Nessun conto da suggerire con sufficiente confidenza.
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: '.68rem', fontWeight: 700, color: '#34c27a', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+                  STORICO CONFERMATO
+                </div>
+                {historicalContoLoading ? (
+                  <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                    Cerco fatture confermate nello storico...
+                  </div>
+                ) : Array.isArray(historicalContoSuggestions) && historicalContoSuggestions.length > 0 ? (
+                  <div style={{ display: 'grid', gap: '.35rem' }}>
+                    {historicalContoSuggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="btn-sec"
+                        onClick={() => applySuggestedContoToRow(s)}
+                        disabled={stato === 'confermata'}
+                        style={{
+                          textAlign: 'left',
+                          padding: '.45rem .55rem',
+                          borderRadius: 8,
+                          background: 'rgba(52,194,122,.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                          <div style={{ fontWeight: 700 }}>
+                            <code style={{ color: '#34c27a' }}>{s.codice}</code> {s.descrizione}
+                          </div>
+                          <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                        </div>
+                        <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                          {Array.isArray(s.reasons) && s.reasons.length > 0 ? s.reasons.join(' · ') : 'Storico confermato'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                    Nessun storico confermato utile trovato.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {!totals.bilanciata && (

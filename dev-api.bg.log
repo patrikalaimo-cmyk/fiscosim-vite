@@ -1,0 +1,10 @@
+
+> fiscosim@5.0.0 dev:api
+> set PORT=3001&& node -r dotenv/config scripts/dev-api.mjs
+
+[dev-api] Porta 3001 già in uso (probabilmente un'altra istanza di dev-api).
+  • Chiudi quella finestra/terminale, oppure termina il processo:
+    netstat -ano | findstr :3001
+    taskkill /PID <PID> /F
+  • Oppure usa un'altra porta (ricorda di allineare vite.config.js → server.proxy['/api'].target):
+    set PORT=3002&& node scripts/dev-api.mjs

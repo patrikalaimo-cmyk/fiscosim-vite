@@ -4,6 +4,7 @@ import { sb } from './lib/supabase'
 // Context
 import { AIStatusProvider, AIBadge } from './context/AIStatusContext'
 import { TestModeBadge } from './context/TestModeContext'
+import { AIDiagnosticsPanel } from './shared/components/AIDiagnosticsPanel'
 
 // Shared
 import { NAV, RUOLI_INFO, PERMESSI_MODULI, FISCAL_KNOWLEDGE_PANEL_SHORTCUT_LABEL } from './shared/constants'
@@ -444,6 +445,7 @@ function App() {
                 <span className="sb-item-label">Guida moduli</span>
               </button>
             </div>
+            <AIDiagnosticsPanel mode="sidebar" />
             <div className="sb-user" style={{ cursor: 'pointer' }} onClick={() => setShowLogoutConfirm(true)} title="Clicca per disconnetterti">
               <div className="sb-avatar">{initials}</div>
               <div className="sb-user-copy" style={{ flex: 1, minWidth: 0 }}>

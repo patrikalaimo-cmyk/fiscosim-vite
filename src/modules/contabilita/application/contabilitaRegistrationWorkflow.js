@@ -132,7 +132,8 @@ async function buildIvaAwarePayload({
       ivaRows,
     pianoConti,
     causaliIva,
-    clientiFornitori: clienti || [],
+    // Counterparty selection is based on Piano dei Conti.
+    clientiFornitori: pianoConti || [],
     clienteFornitoreId: draft?.header?.cliente_fornitore_id || null,
     causaleContabile,
     soggettoNomeFallback: doc?.soggetto_denominazione || '',
@@ -155,6 +156,7 @@ async function buildIvaAwarePayload({
     causale_id: causaleContabile?.id || null,
     causale_codice: causaleContabile?.codice || registrationCausaleCode || (isPassiva ? 'FF' : 'FC'),
     descrizione: descr,
+    cliente_fornitore_id: draft?.header?.cliente_fornitore_id || null,
     cliente_fornitore_nome: doc?.soggetto_denominazione,
     totale_dare: doc?.totale || 0,
     totale_avere: doc?.totale || 0,
@@ -482,6 +484,43 @@ export async function registraDocumentiConfermati({
       )
       if (complete.error || complete.partIns?.error) throw complete.error || complete.partIns?.error
       const pn = complete.pn
+
+      // Open Partitario item for the invoice/parcella (clients/suppliers ledger).
+      // NOTE: this workflow is reached only for imported documents, so it's safe to treat it as a document-based partita.
+      try {
+        const contoId = pnInsertPayload?.cliente_fornitore_id || null
+        if (contoId) {
+          const { data: existingPart } = await contabilitaRepo.getPartitarioByPrimaNotaId(pn.id)
+          const hasExisting = Array.isArray(existingPart) ? existingPart.length > 0 : Boolean(existingPart?.id)
+          if (!hasExisting) {
+            const conto = (pianoConti || []).find((c) => String(c?.id) === String(contoId)) || null
+            const imp = Number(doc?.totale || 0)
+            const d0 = safeJsonParse(doc?.dati_estratti)
+            const dataDoc = (doc?.data_documento || d0?.data_documento || dataReg || '').toString().slice(0, 10) || null
+            const dataScad = (d0?.data_scadenza || d0?.scadenza || dataDoc || '').toString().slice(0, 10) || dataDoc
+            if (imp > 0) {
+              await contabilitaRepo.insertPartitario({
+                societa_id: societaId,
+                tipo: isPassiva ? 'fornitore' : 'cliente',
+                conto_id: contoId,
+                conto_codice: conto?.codice || null,
+                conto_descrizione: conto?.descrizione || pnInsertPayload?.cliente_fornitore_nome || '',
+                prima_nota_id: pn.id,
+                numero_documento: doc?.numero_documento || null,
+                data_documento: dataDoc,
+                data_scadenza: dataScad,
+                importo_originale: imp,
+                importo_pagato: 0,
+                importo_residuo: imp,
+                stato: 'aperta',
+              })
+            }
+          }
+        }
+      } catch (e) {
+        // best effort: never block document registration
+        console.warn('[Partitario] insert failed', e?.message || e)
+      }
 
       const syncRes = await ensureRegistriIvaSync({
         doc,

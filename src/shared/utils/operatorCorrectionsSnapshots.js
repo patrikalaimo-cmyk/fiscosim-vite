@@ -25,6 +25,7 @@ export function buildParsingSnapshotFromImportForm(form, tipo) {
     riepilogo_iva: form.riepilogo_iva ?? null,
     causale: form.causale ?? null,
     linee: form.linee ?? null,
+    operator_clarifications: form.operator_clarifications ?? null,
   }
 }
 
@@ -41,5 +42,7 @@ export function buildAccountingSnapshotFromImportForm(form, pianoConti) {
     conto_codice: c?.codice ?? null,
     conto_descrizione: c?.descrizione ?? null,
     conto_search: form.conto_search ?? null,
+    conto_source: form.conto_da_storico ? 'storico' : form.conto_da_ai ? 'ai' : form.conto_id ? 'manuale' : 'none',
+    operator_clarifications: form.operator_clarifications ?? null,
   }
 }

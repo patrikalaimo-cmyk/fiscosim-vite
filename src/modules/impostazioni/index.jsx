@@ -116,7 +116,7 @@ export function ModuloImpostazioni({ ruolo, utente, onOpenFiscalKnowledgePanel, 
             onClick={() => canEdit && up('test_mode', isTestMode ? 'false' : 'true')}
             style={{ width: 56, height: 30, borderRadius: 15, background: isTestMode ? '#63d9c4' : 'var(--bd2)', cursor: canEdit ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background .2s', opacity: canEdit ? 1 : 0.6 }}
           >
-            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'white', position: 'absolute', top: 3, left: isTestMode ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'var(--bg-main)', position: 'absolute', top: 3, left: isTestMode ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: '.9rem' }}>{isTestMode ? '🧪 Test Mode Attiva' : 'Test Mode Disattiva'}</div>
@@ -152,7 +152,7 @@ export function ModuloImpostazioni({ ruolo, utente, onOpenFiscalKnowledgePanel, 
             onClick={() => canEdit && up('ai_enabled', isAIOn ? 'false' : 'true')}
             style={{ width: 56, height: 30, borderRadius: 15, background: isAIOn ? 'var(--gr)' : 'var(--bd2)', cursor: canEdit ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background .2s', opacity: canEdit ? 1 : 0.6 }}
           >
-            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'white', position: 'absolute', top: 3, left: isAIOn ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'var(--bg-main)', position: 'absolute', top: 3, left: isAIOn ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: '.9rem' }}>{isAIOn ? 'AI Attiva' : 'AI Disattivata'}</div>
@@ -179,7 +179,7 @@ export function ModuloImpostazioni({ ruolo, utente, onOpenFiscalKnowledgePanel, 
             onClick={() => canEdit && up('automazione_pipeline', isAutoPipeline ? 'false' : 'true')}
             style={{ width: 56, height: 30, borderRadius: 15, background: isAutoPipeline ? 'var(--gr)' : 'var(--bd2)', cursor: canEdit ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background .2s', opacity: canEdit ? 1 : 0.6 }}
           >
-            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'white', position: 'absolute', top: 3, left: isAutoPipeline ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+            <div style={{ width: 24, height: 24, borderRadius: 12, background: 'var(--bg-main)', position: 'absolute', top: 3, left: isAutoPipeline ? 29 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: '.9rem' }}>Automazione pipeline</div>

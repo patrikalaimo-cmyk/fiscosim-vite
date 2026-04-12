@@ -617,7 +617,7 @@ function F24RigaModal({riga,clienteNome,locked,onSave,onClose}){
               <label>F24 a zero</label>
               <div onClick={()=>!locked&&up('f24_zero',!form.f24_zero)} style={{display:'flex',alignItems:'center',gap:'.5rem',cursor:locked?'not-allowed':'pointer',padding:'.42rem 0',opacity:locked?.5:1}}>
                 <div style={{width:36,height:20,background:form.f24_zero?'var(--bl)':'var(--bd)',borderRadius:10,position:'relative',transition:'background .2s',flexShrink:0}}>
-                  <div style={{position:'absolute',top:3,left:form.f24_zero?19:3,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                  <div style={{position:'absolute',top:3,left:form.f24_zero?19:3,width:14,height:14,borderRadius:'50%',background:'var(--bg-main)',transition:'left .2s'}}/>
                 </div>
                 <span style={{fontSize:'.8rem',color:form.f24_zero?'var(--bl)':'var(--mu)'}}>{form.f24_zero?'Sì':'No'}</span>
               </div>

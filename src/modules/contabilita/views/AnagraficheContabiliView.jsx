@@ -1288,7 +1288,7 @@ function AnagraficaTab({form, up, conto, B}){
           </div>
           <div onClick={()=>up('split_payment',!form.split_payment)}
             style={{width:40,height:22,borderRadius:11,background:form.split_payment?'var(--gold)':'var(--bd2)',position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0}}>
-            <div style={{width:16,height:16,borderRadius:8,background:'#fff',position:'absolute',top:3,left:form.split_payment?21:3,transition:'left .2s'}}/>
+            <div style={{width:16,height:16,borderRadius:8,background:'var(--bg-main)',position:'absolute',top:3,left:form.split_payment?21:3,transition:'left .2s'}}/>
           </div>
         </div>
         {form.split_payment&&(
@@ -1315,7 +1315,7 @@ function ModalEditConto({conto,onSave,onClose}){
   const [tab,setTab]=useState('generale');
   const B=({k,lbl})=>(<div style={{display:'flex',alignItems:'center',gap:'.5rem',cursor:'pointer',marginTop:'.35rem'}} onClick={()=>up(k,!form[k])}>
     <div style={{width:28,height:16,borderRadius:8,background:form[k]?'var(--gold)':'var(--bd2)',position:'relative',transition:'background .2s',flexShrink:0}}>
-      <div style={{width:12,height:12,borderRadius:6,background:'#fff',position:'absolute',top:2,left:form[k]?14:2,transition:'left .2s'}}/>
+      <div style={{width:12,height:12,borderRadius:6,background:'var(--bg-main)',position:'absolute',top:2,left:form[k]?14:2,transition:'left .2s'}}/>
     </div><span style={{fontSize:'.78rem',color:'var(--mu)'}}>{lbl}</span>
   </div>);
   const [form,setForm]=useState({
@@ -1544,7 +1544,7 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
   const [tab,setTab]=useState('principale');
   const B=({k,lbl,small})=>(<div style={{display:'flex',alignItems:'center',gap:'.4rem',cursor:'pointer',marginTop:'.3rem'}} onClick={()=>up(k,!form[k])}>
     <div style={{width:26,height:14,borderRadius:7,background:form[k]?'var(--gold)':'var(--bd2)',position:'relative',flexShrink:0}}>
-      <div style={{width:10,height:10,borderRadius:5,background:'#fff',position:'absolute',top:2,left:form[k]?14:2,transition:'left .15s'}}/>
+      <div style={{width:10,height:10,borderRadius:5,background:'var(--bg-main)',position:'absolute',top:2,left:form[k]?14:2,transition:'left .15s'}}/>
     </div>
     <span style={{fontSize:small?'.72rem':'.78rem',color:'var(--mu)'}}>{lbl}</span>
   </div>);

@@ -70,13 +70,27 @@ export function inferPercipienteCandidate(documentRow) {
   const partitaIva = normVat(documentRow?.soggetto_piva || estratti?.cedente_piva || '')
   const tipoDocumento = String(documentRow?.tipo_documento || '').toLowerCase()
 
-  const professionalHints = /(parcella|prestazione|compenso|onorario|consulenza|ritenuta|contributo integrativo|rivalsa|professionista|avv\.?|commercialista|architetto|ingegnere|geometra|notaio|medico)/i
+  // Strong professional cues (do NOT include generic "prestazione/consulenza/compenso" as they cause false positives).
+  const professionalHintsStrong =
+    /(parcella|onorario|ritenuta|contributo integrativo|rivalsa|professionista|avv\.?|commercialista|architetto|ingegnere|geometra|notaio|medico)/i
   const td03Hint = /<tipodocumento>\s*td03\s*<\/tipodocumento>/i.test(rawText)
   const td06Hint = /<tipodocumento>\s*td06\s*<\/tipodocumento>/i.test(rawText)
   const isPassiveInvoice = tipoDocumento.includes('fattura_passiva') || tipoDocumento.includes('td03') || tipoDocumento.includes('td06')
-  const hasProfessionalSignal = professionalHints.test(rawText) || td03Hint || td06Hint
+  const hasWithholdingXml =
+    /<\s*datiritenuta\b/i.test(rawText) ||
+    /<\s*(?:importoritenuta|aliquotaritenuta)\b/i.test(rawText)
+  const withholdingRateInText = inferRitenutaRate(rawText)
+  const hasWithholdingText =
+    /\britenut[ae]\b/i.test(rawText) ||
+    /ritenuta\s+d['â€™]acconto/i.test(rawText) ||
+    /rit\.\s*acc/i.test(rawText) ||
+    /acconto\s+irpef/i.test(rawText)
+  const hasExplicitWithholding = Boolean(hasWithholdingXml || hasWithholdingText || withholdingRateInText != null)
+  const hasProfessionalSignal = professionalHintsStrong.test(rawText) || td03Hint || td06Hint || hasExplicitWithholding
 
-  if (!isPassiveInvoice || !hasProfessionalSignal) {
+  // Strict rule: we sync/create Percipienti only when there is explicit withholding evidence.
+  // This prevents normal passive invoices from ever ending up in Percipienti by mistake.
+  if (!isPassiveInvoice || !hasExplicitWithholding) {
     return {
       relevant: false,
       signals: {
@@ -86,7 +100,8 @@ export function inferPercipienteCandidate(documentRow) {
         td06Hint,
         inferredRegime: '',
         expectedWithholding: false,
-        withholdingRateInText: null,
+        hasExplicitWithholding,
+        withholdingRateInText,
         cassaRateInText: null,
         rivalsaRateInText: null,
         hasCodiceFiscale: Boolean(codiceFiscale),
@@ -99,11 +114,12 @@ export function inferPercipienteCandidate(documentRow) {
   const addressParts = extractAddressParts(fullAddress)
   const inferredTipo = /collabor/i.test(rawText) ? 'collaboratore' : 'professionista'
   const inferredRegime = /forfett/i.test(rawText) ? 'forfettario' : ''
-  const inferredRitenutaRate = inferRitenutaRate(rawText)
+  const inferredRitenutaRate = withholdingRateInText
   const inferredCassaRate = inferCassaRate(rawText)
   const inferredRivalsaRate = inferRivalsaRate(rawText)
   const imponibile = Number(documentRow?.imponibile || documentRow?.totale || 0)
-  const expectedWithholding = /ritenuta|prestazione|onorario|parcella|compenso/i.test(rawText) && inferredRegime !== 'forfettario'
+  // Percipiente logic is strict: consider withholding only with explicit fiscal evidence.
+  const expectedWithholding = hasExplicitWithholding && inferredRegime !== 'forfettario'
 
   return {
     relevant: true,
@@ -114,6 +130,7 @@ export function inferPercipienteCandidate(documentRow) {
       td06Hint,
       inferredRegime,
       expectedWithholding,
+      hasExplicitWithholding,
       withholdingRateInText: inferredRitenutaRate,
       cassaRateInText: inferredCassaRate,
       rivalsaRateInText: inferredRivalsaRate,
@@ -188,6 +205,13 @@ export function classifyPercipienteOutcome({ documentRow, inferred, matchedPerci
     Number(candidate?.aliquota_ritenuta || 0) > 0 ||
     Boolean(signals?.withholdingRateInText)
 
+  // Guardrail: never treat as Percipiente without strong withholding evidence.
+  if (!hasWithholdingSetup && !signals?.hasExplicitWithholding) {
+    out.outcome = 'generic_supplier'
+    out.reasons.push('Nessuna ritenuta rilevata: documento trattato come fattura passiva standard (non Percipiente).')
+    return out
+  }
+
   let score = 0
   if (signals?.td03Hint || signals?.td06Hint) {
     score += 3
@@ -211,12 +235,6 @@ export function classifyPercipienteOutcome({ documentRow, inferred, matchedPerci
     out.reasons.push('Codice fiscale non rilevato: evidenza incompleta.')
   }
   if (hasPiva) score += 1
-
-  const isForfettario = String(candidate?.regime_fiscale || '').toLowerCase() === 'forfettario'
-  if (isForfettario) {
-    score += 2
-    out.reasons.push('Regime forfettario rilevato nel documento.')
-  }
 
   if (score >= 7) {
     out.outcome = 'confirmed_percipiente'
@@ -242,4 +260,3 @@ export function findExistingPercipiente(existingRows, candidate) {
     return name && norm(row.ragione_sociale || `${row.cognome || ''} ${row.nome || ''}`.trim()) === name
   })
 }
-

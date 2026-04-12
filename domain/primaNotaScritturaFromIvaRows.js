@@ -16,6 +16,10 @@ export function isCausaleAcquistoPassiva(causaleContabile) {
 
 function findContoClienteFornitore({ pianoConti, cliente, isPassiva }) {
   if (!cliente) return null
+  // If the "cliente" already is a piano_conti row (preferred model), use it directly.
+  if (cliente?.id && cliente?.livello != null && (cliente?.codice || cliente?.descrizione)) {
+    return cliente
+  }
   const piva = cliente.partita_iva ? String(cliente.partita_iva).trim() : ''
   const denom = cliente.ragione_sociale || `${cliente.nome || ''} ${cliente.cognome || ''}`.trim()
   const byPiva = piva
@@ -105,7 +109,7 @@ export function buildScritturaRowsFromIvaRows({
     ? clientiFornitori.find(c => String(c.id) === String(clienteFornitoreId))
     : null
   const nomeSoggetto = cli
-    ? (cli.ragione_sociale || `${cli.nome || ''} ${cli.cognome || ''}`.trim())
+    ? (cli.descrizione || cli.ragione_sociale || `${cli.nome || ''} ${cli.cognome || ''}`.trim())
     : String(soggettoNomeFallback || '').trim() || (isPassiva ? 'Fornitore' : 'Cliente')
 
   const contoSoggetto = findContoClienteFornitore({ pianoConti, cliente: cli, isPassiva: isPassiva })

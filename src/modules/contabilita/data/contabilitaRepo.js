@@ -38,6 +38,155 @@ export function getDocumenti(societaId) {
     .order('created_at', { ascending: false })
 }
 
+export function getArchivioStoricoAiDocumenti(societaIds = [], { limit = 5000 } = {}) {
+  const ids = Array.from(new Set((Array.isArray(societaIds) ? societaIds : []).map((id) => String(id || '').trim()).filter(Boolean)))
+  const select = 'id,societa_id,numero_documento,data_documento,tipo_documento,soggetto_denominazione,soggetto_piva,soggetto_cf,validation_status,workflow_status,conto_id,imponibile,iva,totale,causale_iva,causale_iva_codice,source_document_id,dati_estratti,created_at'
+
+  if (!ids.length) {
+    return Promise.resolve({ data: [], error: null })
+  }
+
+  return Promise.all(
+    ids.map(async (societaId) => {
+      const { data, error } = await sb
+        .from('documenti_contabilita')
+        .select(select)
+        .eq('societa_id', societaId)
+        .limit(limit)
+      if (error) throw error
+      return Array.isArray(data) ? data : []
+    })
+  )
+    .then((chunks) => {
+      const merged = []
+      const seen = new Set()
+      for (const chunk of chunks) {
+        for (const row of chunk || []) {
+          const key = String(row?.id || '')
+          if (!key || seen.has(key)) continue
+          seen.add(key)
+          merged.push(row)
+        }
+      }
+      merged.sort((a, b) => {
+        const da = String(a?.data_documento || '')
+        const db = String(b?.data_documento || '')
+        if (db !== da) return db.localeCompare(da)
+        const ca = String(a?.created_at || '')
+        const cb = String(b?.created_at || '')
+        return cb.localeCompare(ca)
+      })
+      return { data: merged.slice(0, limit), error: null }
+    })
+    .catch((error) => ({ data: [], error }))
+}
+
+export function getArchivioStoricoAiLearning(societaIds = [], { limit = 5000 } = {}) {
+  const ids = Array.from(new Set((Array.isArray(societaIds) ? societaIds : []).map((id) => String(id || '').trim()).filter(Boolean)))
+  const select = 'id,societa_id,anagrafica_id,conto_id,frequenza,confidence_score,ultimo_utilizzo,created_at'
+
+  if (!ids.length) {
+    return Promise.resolve({ data: [], error: null })
+  }
+
+  return Promise.all(
+    ids.map(async (societaId) => {
+      const { data, error } = await sb
+        .from('ai_learning')
+        .select(select)
+        .eq('societa_id', societaId)
+        .limit(limit)
+      if (error) throw error
+      return Array.isArray(data) ? data : []
+    })
+  )
+    .then((chunks) => {
+      const merged = []
+      const seen = new Set()
+      for (const chunk of chunks) {
+        for (const row of chunk || []) {
+          const key = String(row?.id || '')
+          if (!key || seen.has(key)) continue
+          seen.add(key)
+          merged.push(row)
+        }
+      }
+      merged.sort((a, b) => {
+        const cb = Number(b?.confidence_score || 0)
+        const ca = Number(a?.confidence_score || 0)
+        if (cb !== ca) return cb - ca
+        const fb = Number(b?.frequenza || 0)
+        const fa = Number(a?.frequenza || 0)
+        if (fb !== fa) return fb - fa
+        const ub = String(b?.ultimo_utilizzo || '')
+        const ua = String(a?.ultimo_utilizzo || '')
+        return ub.localeCompare(ua)
+      })
+      return { data: merged.slice(0, limit), error: null }
+    })
+    .catch((error) => ({ data: [], error }))
+}
+
+export function getSocietaByIds(ids = []) {
+  const cleanIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean)))
+  if (!cleanIds.length) return Promise.resolve({ data: [], error: null })
+  return Promise.all(
+    cleanIds.map(async (id) => {
+      const { data, error } = await sb.from('societa').select('id,denominazione,codice,attiva').eq('id', id).limit(1)
+      if (error) throw error
+      return Array.isArray(data) ? data : []
+    })
+  )
+    .then((chunks) => {
+      const merged = []
+      const seen = new Set()
+      for (const chunk of chunks) {
+        for (const row of chunk || []) {
+          const key = String(row?.id || '')
+          if (!key || seen.has(key)) continue
+          seen.add(key)
+          merged.push(row)
+        }
+      }
+      merged.sort((a, b) => String(a?.denominazione || '').localeCompare(String(b?.denominazione || ''), 'it'))
+      return { data: merged, error: null }
+    })
+    .catch((error) => ({ data: [], error }))
+}
+
+export function getPianoContiBySocietaIds(ids = []) {
+  const cleanIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean)))
+  const select = 'id,societa_id,codice,descrizione,partita_iva,anagrafica_piva,anagrafica_cf,is_cliente,is_fornitore,is_professionista,livello,attivo'
+  if (!cleanIds.length) return Promise.resolve({ data: [], error: null })
+  return Promise.all(
+    cleanIds.map(async (societaId) => {
+      const { data, error } = await sb
+        .from('piano_conti')
+        .select(select)
+        .eq('societa_id', societaId)
+        .eq('attivo', true)
+        .limit(3000)
+      if (error) throw error
+      return Array.isArray(data) ? data : []
+    })
+  )
+    .then((chunks) => {
+      const merged = []
+      const seen = new Set()
+      for (const chunk of chunks) {
+        for (const row of chunk || []) {
+          const key = String(row?.id || '')
+          if (!key || seen.has(key)) continue
+          seen.add(key)
+          merged.push(row)
+        }
+      }
+      merged.sort((a, b) => String(a?.codice || '').localeCompare(String(b?.codice || ''), 'it'))
+      return { data: merged, error: null }
+    })
+    .catch((error) => ({ data: [], error }))
+}
+
 export function getDocumentiContabilitaBySoggettoPiva(piva) {
   return sb
     .from('documenti_contabilita')
@@ -83,6 +232,78 @@ export function getScrittureRecenti(societaId) {
     .limit(100)
 }
 
+export function getPrimaNotaConsultazioneRows(
+  societaId,
+  {
+    dateFrom = null,
+    dateTo = null,
+    contoIds = [],
+    causaliContabili = [],
+    causaliIva = [],
+  } = {}
+) {
+  return sb
+    .from('prima_nota')
+    .select('id, societa_id, numero_registrazione, data_registrazione, data_documento, numero_documento, causale_codice, causale_iva_codice, descrizione, cliente_fornitore_id, cliente_fornitore_nome, stato')
+    .eq('societa_id', societaId)
+    .gte('data_registrazione', dateFrom || '0001-01-01')
+    .lte('data_registrazione', dateTo || '9999-12-31')
+    .then(async ({ data: headers, error }) => {
+      if (error) return { data: [], error }
+      const headerList = Array.isArray(headers) ? headers : []
+      const headerById = new Map(headerList.map((h) => [String(h.id), h]))
+      const pnIds = headerList.map((h) => h.id).filter(Boolean)
+      if (!pnIds.length) return { data: [], error: null }
+
+      const rowsRes = await sb
+        .from('prima_nota_righe')
+        .select('id, riga_numero, prima_nota_id, conto_id, conto_codice, conto_descrizione, descrizione_riga, dare, avere, importo_dare, importo_avere, causale_iva_codice, tipo_riga_auto, iva_row_id')
+        .in('prima_nota_id', pnIds)
+
+      if (rowsRes.error) return { data: [], error: rowsRes.error }
+
+      const rows = (rowsRes.data || [])
+        .map((r) => {
+          const pn = headerById.get(String(r.prima_nota_id)) || null
+          if (!pn) return null
+          return {
+            id: r.id,
+            riga_numero: r.riga_numero,
+            conto_id: r.conto_id,
+            conto_codice: r.conto_codice,
+            conto_descrizione: r.conto_descrizione,
+            descrizione_riga: r.descrizione_riga,
+            dare: r.dare,
+            avere: r.avere,
+            importo_dare: r.importo_dare,
+            importo_avere: r.importo_avere,
+            causale_iva_codice: r.causale_iva_codice || pn.causale_iva_codice || '',
+            tipo_riga_auto: r.tipo_riga_auto,
+            iva_row_id: r.iva_row_id,
+            prima_nota: pn,
+          }
+        })
+        .filter(Boolean)
+        .filter((r) => {
+          if (Array.isArray(contoIds) && contoIds.length > 0 && !contoIds.includes(r.conto_id)) return false
+          if (Array.isArray(causaliContabili) && causaliContabili.length > 0 && !causaliContabili.includes(r.prima_nota?.causale_codice)) return false
+          if (Array.isArray(causaliIva) && causaliIva.length > 0 && !causaliIva.includes(r.causale_iva_codice)) return false
+          return true
+        })
+        .sort((a, b) => {
+          const da = String(a.prima_nota?.data_registrazione || '')
+          const db = String(b.prima_nota?.data_registrazione || '')
+          if (da !== db) return da.localeCompare(db)
+          const na = Number(a.prima_nota?.numero_registrazione || 0)
+          const nb = Number(b.prima_nota?.numero_registrazione || 0)
+          if (na !== nb) return na - nb
+          return Number(a.riga_numero || 0) - Number(b.riga_numero || 0)
+        })
+
+      return { data: rows.slice(0, 10000), error: null }
+    })
+}
+
 export function getAccountingEntriesByDocumentId(documentId) {
   return sb
     .from('accounting_entries')
@@ -90,6 +311,50 @@ export function getAccountingEntriesByDocumentId(documentId) {
     .eq('document_id', documentId)
     .order('created_at', { ascending: false })
     .limit(5)
+}
+
+export function getHistoricalConfirmedDocumentsForCounterparty({ piva = '', cf = '', nomeLike = '', limit = 80 } = {}) {
+  const select = 'id, societa_id, conto_id, numero_documento, data_documento, tipo_documento, soggetto_denominazione, soggetto_piva, soggetto_cf, causale_iva, causale_iva_codice, validation_status, created_at'
+  const base = sb
+    .from('documenti_contabilita')
+    .select(select)
+
+  const queries = []
+  if (piva) {
+    queries.push(base.eq('soggetto_piva', piva))
+  }
+  if (cf) {
+    queries.push(base.eq('soggetto_cf', cf))
+  }
+  if (!queries.length && nomeLike) {
+    queries.push(base.ilike('soggetto_denominazione', `%${String(nomeLike).slice(0, 24)}%`))
+  }
+  if (!queries.length) return Promise.resolve({ data: [], error: null })
+
+  return Promise.all(
+    queries.map(async (q) => {
+      const { data, error } = await q.limit(limit)
+      if (error) throw error
+      return Array.isArray(data) ? data : []
+    })
+  )
+    .then((chunks) => {
+      const merged = []
+      const seen = new Set()
+      for (const chunk of chunks) {
+        for (const row of chunk || []) {
+          if (String(row?.validation_status || '').toLowerCase() !== 'confirmed') continue
+          if (String(row?.conto_id || '').trim() === '') continue
+          const key = String(row?.id || '')
+          if (!key || seen.has(key)) continue
+          seen.add(key)
+          merged.push(row)
+        }
+      }
+      merged.sort((a, b) => String(b?.data_documento || '').localeCompare(String(a?.data_documento || '')))
+      return { data: merged.slice(0, limit), error: null }
+    })
+    .catch((error) => ({ data: [], error }))
 }
 
 export function insertAccountingEntry(payload) {
@@ -202,7 +467,7 @@ export function bulkDeactivatePianoConti(ids) {
 }
 
 export function insertPianoConto(payload) {
-  return sb.from('piano_conti').insert([payload])
+  return sb.from('piano_conti').insert([payload]).select('*').maybeSingle()
 }
 
 export function getPianoContiBasic(societaId) {
@@ -304,6 +569,20 @@ export function getMovimentiBancariRecenti(societaId) {
 
 export function getPartitarioAperto(societaId) {
   return sb.from('partitario').select('*').eq('societa_id', societaId).eq('stato', 'aperta')
+}
+
+export function getPartitarioBySocieta(societaId, { stato = null } = {}) {
+  let q = sb.from('partitario').select('*').eq('societa_id', societaId).order('data_scadenza', { ascending: true })
+  if (stato) q = q.eq('stato', stato)
+  return q
+}
+
+export function getPartitarioByPrimaNotaId(primaNotaId) {
+  return sb.from('partitario').select('id').eq('prima_nota_id', primaNotaId).limit(1)
+}
+
+export function insertPartitario(payload) {
+  return sb.from('partitario').insert([payload]).select().single()
 }
 
 export function insertContoBancario(payload) {

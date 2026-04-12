@@ -256,10 +256,10 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
               <button className="btn" onClick={stampaPDF}>🖨️ Stampa / PDF</button>
             </div>
           </div>
-          <div style={{background:'white',borderRadius:8,padding:'1rem',maxHeight:500,overflow:'auto'}}>
+          <div style={{background:'var(--bg-surface)',border:'1px solid var(--border-subtle)',borderRadius:12,padding:'1rem',maxHeight:500,overflow:'auto'}}>
             <iframe 
               srcDoc={previewHtml} 
-              style={{width:'100%',height:450,border:'none',borderRadius:4}}
+              style={{width:'100%',height:450,border:'none',borderRadius:8,background:'var(--bg-card)'}}
               title="Anteprima stampa"
             />
           </div>

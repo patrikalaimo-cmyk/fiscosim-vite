@@ -25,6 +25,8 @@ import { runPrimaNotaBulkUpdate } from '../services/primaNotaBulkUpdateService.j
 import { getSupabaseAdmin } from '../lib/db.js'
 import { runAutoValidateOnAccountingEntries } from '../services/autoValidateAccountingEngine.js'
 import { recordAiAccountingFeedback, recordAiAccountingFeedbackBatch } from '../services/aiAccountingFeedbackService.js'
+import { diagnosticsHandler } from '../services/api/ai/diagnostics.js'
+import { startLocalAi } from '../services/aiDiagnosticsService.js'
 import { propostaContabileHandler } from '../services/api/accounting/proposta-contabile.js'
 import { copilotAccountingHandler } from '../services/api/accounting/copilot-accounting.js'
 import { runProactiveInsightEngine } from '../services/proactiveInsightEngine.js'
@@ -133,6 +135,16 @@ const server = http.createServer(async (req, res) => {
               : ''
           return send(res, 502, { error: base + hint })
         }
+      }
+
+      if (action === 'diagnostics') {
+        const out = await diagnosticsHandler({ body })
+        return send(res, out.status, out.json)
+      }
+
+      if (action === 'start_local') {
+        const data = await startLocalAi({ allowSpawn: true })
+        return send(res, 200, { ok: true, local: data })
       }
 
       if (action === 'claude' || action === 'test_claude') {

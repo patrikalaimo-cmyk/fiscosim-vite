@@ -65,14 +65,22 @@ export function extractParcellaInvoiceSignals(documentRow) {
   const hasCassa = /(cassa\s+(previdenziale|professionale)|contributo\s+integrativo)/i.test(lower)
   const hasInps = /\b(inps|gestione\s+separata)\b/i.test(lower)
   const hasEnasarco = /\benasarco\b/i.test(lower)
-  const likelyWithholding =
-    /(ritenuta|prestazione|onorario|compenso|parcella|autonomo|consulenza)/i.test(lower) && !isForfettario
+  // Strong evidence: explicit withholding wording (avoid generic "consulenza/prestazione" false positives).
+  const hasExplicitWithholding =
+    /\britenut[ae]\b/i.test(lower) ||
+    /ritenuta\s+d['’]acconto/i.test(lower) ||
+    /rit\.\s*acc/i.test(lower) ||
+    /acconto\s+irpef/i.test(lower)
+
+  // Weak evidence: document language compatible with professional invoice, but not sufficient alone.
+  const hasParcellaWord = /\bparcella\b/i.test(lower) || /\bonorar(?:io|i)\b/i.test(lower)
+  const weakProfessionalWording =
+    /(prestazione|compenso|autonomo|consulenza|professionista)/i.test(lower) && !isForfettario
+
+  const likelyWithholding = (hasExplicitWithholding || hasParcellaWord || weakProfessionalWording) && !isForfettario
 
   const specialCausale =
-    /\bq\b/.test(lower) ? 'Q'
-    : /\br\b/.test(lower) ? 'R'
-    : /\bs\b/.test(lower) ? 'S'
-    : /\bt\b/.test(lower) ? 'T'
+    /(provvigioni|agente|intermediari|mediazione)/i.test(lower) ? 'Q'
     : null
 
   const suggestedCausale = isDirittiAutore ? 'B' : isOccasionale ? 'M' : specialCausale || 'A'
@@ -88,6 +96,9 @@ export function extractParcellaInvoiceSignals(documentRow) {
     hasInps,
     hasEnasarco,
     isForfettario,
+    hasExplicitWithholding,
+    hasParcellaWord,
+    weakProfessionalWording,
     likelyWithholding,
     suggestedCausale,
   }
@@ -98,16 +109,19 @@ export function isProfessionalParcellaDocument(documentRow) {
   if (!tipoDocumento.includes('passiva') && !tipoDocumento.includes('td03') && !tipoDocumento.includes('td06')) {
     return false
   }
+  const estratti = safeJsonParse(documentRow?.dati_estratti)
+  if (estratti?.parcella_confirmation || estratti?.parcella_audit) return true
   const signals = extractParcellaInvoiceSignals(documentRow)
+  // Parcella flow is strict: require strong fiscal evidence, avoid TD01 generic passive invoices.
   return Boolean(
     signals.isDirittiAutore ||
       signals.isOccasionale ||
-      signals.isForfettario ||
-      signals.likelyWithholding ||
       signals.hasCassa ||
       signals.hasInps ||
       signals.hasEnasarco ||
-      signals.isArt15
+      signals.hasExplicitWithholding ||
+      // "Parcella/onorario" is meaningful, but still require non-forfettario context.
+      (signals.hasParcellaWord && !signals.isForfettario)
   )
 }
 

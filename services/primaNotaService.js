@@ -1,4 +1,4 @@
-import { sb } from '../src/lib/supabase'
+import { sb } from '../src/lib/supabase.js'
 
 export async function createPrimaNota({
   db = sb,
@@ -82,6 +82,14 @@ export async function createPrimaNotaCompleta({
       ...r,
     }))
     partIns = await insertPrimaNotaPartitario({ db, partEntries: partEntriesWithPrimaNotaId, partitarioSelect })
+    if (!partIns.error) {
+      // Update the open items ledger (partitario) so residuals/states are consistent across the app.
+      try {
+        await applyPartitarioClosures(db, { primaNotaId, partEntries: partEntriesWithPrimaNotaId })
+      } catch {
+        // best effort: never block PN creation for a closure side effect
+      }
+    }
   }
   if (partIns?.error) {
     return {
@@ -99,5 +107,42 @@ export async function createPrimaNotaCompleta({
     pn,
     righeIns,
     partIns,
+  }
+}
+
+async function applyPartitarioClosures(db, { primaNotaId, partEntries }) {
+  const grouped = new Map()
+  for (const r of partEntries || []) {
+    const id = r?.documento_id
+    if (!id) continue
+    const imp = Number(String(r?.importo_chiuso ?? 0).replace(',', '.')) || 0
+    grouped.set(String(id), (grouped.get(String(id)) || 0) + imp)
+  }
+
+  for (const [partitaId, inc] of grouped.entries()) {
+    if (!inc || inc <= 0) continue
+    const { data: p, error } = await db
+      .from('partitario')
+      .select('id, importo_originale, importo_pagato')
+      .eq('id', partitaId)
+      .maybeSingle()
+    if (error || !p?.id) continue
+
+    const original = Number(p.importo_originale || 0)
+    const pagato = Number(p.importo_pagato || 0) + inc
+    const residuo = Math.round((original - pagato) * 100) / 100
+    const chiusa = residuo <= 0.01
+    const stato = chiusa ? 'chiusa' : 'parziale'
+
+    const updates = {
+      importo_pagato: Math.round(pagato * 100) / 100,
+      importo_residuo: Math.max(0, residuo),
+      stato,
+      chiusa_da_prima_nota_id: chiusa ? primaNotaId : null,
+      data_chiusura: chiusa ? new Date().toISOString().slice(0, 10) : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    await db.from('partitario').update(updates).eq('id', partitaId)
   }
 }
