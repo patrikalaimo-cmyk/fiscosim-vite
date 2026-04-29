@@ -1,0 +1,546 @@
+import { parseFatturaFile } from './importContabilitaParser.js'
+import { buildBatchReport, buildStagingRow } from './importContabilitaBuilders.js'
+import { normalizeImportContabilitaInputFiles } from './importContabilitaInputNormalizer.js'
+import { createEmptyParsedDocument } from '../domain/parserContract.js'
+import { loadImportContabilitaDedupCandidatesBySocieta } from '../data/importContabilitaRepo.js'
+import { REPORT_OUTCOMES } from '../domain/reportContract.js'
+
+function normalizeText(value) {
+  return String(value || '').trim()
+}
+
+function makeBatchId(options = {}) {
+  const explicit = normalizeText(options.batchId)
+  if (explicit) return explicit
+  return `ic-${Date.now()}`
+}
+
+function createParseErrorParsedDoc(fileLike, error, options = {}) {
+  const parsed = createEmptyParsedDocument()
+  parsed.filename = normalizeText(fileLike?.name || options.filename || '')
+  parsed.sourceHash = normalizeText(options.sourceHash || '')
+  parsed.errors = [
+    {
+      code: 'parse_failed',
+      message: error?.message || 'Errore sconosciuto durante il parsing.',
+    },
+  ]
+  return parsed
+}
+
+function normalizeKeyText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeDateKey(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized) return ''
+  return normalized.slice(0, 10)
+}
+
+function normalizeMoneyKey(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const compact = raw.replace(/\s+/g, '').replace(/[^0-9,.-]/g, '')
+  const normalized = compact.includes(',') && compact.includes('.')
+    ? compact.replace(/\./g, '').replace(',', '.')
+    : compact.includes(',')
+      ? compact.replace(',', '.')
+      : compact
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) return ''
+  return parsed.toFixed(2)
+}
+
+function normalizePartyToken(value) {
+  return normalizeKeyText(value)
+}
+
+function collectPartyTokens(source) {
+  const tokens = new Set()
+  const push = (value) => {
+    const token = normalizePartyToken(value)
+    if (token) tokens.add(token)
+  }
+
+  if (!source || typeof source !== 'object') return tokens
+  push(source.piva)
+  push(source.partitaIva)
+  push(source.cf)
+  push(source.codiceFiscale)
+  push(source.denominazione)
+  push(source.descrizione)
+  push(source.ragioneSociale)
+  push(source.nome)
+  push(source.cognome)
+  return tokens
+}
+
+function extractAiRawObject(raw) {
+  if (!raw) return {}
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+function collectParsedDocTokens(parsedDoc) {
+  const tokens = new Set()
+  for (const value of collectPartyTokens(parsedDoc?.fornitore)) tokens.add(value)
+  for (const value of collectPartyTokens(parsedDoc?.cliente)) tokens.add(value)
+  return tokens
+}
+
+function collectStagingRowTokens(row) {
+  const raw = extractAiRawObject(row?.ai_raw_response || row?.aiRawResponse || null)
+  const tokens = new Set()
+  const add = (value) => {
+    const token = normalizePartyToken(value)
+    if (token) tokens.add(token)
+  }
+
+  add(raw?.cedente_piva)
+  add(raw?.cedente_cf)
+  add(raw?.cedente_denom)
+  add(raw?.cedente_denominazione)
+  add(raw?.cessionario_piva)
+  add(raw?.cessionario_cf)
+  add(raw?.cessionario_denom)
+  add(raw?.cessionario_denominazione)
+  add(row?.cedente_piva)
+  add(row?.cedente_cf)
+  add(row?.cedente_denom)
+  add(row?.cedente_denominazione)
+  add(row?.cessionario_piva)
+  add(row?.cessionario_cf)
+  add(row?.cessionario_denom)
+  add(row?.cessionario_denominazione)
+  add(row?.soggetto_piva)
+  add(row?.soggetto_cf)
+  add(row?.soggetto_denominazione)
+  return tokens
+}
+
+function collectAccountingRowTokens(row) {
+  const tokens = new Set()
+  const add = (value) => {
+    const token = normalizePartyToken(value)
+    if (token) tokens.add(token)
+  }
+
+  add(row?.soggetto_piva)
+  add(row?.soggetto_cf)
+  add(row?.soggetto_denominazione)
+  add(row?.cliente_fornitore_nome)
+  return tokens
+}
+
+function buildDedupKeyVariants({
+  tipoDocumento,
+  numeroDocumento,
+  dataDocumento,
+  totale,
+  tokens = [],
+}) {
+  const tipo = normalizeKeyText(tipoDocumento)
+  const numero = normalizeKeyText(numeroDocumento)
+  const data = normalizeDateKey(dataDocumento)
+  const total = normalizeMoneyKey(totale)
+  const tokenList = Array.from(new Set(Array.isArray(tokens) ? tokens : []))
+  if (!tipo || !numero || !data || !total || !tokenList.length) return new Set()
+
+  const base = `${tipo}|${numero}|${data}|${total}|`
+  return new Set(tokenList.map((token) => `${base}${token}`))
+}
+
+function getParsedDocKey(parsedDoc) {
+  return normalizeText(parsedDoc?.id || parsedDoc?.sourceHash || parsedDoc?.filename)
+}
+
+function normalizeDedupSourceRow(row) {
+  return row && typeof row === 'object' ? row : null
+}
+
+function isActiveStagingRow(row) {
+  const stato = normalizeKeyText(row?.stato)
+  return ['pending', 'classified', 'manual_pending'].includes(stato)
+}
+
+function isDeletedStagingRow(row) {
+  const stato = normalizeKeyText(row?.stato)
+  return ['deleted', 'cancelled', 'canceled', 'annullato', 'annullata', 'archived'].includes(stato)
+}
+
+function isActiveAccountingRow(row) {
+  const workflowStatus = normalizeKeyText(row?.workflow_status)
+  const validationStatus = normalizeKeyText(row?.validation_status)
+  return (
+    ['confirmed', 'registered', 'registrata'].includes(workflowStatus) ||
+    ['confirmed', 'registered', 'registrata'].includes(validationStatus) ||
+    Boolean(normalizeText(row?.registered_at)) ||
+    Boolean(normalizeText(row?.prima_nota_id))
+  )
+}
+
+function isDeletedAccountingRow(row) {
+  const workflowStatus = normalizeKeyText(row?.workflow_status)
+  const validationStatus = normalizeKeyText(row?.validation_status)
+  return ['deleted', 'cancelled', 'canceled', 'annullato', 'annullata', 'archived'].includes(workflowStatus) ||
+    ['deleted', 'cancelled', 'canceled', 'annullato', 'annullata', 'archived'].includes(validationStatus)
+}
+
+function buildDedupSummaryFromParsedDoc(parsedDoc, classification, existingRow = null) {
+  const row = parsedDoc || {}
+  const fornitore = row?.fornitore || {}
+  const cliente = row?.cliente || {}
+  const summary = {
+    id: getParsedDocKey(row),
+    filename: normalizeText(row?.filename),
+    sourceHash: normalizeText(row?.sourceHash),
+    tipoDocumento: normalizeText(row?.tipoDocumento),
+    numeroDocumento: normalizeText(row?.numeroDocumento),
+    dataDocumento: normalizeText(row?.dataDocumento),
+    totale: Number(row?.totale || 0) || 0,
+    fornitore: {
+      denominazione: normalizeText(fornitore?.denominazione),
+      partitaIva: normalizeText(fornitore?.partitaIva),
+      codiceFiscale: normalizeText(fornitore?.codiceFiscale),
+    },
+    cliente: {
+      denominazione: normalizeText(cliente?.denominazione),
+      partitaIva: normalizeText(cliente?.partitaIva),
+      codiceFiscale: normalizeText(cliente?.codiceFiscale),
+    },
+    classification,
+    reasonCode: classification,
+    existingRowId: normalizeText(existingRow?.id),
+  }
+
+  if (classification === 'deletedInStaging' || classification === 'deletedInAccounting') {
+    summary.parsedDoc = buildReimportParsedDocSnapshot(parsedDoc)
+  }
+
+  return summary
+}
+
+function buildReimportParsedDocSnapshot(parsedDoc) {
+  const row = parsedDoc && typeof parsedDoc === 'object' ? parsedDoc : {}
+  const fornitore = row?.fornitore && typeof row.fornitore === 'object' ? row.fornitore : {}
+  const cliente = row?.cliente && typeof row.cliente === 'object' ? row.cliente : {}
+
+  return {
+    filename: normalizeText(row?.filename),
+    sourceHash: normalizeText(row?.sourceHash),
+    tipoDocumento: normalizeText(row?.tipoDocumento),
+    dataDocumento: normalizeText(row?.dataDocumento),
+    numeroDocumento: normalizeText(row?.numeroDocumento),
+    fornitore: {
+      denominazione: normalizeText(fornitore?.denominazione),
+      partitaIva: normalizeText(fornitore?.partitaIva),
+      codiceFiscale: normalizeText(fornitore?.codiceFiscale),
+    },
+    cliente: {
+      denominazione: normalizeText(cliente?.denominazione),
+      partitaIva: normalizeText(cliente?.partitaIva),
+      codiceFiscale: normalizeText(cliente?.codiceFiscale),
+    },
+    imponibile: Number(row?.imponibile || 0) || 0,
+    iva: Number(row?.iva || 0) || 0,
+    totale: Number(row?.totale || 0) || 0,
+    ivaRows: Array.isArray(row?.ivaRows) ? row.ivaRows.map((item) => ({ ...item })) : [],
+    flags: row?.flags && typeof row.flags === 'object'
+      ? { ...row.flags }
+      : { reverseCharge: false, splitPayment: false, hasRitenuta: false, isProfessional: false },
+    warnings: Array.isArray(row?.warnings) ? row.warnings.slice() : [],
+    errors: Array.isArray(row?.errors) ? row.errors.slice() : [],
+    rawXml: normalizeText(row?.rawXml),
+    lineeDocumento: Array.isArray(row?.lineeDocumento) ? row.lineeDocumento.map((item) => ({ ...item })) : [],
+  }
+}
+
+function buildClassifiedParsedDoc(parsedDoc, lookup, batchSeenKeys) {
+  const keyVariants = buildDedupKeyVariants({
+    tipoDocumento: parsedDoc?.tipoDocumento,
+    numeroDocumento: parsedDoc?.numeroDocumento,
+    dataDocumento: parsedDoc?.dataDocumento,
+    totale: parsedDoc?.totale,
+    tokens: Array.from(collectParsedDocTokens(parsedDoc)),
+  })
+
+  let classification = 'importable'
+  let reportOutcome = REPORT_OUTCOMES.imported
+  let severity = 'info'
+  let reasonCode = 'imported'
+  let matchedRow = null
+
+  const resolveMatch = (map) => {
+    for (const key of keyVariants) {
+      if (map.has(key)) return map.get(key)
+    }
+    return null
+  }
+
+  if (keyVariants.size) {
+    matchedRow = resolveMatch(lookup.activeStagingByKey)
+    if (matchedRow) {
+      classification = 'duplicateInStaging'
+      reportOutcome = REPORT_OUTCOMES.blocked_duplicate
+      severity = 'warning'
+      reasonCode = 'duplicate_in_staging'
+    } else {
+      matchedRow = resolveMatch(lookup.activeAccountingByKey)
+      if (matchedRow) {
+        classification = 'duplicateInAccounting'
+        reportOutcome = REPORT_OUTCOMES.blocked_accounted
+        severity = 'error'
+        reasonCode = 'duplicate_in_accounting'
+      } else {
+        matchedRow = resolveMatch(lookup.deletedStagingByKey)
+        if (matchedRow) {
+          classification = 'deletedInStaging'
+          reportOutcome = REPORT_OUTCOMES.warning_reimport
+          severity = 'warning'
+          reasonCode = 'deleted_in_staging'
+        } else {
+          matchedRow = resolveMatch(lookup.deletedAccountingByKey)
+          if (matchedRow) {
+            classification = 'deletedInAccounting'
+            reportOutcome = REPORT_OUTCOMES.warning_reimport
+            severity = 'warning'
+            reasonCode = 'deleted_in_accounting'
+          } else {
+            const batchDuplicate = Array.from(keyVariants).some((key) => batchSeenKeys.has(key))
+            if (batchDuplicate) {
+              classification = 'duplicateInStaging'
+              reportOutcome = REPORT_OUTCOMES.blocked_duplicate
+              severity = 'warning'
+              reasonCode = 'batch_duplicate'
+            }
+          }
+        }
+      }
+    }
+    for (const key of keyVariants) batchSeenKeys.add(key)
+  }
+
+  return {
+    parsedDoc,
+    keyVariants,
+    classification,
+    reportOutcome,
+    severity,
+    reasonCode,
+    matchedRow,
+    summary: buildDedupSummaryFromParsedDoc(parsedDoc, classification, matchedRow),
+  }
+}
+
+function computeReportTotals(items) {
+  return items.reduce(
+    (acc, item) => {
+      acc.files += 1
+      if (item.outcome === REPORT_OUTCOMES.imported) acc.imported += 1
+      if (item.outcome === REPORT_OUTCOMES.blocked_duplicate || item.outcome === REPORT_OUTCOMES.blocked_accounted) acc.blocked += 1
+      if (item.outcome === REPORT_OUTCOMES.warning_reimport) acc.warnings += 1
+      if (item.outcome === REPORT_OUTCOMES.parse_error) acc.errors += 1
+      return acc
+    },
+    { files: 0, imported: 0, blocked: 0, warnings: 0, errors: 0 },
+  )
+}
+
+export async function runImportWorkflow(files = [], options = {}) {
+  const list = Array.isArray(files) ? files : []
+  if (!list.length) {
+    return {
+      ok: false,
+      reason: 'no_files',
+      batchId: makeBatchId(options),
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      parsedDocs: [],
+      stagingRows: [],
+      report: null,
+    }
+  }
+
+  const batchId = makeBatchId(options)
+  const startedAt = new Date().toISOString()
+  const inputPreparation = await normalizeImportContabilitaInputFiles(list, options)
+  const preparedFiles = Array.isArray(inputPreparation.preparedFiles) ? inputPreparation.preparedFiles : []
+  const parsedDocs = []
+
+  for (const fileLike of preparedFiles) {
+    try {
+      const parsed = await parseFatturaFile(fileLike)
+      parsedDocs.push({
+        ...parsed,
+        filename: normalizeText(fileLike?.name || parsed?.filename || ''),
+        sourceHash: normalizeText(parsed?.sourceHash || options.sourceHash || ''),
+      })
+    } catch (error) {
+      parsedDocs.push(createParseErrorParsedDoc(fileLike, error, options))
+    }
+  }
+
+  const dedupCandidates = options.dedupCandidates
+    || (options.societaId
+      ? await loadImportContabilitaDedupCandidatesBySocieta(options.societaId)
+      : { stagingRows: [], accountingRows: [] })
+
+  const activeStagingByKey = new Map()
+  const deletedStagingByKey = new Map()
+  for (const row of Array.isArray(dedupCandidates?.stagingRows) ? dedupCandidates.stagingRows : []) {
+    if (!row) continue
+    if (!isActiveStagingRow(row) && !isDeletedStagingRow(row)) continue
+    const tokens = Array.from(collectStagingRowTokens(row))
+    const keyVariants = buildDedupKeyVariants({
+      tipoDocumento: row?.tipo_documento || row?.ai_raw_response?.tipo_documento || row?.tipoDocumento,
+      numeroDocumento: row?.numero_documento || row?.ai_raw_response?.numero || row?.ai_raw_response?.numero_documento,
+      dataDocumento: row?.data_documento || row?.ai_raw_response?.data || row?.ai_raw_response?.data_documento,
+      totale: row?.totale || row?.ai_raw_response?.totale,
+      tokens,
+    })
+    if (!keyVariants.size) continue
+    const target = isDeletedStagingRow(row) ? deletedStagingByKey : activeStagingByKey
+    for (const key of keyVariants) {
+      if (!target.has(key)) target.set(key, row)
+    }
+  }
+
+  const activeAccountingByKey = new Map()
+  const deletedAccountingByKey = new Map()
+  for (const row of Array.isArray(dedupCandidates?.accountingRows) ? dedupCandidates.accountingRows : []) {
+    if (!row) continue
+    if (!isActiveAccountingRow(row) && !isDeletedAccountingRow(row)) continue
+    const tokens = Array.from(collectAccountingRowTokens(row))
+    const keyVariants = buildDedupKeyVariants({
+      tipoDocumento: row?.tipo_documento,
+      numeroDocumento: row?.numero_documento,
+      dataDocumento: row?.data_documento,
+      totale: row?.totale,
+      tokens,
+    })
+    if (!keyVariants.size) continue
+    const target = isDeletedAccountingRow(row) ? deletedAccountingByKey : activeAccountingByKey
+    for (const key of keyVariants) {
+      if (!target.has(key)) target.set(key, row)
+    }
+  }
+
+  const lookup = {
+    activeStagingByKey,
+    deletedStagingByKey,
+    activeAccountingByKey,
+    deletedAccountingByKey,
+  }
+
+  const batchSeenKeys = new Set()
+  const classifiedDocs = parsedDocs.map((parsedDoc) => buildClassifiedParsedDoc(parsedDoc, lookup, batchSeenKeys))
+  const importableClassifiedDocs = classifiedDocs.filter((item) => item.classification === 'importable')
+  const stagingRows = importableClassifiedDocs.map((item, index) =>
+    buildStagingRow(item.parsedDoc, {
+      batchId,
+      id: normalizeText(item.parsedDoc?.id || `${batchId}-${index + 1}`),
+      filename: item.parsedDoc?.filename,
+    }),
+  )
+
+  const baseReport = buildBatchReport(parsedDocs, {
+    batchId,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+  })
+
+  const reportItemsByKey = new Map()
+  for (const item of Array.isArray(baseReport.items) ? baseReport.items : []) {
+    const key = normalizeText(item?.id || item?.filename)
+    if (key && !reportItemsByKey.has(key)) reportItemsByKey.set(key, item)
+  }
+
+  const reportItems = classifiedDocs.map((item) => {
+    const key = getParsedDocKey(item.parsedDoc)
+    const baseItem = reportItemsByKey.get(key) || {
+      id: key,
+      filename: item.parsedDoc?.filename || '',
+      sourceHash: item.parsedDoc?.sourceHash || '',
+      outcome: REPORT_OUTCOMES.imported,
+      severity: 'info',
+      reasonCode: 'imported',
+      warningsCount: Array.isArray(item.parsedDoc?.warnings) ? item.parsedDoc.warnings.length : 0,
+      errorsCount: Array.isArray(item.parsedDoc?.errors) ? item.parsedDoc.errors.length : 0,
+    }
+
+    if (item.classification === 'importable') {
+      return baseItem
+    }
+
+    return {
+      ...baseItem,
+      outcome: item.reportOutcome,
+      severity: item.severity,
+      reasonCode: item.reasonCode,
+    }
+  })
+
+  const duplicateInStagingRows = classifiedDocs
+    .filter((item) => item.classification === 'duplicateInStaging')
+    .map((item) => item.summary)
+  const duplicateInAccountingRows = classifiedDocs
+    .filter((item) => item.classification === 'duplicateInAccounting')
+    .map((item) => item.summary)
+  const deletedInStagingRows = classifiedDocs
+    .filter((item) => item.classification === 'deletedInStaging')
+    .map((item) => item.summary)
+  const deletedInAccountingRows = classifiedDocs
+    .filter((item) => item.classification === 'deletedInAccounting')
+    .map((item) => item.summary)
+
+  const reportTotals = computeReportTotals(reportItems)
+
+  const finishedAt = new Date().toISOString()
+
+  return {
+    ok: true,
+    batchId,
+    startedAt,
+    finishedAt,
+    parsedDocs,
+    stagingRows,
+    report: {
+      ...baseReport,
+      items: reportItems,
+      totals: reportTotals,
+      batchId,
+      startedAt,
+      finishedAt,
+      uploadedFilesCount: inputPreparation.uploadedFilesCount,
+      extractedXmlCount: inputPreparation.extractedXmlCount,
+      discardedFilesCount: inputPreparation.discardedFilesCount,
+      discardedReasons: inputPreparation.discardedReasons,
+      duplicateInStagingCount: duplicateInStagingRows.length,
+      duplicateInAccountingCount: duplicateInAccountingRows.length,
+      deletedInStagingCount: deletedInStagingRows.length,
+      deletedInAccountingCount: deletedInAccountingRows.length,
+      duplicateInStagingRows,
+      duplicateInAccountingRows,
+      deletedInStagingRows,
+      deletedInAccountingRows,
+      deletedDetectionNote: baseReport.deletedDetectionNote,
+    },
+  }
+}
+
+export async function runCommitWorkflow() {
+  throw new Error('Commit workflow not implemented yet')
+}

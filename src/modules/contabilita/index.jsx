@@ -1,7 +1,7 @@
 ﻿import { parseXMLFattura } from '../../../domain/fatture.js'
 import { trace } from '../../core/debug/trace'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAIStatus } from '../../context/AIStatusContext'
 import { TIPO_LABEL, TIPO_COLOR, MESI, LAST_SOCIETA_STORAGE_KEY } from '../../shared/constants'
 import { routeDocument } from '../../core/workflow'
@@ -16,6 +16,7 @@ import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { registraDocumentiConfermati } from './application/contabilitaRegistrationWorkflow.js'
 import { fmtCurrency as fmt, fmtDate, fmtNumber } from './ui/formatters.js'
 import { ModuleHeader } from '../../shared/components'
+import { getScopedStorageKey, getValidActiveCompanyId } from '../../shared/utils/accessScope.js'
 
 
 const SETTINGS_TABS = [
@@ -34,12 +35,11 @@ const BANCHE_TABS = [
 
 const ADEMPIMENTI_TABS = [
   { id: 'liquidazioni_iva', label: 'Liquidazioni IVA' },
-  { id: 'lipe', label: 'LIPE' },
-  { id: 'iva_annuale', label: 'IVA annuale' },
-  { id: 'cu', label: 'Certificazioni uniche' },
+  { id: 'lipe', label: 'LIPE (parziale)' },
+  { id: 'iva_annuale', label: 'IVA annuale (riepilogo)' },
   { id: 'ritenute', label: 'Ritenute' },
-  { id: 'f770', label: '770' },
-  { id: 'intrastat', label: 'Intrastat' },
+  { id: 'f770', label: '770 (parziale)' },
+  { id: 'intrastat', label: 'Intrastat (manuale)' },
 ]
 
 const STAMPE_TABS = [
@@ -173,19 +173,20 @@ const CONT_QUICK_STATS = [
   { key: 'registrati', label: 'Registrati' },
 ]
 
-export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActionsChange}){
+export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, onHeaderActionsChange}){
+  const getSavedContabilitaSubTabKey = () => getScopedStorageKey('contabilita_sub_tab', { utente, societaId: '' })
   const [societa,setSocieta]=useState([]);
   const [societaAttiva,setSocietaAttiva]=useState(null);
   const [loading,setLoading]=useState(true);
   const [contTab,setContTab]=useState(()=>{
-    // Controlla se c'è un sub-tab salvato dall'Hub Export
-    const savedTab = localStorage.getItem('contabilita_sub_tab');
+    const savedTab = localStorage.getItem(getSavedContabilitaSubTabKey());
     if(savedTab){
-      localStorage.removeItem('contabilita_sub_tab'); // Rimuovi dopo la lettura
+      localStorage.removeItem(getSavedContabilitaSubTabKey());
       return savedTab;
     }
     return 'da_validare';
   });
+  const [exportContext, setExportContext] = useState(null)
   
   // Dati
   const [documenti,setDocumenti]=useState([]);
@@ -202,12 +203,12 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
   const [pnGuidataDoc, setPnGuidataDoc] = useState(null);
   const [splitMode,setSplitMode]=useState('split'); // split, pdf, scrittura
   const [registrazioneInCorso, setRegistrazioneInCorso] = useState(false);
+  const [registrationResults, setRegistrationResults] = useState(null);
   const [settingsTab, setSettingsTab] = useState('societa');
   const [bankingTab, setBankingTab] = useState('movimenti_banca');
   const [adempimentiTab, setAdempimentiTab] = useState('liquidazioni_iva');
   const [stampeTab, setStampeTab] = useState('registri_iva');
-  
-  const getDraftKey = (docId) => `pnGuidataDraft:${societaAttiva?.id || 'no_soc'}:${docId}`
+  const getDraftKey = (docId) => getScopedStorageKey(`pnGuidataDraft:${docId}`, { utente, societaId: societaAttiva?.id || '' })
 
   const openGuidataAt = async (doc, ids, idx) => {
     const k = getDraftKey(doc.id)
@@ -296,51 +297,101 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
   const [modalSocieta,setModalSocieta]=useState(false);
 
   useEffect(()=>{caricaSocieta();},[]);
-  useEffect(()=>{if(societaAttiva)caricaTutto();},[societaAttiva]);
+
+  const caricaSocieta=async()=>{
+    const{data}=await contabilitaRepo.getSocietaAttive();
+    const list=data||[];
+    setSocieta(list);
+    
+    let exportCtx = null
+    try {
+      const stored = localStorage.getItem(getScopedStorageKey('export_context', { utente, societaId: '' }))
+      if (stored) {
+        exportCtx = JSON.parse(stored)
+        setExportContext(exportCtx)
+        localStorage.removeItem(getScopedStorageKey('export_context', { utente, societaId: '' }))
+      }
+    } catch (e) {
+      console.warn('Export context load failed', e)
+    }
+
+    if(list.length>0){
+      let preferred=null;
+      if (exportCtx?.societaId && list.some(s => String(s.id) === String(exportCtx.societaId))) {
+        preferred = exportCtx.societaId
+      } else {
+        try{
+          const saved=localStorage.getItem(getScopedStorageKey(LAST_SOCIETA_STORAGE_KEY, { utente }));
+          if(saved&&list.some(s=>s.id===saved))preferred=saved;
+        }catch{/* ignore */}
+      }
+      const validCompanyId = getValidActiveCompanyId(list, { utente, preferredSocietaId: preferred || '' })
+      const pick=list.find(s=>s.id===validCompanyId)||list[0];
+      setSocietaAttiva(pick);
+    }
+    setLoading(false);
+  };
+
+  const caricaTutto = useCallback(async (forceAll = false) => {
+    if (!societaAttiva) return;
+    
+    const isWorkflowTab = ['da_validare', 'prima_nota_guidata', 'consultazione_partite', 'prima_nota'].includes(contTab)
+    const isSettingsTab = SETTINGS_TABS.some(t => t.id === contTab)
+    
+    if (!forceAll && !isWorkflowTab && !isSettingsTab) {
+      return;
+    }
+    
+    const promises = [];
+    const indexes = {};
+    
+    if (forceAll || isWorkflowTab) {
+      indexes.docs = promises.length; promises.push(contabilitaRepo.getDocumenti(societaAttiva.id, { userId: utente?.id || '' }))
+      indexes.pc = promises.length; promises.push(contabilitaRepo.getPianoConti(societaAttiva.id))
+      indexes.cc = promises.length; promises.push(contabilitaRepo.getCausali(societaAttiva.id))
+      indexes.ci = promises.length; promises.push(contabilitaRepo.getCausaliIvaAttive(societaAttiva.id))
+      indexes.reg = promises.length; promises.push(contabilitaRepo.getRegoleAutomatiche(societaAttiva.id))
+      indexes.pn = promises.length; promises.push(contabilitaRepo.getScrittureRecenti(societaAttiva.id))
+      indexes.cli = promises.length; promises.push(contabilitaRepo.getClientiBase())
+    } else if (isSettingsTab) {
+      indexes.pc = promises.length; promises.push(contabilitaRepo.getPianoConti(societaAttiva.id))
+      indexes.cc = promises.length; promises.push(contabilitaRepo.getCausali(societaAttiva.id))
+      indexes.ci = promises.length; promises.push(contabilitaRepo.getCausaliIvaAttive(societaAttiva.id))
+      indexes.reg = promises.length; promises.push(contabilitaRepo.getRegoleAutomatiche(societaAttiva.id))
+    }
+    
+    indexes.perc = promises.length; promises.push(contabilitaRepo.getPercipientiAttivi(societaAttiva.id))
+    
+    const results = await Promise.all(promises);
+    
+    if ('docs' in indexes) setDocumenti(results[indexes.docs]?.data || [])
+    if ('pc' in indexes) setPianoConti(results[indexes.pc]?.data || [])
+    if ('cc' in indexes) setCausaliContabili(results[indexes.cc]?.data || [])
+    if ('ci' in indexes) setCausaliIva(results[indexes.ci]?.data || [])
+    if ('reg' in indexes) setRegoleAI(results[indexes.reg]?.data || [])
+    if ('pn' in indexes) setScritture(results[indexes.pn]?.data || [])
+    if ('perc' in indexes) setPercipienti(results[indexes.perc]?.data || [])
+    if ('cli' in indexes) setClienti(results[indexes.cli]?.data || [])
+  }, [societaAttiva, contTab, utente]);
+
+  useEffect(()=>{if(societaAttiva)caricaTutto(true);},[societaAttiva, caricaTutto]);
+  useEffect(()=>{if(societaAttiva)caricaTutto(false);},[contTab, societaAttiva, caricaTutto]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onRefresh = () => {
+      void caricaTutto(true)
+    }
+    window.addEventListener('fiscosim:contabilita-refresh', onRefresh)
+    return () => window.removeEventListener('fiscosim:contabilita-refresh', onRefresh)
+  }, [caricaTutto])
+
   useEffect(() => {
     if (SETTINGS_TABS.some((tab) => tab.id === contTab)) setSettingsTab(contTab)
     if (BANCHE_TABS.some((tab) => tab.id === contTab)) setBankingTab(contTab)
     if (ADEMPIMENTI_TABS.some((tab) => tab.id === contTab)) setAdempimentiTab(contTab)
     if (STAMPE_TABS.some((tab) => tab.id === contTab)) setStampeTab(contTab)
   }, [contTab])
-
-  const caricaSocieta=async()=>{
-    const{data}=await contabilitaRepo.getSocietaAttive();
-    const list=data||[];
-    setSocieta(list);
-    if(list.length>0){
-      let preferred=null;
-      try{
-        const saved=localStorage.getItem(LAST_SOCIETA_STORAGE_KEY);
-        if(saved&&list.some(s=>s.id===saved))preferred=saved;
-      }catch{/* ignore */}
-      const pick=list.find(s=>s.id===(preferred||list[0].id))||list[0];
-      setSocietaAttiva(pick);
-    }
-    setLoading(false);
-  };
-
-  const caricaTutto=async()=>{
-    if(!societaAttiva)return;
-    const[{data:docs},{data:pc},{data:cc},{data:ci},{data:reg},{data:pn},{data:perc},{data:cli}]=await Promise.all([
-      contabilitaRepo.getDocumenti(societaAttiva.id),
-      contabilitaRepo.getPianoConti(societaAttiva.id),
-      contabilitaRepo.getCausali(societaAttiva.id),
-      contabilitaRepo.getCausaliIvaAttive(),
-      contabilitaRepo.getRegoleAutomatiche(societaAttiva.id),
-      contabilitaRepo.getScrittureRecenti(societaAttiva.id),
-      contabilitaRepo.getPercipientiAttivi(societaAttiva.id),
-      contabilitaRepo.getClientiBase()
-    ]);
-    setDocumenti(docs||[]);
-    setPianoConti(pc||[]);
-    setCausaliContabili(cc||[]);
-    setCausaliIva(ci||[]);
-    setRegoleAI(reg||[]);
-    setScritture(pn||[]);
-    setPercipienti(perc||[]);
-    setClienti(cli||[]);
-  };
 
   // Stats per badge
   const stats={
@@ -393,22 +444,27 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
   // Conferma singola
   const confermaDoc=async(docId)=>{
     await contabilitaRepo.confirmDocumento(docId,new Date().toISOString());
-    setDocumenti(prev=>prev.map(d=>d.id===docId?{...d,validation_status:'confirmed'}:d));
+    setDocumenti(prev=>prev.map(d=>d.id===docId?{...d,validation_status:'confirmed',workflow_status:'confirmed'}:d));
   };
 
   // Registra confermati -> crea scritture prima nota
-  const registraConfermati=async()=>{
+  const registraConfermati = useCallback(async () => {
     if (registrazioneInCorso) return;
     const daRegistrare=documenti.filter(d=>d.validation_status==='confirmed'&&d.workflow_status!=='registered');
-    if(!daRegistrare.length){alert('Nessun documento confermato da registrare');return;}
+    if(!daRegistrare.length){
+      setRegistrationResults({ type: 'info', message: 'Nessun documento confermato da registrare' });
+      return;
+    }
     
     if(!confirm(`Stai per registrare ${daRegistrare.length} documenti in Prima Nota.\n\nConfermi?`))return;
 
     setRegistrazioneInCorso(true);
+    setRegistrationResults(null);
     try {
       const { registrati, errors, warnings } = await registraDocumentiConfermati({
         documenti,
         societaId: societaAttiva.id,
+        utente,
         pianoConti,
         causaliContabili,
         causaliIva,
@@ -424,47 +480,75 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
       await caricaTutto();
       const failed = Array.isArray(errors) ? errors.length : 0;
       const warningsCount = Array.isArray(warnings) ? warnings.length : 0;
-      let msg = `Registrati ${registrati}/${daRegistrare.length} documenti in Prima Nota`;
-      if (failed) msg += `\n\nErrori: ${failed}`;
-      if (warningsCount) msg += `\nAvvisi: ${warningsCount}`;
-      if (warningsCount && warningsCount <= 3) {
-        const warnLines = warnings
-          .map((w) => `- Doc ${w.docId}: ${w.warnings.map((c) => c.message).join('; ')}`)
-          .join('\n');
-        msg += `\n\nDettagli avvisi:\n${warnLines}`;
-      }
-      alert(msg);
+      
+      setRegistrationResults({
+        type: failed > 0 ? 'error' : (warningsCount > 0 ? 'warning' : 'success'),
+        registrati,
+        total: daRegistrare.length,
+        errors: errors || [],
+        warnings: warnings || [],
+      });
     } catch (e) {
-      alert('Errore: ' + (e?.message || String(e)));
+      setRegistrationResults({
+        type: 'error',
+        message: e?.message || String(e),
+      });
     } finally {
       setRegistrazioneInCorso(false);
     }
-  };
+  }, [
+    registrazioneInCorso,
+    documenti,
+    societaAttiva,
+    utente,
+    pianoConti,
+    causaliContabili,
+    causaliIva,
+    clienti,
+    caricaTutto,
+  ]);
+
+  const refreshHeaderData = useCallback(() => {
+    void caricaTutto()
+  }, [caricaTutto])
+
+  const headerActions = useMemo(() => {
+    if (effectiveTab !== 'da_validare') return []
+    return [
+      {
+        key: 'register-confirmed',
+        label: registrazioneInCorso ? 'Registrazione in corso...' : `Registra confermati (${stats.confermati})`,
+        variant: 'primary',
+        disabled: stats.confermati === 0 || registrazioneInCorso,
+        onClick: registraConfermati,
+      },
+      {
+        key: 'refresh-data',
+        label: 'Aggiorna dati',
+        variant: 'secondary',
+        disabled: false,
+        onClick: refreshHeaderData,
+      },
+    ]
+  }, [effectiveTab, registrazioneInCorso, stats.confermati, registraConfermati, refreshHeaderData])
+
+  const headerActionsSignatureRef = useRef('')
 
   useEffect(() => {
     if (!onHeaderActionsChange) return
-    if (effectiveTab === 'da_validare') {
-      onHeaderActionsChange([
-        {
-          key: 'register-confirmed',
-          label: registrazioneInCorso ? 'Registrazione in corso...' : `Registra confermati (${stats.confermati})`,
-          variant: 'primary',
-          disabled: stats.confermati === 0 || registrazioneInCorso,
-          onClick: registraConfermati,
-        },
-        {
-          key: 'refresh-data',
-          label: 'Aggiorna dati',
-          variant: 'secondary',
-          disabled: false,
-          onClick: () => void caricaTutto(),
-        },
-      ])
-    } else {
-      onHeaderActionsChange([])
-    }
+    const nextSignature = effectiveTab === 'da_validare'
+      ? `da_validare|${registrazioneInCorso ? '1' : '0'}|${stats.confermati}`
+      : 'none'
+
+    if (headerActionsSignatureRef.current === nextSignature) return
+    headerActionsSignatureRef.current = nextSignature
+    onHeaderActionsChange(headerActions)
+  }, [onHeaderActionsChange, effectiveTab, registrazioneInCorso, stats.confermati, headerActions])
+
+  useEffect(() => {
+    if (!onHeaderActionsChange) return undefined
     return () => onHeaderActionsChange([])
-  }, [onHeaderActionsChange, effectiveTab, registrazioneInCorso, stats.confermati, registraConfermati, caricaTutto])
+  }, [onHeaderActionsChange])
 
   if(loading)return<div className="loading">Caricamento...</div>;
 
@@ -476,7 +560,7 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
             <span className="cont-sidebar-top-label">Società</span>
             <select
               value={societaAttiva?.id||''}
-              onChange={e=>{const s=societa.find(x=>x.id===e.target.value);setSocietaAttiva(s);try{if(s?.id)localStorage.setItem(LAST_SOCIETA_STORAGE_KEY,s.id);}catch{/* ignore */}}}
+              onChange={e=>{const s=societa.find(x=>x.id===e.target.value);setSocietaAttiva(s);try{if(s?.id)localStorage.setItem(getScopedStorageKey(LAST_SOCIETA_STORAGE_KEY, { utente }),s.id);}catch{/* ignore */}}}
             >
               {societa.length===0&&<option value="">Nessuna società</option>}
               {societa.map(s=><option key={s.id} value={s.id}>{s.denominazione}</option>)}
@@ -529,7 +613,7 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
                 }
                 secondaryAction={
                   effectiveTab !== 'societa'
-                    ? <button className="btn-sec" onClick={() => void caricaTutto()}>Aggiorna dati</button>
+                    ? <button className="btn-sec" onClick={() => void caricaTutto(true)}>Aggiorna dati</button>
                     : null
                 }
               />
@@ -604,25 +688,28 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
                     ))}
                   </div>
                 )}
-                <PrimaNotaHubView
-                  contTab={effectiveTab}
-                  documenti={documenti}
-                  scritture={scritture}
-                  pianoConti={pianoConti}
+          <PrimaNotaHubView
+            contTab={effectiveTab}
+            documenti={documenti}
+            scritture={scritture}
+            pianoConti={pianoConti}
                   societaList={societa}
                   causaliIva={causaliIva}
                   causaliContabili={causaliContabili}
                   clienti={clienti}
-                  societaAttiva={societaAttiva}
-                  stats={stats}
-                  caricaTutto={caricaTutto}
-                  patchDocumento={patchDocumento}
-                  confermaDoc={confermaDoc}
-                  registraConfermati={registraConfermati}
-                  registrazioneInCorso={registrazioneInCorso}
-                  openGuidataAt={openGuidataAt}
-                  pnGuidataDraft={pnGuidataDraft}
-                  pnGuidataDoc={pnGuidataDoc}
+            societaAttiva={societaAttiva}
+            stats={stats}
+            caricaTutto={caricaTutto}
+            patchDocumento={patchDocumento}
+            confermaDoc={confermaDoc}
+            registraConfermati={registraConfermati}
+            registrazioneInCorso={registrazioneInCorso}
+            registrationResults={registrationResults}
+            setRegistrationResults={setRegistrationResults}
+            utente={utente}
+            openGuidataAt={openGuidataAt}
+            pnGuidataDraft={pnGuidataDraft}
+            pnGuidataDoc={pnGuidataDoc}
                   pnGuidataNav={pnGuidataNav}
                   gotoGuidataRelative={gotoGuidataRelative}
                   setPnGuidataDraft={setPnGuidataDraft}
@@ -656,8 +743,16 @@ export function ModuloContabilita({ruolo, onHeaderContextChange, onHeaderActions
                   caricaTutto={caricaTutto}
                 />
 
+                {effectiveTab==='cu'&&(
+                  <div className="card" style={{padding:'2rem',textAlign:'center'}}>
+                    <div style={{fontSize:'2.5rem',marginBottom:'.5rem'}}>↗</div>
+                    <div style={{fontSize:'1rem',fontWeight:600}}>Certificazioni Uniche disponibili nel modulo dedicato</div>
+                    <div style={{fontSize:'.8rem',color:'var(--mu)',marginTop:'.25rem'}}>Apri il modulo "CU" dalla navigazione principale per lavorare sulle certificazioni uniche.</div>
+                  </div>
+                )}
+
                 {/* Placeholder per altri moduli */}
-                {['regole','scritture','cu'].includes(effectiveTab)&&(
+                {['regole','scritture'].includes(effectiveTab)&&(
                   <div className="card" style={{padding:'2rem',textAlign:'center'}}>
                     <div style={{fontSize:'2.5rem',marginBottom:'.5rem'}}>🚧</div>
                     <div style={{fontSize:'1rem',fontWeight:600}}>Modulo in sviluppo</div>
