@@ -26,6 +26,8 @@ const SETTINGS_TABS = [
   { id: 'causali_iva', label: 'Causali IVA' },
   { id: 'percipienti', label: 'Percipienti' },
   { id: 'regole', label: 'Regole AI' },
+  { id: 'import_storico_nes', label: 'Import storico NES' },
+  { id: 'archivio_storico_ai', label: 'Archivio Storico AI' },
 ]
 
 const BANCHE_TABS = [
@@ -50,25 +52,28 @@ const STAMPE_TABS = [
   { id: 'bilancio', label: 'Bilancio' },
 ]
 
+const CONT_TAB_ALIASES = {
+  consultazione_partite: 'consultazione',
+  movimenti_banca: 'riconciliazione',
+  banche: 'riconciliazione',
+}
+
 const CONT_SIDEBAR_MENU = [
   {
     section: 'OPERATIVO',
     items: [
-      { id: 'da_validare', icon: 'inbox', label: 'Da validare', badge: true },
-      { id: 'import_storico_nes', icon: 'file', label: 'Import storico NES' },
-      { id: 'prima_nota_guidata', icon: 'wand', label: 'Inserimento guidato' },
-      { id: 'consultazione_partite', icon: 'ledger', label: 'Consultazione e partite' },
-      { id: 'archivio_storico_ai', icon: 'chart', label: 'Archivio Storico AI' },
-      { id: 'prima_nota', icon: 'book', label: 'Registrazioni' },
+      { id: 'consultazione', icon: 'ledger', label: 'Consultazione' },
+      { id: 'prima_nota', icon: 'book', label: 'Registrazione avanzata' },
+      { id: 'prima_nota_guidata', icon: 'wand', label: 'Registrazione manuale' },
     ],
   },
   {
-    section: 'AREE',
+    section: 'STRUMENTI / FUNZIONI',
     items: [
-      { id: 'impostazioni', icon: 'building', label: 'Impostazioni' },
-      { id: 'banche', icon: 'bank', label: 'Banche' },
-      { id: 'adempimenti', icon: 'percent', label: 'Adempimenti' },
+      { id: 'riconciliazione', icon: 'bank', label: 'Riconciliazione avanzata' },
       { id: 'stampe', icon: 'book_open', label: 'Stampe' },
+      { id: 'adempimenti', icon: 'percent', label: 'Adempimenti' },
+      { id: 'impostazioni', icon: 'building', label: 'Impostazioni' },
     ],
   },
 ];
@@ -118,8 +123,12 @@ const CONT_TAB_META = {
     subtitle: 'Vista operativa delle scritture, con ricerca rapida e consultazione immediata dei movimenti.',
   },
   prima_nota_guidata: {
-    title: 'Prima nota guidata',
+    title: 'Registrazione manuale',
     subtitle: 'Percorso assistito per costruire e controllare una registrazione completa prima del salvataggio.',
+  },
+  consultazione: {
+    title: 'Consultazione',
+    subtitle: 'Ricerca prima nota, scheda conto e partitario con saldo progressivo e stampe operative.',
   },
   consultazione_partite: {
     title: 'Consultazione e partite',
@@ -175,6 +184,7 @@ const CONT_QUICK_STATS = [
 
 export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, onHeaderActionsChange}){
   const getSavedContabilitaSubTabKey = () => getScopedStorageKey('contabilita_sub_tab', { utente, societaId: '' })
+  const normalizeContTab = (tab) => CONT_TAB_ALIASES[tab] || tab
   const [societa,setSocieta]=useState([]);
   const [societaAttiva,setSocietaAttiva]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -182,9 +192,9 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
     const savedTab = localStorage.getItem(getSavedContabilitaSubTabKey());
     if(savedTab){
       localStorage.removeItem(getSavedContabilitaSubTabKey());
-      return savedTab;
+      return normalizeContTab(savedTab);
     }
-    return 'da_validare';
+    return 'prima_nota';
   });
   const [exportContext, setExportContext] = useState(null)
   
@@ -335,7 +345,8 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
   const caricaTutto = useCallback(async (forceAll = false) => {
     if (!societaAttiva) return;
     
-    const isWorkflowTab = ['da_validare', 'prima_nota_guidata', 'consultazione_partite', 'prima_nota'].includes(contTab)
+    const normalizedTab = normalizeContTab(contTab)
+    const isWorkflowTab = ['da_validare', 'prima_nota_guidata', 'consultazione', 'consultazione_partite', 'prima_nota', 'riconciliazione', 'movimenti_banca', 'banche'].includes(normalizedTab)
     const isSettingsTab = SETTINGS_TABS.some(t => t.id === contTab)
     
     if (!forceAll && !isWorkflowTab && !isSettingsTab) {
@@ -401,8 +412,9 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
     registrati:documenti.filter(d=>d.workflow_status==='registered').length
   };
 
+  const activeMenuTab = normalizeContTab(contTab)
   const isSettingsArea = contTab === 'impostazioni' || SETTINGS_TABS.some((tab) => tab.id === contTab)
-  const isBancheArea = contTab === 'banche' || BANCHE_TABS.some((tab) => tab.id === contTab)
+  const isBancheArea = contTab === 'banche' || BANCHE_TABS.some((tab) => tab.id === contTab) || activeMenuTab === 'riconciliazione'
   const isAdempimentiArea = contTab === 'adempimenti' || ADEMPIMENTI_TABS.some((tab) => tab.id === contTab)
   const isStampeArea = contTab === 'stampe' || STAMPE_TABS.some((tab) => tab.id === contTab)
   const effectiveTab =
@@ -411,14 +423,14 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
     contTab === 'adempimenti' ? adempimentiTab :
     contTab === 'stampe' ? stampeTab :
     contTab
-  const isDaValidareWorkspace = effectiveTab === 'da_validare'
+  const isDaValidareWorkspace = activeMenuTab === 'da_validare' || effectiveTab === 'da_validare'
 
   const currentTabMeta = contTab === 'impostazioni'
     ? {
         title: 'Impostazioni',
         subtitle: 'Configurazioni e anagrafiche del modulo contabile.',
       }
-    : CONT_TAB_META[effectiveTab] || {
+    : CONT_TAB_META[activeMenuTab] || CONT_TAB_META[effectiveTab] || {
     title: 'Contabilita',
     subtitle: 'Workspace operativo del modulo contabile con focus su controllo, registrazione e fiscale.',
   }
@@ -576,13 +588,8 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
               <button
                 key={item.id}
                 type="button"
-                className={'cont-sidebar-item'+((item.id === 'impostazioni' ? isSettingsArea : effectiveTab===item.id)?' active':'')}
-                onClick={()=>{
-                  if(item.id === 'impostazioni'){
-                    setSettingsTab((prev)=>prev || 'societa')
-                    setContTab('impostazioni')
-                    return
-                  }
+                  className={'cont-sidebar-item'+((item.id === 'impostazioni' ? isSettingsArea : activeMenuTab===item.id)?' active':'')}
+                  onClick={()=>{
                   setContTab(item.id)
                 }}
                 title={item.label}
@@ -601,7 +608,7 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
           <div className="empty"><div className="empty-ico">🏢</div><div className="empty-t">Seleziona o crea una società</div></div>
         ):(
           <div className="cont-module-shell compact-shell">
-            {!isDaValidareWorkspace && (
+            {!isDaValidareWorkspace && effectiveTab !== 'prima_nota_guidata' && (
               <ModuleHeader
                 sectionLabel="Contabilità"
                 title={headerTitle}
@@ -769,5 +776,3 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
     </div>
   );
 }
-
-
