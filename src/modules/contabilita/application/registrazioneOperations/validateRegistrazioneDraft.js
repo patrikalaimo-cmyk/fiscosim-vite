@@ -1,0 +1,156 @@
+import { calculateRegistrazioneTotals } from './calculateRegistrazioneTotals.js'
+import { resolveRegistrazioneRowState } from '../../domain/registrazione/resolveRegistrazioneRowState.js'
+import { validateRegistrazioneIvaDraft } from './validateRegistrazioneIvaDraft.js'
+import { validateRegistrazionePartitarioDraft } from './validateRegistrazionePartitarioDraft.js'
+import { validateRegistrazioneRitenutaDraft } from './validateRegistrazioneRitenutaDraft.js'
+import { resolveContoHierarchyView } from '../../domain/piano_conti/resolveContoHierarchyView.js'
+import { buildRegistrazioneManualeUiPolicy } from '../../domain/registrazione/buildRegistrazioneManualeUiPolicy.js'
+
+const IMPLEMENTED_REQUIRED_FIELDS = new Set([
+  'dataRegistrazione',
+  'esercizioContabile',
+  'causaleContabile',
+  'dataDocumento',
+  'numeroDocumento',
+  'soggetto',
+  'totaleDocumento',
+])
+
+function resolveRequiredFields(behavior = {}) {
+  const required = Array.isArray(behavior?.requiredFields) ? behavior.requiredFields : []
+  return Array.from(new Set(required.filter((field) => IMPLEMENTED_REQUIRED_FIELDS.has(field))))
+}
+
+export function validateRegistrazioneDraft(draft = {}, options = {}) {
+  const header = draft?.header && typeof draft.header === 'object' ? draft.header : {}
+  const rows = Array.isArray(draft?.rows) ? draft.rows : []
+  const totals = draft?.totals && typeof draft.totals === 'object' ? draft.totals : calculateRegistrazioneTotals(rows)
+  const pianoConti = Array.isArray(options?.pianoConti) ? options.pianoConti : []
+  const behavior = options?.behavior && typeof options.behavior === 'object' ? options.behavior : options?.config && typeof options.config === 'object' ? options.config : options?.causaleConfig && typeof options.causaleConfig === 'object' ? options.causaleConfig : {}
+  const documentData = draft?.documentData && typeof draft.documentData === 'object' ? draft.documentData : {}
+  const ivaData = draft?.ivaData && typeof draft.ivaData === 'object' ? draft.ivaData : {}
+  const partitarioData = draft?.partitarioData && typeof draft.partitarioData === 'object' ? draft.partitarioData : {}
+  const ritenutaData = draft?.ritenutaData && typeof draft.ritenutaData === 'object' ? draft.ritenutaData : {}
+  const blockers = []
+  const warnings = []
+  const info = []
+  const rowIssues = []
+
+  if (!String(header.dataRegistrazione || '').trim()) blockers.push('data registrazione mancante')
+  if (!String(header.esercizioContabile || '').trim()) blockers.push('esercizio contabile mancante')
+  if (!String(header.causaleContabile?.id || header.causaleContabile?.codice || '').trim()) blockers.push('causale contabile mancante')
+  if (rows.length < 2) blockers.push('servono almeno 2 righe')
+  if (Array.isArray(behavior?.warnings)) warnings.push(...behavior.warnings)
+  if (Array.isArray(behavior?.reasons)) info.push(...behavior.reasons)
+  const soggettoText = String(header.soggetto || '').trim()
+  if (behavior?.showPartitario && !String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim()) {
+    if (soggettoText) blockers.push('cliente / fornitore non selezionato')
+    else if (behavior?.requiresSoggetto) blockers.push('cliente / fornitore mancante')
+  }
+
+  const manualUiPolicy = buildRegistrazioneManualeUiPolicy(behavior)
+  const requiredFields = resolveRequiredFields(manualUiPolicy)
+  const fieldLabels = {
+    dataRegistrazione: 'data registrazione',
+    esercizioContabile: 'esercizio contabile',
+    causaleContabile: 'causale contabile',
+    dataDocumento: 'data documento',
+    numeroDocumento: 'numero documento',
+    soggetto: 'soggetto',
+    totaleDocumento: 'totale documento',
+    clienteFornitoreId: 'cliente / fornitore',
+  }
+
+  requiredFields.forEach((field) => {
+    const value =
+      field === 'causaleContabile'
+        ? header.causaleContabile
+        : field === 'clienteFornitoreId'
+          ? header.clienteFornitoreId || header.cliente_fornitore_id
+          : header[field]
+    const isEmpty =
+      field === 'causaleContabile'
+        ? !String(value?.id || value?.codice || '').trim()
+        : field === 'clienteFornitoreId'
+          ? !String(value || '').trim()
+        : !String(value || '').trim()
+    if (isEmpty) blockers.push(`${fieldLabels[field] || field} mancante`)
+  })
+
+  if (behavior?.requiresDocumentDate && !String(header.dataDocumento || '').trim()) blockers.push('data documento mancante')
+  if (behavior?.requiresDocumentNumber && !String(header.numeroDocumento || '').trim()) blockers.push('numero documento mancante')
+  if (behavior?.requiresDocumentTotal && !String(header.totaleDocumento || '').trim()) warnings.push('totale documento non compilato')
+  if (behavior?.requiresSoggetto && !String(header.soggetto || '').trim()) blockers.push('soggetto mancante')
+  if (behavior?.requiresRitenuteData) {
+    const hasRitenuteAnchor = Boolean(String(header.soggetto || '').trim() || String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim())
+    if (!hasRitenuteAnchor) warnings.push('dati ritenute da completare')
+  }
+
+  const rowStates = rows.map((row, index) => {
+    const state = resolveRegistrazioneRowState(row)
+    const rowLabel = `riga ${index + 1}`
+    const rawContoQuery = String(row?.contoQuery || '').trim()
+    const hasContaText = Boolean(rawContoQuery)
+    const hasPianoConti = pianoConti.length > 0
+    const contoItem = hasPianoConti && state.hasConto ? pianoConti.find((item) => String(item?.id || '').trim() === state.contoId) || null : null
+    const contoHierarchy = contoItem ? resolveContoHierarchyView(contoItem) : null
+    const contoInCatalog = Boolean(contoItem)
+    if (!state.hasConto && !hasContaText) blockers.push(`${rowLabel}: conto mancante`)
+    if (hasPianoConti && ((hasContaText && !state.hasConto) || (state.hasConto && !contoInCatalog))) {
+      blockers.push(`${rowLabel}: conto inesistente, selezionare un conto oppure eliminare la riga`)
+    }
+    if (state.hasConto && contoHierarchy && !contoHierarchy.isSelectableForRegistrazione) {
+      blockers.push(`${rowLabel}: per registrare serve un sottoconto`)
+    }
+    if (state.dare < 0 || state.avere < 0) blockers.push(`${rowLabel}: importi negativi non ammessi`)
+    if (!state.hasMovement) blockers.push(`${rowLabel}: dare/avere entrambi a zero`)
+    if (state.hasDare && state.hasAvere) blockers.push(`${rowLabel}: dare e avere entrambi valorizzati`)
+    if (state.isIncomplete) rowIssues.push({ rowId: row?.id || `row-${index + 1}`, rowLabel, ...state })
+    return state
+  })
+
+  const hasPositiveDebit = rowStates.some((row) => row.hasDare)
+  const hasPositiveCredit = rowStates.some((row) => row.hasAvere)
+  if (!hasPositiveDebit) blockers.push('manca almeno un dare')
+  if (!hasPositiveCredit) blockers.push('manca almeno un avere')
+
+  if (!totals.isBalanced) {
+    const residualSide = totals.differenza > 0 ? 'Avere' : 'Dare'
+    blockers.push(`scrittura non quadrata: sbilancio ${Math.abs(totals.differenza).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in ${residualSide}`)
+  }
+
+  if (behavior?.showDocumentPanel) {
+    if (!String(documentData.divisa || '').trim()) info.push('documento predisposto con divisa standard')
+    if (!String(documentData.modalitaPagamento || '').trim()) info.push('modalita pagamento non definita')
+  }
+
+  const ivaValidation = validateRegistrazioneIvaDraft({ header, ivaData, behavior, documentData }, options)
+  const partitarioValidation = validateRegistrazionePartitarioDraft({ header, partitarioData, behavior }, options)
+  const ritenutaValidation = validateRegistrazioneRitenutaDraft(
+    { header, ritenutaData, behavior, documentData, ivaData, partitarioData, percipienti: Array.isArray(options?.percipienti) ? options.percipienti : Array.isArray(draft?.percipienti) ? draft.percipienti : [] },
+    { ...options, documentData, ivaData, partitarioData, percipienti: Array.isArray(options?.percipienti) ? options.percipienti : Array.isArray(draft?.percipienti) ? draft.percipienti : [] }
+  )
+
+  if (ivaValidation?.status === 'blocked') blockers.push(...(ivaValidation.blockers || []))
+  if (ivaValidation?.status === 'warning') warnings.push(...(ivaValidation.warnings || []))
+  if (ivaValidation?.info?.length) info.push(...ivaValidation.info)
+
+  if (partitarioValidation?.status === 'blocked') blockers.push(...(partitarioValidation.blockers || []))
+  if (partitarioValidation?.status === 'warning') warnings.push(...(partitarioValidation.warnings || []))
+  if (partitarioValidation?.info?.length) info.push(...partitarioValidation.info)
+
+  if (ritenutaValidation?.status === 'blocked') blockers.push(...(ritenutaValidation.blockers || []))
+  if (ritenutaValidation?.status === 'warning') warnings.push(...(ritenutaValidation.warnings || []))
+  if (ritenutaValidation?.info?.length) info.push(...ritenutaValidation.info)
+
+  const status = blockers.length ? 'blocked' : warnings.length ? 'warning' : 'ok'
+  return {
+    status,
+    blockers: Array.from(new Set(blockers)),
+    warnings: Array.from(new Set(warnings)),
+    info: Array.from(new Set(info)),
+    totals,
+    isBalanced: totals.isBalanced,
+    rowIssues,
+  }
+}

@@ -16,6 +16,7 @@ import { findRegistrazioneCausaleExactMatch, resolveRegistrazioneCausaleLabel } 
 import { resolveRegistrazioneCausaleBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
 import { resolveRegistrazioneCausaleIvaBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleIvaBehavior.js'
 import { resolveRegistrazioneCausaleConfig } from '../../domain/registrazione/registrazioneCausaleConfig.js'
+import { buildRegistrazioneManualeUiPolicy } from '../../domain/registrazione/buildRegistrazioneManualeUiPolicy.js'
 import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 import {
   buildRegistrazioneCausaleContabilePayload,
@@ -1318,8 +1319,11 @@ test('validateRegistrazioneDraft varia con il behavior della causale', () => {
       esercizioContabile: '2026',
       dataRegistrazione: '2026-05-01',
       causaleContabile: { id: 'rp', codice: 'RP' },
+      dataDocumento: '2026-05-01',
+      numeroDocumento: 'DOC-1',
       soggetto: 'Studio Rossi',
       clienteFornitoreId: 'cf-2',
+      totaleDocumento: '1220,00',
     },
     percipienti: [
       { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20 },
@@ -1513,6 +1517,58 @@ test('resolveRegistrazioneCausaleBehavior abilita le ritenute da documento e pag
   assert.equal(pagamento.showRitenute, true)
   assert.equal(pagamento.ritenuteMode, 'pagamento')
   assert.equal(pagamento.showPartitario, true)
+})
+
+test('buildRegistrazioneManualeUiPolicy guida tabs e campi documentali per una fattura IVA', () => {
+  const behavior = resolveRegistrazioneCausaleBehavior({
+    codice: 'FC',
+    tipo_causale: 'Doc. IVA normale',
+    operazione_partite: 'Apre',
+  })
+  const uiPolicy = buildRegistrazioneManualeUiPolicy(behavior)
+
+  assert.equal(uiPolicy.showDocumentPanel, true)
+  assert.equal(uiPolicy.showIvaPanel, true)
+  assert.equal(uiPolicy.showPartitario, true)
+  assert.equal(uiPolicy.showRitenute, false)
+  assert.equal(uiPolicy.requiresSoggetto, true)
+  assert.equal(uiPolicy.requiresDocumentDate, true)
+  assert.equal(uiPolicy.requiresDocumentNumber, true)
+  assert.equal(uiPolicy.requiresDocumentTotal, true)
+  assert.deepEqual(uiPolicy.activeTabs, ['rows', 'iva', 'partitario'])
+})
+
+test('buildRegistrazioneManualeUiPolicy nasconde partitario e ritenute per movimento generale semplice', () => {
+  const behavior = resolveRegistrazioneCausaleBehavior({
+    codice: 'MG',
+    tipo_causale: 'Movimento di generale',
+    operazione_partite: 'Ignora',
+    op_ritenute: 'Ignora',
+  })
+  const uiPolicy = buildRegistrazioneManualeUiPolicy(behavior)
+
+  assert.equal(uiPolicy.showDocumentPanel, false)
+  assert.equal(uiPolicy.showPartitario, false)
+  assert.equal(uiPolicy.showRitenute, false)
+  assert.equal(uiPolicy.requiresSoggetto, false)
+  assert.deepEqual(uiPolicy.activeTabs, ['rows'])
+  assert.deepEqual(uiPolicy.requiredFields, ['dataRegistrazione', 'causaleContabile'])
+})
+
+test('buildRegistrazioneManualeUiPolicy espone partitario e ritenute per movimento generale in chiusura con pagamento', () => {
+  const behavior = resolveRegistrazioneCausaleBehavior({
+    codice: 'RTP',
+    tipo_causale: 'Movimento di generale',
+    operazione_partite: 'Chiude',
+    op_ritenute: 'Pagamento',
+  })
+  const uiPolicy = buildRegistrazioneManualeUiPolicy(behavior)
+
+  assert.equal(uiPolicy.showDocumentPanel, false)
+  assert.equal(uiPolicy.showPartitario, true)
+  assert.equal(uiPolicy.showRitenute, true)
+  assert.equal(uiPolicy.requiresSoggetto, true)
+  assert.deepEqual(uiPolicy.activeTabs, ['rows', 'partitario', 'ritenute'])
 })
 
 test('resolveRegistrazioneCausaleConfig espone il layout per FF', () => {

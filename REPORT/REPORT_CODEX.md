@@ -1326,7 +1326,16 @@ Data task:
 ### 13. BACKUP / COMMIT
 
 - BACKUP NON ESEGUITO.
-- COMMIT NON ESEGUITO.
+- COMMIT ESEGUITO: `e298e3b` (`checkpoint 2026-05-23 - impostazioni causali guidate e partite`)
+- File inclusi nel commit:
+  - `REPORT/REPORT_CODEX.md`
+  - `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+  - `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+  - `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+  - `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+  - `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- Build/test: PASS.
+- Test manuale utente: PASS (conferma operativa su `Operazione gestita` e `Gestione partite`).
 
 ### 14. Prossimo step consigliato
 
@@ -1335,3 +1344,199 @@ Data task:
 ### 15. Conferma finale
 
 - `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1B-quinquies.
+
+---
+
+## RM1C - audit strutturale causali contabili/IVA dopo RM1B
+
+### 1. Path usato
+
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+### 2. Conferma lettura REGOLE_CODEX.md
+
+- Confermato: `REGOLE_CODEX.md` e' stato letto integralmente prima dell'audit.
+
+### 3. File letti
+
+- `REGOLE_CODEX.md`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- `src/modules/contabilita/domain/causali/causalePolicyUtils.js`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`
+- `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleIvaBehavior.js`
+- `src/modules/contabilita/prima_nota_guidata.jsx`
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+- `src/modules/contabilita/views/PrimaNotaHubView.jsx`
+- `src/modules/contabilita/index.jsx`
+- `src/modules/contabilita/data/contabilitaRepo.js`
+
+### 4. Valutazione fonte primaria causali
+
+- Confermato: la struttura causale usa ora impostazioni funzionali come fonte primaria:
+  - `tipo_causale`
+  - `tipo_documento` / `Operazione gestita`
+  - `operazione_partite`
+  - `op_ritenute`
+  - registri IVA e flag IVA
+- Confermato: `operazione_partite` e' la fonte primaria per le partite.
+- Confermato: `gestione_partite` e' rimasto solo come alias interno/compatibilita'.
+
+### 5. Dipendenze fragili trovate
+
+- `resolveRegistrazioneCausaleBehavior.js` mantiene ancora un fallback legacy finale basato sul codice quando i metadati funzionali non bastano;
+- `PrimaNotaHubView.jsx` contiene ancora la mappa storica `CAUSALI_APRONO_PARTITA` con codici espliciti (`FF`, `FC`, `RP`, ecc.);
+- `AnagraficheContabiliView.jsx` conserva riferimenti funzionali e di import ancora legati a codici storici nei punti di ingestione documentale;
+- `causaleOperazioneGestita.js` mantiene un fallback di mapping legacy da testi/codici storici per non perdere valori gia' esistenti;
+- `prima_nota_guidata.jsx` esiste ancora come file legacy molto grande e viene mantenuto come chiave/rimando storico, non come flusso nuovo;
+- `contabilitaRepo.js` e' ancora molto ampio e contiene logica multi-flusso oltre al solo perimetro causali.
+
+### 6. Fallback legacy residui
+
+- fallback al codice in `resolveRegistrazioneCausaleBehavior.js` quando il profilo funzionale non e' sufficiente;
+- fallback lessicale/legacy in `causaleOperazioneGestita.js` per riconoscere valori storici gia' presenti;
+- chiave routing legacy `prima_nota_guidata` in `index.jsx` e `PrimaNotaHubView.jsx`;
+- commento esplicito nel hub che indica il montaggio della nuova `RegistrazioneManualeView` tramite chiave legacy temporanea.
+
+### 7. Valutazione modularita'
+
+- Valutazione: **abbastanza forte ma con debiti**.
+- Punti forti:
+  - policy causali separate in `domain/causali`;
+  - normalizzazione separata in `domain/registrazione`;
+  - UI impostazioni causali e UI manuale distinte;
+  - registrazione manuale nuova separata dal legacy.
+- Debiti:
+  - `AnagraficheContabiliView.jsx` e' ancora molto grande e concentra molta UI;
+  - `contabilitaRepo.js` e' molto grande e incorpora piu' responsabilita';
+  - `prima_nota_guidata.jsx` resta pesante e va considerato solo come legacy di riferimento;
+  - alcuni flussi di lettura continuano a dipendere da mapping storici per non rompere i dati gia' presenti.
+
+### 8. Valutazione coerenza fiscale/contabile
+
+- La struttura attuale e' sufficiente a governare:
+  - scrittura semplice PN
+  - fattura attiva / passiva
+  - note credito attive / passive
+  - incasso / pagamento ordinario
+  - IVA per cassa / esigibilita' differita
+  - split payment
+  - reverse charge / autofattura
+  - corrispettivi
+  - ritenute
+  - partitario
+  - registri IVA
+  - template righe PN
+- Restano pero' punti che richiedono disciplina funzionale costante:
+  - la distinzione tra alias UI e campo persistito reale;
+  - i fallback legacy per i casi storici;
+  - l'allineamento tra comportamento causale, documento e flusso di registrazione.
+
+### 9. Rischi regressione
+
+1. una riduzione troppo aggressiva dei fallback legacy potrebbe rompere le causali storiche gia' salvate;
+2. la presenza di mappe storico-codice in alcuni punti UI/documento puo' reintrodurre ambiguita' se non viene tenuta sotto controllo;
+3. `contabilitaRepo.js` e `AnagraficheContabiliView.jsx` restano grandi e quindi piu' sensibili a regressioni a cascata;
+4. i flussi legacy e la chiave `prima_nota_guidata` vanno tenuti come compatibilita' e non riutilizzati come fonte di nuova logica.
+
+### 10. Zone d'ombra
+
+- `prima_nota_guidata` e' ancora presente come chiave legacy ma il confine tra semplice compatibilita' e flusso attivo va tenuto sotto controllo;
+- i fallback legacy da codice e testo esistono ancora e vanno chiariti caso per caso se diventano troppo permissivi;
+- il perimetro di `operazione_partite` come fonte primaria e' ormai definito, ma bisogna evitare di reintrodurre `gestione_partite` come input editabile autonomo;
+- alcuni casi storici di causali potrebbero richiedere conferma fiscale/contabile esplicita dall'utente per essere normalizzati senza ambiguita'.
+
+### 11. Primo prossimo step consigliato
+
+- Congelare il contratto causali corrente e applicarlo solo ai flussi lettori della manuale/documento, tenendo fuori il legacy dalla nuova logica di salvataggio e di scelta operativa.
+
+### 12. Conferma nessun codice modificato
+
+- Confermato: nessun codice applicativo e' stato modificato in questo audit.
+
+### 13. BACKUP / COMMIT
+
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+### 14. Conferma finale
+
+- `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1C.
+
+---
+
+## RM2A - Policy causale per testata e tab della Registrazione Manuale
+
+**Path usato**
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+**Conferma lettura `REGOLE_CODEX.md`**
+- letta integralmente prima di intervenire.
+
+**File letti**
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+- `src/modules/contabilita/components/registrazione/RegistrazioneHeaderForm.jsx`
+- `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`
+- `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+
+**File creati**
+- `src/modules/contabilita/domain/registrazione/buildRegistrazioneManualeUiPolicy.js`
+
+**File modificati**
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+- `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `REPORT/REPORT_CODEX.md`
+
+**Diff sintetico**
+- introdotto un helper UI dedicato alla policy causale per guidare visibilita' e obbligatorieta' dei campi della manuale;
+- la Registrazione Manuale usa ora la policy derivata per decidere tab visibili e testata mostrata/obbligatoria;
+- la validazione draft usa la stessa policy UI come fonte dei campi obbligatori di testata;
+- aggiunti test mirati sulla policy UI per documento IVA, movimento generale semplice e movimento generale in chiusura con ritenute.
+
+**Conferme funzionali**
+- la UI usa la policy causale e non codici/nome causale come fonte decisionale primaria;
+- `operazione_partite` resta la fonte primaria per la gestione partite;
+- `save` della Registrazione Manuale non e' stato toccato;
+- DB / migration / auth / env / Supabase non sono stati toccati.
+
+**Esito build/test**
+- `npm run build`: PASS
+- `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`: PASS, `91/91`
+
+**Test manuali richiesti**
+- verificare una causale documento IVA e confermare che compaiano Data documento, Numero documento, Cliente/Fornitore e Totale documento;
+- verificare un movimento generale semplice e confermare che non compaiano partitario e ritenute;
+- verificare un movimento generale con chiusura partite e confermare la visibilita' del partitario e delle ritenute se abilitate;
+- verificare che il cambio causale faccia ricalcolare i tab visibili senza dipendere da FF/FC/RP come logica diretta.
+
+**Valutazione strutturale**
+- la modifica **rafforza** il modulo perche' introduce un contratto UI dedicato e centralizzato;
+- non introduce dipendenze fragili nuove, ma continua a dipendere dal fallback legacy gia' presente nel resolver causale;
+- non crea duplicazioni nuove: normalizza l'uso della policy gia' esistente;
+- non appesantisce in modo significativo i file principali, perche' la logica nuova e' stata spostata in un helper piccolo;
+- i rischi di rottura a cascata restano contenuti ma esistono sui casi legacy che ancora passano dal fallback codice/testo;
+- in una fase futura sara' utile un hardening ulteriore per ridurre i fallback legacy residui.
+
+**Rischi residui**
+- alcune causali storiche potrebbero continuare a dipendere dal fallback legacy se i metadati funzionali non sono completi;
+- la semantica di ritenute/documento per casi ibridi resta delicata e potrebbe richiedere chiarimento funzionale ulteriore;
+- la UI della manuale continua a ricevere una policy derivata: se il resolver legacy torna ad essere necessario su piu' casi, va monitorata la coerenza dei tab.
+
+**Primo prossimo step consigliato**
+- usare la stessa policy UI per rifinire i casi ibridi del flusso documento/partite/ritenute, mantenendo il legacy solo come compatibilita' residua.
+
+**BACKUP / COMMIT**
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+**Conferma finale**
+- `REPORT/REPORT_CODEX.md` aggiornato anche per RM2A.
