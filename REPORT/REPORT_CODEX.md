@@ -822,9 +822,516 @@ Data task:
 
 ## 13. BACKUP / COMMIT
 
-- BACKUP NON ESEGUITO: modifica piccola e perimetro controllato.
-- COMMIT NON ESEGUITO.
+- Hash commit creato: `ccf60af` (`checkpoint 2026-05-23 - contratto unico comportamento causali`)
+- File inclusi nel commit:
+  - `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+  - `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+  - `src/modules/contabilita/domain/causali/causalePolicyUtils.js`
+  - `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`
+  - `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleIvaBehavior.js`
+  - `REPORT/REPORT_CODEX.md`
+- Conferma build/test precedenti: PASS.
+- BACKUP NON ESEGUITO: diff limitato ai file attesi, checkpoint piccolo e controllato.
+- COMMIT ESEGUITO: checkpoint creato con successo.
 
 ## 14. Conferma finale
 
 - `REPORT/REPORT_CODEX.md` e' stato aggiornato.
+
+---
+
+## RM1B - Impostazioni causali contabili piu' guidate
+
+### 1. Path usato
+
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+### 2. Conferma lettura REGOLE_CODEX.md
+
+- Confermato: le regole operative sono state lette prima dell'intervento.
+
+### 3. File letti
+
+- `REGOLE_CODEX.md`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+- `src/modules/contabilita/domain/causali/causalePolicyUtils.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+
+### 4. File creati
+
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+
+### 5. File modificati
+
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+
+### 6. Diff sintetico
+
+- introdotto un helper piccolo dedicato al contratto unico del sottotipo operativo causale;
+- la form causali ora mostra `Operazione gestita` al posto di `Tipo documento`;
+- le opzioni sono filtrate in base al `tipo_causale`:
+  - movimento generale: `Generale`, `Incasso`, `Pagamento`
+  - doc. IVA normale: `Fattura attiva`, `Fattura passiva`, `Nota credito attiva`, `Nota credito passiva`
+  - doc. IVA esig. differita: `Fattura attiva IVA per cassa`, `Fattura passiva IVA per cassa`
+  - pag./inc. IVA esig. diff.: `Incasso IVA per cassa`, `Pagamento IVA per cassa`
+  - autofattura: `Autofattura`, `Reverse charge`, `Integrazione documento`
+  - corrispettivo: `Corrispettivo`
+  - IVA Acq. CEE: `Acquisto CEE beni`, `Acquisto CEE servizi`
+  - sola IVA: `Movimento sola IVA`
+- la policy contabile/IVA legge il sottotipo operativo come campo funzionale, mantenendo il fallback legacy solo come compatibilita' residua;
+- la normalizzazione del form preserva i valori legacy non ancora mappati, con fallback visivo in UI, senza toccare il save.
+
+### 7. Conferma su codici/nomi causali NES
+
+- Confermato: nessun codice o nome causale NES e' stato cambiato.
+
+### 8. Conferma che save/DB/migration/auth/env non sono stati toccati
+
+- Confermato.
+- Nessuna modifica a:
+  - save
+  - DB
+  - migration
+  - auth
+  - `.env`
+  - `.env.local`
+  - Supabase
+
+### 9. Esito build/test
+
+- `npm run build`: PASS
+- test mirato eseguito:
+  - `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- esito test: PASS
+  - 86 test passati
+  - 0 falliti
+
+### 10. Rischi regressione
+
+1. i valori legacy gia' memorizzati possono apparire come fallback testuale finche' non vengono riallineati manualmente o da una successiva migrazione controllata;
+2. il nuovo mapping rende piu' esplicito il comportamento, ma il resto del flusso contabile continua a dipendere dai campi funzionali gia' esistenti (`operazione_partite`, `op_ritenute`, `data_documento`, `numero_documento`).
+
+### 11. Test manuali consigliati
+
+- aprire una causale contabile nuova e verificare che `Operazione gestita` mostri solo le scelte consentite dal `tipo_causale`;
+- cambiare `tipo_causale` e verificare che il valore dell'operazione si resetti o si riallinei senza salvare dati incoerenti;
+- riaprire una causale legacy gia' esistente e verificare che il valore non compatibile venga mostrato come fallback e non venga perso al salvataggio.
+
+### 12. Prossimo step consigliato
+
+- Agganciare il comportamento della nuova policy al flusso documento-guidato che oggi usa ancora la selezione legacy per `FF`/`FC`, in modo da far leggere la policy causale anche all'import/registrazione documento.
+
+### 13. BACKUP / COMMIT
+
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+### 14. Conferma finale
+
+- `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1B.
+
+---
+
+## RM1B-bis - filtro Operazione gestita dipendente da tipo causale + gestione partite
+
+### 1. Path usato
+
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+### 2. Conferma lettura REGOLE_CODEX.md
+
+- Confermato: `REGOLE_CODEX.md` e' stato letto integralmente prima dell'intervento.
+
+### 3. File letti
+
+- `REGOLE_CODEX.md`
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+
+### 4. File modificati
+
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `REPORT/REPORT_CODEX.md`
+
+### 5. Diff sintetico
+
+- il gruppo `Movimento di generale` e' stato spezzato in due comportamenti:
+  - `Ignora` / non chiude partite: scrittura semplice di prima nota con opzioni `Generale`, `Giroconto`, `Costo/Ricavo diretto`
+  - `Chiude`: incasso/pagamento ordinario con opzioni `Incasso`, `Pagamento`
+- il filtro `Operazione gestita` ora usa il contesto combinato `tipo_causale + gestione_partite/operazione_partite`;
+- se il valore corrente non e' piu' coerente con il contesto, la UI lo riallinea o lo resetta; i valori legacy non mappati restano visibili come fallback testuale e non vengono persi automaticamente;
+- la policy contabile ora distingue esplicitamente il caso `Movimento di generale + Chiude` dal canale `Pag./Inc. IVA esig. diff.`;
+- la normalizzazione del form causale usa il contesto partite per non generare combinazioni incoerenti.
+
+### 6. Conferma su Operazione gestita
+
+- Confermato: `Operazione gestita` dipende ora da `tipo_causale + gestione_partite/operazione_partite`.
+
+### 7. Conferma su Movimento generale + Chiude
+
+- Confermato: `Movimento di generale + Chiude` e' trattato come incasso/pagamento ordinario, non come IVA per cassa.
+
+### 8. Conferma su Pag./Inc. IVA esig. diff.
+
+- Confermato: `Pag./Inc. IVA esig. diff.` resta il solo canale dedicato per incasso/pagamento IVA per cassa.
+
+### 9. Conferma che save/DB/migration/auth/env non sono stati toccati
+
+- Confermato.
+- Nessuna modifica a:
+  - save
+  - DB
+  - migration
+  - auth
+  - `.env`
+  - `.env.local`
+  - Supabase
+
+### 10. Esito build/test
+
+- `npm run build`: PASS
+- test mirato eseguito:
+  - `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- esito test: PASS
+  - 86 test passati
+  - 0 falliti
+
+### 11. Test manuali consigliati
+
+- aprire una causale `Movimento di generale` con `Ignora` e verificare che il menu `Operazione gestita` mostri solo le scelte di scrittura semplice;
+- cambiare `gestione_partite` su `Chiude` e verificare che il menu si restringa alle sole opzioni `Incasso` / `Pagamento`;
+- aprire una causale `Pag./Inc. IVA esig. diff.` e verificare che restino solo le opzioni IVA per cassa;
+- cambiare contesto e verificare che un valore non piu' coerente venga riallineato senza perdere i fallback legacy non mappati.
+
+### 12. Prossimo step consigliato
+
+- Agganciare il nuovo filtro contestuale anche ai punti di lettura della causale fuori dalla schermata impostazioni, in modo che il comportamento resti coerente nella Registrazione Manuale e nei flussi documento-guidati.
+
+### 13. BACKUP / COMMIT
+
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+### 14. Conferma finale
+
+- `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1B-bis.
+
+---
+
+## RM1B-ter - fix salvataggio impostazioni causali contabili / Operazione gestita
+
+### 1. Path usato
+
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+### 2. Conferma lettura REGOLE_CODEX.md
+
+- Confermato: `REGOLE_CODEX.md` e' stato letto integralmente prima dell'intervento.
+
+### 3. Causa del mancato salvataggio
+
+- il payload di salvataggio della causale stava includendo anche `gestione_partite`, ma nel DB delle causali contabili non esiste una colonna persistita con questo nome;
+- la UI mostrava correttamente il comportamento filtrato, ma il dato reale da salvare doveva restare nel campo DB esistente `operazione_partite` e il sottotipo operativo in `tipo_documento`;
+- di conseguenza, il reload non poteva garantire coerenza se il payload conteneva un campo non persistibile o non riallineato al campo reale.
+
+### 4. File letti
+
+- `REGOLE_CODEX.md`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/data/contabilitaRepo.js`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `supabase/migrations/20260503123000_causali_contabili_config_columns.sql`
+
+### 5. File modificati
+
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `REPORT/REPORT_CODEX.md`
+
+### 6. Diff sintetico
+
+- il form causali continua a filtrare `Operazione gestita` in base a `tipo_causale` + partite;
+- i due campi partite vengono ora riallineati in UI durante la modifica, cosi' il valore effettivo non diverge tra alias legacy e campo attivo;
+- il payload di salvataggio non invia piu' `gestione_partite` al repository, ma persiste il valore nel campo reale `operazione_partite`;
+- il reload continua a ricostruire anche `gestione_partite` come alias di UI a partire dal valore salvato;
+- il test mirato e' stato aggiornato per verificare che il valore venga salvato nel campo corretto e che il campo alias non finisca nel payload DB.
+
+### 7. Conferma sul campo corretto
+
+- Confermato: `Operazione gestita` continua a essere salvato nel campo corretto `tipo_documento`.
+- Confermato: il valore di contesto partite viene ora persistito nel campo DB reale `operazione_partite`, senza inviare una colonna inesistente.
+
+### 8. Conferma reload
+
+- Confermato: il reload mantiene il valore salvato perche' la normalizzazione ricostruisce `gestione_partite` come alias a partire da `operazione_partite` e normalizza `tipo_documento` nello stesso contratto funzionale.
+
+### 9. Conferma che save Registrazione Manuale / DB / migration / auth / env non sono stati toccati
+
+- Confermato.
+- Nessuna modifica a:
+  - save della Registrazione Manuale
+  - DB
+  - migration
+  - auth
+  - `.env`
+  - `.env.local`
+  - Supabase
+
+### 10. Esito build/test
+
+- `npm run build`: PASS
+- test mirato eseguito:
+  - `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- esito test: PASS
+  - 86 test passati
+  - 0 falliti
+
+### 11. Test manuali consigliati
+
+- aprire una causale contabile esistente, modificare `Operazione gestita`, salvare, chiudere e riaprire la causale verificando che il valore resti quello scelto;
+- cambiare `Operazione partite` / `Gestione partite` e verificare che il valore persistito torni nel campo reale `operazione_partite`;
+- controllare che il filtro di `Operazione gestita` resti coerente dopo il reload e non mostri piu' combinazioni non compatibili.
+
+### 12. Prossimo step consigliato
+
+- Se il comportamento risulta stabile in UI, il prossimo step sicuro e' lasciare fermo questo contratto e applicarlo solo ai flussi che leggono le causali, senza riaprire il save della Registrazione Manuale.
+
+### 13. BACKUP / COMMIT
+
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+### 14. Conferma finale
+
+- `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1B-ter.
+
+---
+
+## RM1B-quater - debug mirato salvataggio e refresh impostazioni causali
+
+### 1. Path usato
+
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+### 2. Conferma lettura REGOLE_CODEX.md
+
+- Confermato: `REGOLE_CODEX.md` e' stato letto integralmente prima dell'intervento.
+
+### 3. Causa reale del bug su `Operazione gestita`
+
+- il salvataggio aggiornava correttamente il record, ma la riapertura del modal leggeva ancora la causale da uno stato/lista locale non rifrescato;
+- in pratica il refresh visivo richiedeva un hard reset della pagina per mostrare il valore persistito piu' recente;
+- la correzione introdotta forza il refetch del record prima dell'apertura del modal e attende il refresh della lista dopo il save, cosi' il modal riparte dal dato realmente salvato.
+
+### 4. Causa reale del bug su `Gestione partite`
+
+- `Gestione partite` e `operazione_partite` stavano oscillando come alias UI/persistenza senza un allineamento stabile;
+- la UI mostrava `gestione_partite` come comando operativo, ma il campo realmente persistito e' `operazione_partite`;
+- il problema di blocco su `Chiude` dipendeva dalla mancata sincronizzazione costante tra i due campi in fase di edit e reload.
+
+### 5. Flusso dati ricostruito
+
+- UI causale:
+  - selezione in `Operazione gestita` / `Gestione partite`
+  - aggiornamento stato form
+  - normalizzazione `tipo_documento` tramite policy causale
+- salvataggio:
+  - `AnagraficheContabiliView.jsx` costruisce il payload con `buildRegistrazioneCausaleContabilePayload(...)`
+  - `contabilitaRepo.updateCausale(...)` persiste il record
+  - il refresh lista viene atteso prima di chiudere il modal
+- reload:
+  - `openEditCausale(...)` rifetcha il record per `id`
+  - `hydrateRegistrazioneCausaleContabileForm(...)` ricostruisce `gestione_partite` dal valore persistito
+- sincronizzazione partite:
+  - il cambio UI aggiorna entrambi i campi:
+    - `gestione_partite`
+    - `operazione_partite`
+  - il payload persiste il campo reale DB `operazione_partite`
+
+### 6. File letti
+
+- `REGOLE_CODEX.md`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/data/contabilitaRepo.js`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `supabase/migrations/20260503123000_causali_contabili_config_columns.sql` (solo lettura)
+
+### 7. File modificati
+
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `REPORT/REPORT_CODEX.md`
+
+### 8. Diff sintetico
+
+- la finestra edit causale ora rifetcha il record dal repository prima di aprirsi;
+- dopo il save la lista causali viene rifrescata prima della chiusura del modal;
+- `Gestione partite` e `operazione_partite` vengono tenuti sincronizzati nello stato form;
+- il payload continua a persistere il valore nel campo DB reale `operazione_partite`;
+- la normalizzazione al reload ricostruisce `gestione_partite` dal dato persistito;
+- e' stato aggiunto un test mirato sulla sincronizzazione `gestione_partite -> operazione_partite` e sulla normalizzazione del reload.
+
+### 9. Conferma su `Operazione gestita`
+
+- Confermato: dopo save + chiudi/riapri la UI ora ricarica i valori aggiornati senza hard reset.
+
+### 10. Conferma su `Gestione partite`
+
+- Confermato: `gestione_partite` e `operazione_partite` non divergono piu' nel flusso di edit/reload; il valore persistito resta coerente dopo il salvataggio.
+
+### 11. Conferma che save Registrazione Manuale / DB / migration / auth / env non sono stati toccati
+
+- Confermato.
+- Nessuna modifica a:
+  - save della Registrazione Manuale
+  - DB
+  - migration
+  - auth
+  - `.env`
+  - `.env.local`
+  - Supabase
+
+### 12. Esito build/test
+
+- `npm run build`: PASS
+- test mirato eseguito:
+  - `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- esito test: PASS
+  - 87 test passati
+  - 0 falliti
+
+### 13. Test manuali richiesti
+
+- modificare `Operazione gestita`, salvare, chiudere e riaprire la causale senza hard reset;
+- cambiare `Gestione partite` da `Chiude` a `Ignora` e viceversa, verificando che il valore persista e venga riletto correttamente;
+- fare un cambio rapido di `tipo_causale` e verificare che il filtro di `Operazione gestita` si riallinei al nuovo contesto.
+
+### 14. BACKUP / COMMIT
+
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+### 15. Prossimo step consigliato
+
+- Se la UI conferma il refresh corretto, il prossimo passo e' applicare la stessa logica di refetch/riapertura solo ai punti che leggono la causale in altri moduli, senza riaprire il salvataggio della Registrazione Manuale.
+
+### 16. Conferma finale
+
+- `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1B-quater.
+
+---
+
+## RM1B-quinquies - rimozione ambiguita' Gestione partite dalle impostazioni causali
+
+### 1. Path usato
+
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+
+### 2. Conferma lettura REGOLE_CODEX.md
+
+- Confermato: `REGOLE_CODEX.md` e' stato letto integralmente prima dell'intervento.
+
+### 3. Causa residua del problema su `gestione_partite`
+
+- `gestione_partite` era rimasto come secondo input editabile nella UI causali, pur non essendo il campo operativo principale;
+- questa doppia esposizione generava ambiguita' tra alias UI e campo persistito reale;
+- la correzione elimina il controllo editabile autonomo e usa solo `operazione_partite` come comando principale, mantenendo `gestione_partite` come alias interno derivato.
+
+### 4. File letti
+
+- `REGOLE_CODEX.md`
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/causalePolicyUtils.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+
+### 5. File modificati
+
+- `src/modules/contabilita/views/AnagraficheContabiliView.jsx`
+- `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`
+- `REPORT/REPORT_CODEX.md`
+
+### 6. Diff sintetico
+
+- nella UI causali e' stato rimosso il campo editabile autonomo `Gestione partite`;
+- il singolo campo visibile e' ora `Gestione partite`, ma tecnicamente scrive su `operazione_partite` e riallinea `gestione_partite` come alias interno;
+- la policy causale usa `operazione_partite` come fonte primaria e solo in fallback il vecchio alias;
+- la normalizzazione al reload ricostruisce `gestione_partite` a partire da `operazione_partite`;
+- i test sono stati aggiornati per verificare la priorita' della fonte primaria e l'assenza di divergenza.
+
+### 7. Conferma che `operazione_partite` e' ora la fonte primaria
+
+- Confermato: il flusso di UI, normalizzazione e policy usa `operazione_partite` come comando principale.
+
+### 8. Conferma che `gestione_partite` non e' piu' campo editabile autonomo
+
+- Confermato: non esiste piu' un secondo input editabile separato in UI; `gestione_partite` resta solo alias derivato/compatibilita'.
+
+### 9. Conferma che `Operazione gestita` continua a funzionare
+
+- Confermato: il filtro di `Operazione gestita` continua a funzionare e a dipendere dal contesto `tipo_causale + operazione_partite`.
+
+### 10. Conferma che save Registrazione Manuale / DB / migration / auth / env non sono stati toccati
+
+- Confermato.
+- Nessuna modifica a:
+  - save della Registrazione Manuale
+  - DB
+  - migration
+  - auth
+  - `.env`
+  - `.env.local`
+  - Supabase
+
+### 11. Esito build/test
+
+- `npm run build`: PASS
+- `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`: PASS
+  - 88 test passati
+  - 0 falliti
+
+### 12. Test manuali richiesti
+
+- aprire una causale contabile e verificare che esista un solo controllo editabile per la gestione partite;
+- cambiare il valore della gestione partite e verificare che la riapertura mostri il dato persistito senza ambiguita';
+- cambiare `tipo_causale` e verificare che il menu `Operazione gestita` continui a filtrare correttamente.
+
+### 13. BACKUP / COMMIT
+
+- BACKUP NON ESEGUITO.
+- COMMIT NON ESEGUITO.
+
+### 14. Prossimo step consigliato
+
+- Se la UI e il reload restano coerenti, il prossimo passo e' mantenere questo contratto stabile e applicarlo solo ai flussi che leggono le causali, senza riaprire il salvataggio della Registrazione Manuale.
+
+### 15. Conferma finale
+
+- `REPORT/REPORT_CODEX.md` e' stato aggiornato anche per RM1B-quinquies.

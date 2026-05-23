@@ -1,4 +1,5 @@
 import { normalizeText } from '../../application/canonical_mapper/utils.js'
+import { buildCausaleOperazioneGestitaPolicy, normalizeCausaleOperazioneGestita } from './causaleOperazioneGestita.js'
 import {
   hasPolicyField,
   isPolicyOneOf,
@@ -45,29 +46,35 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const segnoRegistroIva = normalizeText(item?.segno_registro_iva || item?.segnoRegistroIva || '')
   const registroIva = normalizeText(item?.codice_registro_iva || item?.registro_iva || '')
   const normalizedType = normalizePolicyKey(typeCausale)
-  const normalizedTipoDocumento = normalizePolicyKey(tipoDocumento)
+  const partiteMode = operazionePartite || gestionePartite
+  const operazioneGestita = normalizeCausaleOperazioneGestita(typeCausale, partiteMode, tipoDocumento, item)
+  const operazionePolicy = buildCausaleOperazioneGestitaPolicy(typeCausale, partiteMode, operazioneGestita, item)
 
-  const partiteOpen = isPolicyOneOf(operazionePartite, ['apre', 'apertura', 'aperti']) || isPolicyOneOf(gestionePartite, ['apre', 'apertura'])
-  const partiteClose = isPolicyOneOf(operazionePartite, ['chiude', 'chiusura']) || isPolicyOneOf(gestionePartite, ['chiude', 'chiusura'])
-  const partiteIgnore = isPolicyOneOf(operazionePartite, ['ignora', 'nessuna', 'nessuno']) || isPolicyOneOf(gestionePartite, ['ignora', 'nessuna', 'nessuno'])
+  const partiteOpen = isPolicyOneOf(operazionePartite, ['apre', 'apertura', 'aperti']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['apre', 'apertura']))
+  const partiteClose = isPolicyOneOf(operazionePartite, ['chiude', 'chiusura']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['chiude', 'chiusura']))
+  const partiteIgnore = isPolicyOneOf(operazionePartite, ['ignora', 'nessuna', 'nessuno']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['ignora', 'nessuna', 'nessuno']))
 
   const ritenuteDocument = isPolicyOneOf(opRitenute, ['documento', 'doc', 'document'])
   const ritenutePayment = isPolicyOneOf(opRitenute, ['pagamento', 'pag', 'payment'])
   const ritenuteIgnore = isPolicyOneOf(opRitenute, ['ignora', 'nessuna', 'nessuno'])
 
-  const ivaPerCassa = hasIvaDifferitaFlag(item) || pickPolicyBoolean(item, ['causale_giro_iva_cassa', 'iva_per_cassa']) === true
-  const isCee = hasCeeFlag(item) || normalizedType.includes('cee') || normalizedTipoDocumento.includes('cee')
-  const isAutofattura = isPolicyOneOf(typeCausale, ['autofattura']) || isPolicyOneOf(tipoDocumento, ['autofattura'])
-  const isCorrispettivo = isPolicyOneOf(typeCausale, ['doccorrispettivo', 'corrispettivo'])
-  const isSolaIva = isPolicyOneOf(typeCausale, ['movimentosolaiva', 'solaiva', 'soloiva']) || isPolicyOneOf(tipoDocumento, ['movimentosolaiva', 'solaiva', 'soloiva'])
-  const isMovimentoGenerico = isPolicyOneOf(typeCausale, ['movimentogenerale', 'movimentodigenerale', 'generale'])
+  const ivaPerCassa =
+    hasIvaDifferitaFlag(item) ||
+    pickPolicyBoolean(item, ['causale_giro_iva_cassa', 'iva_per_cassa']) === true ||
+    operazionePolicy.isIvaDifferitaDocumento ||
+    operazionePolicy.isIvaDifferitaPagamento
+  const isCee = hasCeeFlag(item) || normalizedType.includes('cee') || operazionePolicy.isCee
+  const isAutofattura = isPolicyOneOf(typeCausale, ['autofattura']) || operazionePolicy.isAutofattura
+  const isCorrispettivo = isPolicyOneOf(typeCausale, ['doccorrispettivo', 'corrispettivo']) || operazionePolicy.isCorrispettivo
+  const isSolaIva = isPolicyOneOf(typeCausale, ['movimentosolaiva', 'solaiva', 'soloiva']) || operazionePolicy.isMovimentoSolaIva
+  const isMovimentoGenerico = isPolicyOneOf(typeCausale, ['movimentogenerale', 'movimentodigenerale', 'generale']) || operazionePolicy.isMovimentoGenerale
   const isPagamentoIncasso =
     isPolicyOneOf(typeCausale, [
       'pagincivaesigdiff',
       'pagamentoincassivaesigdiff',
       'pagamentoincassoivaesigdifferita',
       'pagamentoincassivaesigibilitadifferita',
-    ]) || (ivaPerCassa && (partiteOpen || partiteClose))
+    ]) || operazionePolicy.isPagamentoIncasso
 
   const isDocumentoIva =
     isPolicyOneOf(typeCausale, [
@@ -85,6 +92,7 @@ export function buildCausaleContabilePolicy(causale = {}) {
     ]) ||
     isCorrispettivo ||
     isCee ||
+    operazionePolicy.isDocumentoIva ||
     (ivaPerCassa && !isPagamentoIncasso)
 
   const richiedeDataDocumento =
@@ -102,6 +110,7 @@ export function buildCausaleContabilePolicy(causale = {}) {
       gestionePartite ||
       opRitenute ||
       tipoDocumento ||
+      operazioneGestita ||
       dataDocumento ||
       numeroDocumento ||
       ivaPerCassa ||
@@ -113,15 +122,18 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const notaCredito =
     isPolicyOneOf(typeCausale, ['notacredito', 'nota credito']) ||
     isPolicyOneOf(tipoDocumento, ['notacredito', 'nota credito']) ||
+    operazionePolicy.isNotaCreditoAttiva ||
+    operazionePolicy.isNotaCreditoPassiva ||
     segnoRegistroIva === '-'
 
   return {
     code,
     typeCausale,
-    operazionePartite,
-    gestionePartite,
+    operazionePartite: operazionePartite || gestionePartite,
+    gestionePartite: operazionePartite || gestionePartite,
     opRitenute,
     tipoDocumento,
+    operazioneGestita,
     dataDocumento,
     numeroDocumento,
     registroIva,
@@ -134,6 +146,17 @@ export function buildCausaleContabilePolicy(causale = {}) {
     isCorrispettivo,
     isSolaIva,
     isCee,
+    operazioneGestitaGroup: operazionePolicy.operazioneGestitaGroup,
+    isFatturaAttiva: operazionePolicy.isFatturaAttiva,
+    isFatturaPassiva: operazionePolicy.isFatturaPassiva,
+    isNotaCreditoAttiva: operazionePolicy.isNotaCreditoAttiva,
+    isNotaCreditoPassiva: operazionePolicy.isNotaCreditoPassiva,
+    isIncasso: operazionePolicy.isIncasso,
+    isPagamento: operazionePolicy.isPagamento,
+    isReverseCharge: operazionePolicy.isReverseCharge,
+    isIntegrazioneDocumento: operazionePolicy.isIntegrazioneDocumento,
+    isAcquistoCeeBeni: operazionePolicy.isAcquistoCeeBeni,
+    isAcquistoCeeServizi: operazionePolicy.isAcquistoCeeServizi,
     gestionePartitario: resolvePartitarioMode({ partiteOpen, partiteClose, partiteIgnore }),
     gestioneRitenute: resolveRitenuteMode({ ritenuteDocument, ritenutePayment, ritenuteIgnore }),
     richiedeDataDocumento,

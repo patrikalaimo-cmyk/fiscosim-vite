@@ -8,6 +8,24 @@ import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../../u
 import { extractTextFromPDFBrowser } from '../../../shared/utils'
 import { triggerAutoPipeline } from '../../../utils/autoPipeline.js'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
+import CausaleRighePrimaNotaTemplateTab from '../components/causali/CausaleRighePrimaNotaTemplateTab.jsx'
+import {
+  CAUSALE_OPERAZIONE_PARTITE_OPTIONS,
+  CAUSALE_RITENUTE_OPTIONS,
+  CAUSALE_STATO_DOCUMENTO_OPTIONS,
+  CAUSALE_TIPO_CAUSALE_OPTIONS,
+  CAUSALE_RIGHE_TEMPLATE_FORMULE,
+  CAUSALE_RIGHE_TEMPLATE_LATI,
+  CAUSALE_RIGHE_TEMPLATE_RUOLI,
+  buildRegistrazioneCausaleContabilePayload,
+  hydrateRegistrazioneCausaleContabileForm,
+  normalizeRegistrazioneCausaleRighePrimaNotaTemplate,
+  normalizeRegistrazioneCausaleRighePrimaNotaTemplateRow,
+} from '../domain/registrazione/normalizeRegistrazioneCausaleDetail.js'
+import {
+  getCausaleOperazioneGestitaOptions,
+  normalizeCausaleOperazioneGestita,
+} from '../domain/causali/causaleOperazioneGestita.js'
 
 export default function AnagraficheContabiliView({
   contTab,
@@ -41,6 +59,7 @@ export default function AnagraficheContabiliView({
           causali={causaliContabili}
           tipo="contabili"
           societaId={societaAttiva.id}
+          pianoConti={pianoConti}
           onImport={() => setModalImportPDF('causali')}
           onRefresh={caricaTutto}
         />
@@ -51,6 +70,7 @@ export default function AnagraficheContabiliView({
           causali={causaliIva}
           tipo="iva"
           societaId={societaAttiva.id}
+          pianoConti={pianoConti}
           onImport={() => setModalImportPDF('causali_iva')}
           onRefresh={caricaTutto}
         />
@@ -471,6 +491,23 @@ function ImportFattureView({societaId,onComplete}){
 // â”€â”€â”€ PIANO CONTI VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // â”€â”€â”€ MODAL NUOVO CONTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function validatePianoContoForm(form = {}) {
+  const descrizione = String(form?.descrizione || '').trim()
+  if (!descrizione) return 'Inserisci la descrizione del conto.'
+
+  const piva = String(form?.partita_iva || '').replace(/\D/g, '')
+  if (piva && piva.length !== 11) return 'La partita IVA deve contenere 11 cifre.'
+
+  const cf = String(form?.codice_fiscale || '').replace(/\s/g, '').toUpperCase()
+  if (cf && ![11, 16].includes(cf.length)) return 'Il codice fiscale deve avere 11 o 16 caratteri.'
+
+  if (form?.is_cliente && form?.is_fornitore) {
+    return 'Un conto non puo essere contemporaneamente cliente e fornitore.'
+  }
+
+  return ''
+}
+
 function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
   const MASTRI = [
     {codice:'1',label:'1 — Attività'},
@@ -520,6 +557,12 @@ function ModalNuovoConto({societaId, pianoConti, onSave, onClose}){
     else if(fd<=5){tipo='economico';natura='costo';sezione='dare';}
     else if(fd===6){tipo='ordine';natura='ordine';}
     else if(fd===2){natura='passivo';sezione='avere';}
+    const validationError = validatePianoContoForm({ descrizione: descrizione.trim() })
+    if (validationError) {
+      setSaving(false)
+      alert(validationError)
+      return
+    }
     await onSave({
       codice: codice.trim(),
       codice_mastro: parts[0]||null,
@@ -643,6 +686,171 @@ function ModalNuovaCausale({tipo, societaId, onSave, onClose}){
       </div>
     </div>
   );
+}
+
+function CausaleRighePrimaNotaTab({form, setForm}){
+  const templateRows = useMemo(
+    () => normalizeRegistrazioneCausaleRighePrimaNotaTemplate(form.righe_prima_nota_template),
+    [form.righe_prima_nota_template]
+  )
+
+  const updateTemplateRows = (updater) => {
+    setForm((prev) => {
+      const nextRows = updater(normalizeRegistrazioneCausaleRighePrimaNotaTemplate(prev.righe_prima_nota_template))
+      return { ...prev, righe_prima_nota_template: nextRows }
+    })
+  }
+
+  const addRow = () => {
+    updateTemplateRows((rows) => [
+      ...rows,
+      normalizeRegistrazioneCausaleRighePrimaNotaTemplateRow(
+        { ordine: rows.reduce((max, row) => Math.max(max, Number(row.ordine) || 0), 0) + 1, attiva: true, modificabile: true },
+        rows.length
+      ),
+    ])
+  }
+
+  const removeRow = (targetRow) => {
+    updateTemplateRows((rows) => rows.filter((row) => row !== targetRow))
+  }
+
+  const updateRow = (targetRow, field, value) => {
+    updateTemplateRows((rows) => rows.map((row) => (row === targetRow ? { ...row, [field]: value } : row)))
+  }
+
+  const sortedRows = [...templateRows].sort((a, b) => {
+    const diff = (Number(a.ordine) || 0) - (Number(b.ordine) || 0)
+    if (diff) return diff
+    return String(a.ruolo || '').localeCompare(String(b.ruolo || ''), 'it')
+  })
+
+  const RowToggle = ({row, field}) => (
+    <button
+      type="button"
+      className={row[field] ? 'btn' : 'btn-sec'}
+      onClick={() => updateRow(row, field, !row[field])}
+      style={{padding:'.25rem .5rem',fontSize:'.68rem',minWidth:70}}
+    >
+      {row[field] ? 'Sì' : 'No'}
+    </button>
+  )
+
+  const optionsLabel = (value) => {
+    if (value === 'manuale') return 'Manuale'
+    if (value === 'totale_documento') return 'Totale documento'
+    if (value === 'imponibile') return 'Imponibile'
+    if (value === 'iva_detraibile') return 'IVA detraibile'
+    if (value === 'iva_indetraibile') return 'IVA indetraibile'
+    if (value === 'netto') return 'Netto'
+    if (value === 'residuo_sbilancio') return 'Residuo sbilancio'
+    return value
+  }
+
+  return (
+    <div className="form-grid" style={{display:'block'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'.75rem',marginBottom:'.75rem'}}>
+        <div>
+          <div style={{fontSize:'.78rem',fontWeight:700,color:'var(--gold)'}}>Righe prima nota template</div>
+          <div style={{fontSize:'.72rem',color:'var(--mu)'}}>Definisci una struttura preimpostata per la causale. Le righe verranno solo salvate come template.</div>
+        </div>
+        <button className="btn-sec" type="button" onClick={addRow}>+ Aggiungi riga</button>
+      </div>
+
+      {sortedRows.length === 0 ? (
+        <div className="alert alert-info" style={{fontSize:'.78rem'}}>
+          Nessuna riga template configurata. Premi “Aggiungi riga” per iniziare.
+        </div>
+      ) : (
+        <div style={{overflowX:'auto',border:'1px solid var(--bd)',borderRadius:8}}>
+          <table className="tbl" style={{minWidth:1280}}>
+            <thead>
+              <tr>
+                <th style={{width:70}}>Ordine</th>
+                <th style={{width:150}}>Ruolo</th>
+                <th style={{width:110}}>Lato</th>
+                <th style={{width:160}}>Formula importo</th>
+                <th style={{width:150}}>Conto ID</th>
+                <th style={{width:150}}>Conto codice</th>
+                <th>Conto descrizione</th>
+                <th style={{width:150}}>Mastrino hint</th>
+                <th style={{width:180}}>Descrizione riga</th>
+                <th style={{width:90}}>Obblig.</th>
+                <th style={{width:90}}>Modif.</th>
+                <th style={{width:90}}>Attiva</th>
+                <th style={{width:90}}>Azioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.map((row, index) => (
+                <tr key={index} style={{opacity:row.attiva?1:.55}}>
+                  <td>
+                    <input
+                      type="number"
+                      value={row.ordine}
+                      min={1}
+                      onChange={(e) => updateRow(row, 'ordine', Number.parseInt(e.target.value, 10) || 0)}
+                      style={{width:64}}
+                    />
+                  </td>
+                  <td>
+                    <select value={row.ruolo} onChange={(e) => updateRow(row, 'ruolo', e.target.value)}>
+                      {CAUSALE_RIGHE_TEMPLATE_RUOLI.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={row.lato} onChange={(e) => updateRow(row, 'lato', e.target.value)}>
+                      {CAUSALE_RIGHE_TEMPLATE_LATI.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={row.formula_importo} onChange={(e) => updateRow(row, 'formula_importo', e.target.value)}>
+                      {CAUSALE_RIGHE_TEMPLATE_FORMULE.map((option) => (
+                        <option key={option} value={option}>{optionsLabel(option)}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <input value={row.conto_id} onChange={(e) => updateRow(row, 'conto_id', e.target.value)} placeholder="ID conto"/>
+                  </td>
+                  <td>
+                    <input value={row.conto_codice} onChange={(e) => updateRow(row, 'conto_codice', e.target.value)} placeholder="Codice conto"/>
+                  </td>
+                  <td>
+                    <input value={row.conto_descrizione} onChange={(e) => updateRow(row, 'conto_descrizione', e.target.value)} placeholder="Descrizione conto"/>
+                  </td>
+                  <td>
+                    <input value={row.mastrino_hint} onChange={(e) => updateRow(row, 'mastrino_hint', e.target.value)} placeholder="Hint mastrino"/>
+                  </td>
+                  <td>
+                    <input value={row.descrizione_riga} onChange={(e) => updateRow(row, 'descrizione_riga', e.target.value)} placeholder="Descrizione riga"/>
+                  </td>
+                  <td>
+                    <RowToggle row={row} field="obbligatoria" />
+                  </td>
+                  <td>
+                    <RowToggle row={row} field="modificabile" />
+                  </td>
+                  <td>
+                    <RowToggle row={row} field="attiva" />
+                  </td>
+                  <td>
+                    <button type="button" className="btn-sec" onClick={() => removeRow(row)} style={{padding:'.25rem .5rem',fontSize:'.68rem'}}>
+                      Elimina
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // â”€â”€â”€ MODAL IMPORT ANAGRAFICA NES â†’ PIANO DEI CONTI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -873,14 +1081,32 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
   );
 }
 
-function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
+export function PianoContiView({pianoConti,societaId,onImport,onRefresh,usageByConto={}}){
   const [search,setSearch]=useState('');
+  const [filterMode,setFilterMode]=useState('tutti');
   const [sel,setSel]=useState(new Set());
   const [open,setOpen]=useState(new Set()); // nodi espansi
   const [deleting,setDeleting]=useState(false);
   const [editConto,setEditConto]=useState(null);
   const [nuovoConto,setNuovoConto]=useState({open:false});
   const [importAnagrafica,setImportAnagrafica]=useState(false); // {id, codice, descrizione, ...}
+  const [showInlineImport,setShowInlineImport]=useState(false);
+  const usedIds = useMemo(
+    ()=>new Set(Object.entries(usageByConto||{}).filter(([,count])=>Number(count||0)>0).map(([id])=>String(id))),
+    [usageByConto]
+  );
+
+  const filterRows = useMemo(()=>{
+    const rows = Array.isArray(pianoConti) ? pianoConti : [];
+    return rows.filter((row)=>{
+      if(filterMode==='movimentati' && !usedIds.has(String(row?.id||''))) return false;
+      if(filterMode==='clienti' && !row?.is_cliente) return false;
+      if(filterMode==='fornitori' && !row?.is_fornitore) return false;
+      if(filterMode==='banche' && !row?.is_banca) return false;
+      if(filterMode==='iva' && !row?.is_iva) return false;
+      return true;
+    });
+  },[filterMode,pianoConti,usedIds]);
 
   // Costruisce albero da array flat
   const tree=useMemo(()=>{
@@ -892,7 +1118,7 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
       return parts.slice(0,-1).join(' ');
     };
     const map={};
-    const valid=pianoConti.filter(c=>c?.codice);
+    const valid=filterRows.filter(c=>c?.codice);
     // Prima passata: popola map con tutti i nodi reali
     for(const c of valid) map[c.codice.trim()]={...c,codice:c.codice.trim(),children:[]};
     // FIX: seconda passata â€” crea nodi placeholder per parent mancanti (nodi intermedi non importati)
@@ -917,14 +1143,14 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
     roots.sort((a,b)=>a.codice.localeCompare(b.codice,undefined,{numeric:true}));
     roots.forEach(sortChildren);
     return roots;
-  },[pianoConti]);
+  },[filterRows]);
 
   const filtered=useMemo(()=>{
     if(!search) return tree;
     const s=search.toLowerCase();
     // Filtra flat e restituisce array senza struttura ad albero
-    return pianoConti.filter(c=>(c.codice+' '+c.descrizione).toLowerCase().includes(s));
-  },[search,tree,pianoConti]);
+    return filterRows.filter(c=>(c.codice+' '+c.descrizione).toLowerCase().includes(s));
+  },[search,tree,filterRows]);
 
   const toggleOpen=(codice)=>setOpen(p=>{const n=new Set(p);n.has(codice)?n.delete(codice):n.add(codice);return n;});
   const toggleSel=(id)=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
@@ -934,7 +1160,17 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
     if(!sel.size||!confirm(`Eliminare ${sel.size} conti selezionati?`))return;
     setDeleting(true);
     const ids=[...sel];
-    for(let i=0;i<ids.length;i+=100) await contabilitaRepo.bulkDeactivatePianoConti(ids.slice(i,i+100));
+    const removable = ids.filter(id=>!usedIds.has(String(id)));
+    const protectedCount = ids.length - removable.length;
+    if(!removable.length){
+      setDeleting(false);
+      alert('I conti selezionati sono già usati in documenti o prima nota. Per sicurezza non vengono disattivati.')
+      return
+    }
+    if(protectedCount>0){
+      alert(`${protectedCount} conti già usati resteranno attivi. Procedo a disattivare solo i ${removable.length} non movimentati.`)
+    }
+    for(let i=0;i<removable.length;i+=100) await contabilitaRepo.bulkDeactivatePianoConti(removable.slice(i,i+100));
     setSel(new Set());setDeleting(false);onRefresh();
   };
 
@@ -942,7 +1178,11 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
     if(!confirm(`Eliminare TUTTI i ${pianoConti.length} conti del piano? Questa azione non è reversibile.`))return;
     setDeleting(true);
     // Elimina in batch da 100
-    const ids=pianoConti.map(c=>c.id);
+    const ids=pianoConti.map(c=>c.id).filter(id=>!usedIds.has(String(id)));
+    const protectedCount = pianoConti.length - ids.length;
+    if(protectedCount>0){
+      alert(`${protectedCount} conti già usati in contabilità resteranno attivi per sicurezza. Disattivo i restanti ${ids.length}.`)
+    }
     for(let i=0;i<ids.length;i+=100) await contabilitaRepo.bulkDeactivatePianoConti(ids.slice(i,i+100));
     setSel(new Set());setDeleting(false);onRefresh();
   };
@@ -1001,6 +1241,7 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
             {node.is_cliente&&<span className="bdg bdg-green" style={{fontSize:'.5rem',padding:'1px 4px'}}>C</span>}
             {node.is_fornitore&&<span className="bdg bdg-gold" style={{fontSize:'.5rem',padding:'1px 4px'}}>F</span>}
             {node.is_banca&&<span className="bdg bdg-blue" style={{fontSize:'.5rem',padding:'1px 4px'}}>B</span>}
+            {usedIds.has(String(node.id||''))&&<span className="bdg bdg-blue" style={{fontSize:'.5rem',padding:'1px 4px'}}>MOV</span>}
           </div>
           {/* Matita edit */}
           <div onClick={e=>{e.stopPropagation();setEditConto(node);}} style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer',flexShrink:0}}
@@ -1031,6 +1272,7 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
         </div>
         <code style={{fontSize:'.7rem',color:lvlColors[depth]||'var(--mu)',minWidth:90,flexShrink:0}}>{c.codice}</code>
         <span style={{flex:1,fontSize:'.8rem',color:'var(--tx)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.descrizione}</span>
+        {usedIds.has(String(c.id||''))&&<span className="bdg bdg-blue" style={{fontSize:'.55rem',padding:'1px 4px'}}>MOV</span>}
         <div onClick={()=>setEditConto(c)} style={{padding:'.15rem .35rem',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer'}}
           onMouseEnter={e=>{e.currentTarget.style.color='var(--gold)';}}
           onMouseLeave={e=>{e.currentTarget.style.color='var(--mu)';}}>Modifica</div>
@@ -1048,21 +1290,57 @@ function PianoContiView({pianoConti,societaId,onImport,onRefresh}){
         secondaryAction={
           <>
             <button className="btn-sec" onClick={()=>setImportAnagrafica(true)}>Import anagrafica</button>
-            <button className="btn" onClick={onImport}>{COMMON_UI_TEXT.importPdfExcel}</button>
+            <button className="btn" onClick={()=>{ if(typeof onImport==='function') onImport(); else setShowInlineImport(true); }}>{COMMON_UI_TEXT.importPdfExcel}</button>
             {pianoConti.length>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteAll}>{deleting?COMMON_UI_TEXT.deleting:deleteAllLabel(pianoConti.length)}</button>}
           </>
         }
       />
-      {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{await contabilitaRepo.updatePianoConto(editConto.id,updates);setEditConto(null);onRefresh();}} onClose={()=>setEditConto(null)}/>}
-      {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{const{error}=await contabilitaRepo.insertPianoConto({...rec,societa_id:societaId,attivo:true});if(error){alert('Errore: '+error.message);return;}setNuovoConto({open:false});onRefresh();}} onClose={()=>setNuovoConto({open:false})}/>}
+      {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{
+        const validationError = validatePianoContoForm(updates)
+        if(validationError){alert(validationError);return;}
+        const {error}=await contabilitaRepo.updatePianoConto(editConto.id,updates);
+        if(error){alert('Errore: '+error.message);return;}
+        setEditConto(null);onRefresh();
+      }} onClose={()=>setEditConto(null)}/>}
+      {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{
+        const validationError = validatePianoContoForm(rec)
+        if(validationError){alert(validationError);return;}
+        const existing = await contabilitaRepo.findPianoContoByCodice(societaId, rec.codice)
+        if(existing?.data?.id){alert(`Esiste già un conto con codice ${rec.codice}.`);return;}
+        const{error}=await contabilitaRepo.insertPianoConto({...rec,societa_id:societaId,attivo:true});
+        if(error){alert('Errore: '+error.message);return;}
+        setNuovoConto({open:false});onRefresh();
+      }} onClose={()=>setNuovoConto({open:false})}/>}
       {importAnagrafica&&<ModalImportAnagraficaNESPianoConti societaId={societaId} pianoConti={pianoConti} onComplete={()=>{setImportAnagrafica(false);onRefresh();}} onClose={()=>setImportAnagrafica(false)}/>}
+      {showInlineImport&&<ModalImportPDF tipo="piano_conti" societaId={societaId} onComplete={()=>{setShowInlineImport(false);onRefresh();}} onClose={()=>setShowInlineImport(false)}/>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div style={{fontSize:'.75rem',color:'var(--mu)'}}>
-          {pianoConti.length} conti · <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={expandAll}>{ACCOUNTING_UI_TEXT.expandAll}</span> · <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={collapseAll}>{ACCOUNTING_UI_TEXT.collapseAll}</span>
+          {filterRows.length} conti visibili · {usedIds.size} movimentati · <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={expandAll}>{ACCOUNTING_UI_TEXT.expandAll}</span> · <span style={{cursor:'pointer',color:'var(--cy)'}} onClick={collapseAll}>{ACCOUNTING_UI_TEXT.collapseAll}</span>
         </div>
         <div style={{display:'flex',gap:'.5rem'}}>
           {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?COMMON_UI_TEXT.deleting:deleteSelectedLabel(sel.size)}</button>}
         </div>
+      </div>
+
+      <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',marginBottom:'1rem'}}>
+        {[
+          ['tutti','Tutti'],
+          ['movimentati','Movimentati'],
+          ['clienti','Clienti'],
+          ['fornitori','Fornitori'],
+          ['banche','Banche'],
+          ['iva','IVA']
+        ].map(([id,label])=>(
+          <button
+            key={id}
+            type="button"
+            className={filterMode===id?'btn':'btn-sec'}
+            onClick={()=>setFilterMode(id)}
+            style={{padding:'.35rem .7rem',fontSize:'.75rem'}}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <input placeholder={ACCOUNTING_UI_TEXT.searchAccountPlaceholder} value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:'1rem',width:'100%'}}/>
@@ -1169,7 +1447,7 @@ function AnagraficaTab({form, up, conto, B}){
   const [causaliIva,setCausaliIva]=useState([]);
   useEffect(()=>{
     if(!conto.societa_id) return;
-    contabilitaRepo.getCausaliIvaBasic()
+    contabilitaRepo.getCausaliIvaBasic(conto.societa_id)
       .then(({data})=>setCausaliIva(data||[]));
   },[conto.societa_id]);
 
@@ -1220,7 +1498,7 @@ function AnagraficaTab({form, up, conto, B}){
 
         {/* Aliquota IVA â€” dropdown causali IVA */}
         <div className="fg">
-          <label>Aliquota IVA predefinita</label>
+          <label>Causale IVA predefinita</label>
           <select value={form.causale_iva_id||''} onChange={e=>{
             const id=e.target.value
             const c=causaliIva.find(x=>x.id===id)
@@ -1446,7 +1724,7 @@ function ModalEditConto({conto,onSave,onClose}){
 }
 
 // â”€â”€â”€ CAUSALI VIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
+function CausaliView({causali,tipo,societaId,pianoConti,onImport,onRefresh}){
   const [sel,setSel]=useState(new Set());
   const [deleting,setDeleting]=useState(false);
   const [editCausale,setEditCausale]=useState(null);
@@ -1474,6 +1752,21 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
     setSel(new Set());setDeleting(false);onRefresh();
   };
 
+  const openEditCausale = async (causale) => {
+    if (!causale?.id) {
+      setEditCausale(causale);
+      return;
+    }
+    const table = tipo === 'iva' ? 'causali_iva' : 'causali_contabili';
+    const { data, error } = await contabilitaRepo.getCausaleById(table, causale.id);
+    if (error) {
+      console.warn('[AnagraficheContabiliView] causale reload fallback', error);
+      setEditCausale(causale);
+      return;
+    }
+    setEditCausale(data || causale);
+  };
+
   return(
     <div>
       <ModuleHeader
@@ -1488,8 +1781,8 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
           </>
         }
       />
-      {editCausale&&<ModalEditCausale causale={editCausale} tipo={tipo} onSave={async(updates)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';await contabilitaRepo.updateCausale(table,editCausale.id,updates);setEditCausale(null);onRefresh();}} onClose={()=>setEditCausale(null)}/>}
-      {nuovaCausale&&<ModalNuovaCausale tipo={tipo} societaId={societaId} onSave={async(rec)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const row=tipo==='iva'?{...rec,attivo:true}:{...rec,societa_id:societaId,attivo:true};const{error}=await contabilitaRepo.insertCausale(table,row);if(error){alert('Errore: '+error.message);return;}setNuovaCausale(false);onRefresh();}} onClose={()=>setNuovaCausale(false)}/>}
+      {editCausale&&<ModalEditCausale causale={editCausale} tipo={tipo} pianoConti={pianoConti} onSave={async(updates)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const payload=buildRegistrazioneCausaleContabilePayload(updates,{isIva:tipo==='iva'});const {error}=await contabilitaRepo.updateCausale(table,editCausale.id,payload);if(error){alert('Errore: '+error.message);return;}await onRefresh?.();setEditCausale(null);}} onClose={()=>setEditCausale(null)}/>}
+      {nuovaCausale&&<ModalNuovaCausale tipo={tipo} societaId={societaId} onSave={async(rec)=>{const table=tipo==='iva'?'causali_iva':'causali_contabili';const row=tipo==='iva'?{...buildRegistrazioneCausaleContabilePayload(rec,{isIva:true}),societa_id:societaId,attivo:true}:{...buildRegistrazioneCausaleContabilePayload(rec,{isIva:false}),societa_id:societaId,attivo:true};const{error}=await contabilitaRepo.insertCausale(table,row);if(error){alert('Errore: '+error.message);return;}setNuovaCausale(false);onRefresh();}} onClose={()=>setNuovaCausale(false)}/>}
       <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',marginBottom:'1rem'}}>
         <div style={{display:'flex',gap:'.5rem'}}>
           {sel.size>0&&<button className="btn-sec" style={{borderColor:'rgba(224,82,82,.4)',color:'#ff8585'}} disabled={deleting} onClick={deleteSelected}>{deleting?COMMON_UI_TEXT.deleting:deleteSelectedLabel(sel.size)}</button>}
@@ -1527,7 +1820,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
                 {tipo==='iva'&&<td><span style={{fontSize:'.72rem',color:'var(--mu)'}}>{c.tipo}</span></td>}
                 {tipo==='contabili'&&<td style={{fontSize:'.75rem',color:'var(--mu)'}}>{c.tipo}</td>}
                 <td>
-                  <button className="btn-icon" style={{fontSize:'.75rem'}} onClick={()=>setEditCausale(c)}>Modifica</button>
+                  <button className="btn-icon" style={{fontSize:'.75rem'}} onClick={()=>openEditCausale(c)}>Modifica</button>
                 </td>
               </tr>
             ))}</tbody>
@@ -1539,7 +1832,7 @@ function CausaliView({causali,tipo,societaId,onImport,onRefresh}){
 }
 
 // â”€â”€â”€ MODAL EDIT CAUSALE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function ModalEditCausale({causale,tipo,onSave,onClose}){
+function ModalEditCausale({causale,tipo,pianoConti,onSave,onClose}){
   const isIva=tipo==='iva';
   const [tab,setTab]=useState('principale');
   const B=({k,lbl,small})=>(<div style={{display:'flex',alignItems:'center',gap:'.4rem',cursor:'pointer',marginTop:'.3rem'}} onClick={()=>up(k,!form[k])}>
@@ -1549,110 +1842,45 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
     <span style={{fontSize:small?'.72rem':'.78rem',color:'var(--mu)'}}>{lbl}</span>
   </div>);
 
-  const [form,setForm]=useState(isIva?{
-    // Principali
-    codice:causale.codice||'',
-    descrizione:causale.descrizione||'',
-    percentuale_imposta:causale.aliquota??causale.percentuale_imposta??0,
-    regime_iva:causale.regime_iva||'Imponibile',
-    percentuale_compensazione:causale.percentuale_compensazione??0,
-    tipo_trattamento:causale.tipo_trattamento||'Normale',
-    // DetraibilitÃ 
-    nota_di_variazione:causale.nota_di_variazione||false,
-    detraibile:causale.detraibile??true,
-    percentuale_indetraibilita:causale.percentuale_indetraibilita??0,
-    // Volume e plafond
-    volume_affari:causale.volume_affari||false,
-    volume_affari_plafond:causale.volume_affari_plafond||false,
-    concorre_plafond:causale.concorre_plafond||false,
-    utilizzo_plafond_interno:causale.utilizzo_plafond_interno||false,
-    utilizzo_plafond_import:causale.utilizzo_plafond_import||false,
-    monte_acquisti:causale.monte_acquisti||false,
-    // Operazioni
-    operazione_attiva:causale.operazione_attiva||false,
-    cessione_intra:causale.cessione_intra||false,
-    operazione_passiva:causale.operazione_passiva||false,
-    acquisto_intra:causale.acquisto_intra||false,
-    // Liquidazione / dichiarazione
-    op_attive_spesometro:causale.op_attive_spesometro||false,
-    op_passive_spesometro:causale.op_passive_spesometro??true,
-    op_attive_liquidazione:causale.op_attive_liquidazione||false,
-    op_passive_liquidazione:causale.op_passive_liquidazione||false,
-    reverse_charge:causale.reverse_charge||false,
-    incluso_quadro_vt:causale.incluso_quadro_vt||false,
-    imponibile_quadro_vt:causale.imponibile_quadro_vt||false,
-    imposta_quadro_vt:causale.imposta_quadro_vt||false,
-    op_esenti_prorata:causale.op_esenti_prorata||false,
-    volume_affari_prorata:causale.volume_affari_prorata||false,
-    ripartizione_acquisti:causale.ripartizione_acquisti||false,
-    no_riparto_spese_acc:causale.no_riparto_spese_acc||false,
-    acquisto_soggetti_minimi:causale.acquisto_soggetti_minimi||false,
-    acquisti_art17_c2:causale.acquisti_art17_c2||false,
-    no_calcolo_bolli:causale.no_calcolo_bolli||false,
-    acquisti_regime_forfetario:causale.acquisti_regime_forfetario||false,
-    // Reverse charge settori
-    oro_argento:causale.oro_argento||false,
-    rottami_recupero:causale.rottami_recupero||false,
-    subappalto_edile:causale.subappalto_edile||false,
-    fabbricati_strumentali:causale.fabbricati_strumentali||false,
-    telefoni_cellulari:causale.telefoni_cellulari||false,
-    prodotti_elettronici:causale.prodotti_elettronici||false,
-    servizi_pulizia:causale.servizi_pulizia||false,
-    demolizione:causale.demolizione||false,
-    installazione_impianti:causale.installazione_impianti||false,
-    completamento_edifici:causale.completamento_edifici||false,
-    trasf_quote:causale.trasf_quote||false,
-    trasf_unita_certif:causale.trasf_unita_certif||false,
-    gas_energia:causale.gas_energia||false,
-    // E-fattura
-    natura_aliquota_iva_pa:causale.natura_aliquota_iva_pa||'',
-    codice_efat_passive:causale.codice_efat_passive||false,
-    codice_efat_attive:causale.codice_efat_attive||false,
-    aliquota_ventilazione_no_acq:causale.aliquota_ventilazione_no_acq||false,
-    note:causale.note||'',
-  }:{
-    // Causali contabili
-    codice:causale.codice||'',
-    descrizione:causale.descrizione||'',
-    descrizione_tabulati:causale.descrizione_tabulati||'',
-    tipo_causale:causale.tipo_causale||'Movimento di generale',
-    operazione_partite:causale.operazione_partite||'Ignora',
-    tipo_pagamento:causale.tipo_pagamento||'',
-    codice_registro_iva:causale.codice_registro_iva||'',
-    protocollo_numerazione:causale.protocollo_numerazione??0,
-    segno_registro_iva:causale.segno_registro_iva||'',
-    codice_aliquota_iva:causale.codice_aliquota_iva||'',
-    op_ritenute:causale.op_ritenute||'Ignora',
-    tipo_documento:causale.tipo_documento||'',
-    data_documento:causale.data_documento||'Facoltativo',
-    numero_documento:causale.numero_documento||'Facoltativo',
-    tipo_doc_comunicaz_ft:causale.tipo_doc_comunicaz_ft||'',
-    tipo_doc_ft_elettroniche:causale.tipo_doc_ft_elettroniche||'',
-    conto_iva_esig_differita:causale.conto_iva_esig_differita||'',
-    registro_iva_differita:causale.registro_iva_differita||'',
-    registro_iva_cee:causale.registro_iva_cee||'',
-    protocollo_iva_cee:causale.protocollo_iva_cee??0,
-    segno_iva_registro_cee:causale.segno_iva_registro_cee||'',
-    // Flag booleani
-    trascina_descrizione:causale.trascina_descrizione??true,
-    trascina_sbilancio:causale.trascina_sbilancio||false,
-    data_competenza:causale.data_competenza||false,
-    rateo_risconti:causale.rateo_risconti||false,
-    disattivato:causale.disattivato||false,
-    integrazione_documento:causale.integrazione_documento||false,
-    causale_giro_iva_cassa:causale.causale_giro_iva_cassa||false,
-    competenza_iva_anno_prec:causale.competenza_iva_anno_prec||false,
-    causale_standard_efat:causale.causale_standard_efat||false,
-    ventilazione_corrispettivi:causale.ventilazione_corrispettivi||false,
-    esclusa_integrazioni:causale.esclusa_integrazioni||false,
-    note:causale.note||'',
-  });
+  const [form,setForm]=useState(()=>hydrateRegistrazioneCausaleContabileForm(causale,{isIva}));
+  useEffect(()=>{
+    setForm(hydrateRegistrazioneCausaleContabileForm(causale,{isIva}))
+  },[causale,isIva])
   const [saving,setSaving]=useState(false);
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const operazionePartiteContext = String(form.operazione_partite || form.gestione_partite || '')
+  const operazioneGestitaOptions=useMemo(
+    () => getCausaleOperazioneGestitaOptions(form.tipo_causale, operazionePartiteContext),
+    [form.tipo_causale, operazionePartiteContext]
+  )
+  const operazioneGestitaCurrentValue = String(form.tipo_documento || '')
+  const operazioneGestitaHasCurrentValue = operazioneGestitaOptions.some((option) => option.value === operazioneGestitaCurrentValue)
+  const handleTipoCausaleChange=(nextTipoCausale)=>{
+    setForm((prev)=>{
+      const nextPartiteContext = String(prev.operazione_partite || prev.gestione_partite || '')
+      const nextOperazioneGestita = normalizeCausaleOperazioneGestita(nextTipoCausale, nextPartiteContext, prev.tipo_documento, prev)
+      return {
+        ...prev,
+        tipo_causale: nextTipoCausale,
+        tipo_documento: nextOperazioneGestita,
+      }
+    })
+  }
+  const handlePartiteChange=(nextValue)=>{
+    setForm((prev)=>{
+      const nextForm = {...prev,operazione_partite:nextValue,gestione_partite:nextValue}
+      const nextPartiteContext = String(nextForm.operazione_partite || nextForm.gestione_partite || '')
+      const nextOperazioneGestita = normalizeCausaleOperazioneGestita(nextForm.tipo_causale, nextPartiteContext, prev.tipo_documento, prev)
+      return {
+        ...nextForm,
+        tipo_documento: nextOperazioneGestita,
+      }
+    })
+  }
   const save=async()=>{setSaving(true);await onSave(form);setSaving(false);};
 
   const TABS_IVA=[['principale','Principale'],['operazioni','Operazioni'],['rc','Rev. Charge'],['efat','E-Fattura']];
-  const TABS_CONT=[['principale','Principale'],['iva','IVA'],['flags','Flag'],['cee','CEE/Differita']];
+  const TABS_CONT=[['principale','Principale'],['iva','IVA'],['flags','Flag'],['cee','CEE/Differita'],['righe','Righe prima nota']];
   const TABS=isIva?TABS_IVA:TABS_CONT;
 
   const TD_OPTIONS=[
@@ -1688,7 +1916,7 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
           {isIva&&tab==='principale'&&<div className="form-grid">
             <div className="fg"><label>Codice</label><input value={form.codice} onChange={e=>up('codice',e.target.value.toUpperCase())} style={{fontFamily:'monospace'}}/></div>
             <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
-            <div className="fg"><label>% Imposta</label><input type="number" value={form.percentuale_imposta} onChange={e=>up('aliquota',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
+            <div className="fg"><label>% Imposta</label><input type="number" value={form.percentuale_imposta} onChange={e=>{const next=parseFloat(e.target.value)||0; up('percentuale_imposta', next); up('aliquota', next);}} min={0} max={100} step={1}/></div>
             <div className="fg"><label>% Indetraibilità</label><input type="number" value={form.percentuale_indetraibilita} onChange={e=>up('percentuale_indetraibilita',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
             <div className="fg"><label>% Compensazione</label><input type="number" value={form.percentuale_compensazione} onChange={e=>up('percentuale_compensazione',parseFloat(e.target.value)||0)} min={0} max={100} step={1}/></div>
             <div className="fg"><label>Regime IVA</label>
@@ -1809,58 +2037,38 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
             <div className="fg full"><label>Descrizione *</label><input value={form.descrizione} onChange={e=>up('descrizione',e.target.value)} autoFocus/></div>
             <div className="fg full"><label>Descrizione per tabulati</label><input value={form.descrizione_tabulati} onChange={e=>up('descrizione_tabulati',e.target.value)} placeholder="Descrizione breve per stampe NES"/></div>
             <div className="fg"><label>Tipo causale</label>
-              <select value={form.tipo_causale} onChange={e=>up('tipo_causale',e.target.value)}>
-                <option value="Movimento di generale">Movimento di generale</option>
-                <option value="Doc. Iva normale">Doc. IVA normale</option>
-                <option value="Doc. Iva esig. differita">Doc. IVA esig. differita</option>
-                <option value="Autofattura">Autofattura</option>
-                <option value="Doc. Corrispettivo">Doc. Corrispettivo</option>
-                <option value="Doc. Iva Acq. CEE">Doc. IVA Acq. CEE</option>
-                <option value="Movimento sola Iva">Movimento sola IVA</option>
-                <option value="Pag./inc. Iva esig. diff.">Pag./Inc. IVA esig. diff.</option>
-              </select>
-            </div>
-            <div className="fg"><label>Operazione partite</label>
-              <select value={form.operazione_partite} onChange={e=>up('operazione_partite',e.target.value)}>
-                <option value="Ignora">Ignora</option>
-                <option value="Apre">Apre</option>
-                <option value="Chiude">Chiude</option>
-              </select>
-            </div>
-            <div className="fg"><label>Tipo documento</label>
-              <select value={form.tipo_documento} onChange={e=>up('tipo_documento',e.target.value)}>
-                <option value="">-- Non specificato --</option>
-                <option value="Fattura">Fattura</option>
-                <option value="Autofattura">Autofattura</option>
-                <option value="Doc. Iva normale">Doc. IVA normale</option>
-                <option value="Doc. Iva esig. differita">Doc. IVA esig. differita</option>
-                <option value="Movimento di generale">Movimento di generale</option>
+              <select value={form.tipo_causale} onChange={e=>handleTipoCausaleChange(e.target.value)}>
+                {CAUSALE_TIPO_CAUSALE_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
               </select>
             </div>
             <div className="fg"><label>Gestione partite</label>
-              <select value={form.operazione_partite} onChange={e=>up('operazione_partite',e.target.value)}>
-                <option value="Ignora">Ignora</option>
-                <option value="Apre">Apre</option>
-                <option value="Chiude">Chiude</option>
+              <select value={form.operazione_partite} onChange={e=>handlePartiteChange(e.target.value)}>
+                {CAUSALE_OPERAZIONE_PARTITE_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
+              </select>
+            </div>
+            <div className="fg"><label>Operazione gestita</label>
+              <select value={form.tipo_documento} onChange={e=>up('tipo_documento',e.target.value)}>
+                {!operazioneGestitaHasCurrentValue && operazioneGestitaCurrentValue ? (
+                  <option value={operazioneGestitaCurrentValue}>{`Legacy: ${operazioneGestitaCurrentValue}`}</option>
+                ) : null}
+                {operazioneGestitaOptions.map((option)=>(
+                  <option key={option.value || '__empty__'} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </div>
             <div className="fg"><label>Op. ritenute</label>
               <select value={form.op_ritenute} onChange={e=>up('op_ritenute',e.target.value)}>
-                <option value="Ignora">Ignora</option>
-                <option value="Documento">Documento</option>
-                <option value="Pagamento">Pagamento</option>
+                {CAUSALE_RITENUTE_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
               </select>
             </div>
             <div className="fg"><label>Data documento</label>
               <select value={form.data_documento} onChange={e=>up('data_documento',e.target.value)}>
-                <option value="Facoltativo">Facoltativo</option>
-                <option value="Obbligatorio">Obbligatorio</option>
+                {CAUSALE_STATO_DOCUMENTO_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
               </select>
             </div>
             <div className="fg"><label>Numero documento</label>
               <select value={form.numero_documento} onChange={e=>up('numero_documento',e.target.value)}>
-                <option value="Facoltativo">Facoltativo</option>
-                <option value="Obbligatorio">Obbligatorio</option>
+                {CAUSALE_STATO_DOCUMENTO_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}
               </select>
             </div>
             <div className="fg"><label>Tipo pag.</label><input value={form.tipo_pagamento} onChange={e=>up('tipo_pagamento',e.target.value)} placeholder="es. Rimessa diretta"/></div>
@@ -1919,6 +2127,10 @@ function ModalEditCausale({causale,tipo,onSave,onClose}){
               </select>
             </div>
           </div>}
+
+          {!isIva&&tab==='righe'&&(
+            <CausaleRighePrimaNotaTemplateTab form={form} setForm={setForm} pianoConti={pianoConti} />
+          )}
 
         </div>
         <div className="modal-foot">
@@ -2710,6 +2922,3 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
   );
 }
 export { ModalNuovaSocieta }
-
-
-

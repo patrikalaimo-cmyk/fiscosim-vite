@@ -70,6 +70,8 @@ export function buildCausaleIvaPolicy(causaleIva = {}, options = {}) {
   return {
     code: normalizeText(iva?.codice || iva?.code || iva?.sigla || iva?.id || '').toUpperCase(),
     descrizione: normalizeText(iva?.descrizione || iva?.description || iva?.denominazione || iva?.nome || ''),
+    operazioneGestita: contabilePolicy.operazioneGestita || '',
+    operazioneGestitaGroup: contabilePolicy.operazioneGestitaGroup || '',
     aliquota,
     natura,
     regimeIva,
