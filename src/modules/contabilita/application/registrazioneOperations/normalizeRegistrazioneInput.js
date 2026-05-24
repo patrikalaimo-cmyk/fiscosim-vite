@@ -1,5 +1,6 @@
 import { normalizeText, round2 } from '../canonical_mapper/utils.js'
 import { normalizeRegistrazioneIvaRows } from './normalizeRegistrazioneIvaRows.js'
+import { findRegistrazioneControparteExactMatch } from './resolveRegistrazioneControparti.js'
 import { buildRegistrazioneContoSelection, resolveRegistrazioneContoDescrizione, resolveRegistrazioneContoLabel } from './resolveRegistrazioneConti.js'
 
 function normalizeDate(value) {
@@ -38,6 +39,122 @@ function resolveCatalogItem(input, items = []) {
 
   if (partialMatches.length === 1) return partialMatches[0]
   return partialMatches[0] || null
+}
+
+function resolveHeaderCounterpartyType(item = {}) {
+  const rawType = normalizeText(item?.clienteFornitoreTipo ?? item?.cliente_fornitore_tipo ?? item?.tipoControparte ?? item?.tipo_controparte ?? item?.tipo).toLowerCase()
+  if (rawType.includes('fornit')) return 'fornitore'
+  if (rawType.includes('client')) return 'cliente'
+  if (rawType.includes('prof')) return 'professionista'
+  if (item?.is_fornitore) return 'fornitore'
+  if (item?.is_cliente) return 'cliente'
+  if (item?.is_professionista) return 'professionista'
+  return ''
+}
+
+function resolveAllowedCounterpartyTypes(sourceHeader = {}, existingType = '') {
+  const explicitType = resolveHeaderCounterpartyType({ clienteFornitoreTipo: existingType, cliente_fornitore_tipo: existingType })
+  if (explicitType) return [explicitType]
+
+  const causaleCode = normalizeText(
+    sourceHeader?.causaleContabile?.codice ??
+      sourceHeader?.causaleContabile?.code ??
+      sourceHeader?.causaleContabileId ??
+      sourceHeader?.causaleContabile ??
+      sourceHeader?.causale_codice ??
+      ''
+  ).toUpperCase()
+
+  if (causaleCode.startsWith('FF')) return ['fornitore']
+  if (causaleCode.startsWith('FC')) return ['cliente']
+  return ['fornitore', 'cliente']
+}
+
+export function resolveRegistrazioneHeaderCounterpartyDraft(header = {}, pianoConti = []) {
+  const sourceHeader = header && typeof header === 'object' ? header : {}
+  const existingId = normalizeText(sourceHeader.clienteFornitoreId ?? sourceHeader.cliente_fornitore_id)
+  const existingCode = normalizeText(sourceHeader.clienteFornitoreCodice ?? sourceHeader.cliente_fornitore_codice)
+  const existingName = normalizeText(sourceHeader.clienteFornitoreNome ?? sourceHeader.cliente_fornitore_nome)
+  const existingType = normalizeText(sourceHeader.clienteFornitoreTipo ?? sourceHeader.cliente_fornitore_tipo)
+  const subjectText = normalizeText(sourceHeader.soggetto ?? existingName ?? '')
+
+  const preservedSubject =
+    existingId && (
+      !subjectText ||
+      subjectText.toLowerCase() === existingName.toLowerCase() ||
+      subjectText.toLowerCase() === existingCode.toLowerCase() ||
+      subjectText.toLowerCase() === existingId.toLowerCase()
+    )
+
+  if (preservedSubject) {
+    return {
+      ...sourceHeader,
+      soggetto: subjectText || existingName || '',
+      clienteFornitoreId: existingId,
+      cliente_fornitore_id: existingId,
+      clienteFornitoreCodice: existingCode,
+      cliente_fornitore_codice: existingCode,
+      clienteFornitoreNome: existingName || subjectText,
+      cliente_fornitore_nome: existingName || subjectText,
+      clienteFornitoreTipo: existingType,
+      cliente_fornitore_tipo: existingType,
+    }
+  }
+
+  if (!subjectText) {
+    return {
+      ...sourceHeader,
+      soggetto: '',
+      clienteFornitoreId: existingId || '',
+      cliente_fornitore_id: existingId || '',
+      clienteFornitoreCodice: existingCode || '',
+      cliente_fornitore_codice: existingCode || '',
+      clienteFornitoreNome: existingName || '',
+      cliente_fornitore_nome: existingName || '',
+      clienteFornitoreTipo: existingType || '',
+      cliente_fornitore_tipo: existingType || '',
+    }
+  }
+
+  const match = findRegistrazioneControparteExactMatch(
+    pianoConti,
+    subjectText,
+    { allowedTypes: resolveAllowedCounterpartyTypes(sourceHeader, existingType) }
+  )
+  const resolvedId = normalizeText(match?.id)
+  if (!resolvedId) {
+    return {
+      ...sourceHeader,
+      soggetto: subjectText,
+      clienteFornitoreId: '',
+      cliente_fornitore_id: '',
+      clienteFornitoreCodice: '',
+      cliente_fornitore_codice: '',
+      clienteFornitoreNome: '',
+      cliente_fornitore_nome: '',
+      clienteFornitoreTipo: '',
+      cliente_fornitore_tipo: '',
+    }
+  }
+
+  const selection = buildRegistrazioneContoSelection(match, match?.__label || resolveRegistrazioneContoLabel(match))
+  const resolvedName = normalizeText(selection.conto_descrizione || resolveRegistrazioneContoDescrizione(selection || match))
+  const resolvedLabel = normalizeText(selection.__label || resolveRegistrazioneContoLabel(selection || match))
+  const resolvedCode = normalizeText(selection.codice || selection.code || selection.sigla || match?.codice || match?.code || match?.sigla)
+  const resolvedType = resolveHeaderCounterpartyType(selection || match)
+
+  return {
+    ...sourceHeader,
+    soggetto: resolvedLabel || subjectText,
+    clienteFornitoreId: resolvedId,
+    cliente_fornitore_id: resolvedId,
+    clienteFornitoreCodice: resolvedCode,
+    cliente_fornitore_codice: resolvedCode,
+    clienteFornitoreNome: resolvedName || resolvedLabel,
+    cliente_fornitore_nome: resolvedName || resolvedLabel,
+    clienteFornitoreTipo: resolvedType,
+    cliente_fornitore_tipo: resolvedType,
+  }
 }
 
 function resolveStrictContoItem(input, items = []) {
@@ -260,21 +377,23 @@ export function normalizeRegistrazioneInput(input = {}, { pianoConti = [], causa
     ),
   }
 
+  const normalizedHeaderSource = resolveRegistrazioneHeaderCounterpartyDraft(header, pianoConti)
+
   const normalizedHeader = {
-    societaId: normalizeText(source.societaId ?? header.societaId ?? header.societa_id),
-    esercizioContabile: normalizeText(header.esercizioContabile ?? header.esercizio_contabile ?? header.esercizio),
-    dataRegistrazione: normalizeDate(header.dataRegistrazione ?? header.data_registrazione),
-    dataDocumento: normalizeDate(header.dataDocumento ?? header.data_documento),
-    numeroDocumento: normalizeText(header.numeroDocumento ?? header.numero_documento),
-    totaleDocumento: normalizePanelNumber(header.totaleDocumento ?? header.totale_documento ?? source.documentData?.totaleDocumento ?? source.documentData?.totale_documento),
-    tipoDocumento: normalizePanelText(header.tipoDocumento ?? header.tipo_documento),
-    causaleContabile: normalizeCausaleContabile(header.causaleContabile ?? header.causaleContabileId ?? header.causaleContabileCodice ?? header.causale_id ?? header.causale_codice, causaliContabili),
-    descrizioneGenerale: normalizeText(header.descrizioneGenerale ?? header.descrizione_generale ?? header.descrizione),
-    soggetto: normalizeText(header.soggetto),
-    clienteFornitoreId: normalizeText(header.clienteFornitoreId ?? header.cliente_fornitore_id),
-    clienteFornitoreNome: normalizeText(header.clienteFornitoreNome ?? header.cliente_fornitore_nome),
-    clienteFornitoreCodice: normalizeText(header.clienteFornitoreCodice ?? header.cliente_fornitore_codice),
-    clienteFornitoreTipo: normalizeText(header.clienteFornitoreTipo ?? header.cliente_fornitore_tipo),
+    societaId: normalizeText(source.societaId ?? normalizedHeaderSource.societaId ?? normalizedHeaderSource.societa_id),
+    esercizioContabile: normalizeText(normalizedHeaderSource.esercizioContabile ?? normalizedHeaderSource.esercizio_contabile ?? normalizedHeaderSource.esercizio),
+    dataRegistrazione: normalizeDate(normalizedHeaderSource.dataRegistrazione ?? normalizedHeaderSource.data_registrazione),
+    dataDocumento: normalizeDate(normalizedHeaderSource.dataDocumento ?? normalizedHeaderSource.data_documento),
+    numeroDocumento: normalizeText(normalizedHeaderSource.numeroDocumento ?? normalizedHeaderSource.numero_documento),
+    totaleDocumento: normalizePanelNumber(normalizedHeaderSource.totaleDocumento ?? normalizedHeaderSource.totale_documento ?? source.documentData?.totaleDocumento ?? source.documentData?.totale_documento),
+    tipoDocumento: normalizePanelText(normalizedHeaderSource.tipoDocumento ?? normalizedHeaderSource.tipo_documento),
+    causaleContabile: normalizeCausaleContabile(normalizedHeaderSource.causaleContabile ?? normalizedHeaderSource.causaleContabileId ?? normalizedHeaderSource.causaleContabileCodice ?? normalizedHeaderSource.causale_id ?? normalizedHeaderSource.causale_codice, causaliContabili),
+    descrizioneGenerale: normalizeText(normalizedHeaderSource.descrizioneGenerale ?? normalizedHeaderSource.descrizione_generale ?? normalizedHeaderSource.descrizione),
+    soggetto: normalizeText(normalizedHeaderSource.soggetto),
+    clienteFornitoreId: normalizeText(normalizedHeaderSource.clienteFornitoreId ?? normalizedHeaderSource.cliente_fornitore_id),
+    clienteFornitoreNome: normalizeText(normalizedHeaderSource.clienteFornitoreNome ?? normalizedHeaderSource.cliente_fornitore_nome),
+    clienteFornitoreCodice: normalizeText(normalizedHeaderSource.clienteFornitoreCodice ?? normalizedHeaderSource.cliente_fornitore_codice),
+    clienteFornitoreTipo: normalizeText(normalizedHeaderSource.clienteFornitoreTipo ?? normalizedHeaderSource.cliente_fornitore_tipo),
   }
 
   const normalizedRows = rowsSource.map((row, index) => normalizeRow(row, index, pianoConti))

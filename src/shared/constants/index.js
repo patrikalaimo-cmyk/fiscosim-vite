@@ -170,6 +170,7 @@ export const NAV = [
   {
     section: 'DOCUMENT HUB',
     items: [
+      { id: 'import_contabilita',  ico: '📁', label: 'Import Contabilità' },
       { id: 'import_unificato',    ico: '📁', label: 'Import Documenti' },
       { id: 'export_dati',         ico: '📤', label: 'Export Dati' },
       { id: 'fatture_ade',         ico: '📥', label: 'Fatture Massive ADE' },
@@ -215,6 +216,7 @@ export const PERMESSI_MODULI = [
   { id: 'agenda',           label: 'Agenda Invii',         ico: '📅', hasSoloAssegnati: false },
   { id: 'simulatore',       label: 'Simulatore',           ico: '📊', hasSoloAssegnati: false },
   { id: 'import',           label: 'Import Excel',         ico: '📤', hasSoloAssegnati: false },
+  { id: 'import_contabilita', label: 'Import Contabilità', ico: '📁', hasSoloAssegnati: false },
   { id: 'import_documenti', label: 'Import Documenti',     ico: '📁', hasSoloAssegnati: false },
   { id: 'dashboard',        label: 'Dashboard',            ico: '🏠', hasSoloAssegnati: false },
   { id: 'cu',               label: 'Certificazioni Uniche',ico: '📜', hasSoloAssegnati: false },

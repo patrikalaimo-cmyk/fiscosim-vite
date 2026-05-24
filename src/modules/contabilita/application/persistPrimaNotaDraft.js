@@ -112,11 +112,21 @@ function resolveDraftBundle(input = {}) {
         ? innerDraft.rows
         : []
 
+  const ivaDraft = bundle.ivaDraft || innerDraft.ivaDraft || null
+  const ivaRows = Array.isArray(ivaDraft?.rows) ? ivaDraft.rows : []
+
+  const partitarioDraft = bundle.partitarioDraft || innerDraft.partitarioDraft || null
+  const partitarioRows = Array.isArray(partitarioDraft?.rows) ? partitarioDraft.rows : []
+
   return {
     bundle,
     innerDraft,
     pnPayload,
     righePayload,
+    ivaDraft,
+    ivaRows,
+    partitarioDraft,
+    partitarioRows,
     validation: bundle.validation || innerDraft.validation || null,
     readiness: bundle.readiness || innerDraft.readiness || null,
     classification: bundle.classification || innerDraft.classification || null,
@@ -216,6 +226,69 @@ function buildPersistError(validation) {
   return error
 }
 
+function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = {}) {
+  const imponibile = normalizeDbAmount(row.imponibile)
+  const ivaAmount = normalizeDbAmount(row.ivaTotale ?? row.ivaDetraibile ?? row.iva ?? row.imposta ?? 0)
+  const pct = Number.isFinite(Number(row.percentualeDetraibilita ?? row.detraibilitaPercent))
+    ? Number(row.percentualeDetraibilita ?? row.detraibilitaPercent)
+    : 100
+  const iva_detraibile = Number.isFinite(Number(row.ivaDetraibile ?? row.ivaDetraibile))
+    ? normalizeDbAmount(row.ivaDetraibile)
+    : round2(ivaAmount * (pct / 100))
+  const iva_indetraibile = Number.isFinite(Number(row.ivaIndetraibile))
+    ? normalizeDbAmount(row.ivaIndetraibile)
+    : round2(ivaAmount - iva_detraibile)
+
+  const reg = String(row.registroIva || row.registerType || ivaDraft?.registroIva || '').toLowerCase()
+  const tipo = reg.includes('ven') || reg.includes('corr') ? 'vendita' : 'acquisto'
+
+  return {
+    documento_id: pnPayload.numero_documento || 'manual-reg-doc',
+    riga_idx: index,
+    data: pnPayload.data_documento || pnPayload.data_registrazione,
+    imponibile,
+    iva: ivaAmount,
+    aliquota: Number.isFinite(Number(row.aliquota)) ? Number(row.aliquota) : null,
+    tipo,
+    detraibile: pct > 0,
+    percentuale_detraibilita: pct,
+    iva_detraibile,
+    iva_indetraibile,
+    causale_iva_id: normalizeDbText(row.causaleIvaId || row.causale_iva_id),
+    societa_id: pnPayload.societa_id || null,
+    numero_documento: pnPayload.numero_documento || null,
+    data_documento: pnPayload.data_documento || null,
+    soggetto_denominazione: pnPayload.cliente_fornitore_nome || null,
+  }
+}
+
+function mapPartitarioRowForDb(row = {}, pnPayload = {}) {
+  const imp = normalizeDbAmount(row.importoAperto || row.importoOriginario || 0)
+  return {
+    societa_id: pnPayload.societa_id || null,
+    tipo: row.soggettoTipo || (pnPayload.causale_codice === 'FF' ? 'fornitore' : 'cliente'),
+    conto_id: row.soggettoId || pnPayload.cliente_fornitore_id || null,
+    conto_codice: null,
+    conto_descrizione: row.soggettoNome || pnPayload.cliente_fornitore_nome || '',
+    numero_documento: row.numeroDocumento || pnPayload.numero_registrazione || null,
+    data_documento: row.dataDocumento || pnPayload.data_documento || null,
+    data_scadenza: row.dataScadenza || row.dataDocumento || pnPayload.data_documento || null,
+    importo_originale: imp,
+    importo_pagato: 0,
+    importo_residuo: imp,
+    stato: 'aperta',
+    tipo_movimento: 'apertura'
+  }
+}
+
+function mapPartitarioClosureForDb(row = {}, pnPayload = {}) {
+  return {
+    documento_id: row.id,
+    importo_chiuso: normalizeDbAmount(row.importoChiusura),
+    tipo_movimento: 'chiusura'
+  }
+}
+
 export async function persistPrimaNotaDraft({
   db,
   draft = {},
@@ -241,11 +314,30 @@ export async function persistPrimaNotaDraft({
     ? resolved.righePayload.map((row, index) => mapPrimaNotaRigaForDb(row, index))
     : []
 
+  const ivaEnabled = Boolean(resolved.ivaDraft?.active || resolved.innerDraft?.meta?.behavior?.showIvaPanel)
+  const vatEntriesForDb = ivaEnabled && Array.isArray(resolved.ivaRows)
+    ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft))
+    : []
+
+  const partitarioEnabled = Boolean(resolved.partitarioDraft?.active || resolved.innerDraft?.meta?.behavior?.showPartitario)
+  const partEntriesForDb = partitarioEnabled && Array.isArray(resolved.partitarioRows)
+    ? resolved.partitarioRows
+        .filter(row => resolved.partitarioDraft?.mode === 'apertura' || (resolved.partitarioDraft?.mode === 'chiusura' && row.selected && row.importoChiusura > 0))
+        .map(row => {
+          if (resolved.partitarioDraft?.mode === 'apertura') {
+            return mapPartitarioRowForDb(row, pnPayloadForDb)
+          } else {
+            return mapPartitarioClosureForDb(row, pnPayloadForDb)
+          }
+        })
+    : []
+
   const complete = await createPrimaNotaCompleta({
     db,
     pnPayload: pnPayloadForDb,
     righePayload: righePayloadForDb,
-    partEntries: [],
+    vatEntries: vatEntriesForDb,
+    partEntries: partEntriesForDb,
     headerSelect,
     righeSelect,
     partitarioSelect: '*',
@@ -258,6 +350,7 @@ export async function persistPrimaNotaDraft({
     error.details = {
       pn: complete.pn || null,
       righeIns: complete.righeIns || null,
+      vatIns: complete.vatIns || null,
       partIns: complete.partIns || null,
     }
     return {
@@ -267,6 +360,7 @@ export async function persistPrimaNotaDraft({
       draft: resolved.innerDraft,
       pn: complete.pn || null,
       righeIns: complete.righeIns || null,
+      vatIns: complete.vatIns || null,
       partIns: complete.partIns || null,
       rollback: complete.rollback || null,
     }
@@ -278,12 +372,17 @@ export async function persistPrimaNotaDraft({
     : Array.isArray(resolved.righePayload)
       ? resolved.righePayload.length
       : 0
+  const vatCreated = Array.isArray(complete?.vatIns?.data)
+    ? complete.vatIns.data.length
+    : vatEntriesForDb.length
 
   return {
     data: {
       prima_nota_id: primaNotaId,
       numero_righe: righeCreated,
       righe_create_count: righeCreated,
+      numero_righe_iva: vatCreated,
+      vat_create_count: vatCreated,
       totale_dare: validation.totals.dare,
       totale_avere: validation.totals.avere,
       isBalanced: validation.totals.isBalanced,
@@ -293,6 +392,7 @@ export async function persistPrimaNotaDraft({
     draft: resolved.innerDraft,
     pn: complete.pn || null,
     righeIns: complete.righeIns || null,
+    vatIns: complete.vatIns || null,
     partIns: complete.partIns || null,
     rollback: complete.rollback || null,
   }

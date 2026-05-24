@@ -4,6 +4,7 @@ import { buildRegistrazioneContoSelection } from './resolveRegistrazioneConti.js
 import { normalizeRegistrazioneRigheTemplate } from '../../domain/registrazione/normalizeRegistrazioneRigheTemplate.js'
 import { resolveRegistrazioneTemplateRowAccount } from './resolveRegistrazioneTemplateRowAccount.js'
 import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/resolveRegistrazioneRigheTemplate.js'
+import { resolveRegistrazioneCausaleBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
 
 function toAmountNumber(value) {
   const text = normalizeText(value).replace(',', '.')
@@ -113,6 +114,23 @@ function resolveTemplateAccount(row = {}, soggetto = {}) {
 
 function resolveGeneratedRowAccount(row = {}, context = {}) {
   const rowRole = normalizeText(row?.ruolo)
+  if (row?.manualSelectionOnly) {
+    return {
+      selection: {
+        id: '',
+        codice: '',
+        descrizione: '',
+        source: 'manual_required',
+        confidence: 0,
+        reasons: ['conto da selezionare'],
+        warnings: ['conto da selezionare'],
+      },
+      source: 'manual_required',
+      confidence: 0,
+      reasons: ['conto da selezionare'],
+      warnings: ['conto da selezionare'],
+    }
+  }
   const explicitTemplateAccount = resolveTemplateAccount(row, context?.soggetto || {})
   if (explicitTemplateAccount) {
     const hierarchy = explicitTemplateAccount?.hierarchyType ? explicitTemplateAccount : null
@@ -155,6 +173,67 @@ function resolveSubjectRowSide(row = {}, selection = null) {
   const explicitSide = normalizeText(row?.lato)
   if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
   return 'avere'
+}
+
+function resolveIvaRowSide(row = {}, behavior = {}) {
+  if (behavior?.isFatturaAttiva) return 'avere'
+  if (behavior?.isFatturaPassiva) return 'dare'
+  const explicitSide = normalizeText(row?.lato)
+  if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
+  return 'dare'
+}
+
+function buildManualDocumentEconomicRow(index = 0, behavior = {}) {
+  const isAttiva = Boolean(behavior?.isFatturaAttiva)
+  const isPassiva = Boolean(behavior?.isFatturaPassiva)
+  if (!behavior?.showDocumentPanel || !behavior?.showIvaPanel || (!isAttiva && !isPassiva)) return null
+
+  const side = isAttiva ? 'avere' : 'dare'
+
+  return {
+    id: `template-row-${index + 1}`,
+    riga_numero: index + 1,
+    templateGenerated: true,
+    templateKey: '',
+    manualEdited: false,
+    templateScope: false,
+    contoQuery: '',
+    conto_id: '',
+    conto_codice: '',
+    conto_descrizione: '',
+    hierarchyType: 'sottoconto',
+    isTemplateScope: false,
+    lato: side,
+    formula_importo: 'manuale',
+    descrizione: '',
+    descrizione_riga: isAttiva ? 'Ricavo' : 'Costo',
+    mastrino_hint: '',
+    templateFormula: 'manuale',
+    templateSide: side,
+    templateSource: 'manual_required',
+    templateConfidence: 0,
+    templateReasons: ['Conto economico da selezionare'],
+    dare: '',
+    avere: '',
+    obbligatoria: true,
+    modificabile: true,
+    attiva: true,
+    conto_resolved_finale: false,
+    contoQueryHint: 'Conto da selezionare',
+    autoResidualApplied: false,
+    manualAmountOverride: false,
+    lastAmountSide: side,
+    templateWarnings: ['Conto economico da selezionare'],
+    manualSelectionOnly: true,
+  }
+}
+
+function appendManualDocumentEconomicRow(templateRows = [], behavior = {}) {
+  const rows = Array.isArray(templateRows) ? templateRows.slice() : []
+  const hasEconomicRow = rows.some((row) => ['costo', 'ricavo'].includes(normalizeText(row?.ruolo)))
+  if (hasEconomicRow) return rows
+  const manualRow = buildManualDocumentEconomicRow(rows.length, behavior)
+  return manualRow ? [...rows, manualRow] : rows
 }
 
 function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare: 0, avere: 0 }) {
@@ -206,6 +285,8 @@ function buildGeneratedRow(templateRow = {}, index = 0, context = {}, runningTot
         is_cliente: selection?.is_cliente || normalizeText(subjectContext.clienteFornitoreTipo || subjectContext.cliente_fornitore_tipo) === 'cliente',
         is_fornitore: selection?.is_fornitore || normalizeText(subjectContext.clienteFornitoreTipo || subjectContext.cliente_fornitore_tipo) === 'fornitore',
       })
+    : normalizeText(row?.ruolo) === 'iva'
+      ? resolveIvaRowSide(row, context?.causaleBehavior || {})
     : normalizeText(row.lato) === 'avere'
       ? 'avere'
       : 'dare'
@@ -226,6 +307,8 @@ function buildGeneratedRow(templateRow = {}, index = 0, context = {}, runningTot
     id: row.id || `template-row-${index + 1}`,
     riga_numero: index + 1,
     templateGenerated: true,
+    manualSelectionOnly: Boolean(row.manualSelectionOnly),
+    source: accountResolution.source || context?.templateSource || 'behavior_fallback',
     templateKey: context?.templateKey || '',
     manualEdited: false,
     templateScope,
@@ -264,7 +347,8 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   const source = input && typeof input === 'object' ? input : {}
   const templateSource = source.templateRows || source.templateRowsTemplate || source.rows || []
   const normalizedTemplate = normalizeRegistrazioneRigheTemplate(templateSource)
-  const templateRows = Array.isArray(normalizedTemplate.rows) ? normalizedTemplate.rows : []
+  const behavior = options?.behavior || options?.causaleBehavior || source?.causaleBehavior || {}
+  const templateRows = appendManualDocumentEconomicRow(Array.isArray(normalizedTemplate.rows) ? normalizedTemplate.rows : [], behavior)
   const documentData = source.documentData && typeof source.documentData === 'object' ? source.documentData : {}
   const ivaDraft = source.ivaDraft && typeof source.ivaDraft === 'object' ? source.ivaDraft : {}
   const soggetto = source.soggetto && typeof source.soggetto === 'object' ? source.soggetto : {}
@@ -374,6 +458,20 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
   const subjectAccountDefaults = source.subjectAccountDefaults || source.subjectAccountDefault || null
   const subjectAccountHistory = source.subjectAccountHistory || historicalCausaleStructure?.accountHints || null
   const procedureDefaults = source.procedureDefaults || null
+  const resolvedCausaleBehavior = source.documentBehavior || source.selectedCausaleBehavior || resolveRegistrazioneCausaleBehavior(source.causale || source.selectedCausale || {}, { useLegacyFallback: false })
+  const causaleTypeText = normalizeText(
+    source.causale?.tipoDocumento ||
+      source.causale?.tipo_documento ||
+      source.selectedCausale?.tipoDocumento ||
+      source.selectedCausale?.tipo_documento ||
+      resolvedCausaleBehavior?.tipoDocumento ||
+      ''
+  )
+  const documentBehavior = {
+    ...resolvedCausaleBehavior,
+    isFatturaAttiva: Boolean(resolvedCausaleBehavior?.isFatturaAttiva) || /attiv/.test(causaleTypeText),
+    isFatturaPassiva: Boolean(resolvedCausaleBehavior?.isFatturaPassiva) || /passiv/.test(causaleTypeText),
+  }
   const resolvedTemplate =
     source.resolvedTemplate && typeof source.resolvedTemplate === 'object'
       ? source.resolvedTemplate
@@ -388,7 +486,7 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
           historicalCausaleStructure,
           subjectAccountResolution: subjectAccountHistory,
         })
-  const templateRows = Array.isArray(resolvedTemplate.templateRows) ? resolvedTemplate.templateRows : []
+  const templateRows = appendManualDocumentEconomicRow(Array.isArray(resolvedTemplate.templateRows) ? resolvedTemplate.templateRows : [], documentBehavior)
   const force = Boolean(options.force || source.forceTemplateRows)
   const hasTemplate = templateRows.length > 0
   const pristineRows = canAutoApplyTemplateRows(currentRows)
@@ -435,7 +533,7 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
         soggetto,
         templateKey,
         societaId: source.societaId || '',
-        causaleBehavior,
+        causaleBehavior: documentBehavior,
         causale: source.causale || source.selectedCausale || null,
         templateSource: resolvedTemplate?.source || 'causale_template',
         templateConfidence: resolvedTemplate?.confidence ?? 1,

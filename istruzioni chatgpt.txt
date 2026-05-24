@@ -1,0 +1,449 @@
+CONTESTO RIPARTENZA NUOVA CHAT — FiscoSim / Import Contabilità
+
+Sto sviluppando FiscoSim, gestionale interno per studio commercialista. Stiamo lavorando sul modulo:
+
+src/modules/import_contabilita/
+
+Regola generale fondamentale:
+- Non modificare mai funzioni/flussi già funzionanti salvo richiesta esplicita.
+- Interventi chirurgici, piccoli, mirati.
+- Prima analisi completa, poi patch.
+- Niente microfix casuali.
+- Ogni step deve rispettare la scaletta.
+- Se dico “metti in scaletta”, significa inserirlo nel punto corretto, NON anticiparlo.
+- Si anticipa solo se lo chiedo esplicitamente o se c’è bug bloccante P0.
+- Dopo report Codex, prima audit del report; chiedere file solo se realmente necessari o se il report indica file modificati non disponibili.
+- Quando allego report Codex e file modificati, verificare sempre:
+  - file modificati
+  - import nuovi
+  - collegamenti legacy
+  - cambi fuori perimetro
+  - test eseguiti
+  - rischi regressione
+  - riferimenti a import_fatture, import_unificato, import_nuovo, DISUSO
+
+Regola legacy:
+- In src/modules/import_contabilita non devono essere introdotti collegamenti attivi a:
+  - import_fatture
+  - import_unificato
+  - import_nuovo
+  - DISUSO
+- Il vecchio import_fatture può essere letto solo come riferimento concettuale/UX, non importato come dipendenza attiva, soprattutto non per logiche write-heavy.
+
+STATO GENERALE MODULO IMPORT CONTABILITÀ
+
+P5 È CHIUSA.
+
+P5 ha coperto:
+- P5E — Creazione reale nuovo conto piano conti
+- P5F — Aggancio/consolidamento conto esistente
+- P5G — Aggiornamento dati mancanti su conti esistenti
+- P5H — Percipienti CF-only
+- P5I — Working table: controparte patrimoniale + readiness completa
+- P5J — Working view locale separata/read-only/navigabile
+- P5-FINAL — Audit complessivo positivo
+
+Punti blindati P5:
+1. Controparte patrimoniale fornitore/cliente
+   - È il conto piano conti fornitore/cliente.
+   - Esempi:
+     - fornitori Italia: 2.03.08.xxxx
+     - fornitori estero: 2.03.09.xxxx
+     - professionisti: 2.03.10.xxxx
+     - clienti Italia: 1.02.20.xxxx
+     - clienti estero: 1.02.21.xxxx
+   - Serve per partitario, partite, scadenze, pagamento/incasso, scrittura finale.
+   - Deve essere mostrata nella prima colonna della working table sotto il nome estratto XML.
+   - Esempio:
+     DAC Spa
+     2 03 08 0306 - DAC Spa
+   - Se non collegata, deve comparire “Non collegato” o “-”.
+   - Se manca, la fattura non è pronta/registrabile.
+
+2. Conto costo/ricavo
+   - È la colonna “Conto” / “Conto proposto” della working table.
+   - È separato dalla controparte patrimoniale.
+   - È gestito da manualAccountByRowId.
+   - NON deve mai ricevere il conto patrimoniale fornitore/cliente.
+   - Priorità futura proposta conto costo/ricavo:
+     1. preimpostazione sull’anagrafica piano conti della controparte;
+     2. storico contabilizzazioni;
+     3. impostazioni generali procedure/studio, futura tabella.
+
+3. Causale contabile
+   - Separata dal conto.
+   - Gestita da manualCausaleByRowId.
+   - In futuro deve derivare da tabella “Studio / Impostazioni procedure”, non da storico:
+     - fattura fornitore ordinaria: FF
+     - fattura cliente ordinaria: FC
+     - IVA per cassa: FFPC / FCPC
+     - fattura/parcella con ritenuta: RP / RPPC
+     - estero/reverse: A17X / FARC, fase successiva
+   - Operatore può sempre variare.
+
+4. Percipienti
+   - Gestione integrata dentro “Anagrafiche da verificare”, non tabella separata.
+   - Filtro Tipo include: Fornitore, Cliente, Percipiente.
+   - Le righe percipiente devono stare in alto.
+   - Match percipiente SOLO su codice fiscale.
+   - CF obbligatorio.
+   - Nessun match su P.IVA.
+   - Nessun match su denominazione.
+   - Se CF esiste già in anagrafica percipienti, NON creare nuovo percipiente.
+   - P5 non collega CU/770/scadenzario ritenute.
+   - Cassa previdenziale/ritenute dettagliate ancora non implementate nel parser/anagrafica percipiente.
+
+5. Working table
+   - Prima colonna: fornitore/cliente XML + conto patrimoniale collegato sotto.
+   - Colonna Conto: conto costo/ricavo.
+   - Colonna Causale: causale contabile.
+   - Readiness riga richiede:
+     - numero documento
+     - data documento
+     - imponibile
+     - IVA presente/parsata, ma senza detrazione IVA
+     - totale
+     - controparte patrimoniale collegata
+     - conto costo/ricavo
+     - causale contabile
+   - Detrazione IVA, indetraibilità, pro-rata, split payment, reverse charge, registri IVA vanno nella working view avanzata, non nella readiness P5.
+   - Complete/Incomplete usano readiness finale.
+   - “Pronta” deve poi essere resa visivamente verde tipo Imported; “Incompleta” gialla/rossa in P6 UX.
+   - La colonna Stato attuale è probabilmente poco utile; in P6 valutare sostituzione/spostamento e inserimento “data registrazione” più a sinistra.
+
+6. Working view
+   - È separata dalla working table.
+   - Click “Avvia contabilizzazione” apre schermata dedicata, non pannello sotto la tabella.
+   - Layout attuale/futuro:
+     - sinistra: anteprima fattura
+     - destra: working view contabile
+   - Pulsanti:
+     - Torna all’elenco
+     - Riga precedente
+     - Riga successiva
+     - indicatore 1 / N
+   - Navigazione:
+     - se righe selezionate: naviga solo tra selezionate pronte;
+     - se nessuna selezione: naviga tutte le righe pronte;
+     - incomplete escluse.
+   - Working view P5 è locale/read-only:
+     - nessun DB write
+     - nessun commit reale
+     - nessuna prima nota reale
+     - nessun documenti_contabilita
+     - nessun documenti_import
+     - nessun partitario
+     - nessuna IVA/ritenute/CU/770
+   - Controlli strutturali P5J2:
+     - controparte patrimoniale presente
+     - conto costo/ricavo presente
+     - causale presente
+     - dati documento
+     - quadratura bozza PN
+     - partitario coerente
+     - IVA base presente
+   - Status: ok / warning / blocked.
+
+7. Snapshot / local state
+   - manualAccountByRowId = conto costo/ricavo.
+   - manualCausaleByRowId = causale.
+   - anagraficheDecisioniByKey = decisioni anagrafiche.
+   - percipientiDecisioniByKey = decisioni percipienti.
+   - counterpartyAccountByRowId = derivato per conto patrimoniale controparte.
+   - Snapshot deve restare compatto, niente payload pesanti.
+
+P5-FINAL audit Codex:
+- Ha confermato P5 chiudibile.
+- Nessun file modificato in audit.
+- Nessun DB write improprio.
+- Nessun riferimento legacy in src/modules/import_contabilita a import_fatture/import_unificato/import_nuovo/DISUSO.
+- Rischio residuo non bloccante: se readiness cambia mentre working view è aperta, lista navigabile può restare storica fino a riapertura view.
+
+STATO ATTUALE: SIAMO IN P6
+
+P6 = UX definitiva Import Contabilità.
+P6 deve essere SOLO UX/layout, senza cambiare logiche contabili chiuse in P5.
+
+Target vincolante:
+Ho generato/salvato immagini target della UX:
+1. Schermata elenco Import Contabilità pulita:
+   - header pulito
+   - azioni principali in alto
+   - stats compatte
+   - cards compatte/collassate per Import & Stato, Report, Anagrafiche
+   - working table centrale grande
+   - filtri ordinati
+   - stile dark navy, elegante, professionale, poco affaticante
+   - deve essere “uguale” al mockup target, non solo ispirata.
+2. Working view:
+   - schermata separata
+   - sinistra anteprima fattura
+   - destra Prima Nota / IVA / Partitario / Suggerimenti
+   - stile uguale al mockup target pulito.
+   - anche questa UX finale sarà P6, ma non subito se stiamo facendo elenco.
+
+P6-AUDIT è chiuso.
+Esito audit:
+- La schermata attuale è funzionale ma troppo affollata.
+- Problemi:
+  - sezioni superiori occupano troppo spazio verticale;
+  - Report import e Anagrafiche dominano;
+  - pulsanti batch troppi e percepiti equivalenti;
+  - working table troppo in basso;
+  - preview laterale e working view sono concetti diversi;
+  - Stato working table ambiguo;
+  - controlli ripetuti.
+- Layout target:
+  A. Header
+  B. Cards superiori compatte
+  C. Toolbar filtri
+  D. Working table
+  E. Drawer/pannelli dettagli
+  F. Working view separata
+- Roadmap P6 audit proposta:
+  - P6A Layout elenco base
+  - P6B Cards superiori compatte
+  - P6C Working table visual/readiness
+  - P6D Filtri colonna
+  - P6E Anteprima avanzata
+  - P6F Working view visual finale
+
+NOTA: Prima avevamo chiamato P6A, ma Codex ha fatto solo micro-ritocchi quasi invisibili.
+Utente ha inviato screenshot e ha detto:
+- “non mi sembra ci siano state modifiche visibili”.
+Quindi:
+- P6A precedente = solo P6A0 ritocco conservativo, non soddisfacente.
+- Stato:
+  P6A0 — Ritocco conservativo iniziale: chiuso/parziale.
+  P6A1 — Layout elenco target reale con card compatte superiori: DA FARE.
+
+Dove ripartire:
+Bisogna preparare/continuare con P6A1, più vincolante, per ottenere davvero:
+1. Header pulito.
+2. Fascia superiore con 3 card compatte:
+   - Import & Stato
+   - Report import
+   - Anagrafiche da verificare
+3. Toolbar operativa working table più pulita.
+4. Working table più alta e centrale.
+5. Dettagli report/anagrafiche disponibili solo tramite “Dettagli” / “Mostra dettagli”, non dominanti.
+6. Nessuna modifica a P5 logic.
+7. Working view branch non toccato.
+
+PROMPT CONSIGLIATO PER RIPARTIRE: P6A1
+
+Stiamo lavorando su FiscoSim, modulo:
+
+src/modules/import_contabilita/
+
+FASE: P6A1 — Layout elenco target reale con card compatte superiori.
+
+PROBLEMA
+La precedente P6A ha prodotto solo micro-ritocchi visivi. La schermata è ancora troppo simile a prima:
+- Report import ancora troppo dominante
+- Anagrafiche da verificare ancora troppo dominante
+- working table ancora troppo in basso
+- filtri e azioni ancora mischiati
+- nessuna vera struttura a card superiori compatte
+
+OBIETTIVO
+Riorganizzare davvero la modalità elenco verso il layout target deciso:
+
+1. Header pulito
+2. Fascia superiore con 3 card compatte:
+   - Import & Stato
+   - Report import
+   - Anagrafiche da verificare
+3. Toolbar operativa working table
+4. Working table centrale e più alta possibile
+
+QUESTA È ANCORA SOLO UX/LAYOUT.
+NON modificare logiche P5.
+
+FILE MODIFICABILE
+- src/modules/import_contabilita/index.jsx
+
+FILE DA NON MODIFICARE
+- repo
+- parser
+- workflow
+- builders
+- dedup
+- mergeImportResults
+- DB/schema
+- working view logic
+- tutti gli altri file
+
+DIVIETI ASSOLUTI
+- Non scrivere DB
+- Non modificare import logic
+- Non modificare anagrafiche logic
+- Non modificare percipienti logic
+- Non modificare readiness logic
+- Non modificare working view
+- Non cambiare shape degli stati
+- Non introdurre nuove dipendenze
+- Non fare refactor generale
+
+PATCH RICHIESTA
+
+1. Creare una fascia superiore “overview cards”
+
+Subito sotto l’header/azioni principali, creare un layout a 3 card compatte, responsive:
+
+CARD 1 — Import & Stato
+Mostrare in modo compatto:
+- ultimo import / file in coda
+- file selezionato
+- visibili
+- complete
+- incomplete
+- società selezionata
+- eventuale bottone dettagli solo se già presente
+
+CARD 2 — Report import
+Mostrare solo sintesi:
+- totale
+- nuove
+- già presenti
+- scartati
+- errori
+- bottone “Dettagli import”
+
+Non mostrare il report come sezione larga dominante.
+
+CARD 3 — Anagrafiche da verificare
+Mostrare solo sintesi:
+- totale controparti
+- pronte
+- conto esistente
+- nuove
+- da scegliere
+- incomplete
+- ignorate
+- percipienti candidati/esistenti
+- bottoni principali:
+  - Mostra dettagli
+  - Conferma completati
+  - Elimina ignorati, se esistente
+
+Non espandere automaticamente la tabella anagrafiche se è compressa.
+La sezione dettagliata deve restare disponibile quando l’utente clicca “Mostra dettagli”.
+
+2. Spostare la working table più in alto
+
+Dopo le tre card compatte, mostrare subito:
+- toolbar filtri
+- working table
+
+La working table deve diventare il focus visivo.
+
+3. Toolbar working table più pulita
+
+Raggruppare visivamente:
+- ricerca
+- vista: tutte/pronte/registrate
+- filtri rapidi complete/incomplete/tutto/selezionate
+- azioni batch: seleziona tutto, deseleziona, elimina selezionate, avvia contabilizzazione
+- export/colonne
+
+Non cambiare gli handler.
+Solo layout/ordine/gerarchia.
+
+4. Report e Anagrafiche dettagliati
+
+Non rimuovere funzionalità.
+
+Se oggi i dettagli sono renderizzati sotto:
+- mantenerli disponibili solo quando il relativo dettaglio è aperto/collassato;
+- evitare che occupino spazio se compressi;
+- se esiste già stato/toggle, usarlo;
+- se non esiste, non introdurre logica complessa, ma almeno separare visivamente sintesi e dettagli.
+
+5. Non toccare working view
+
+Il ramo working view separata deve restare invariato.
+
+6. Non toccare logiche
+
+Tutte le mappe/stati/handler P5 devono restare identici.
+
+TEST / CONTROLLI RICHIESTI
+1. npm run build
+2. Controllo statico:
+- solo layout elenco modificato
+- working view branch invariato
+- handler invariati
+- nessuna logica P5 modificata
+- report/anagrafiche ancora accessibili
+- working table ancora funzionante
+- no DB write
+- no repo change
+3. Grep legacy:
+- import_fatture
+- import_unificato
+- import_nuovo
+- DISUSO
+
+CASI MANUALI DA VERIFICARE
+1. Apri Import Contabilità.
+2. Verifica che sotto l’header ci siano 3 card compatte:
+   - Import & Stato
+   - Report import
+   - Anagrafiche da verificare
+3. Verifica che la working table sia molto più visibile e meno spinta in basso.
+4. Apri dettagli import: deve funzionare.
+5. Apri dettagli anagrafiche: deve funzionare.
+6. Usa filtri e ricerca: devono funzionare.
+7. Avvia working view: deve aprirsi come prima.
+8. Console pulita.
+
+OUTPUT FINALE RICHIESTO
+Rispondi in italiano con:
+1. Analisi iniziale.
+2. File modificato.
+3. Come sono state create le 3 card superiori.
+4. Come è stata resa centrale la working table.
+5. Come sono rimasti accessibili report/anagrafiche dettagliati.
+6. Come è stata pulita la toolbar.
+7. Conferma working view invariata.
+8. Conferma P5 logic invariata.
+9. Test eseguiti e risultato.
+10. Esito grep legacy.
+11. Rischi residui.
+12. Test manuali consigliati.
+
+ULTERIORI NOTE IMPORTANTI P6
+
+- P6 non deve essere “simile” al mockup: il target è arrivare a quella UX il più possibile uguale.
+- Però implementare a micro-step, senza refactorone.
+- Dopo P6A1:
+  - P6B potrebbe essere cards collassabili reali/drawer dettagli.
+  - P6C working table visual/readiness: Pronta verde tipo Imported, Incompleta giallo/rosso, eventuale spostamento/sostituzione colonna Stato.
+  - P6D filtri colonna:
+    - testuali A-Z/Z-A/ricerca
+    - numerici maggiore/minore/uguale/intervallo
+    - date da/a/intervallo
+    - pulisci filtri
+  - P6E anteprima avanzata:
+    - tab Fattura FiscoSim
+    - Fattura originale stile AssoInvoice da XML originale
+    - XML grezzo
+    - da mettere in anteprima elenco e/o working view.
+  - P6F working view visual finale secondo mockup.
+
+ANTEPRIMA AVANZATA
+Già in scaletta P6E:
+- Oggi anteprima mostra Fattura FiscoSim basata su parsedDocument.
+- Si vuole aggiungere:
+  1. Fattura FiscoSim
+  2. Fattura originale, stile AssoInvoice, basata su XML originale
+  3. XML grezzo
+- Non anticiparla prima di P6E, salvo richiesta esplicita.
+
+UX TARGET
+Utente ha salvato le immagini generate:
+- Dashboard/lista Import Contabilità pulita.
+- Working view separata pulita.
+Vuole che FiscoSim diventi così: “non simile, non ispirata, ma così”.
+Quindi durante P6 bisogna far convergere a quel layout.

@@ -11,7 +11,7 @@ import { applyRegistrazioneAutoResidualChainToRows } from './applyRegistrazioneA
 import { parseRegistrazioneAmount } from './parseRegistrazioneAmount.js'
 import { normalizeRegistrazioneRowPatch } from './normalizeRegistrazioneRowPatch.js'
 import { buildRegistrazioneContoSelection, findRegistrazioneContoByPrefix, findRegistrazioneContoExactMatch, resolveContoHierarchyView, resolveRegistrazioneContoDescrizione } from './resolveRegistrazioneConti.js'
-import { buildRegistrazioneContropartiList } from './resolveRegistrazioneControparti.js'
+import { buildRegistrazioneContropartiList, findRegistrazioneControparteExactMatch } from './resolveRegistrazioneControparti.js'
 import { findRegistrazioneCausaleExactMatch, resolveRegistrazioneCausaleLabel } from './resolveRegistrazioneCausali.js'
 import { resolveRegistrazioneCausaleBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
 import { resolveRegistrazioneCausaleIvaBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleIvaBehavior.js'
@@ -36,6 +36,7 @@ import { normalizeRegistrazioneRigheTemplate } from '../../domain/registrazione/
 import { buildCausaleStructureHistory } from './buildCausaleStructureHistory.js'
 import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/resolveRegistrazioneRigheTemplate.js'
 import { resolveRegistrazioneTemplateRowAccount } from './resolveRegistrazioneTemplateRowAccount.js'
+import { resolveRegistrazioneHeaderCounterpartyDraft } from './normalizeRegistrazioneInput.js'
 import { createPrimaNotaCompleta } from '../../../../../services/primaNotaService.js'
 
 const pianoConti = [
@@ -99,6 +100,33 @@ const causaleTemplateFF = {
     },
   ],
 }
+
+const causaleDocumentoPassiva = {
+  id: 'ff-doc',
+  codice: 'FF',
+  descrizione: 'Fattura fornitore',
+  tipo_causale: 'Doc. IVA normale',
+  tipo_documento: 'Fattura passiva',
+  codice_registro_iva: '01',
+  data_documento: 'Obbligatorio',
+  numero_documento: 'Obbligatorio',
+}
+
+const causaleDocumentoAttiva = {
+  id: 'fc-doc',
+  codice: 'FC',
+  descrizione: 'Fattura cliente',
+  tipo_causale: 'Doc. IVA normale',
+  tipo_documento: 'Fattura attiva',
+  codice_registro_iva: '02',
+  data_documento: 'Obbligatorio',
+  numero_documento: 'Obbligatorio',
+}
+
+const causaleIvaAcquisti = { id: 'iva-acq', codice: 'IVA22A', descrizione: 'Acquisti 22%', aliquota: 22, registroIva: 'ACQ', segnoRegistro: '+', percentualeDetraibilita: 100 }
+const causaleIvaVendite = { id: 'iva-vend', codice: 'IVA22V', descrizione: 'Vendite 22%', aliquota: 22, registroIva: 'VEN', segnoRegistro: '+', percentualeDetraibilita: 100 }
+const causaleDocumentoPassivaConfig = buildRegistrazioneManualeUiPolicy(resolveRegistrazioneCausaleBehavior(causaleDocumentoPassiva))
+const causaleDocumentoAttivaConfig = buildRegistrazioneManualeUiPolicy(resolveRegistrazioneCausaleBehavior(causaleDocumentoAttiva))
 
 function buildPrimaNotaCompletaDbMock({
   headerId = 'pn-1',
@@ -314,6 +342,270 @@ test('buildRegistrazioneDraft blocca una riga che espone solo una label conto se
 
   assert.equal(result.validation.status, 'blocked')
   assert.ok(result.validation.blockers.some((item) => String(item).includes('conto mancante')))
+})
+
+test('buildRegistrazioneDraft per fattura passiva semplice genera soggetto, IVA e costo da selezionare', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        dataDocumento: '2026-05-01',
+        numeroDocumento: 'A-101',
+        totaleDocumento: '122',
+        causaleContabileId: 'ff-doc',
+        soggetto: 'Fornitore demo',
+        clienteFornitoreId: 'cf-1',
+        clienteFornitoreNome: 'Fornitore demo',
+        clienteFornitoreTipo: 'fornitore',
+      },
+      documentData: {
+        totaleDocumento: '122',
+        imponibile: '100',
+      },
+      ivaData: {
+        causaleIvaId: 'iva-acq',
+      },
+      rows: [{}, {}],
+    },
+    {
+      pianoConti: [
+        { id: 'cf-1', codice: '2 03 08 0001', descrizione: 'Fornitore demo', is_fornitore: true, livello: 3, tipo: 'FINALE' },
+      ],
+      causaliContabili: [causaleDocumentoPassiva],
+      selectedCausale: causaleDocumentoPassiva,
+      config: causaleDocumentoPassivaConfig,
+      causaliIva: [causaleIvaAcquisti],
+    }
+  )
+
+  assert.equal(result.validation.status, 'blocked')
+  assert.equal(result.draft.rows.length, 3)
+  assert.equal(result.draft.rows[0].lato, 'avere')
+  assert.equal(result.draft.rows[0].avere, '122.00')
+  assert.equal(result.draft.rows[1].lato, 'dare')
+  assert.equal(result.draft.rows[1].dare, '22.00')
+  assert.equal(result.draft.rows[2].manualSelectionOnly, true)
+  assert.equal(result.draft.rows[2].source, 'manual_required')
+  assert.equal(result.draft.rows[2].lato, 'dare')
+  assert.equal(result.draft.header.clienteFornitoreId, 'cf-1')
+  assert.equal(result.draft.header.clienteFornitoreTipo, 'fornitore')
+  assert.equal(result.draft.header.soggetto, 'Fornitore demo')
+  assert.equal(result.validation.blockers.some((item) => String(item).includes('cliente / fornitore')), false)
+  assert.ok(result.validation.blockers.some((item) => String(item).includes('scrittura non quadrata')))
+})
+
+test('buildRegistrazioneDraft ricostruisce il cliente/fornitore reale dalla sola label visibile in testata', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        dataDocumento: '2026-05-01',
+        numeroDocumento: 'A-104',
+        totaleDocumento: '122',
+        causaleContabileId: 'ff-doc',
+        soggetto: '2 03 08 0001 - BIRIMPORT S.P.A.',
+        clienteFornitoreId: '',
+        clienteFornitoreNome: '',
+        clienteFornitoreCodice: '',
+        clienteFornitoreTipo: '',
+      },
+      documentData: {
+        totaleDocumento: '122',
+        imponibile: '100',
+      },
+      ivaData: {
+        causaleIvaId: 'iva-acq',
+      },
+      rows: [{}, {}],
+    },
+    {
+      pianoConti: [
+        { id: 'cf-1', codice: '2 03 08 0001', descrizione: 'BIRIMPORT S.P.A.', is_fornitore: true, livello: 3, tipo: 'FINALE' },
+      ],
+      causaliContabili: [causaleDocumentoPassiva],
+      selectedCausale: causaleDocumentoPassiva,
+      config: causaleDocumentoPassivaConfig,
+      causaliIva: [causaleIvaAcquisti],
+    }
+  )
+
+  assert.equal(result.normalized.header.clienteFornitoreId, 'cf-1')
+  assert.equal(result.normalized.header.clienteFornitoreCodice, '2 03 08 0001')
+  assert.equal(result.normalized.header.clienteFornitoreNome, 'BIRIMPORT S.P.A.')
+  assert.equal(result.normalized.header.clienteFornitoreTipo, 'fornitore')
+  assert.equal(result.validation.blockers.some((item) => String(item).includes('cliente / fornitore')), false)
+})
+
+test('buildRegistrazioneDraft per fattura attiva semplice genera cliente, IVA e ricavo da selezionare', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        dataDocumento: '2026-05-01',
+        numeroDocumento: 'F-101',
+        totaleDocumento: '122',
+        causaleContabileId: 'fc-doc',
+        soggetto: 'Cliente demo',
+        clienteFornitoreId: 'cl-1',
+        clienteFornitoreNome: 'Cliente demo',
+        clienteFornitoreTipo: 'cliente',
+      },
+      documentData: {
+        totaleDocumento: '122',
+        imponibile: '100',
+      },
+      ivaData: {
+        causaleIvaId: 'iva-vend',
+      },
+      rows: [{}, {}],
+    },
+    {
+      pianoConti: [
+        { id: 'cl-1', codice: '1 01 01 0001', descrizione: 'Cliente demo', is_cliente: true, livello: 3, tipo: 'FINALE' },
+      ],
+      causaliContabili: [causaleDocumentoAttiva],
+      selectedCausale: causaleDocumentoAttiva,
+      config: causaleDocumentoAttivaConfig,
+      causaliIva: [causaleIvaVendite],
+    }
+  )
+
+  assert.equal(result.validation.status, 'blocked')
+  assert.equal(result.draft.rows.length, 3)
+  assert.equal(result.draft.rows[0].lato, 'dare')
+  assert.equal(result.draft.rows[0].dare, '122.00')
+  assert.equal(result.draft.rows[1].lato, 'avere')
+  assert.equal(result.draft.rows[1].avere, '22.00')
+  assert.equal(result.draft.rows[2].manualSelectionOnly, true)
+  assert.equal(result.draft.rows[2].source, 'manual_required')
+  assert.equal(result.draft.rows[2].lato, 'avere')
+  assert.equal(result.draft.header.clienteFornitoreId, 'cl-1')
+  assert.equal(result.draft.header.clienteFornitoreTipo, 'cliente')
+  assert.equal(result.draft.header.soggetto, 'Cliente demo')
+  assert.equal(result.validation.blockers.some((item) => String(item).includes('cliente / fornitore')), false)
+  assert.ok(result.validation.blockers.some((item) => String(item).includes('scrittura non quadrata')))
+})
+
+test('validateRegistrazioneDraft blocca il totale documento mancante nel documento IVA', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        dataDocumento: '2026-05-01',
+        numeroDocumento: 'A-102',
+        causaleContabileId: 'ff-doc',
+        soggetto: 'Fornitore demo',
+        clienteFornitoreId: 'cf-1',
+        clienteFornitoreNome: 'Fornitore demo',
+        clienteFornitoreTipo: 'fornitore',
+        totaleDocumento: '',
+      },
+      documentData: {
+        totaleDocumento: '',
+        imponibile: '100',
+      },
+      ivaData: {
+        causaleIvaId: 'iva-acq',
+      },
+      rows: [{}, {}],
+    },
+    {
+      pianoConti: [
+        { id: 'cf-1', codice: '2 03 08 0001', descrizione: 'Fornitore demo', is_fornitore: true, livello: 3, tipo: 'FINALE' },
+      ],
+      causaliContabili: [causaleDocumentoPassiva],
+      selectedCausale: causaleDocumentoPassiva,
+      config: causaleDocumentoPassivaConfig,
+      causaliIva: [causaleIvaAcquisti],
+    }
+  )
+
+  assert.equal(result.validation.status, 'blocked')
+  assert.ok(result.validation.blockers.includes('totale documento mancante'))
+})
+
+test('validateRegistrazioneDraft blocca il documento IVA passivo senza fornitore reale', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        dataDocumento: '2026-05-01',
+        numeroDocumento: 'A-103',
+        totaleDocumento: '122',
+        causaleContabileId: 'ff-doc',
+        soggetto: 'Fornitore demo',
+        clienteFornitoreId: '',
+        clienteFornitoreNome: '',
+        clienteFornitoreTipo: 'fornitore',
+      },
+      documentData: {
+        totaleDocumento: '122',
+        imponibile: '100',
+      },
+      ivaData: {
+        causaleIvaId: 'iva-acq',
+      },
+      rows: [{}, {}],
+    },
+    {
+      pianoConti: [],
+      causaliContabili: [causaleDocumentoPassiva],
+      selectedCausale: causaleDocumentoPassiva,
+      config: causaleDocumentoPassivaConfig,
+      causaliIva: [causaleIvaAcquisti],
+    }
+  )
+
+  assert.equal(result.validation.status, 'blocked')
+  assert.ok(result.validation.blockers.some((item) => String(item).includes('cliente / fornitore')))
+})
+
+test('validateRegistrazioneDraft blocca il documento IVA attivo senza cliente reale', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        dataDocumento: '2026-05-01',
+        numeroDocumento: 'F-103',
+        totaleDocumento: '122',
+        causaleContabileId: 'fc-doc',
+        soggetto: 'Cliente demo',
+        clienteFornitoreId: '',
+        clienteFornitoreNome: '',
+        clienteFornitoreTipo: 'cliente',
+      },
+      documentData: {
+        totaleDocumento: '122',
+        imponibile: '100',
+      },
+      ivaData: {
+        causaleIvaId: 'iva-vend',
+      },
+      rows: [{}, {}],
+    },
+    {
+      pianoConti: [],
+      causaliContabili: [causaleDocumentoAttiva],
+      selectedCausale: causaleDocumentoAttiva,
+      config: causaleDocumentoAttivaConfig,
+      causaliIva: [causaleIvaVendite],
+    }
+  )
+
+  assert.equal(result.validation.status, 'blocked')
+  assert.ok(result.validation.blockers.some((item) => String(item).includes('cliente / fornitore')))
 })
 
 test('resolveRegistrazioneEsercizio propone esercizio coerente con la data', () => {
@@ -608,6 +900,7 @@ test('resolveRegistrazioneContoDescrizione estrae la descrizione reale dalla lab
 
 test('buildRegistrazioneContropartiList filtra i soli conti compatibili con cliente/fornitore', () => {
   const conti = [
+    { id: 'c0', codice: '050', descrizione: 'IMMOBILIZZAZIONI', livello: 3 },
     { id: 'c1', codice: '100', descrizione: 'Cassa', is_cliente: false, is_fornitore: false, livello: 2 },
     { id: 'c2', codice: '200', descrizione: 'Fornitore Alfa', is_fornitore: true, livello: 4 },
     { id: 'c3', codice: '300', descrizione: 'Cliente Beta', is_cliente: true, livello: 4 },
@@ -616,8 +909,96 @@ test('buildRegistrazioneContropartiList filtra i soli conti compatibili con clie
   const result = buildRegistrazioneContropartiList(conti)
 
   assert.equal(result.length, 2)
+  assert.equal(result.some((item) => item.id === 'c0'), false)
   assert.ok(result.some((item) => item.id === 'c2'))
   assert.ok(result.some((item) => item.id === 'c3'))
+})
+
+test('findRegistrazioneControparteExactMatch non risolve il testo parziale', () => {
+  const conti = [
+    { id: 'cf-1', codice: '2 03 08 0001', descrizione: 'BIRIMPORT S.P.A.', is_fornitore: true, livello: 3 },
+    { id: 'gen-1', codice: '1 03 01 0001', descrizione: 'IMMOBILIZZAZIONI', livello: 3 },
+  ]
+
+  assert.equal(findRegistrazioneControparteExactMatch(conti, 'bi'), null)
+  assert.equal(findRegistrazioneControparteExactMatch(conti, 'IMMOBILIZZAZIONI'), null)
+  assert.equal(findRegistrazioneControparteExactMatch(conti, '2 03 08 0001 - BIRIMPORT S.P.A.')?.id, 'cf-1')
+})
+
+test('resolveRegistrazioneHeaderCounterpartyDraft lascia il testo parziale senza PK reale', () => {
+  const header = resolveRegistrazioneHeaderCounterpartyDraft(
+    {
+      soggetto: 'bi',
+      clienteFornitoreId: 'cf-1',
+      clienteFornitoreNome: 'BIRIMPORT S.P.A.',
+      clienteFornitoreCodice: '2 03 08 0001',
+      clienteFornitoreTipo: 'fornitore',
+      causaleContabile: { codice: 'FF' },
+    },
+    [{ id: 'cf-1', codice: '2 03 08 0001', descrizione: 'BIRIMPORT S.P.A.', is_fornitore: true, livello: 3 }]
+  )
+
+  assert.equal(header.clienteFornitoreId, '')
+  assert.equal(header.clienteFornitoreNome, '')
+  assert.equal(header.clienteFornitoreCodice, '')
+  assert.equal(header.clienteFornitoreTipo, '')
+  assert.equal(header.soggetto, 'bi')
+})
+
+test('buildRegistrazioneDraft conserva il clear del soggetto senza riaggancio', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        causaleContabileId: 'ff',
+        soggetto: '',
+        clienteFornitoreId: '',
+        clienteFornitoreNome: '',
+        clienteFornitoreCodice: '',
+        clienteFornitoreTipo: '',
+      },
+      rows: [
+        { contoQuery: '100', descrizione: 'Cassa', dare: 100, avere: 0 },
+        { contoQuery: '200', descrizione: 'Ricavi', dare: 0, avere: 100 },
+      ],
+    },
+    { pianoConti, causaliContabili }
+  )
+
+  assert.equal(result.normalized.header.soggetto, '')
+  assert.equal(result.normalized.header.clienteFornitoreId, '')
+  assert.equal(result.normalized.header.clienteFornitoreNome, '')
+  assert.equal(result.normalized.header.clienteFornitoreCodice, '')
+  assert.equal(result.normalized.header.clienteFornitoreTipo, '')
+  assert.equal(result.validation.status, 'ok')
+})
+
+test('resolveRegistrazioneHeaderCounterpartyDraft ricostruisce il soggetto canonico dalla label visibile', () => {
+  const header = resolveRegistrazioneHeaderCounterpartyDraft(
+    { soggetto: '2 03 08 0001 - BIRIMPORT S.P.A.' },
+    [{ id: 'cf-1', codice: '2 03 08 0001', descrizione: 'BIRIMPORT S.P.A.', is_fornitore: true, livello: 3, tipo: 'FINALE' }]
+  )
+
+  assert.equal(header.clienteFornitoreId, 'cf-1')
+  assert.equal(header.clienteFornitoreCodice, '2 03 08 0001')
+  assert.equal(header.clienteFornitoreNome, 'BIRIMPORT S.P.A.')
+  assert.equal(header.clienteFornitoreTipo, 'fornitore')
+  assert.equal(header.soggetto, '2 03 08 0001 - BIRIMPORT S.P.A.')
+})
+
+test('resolveRegistrazioneHeaderCounterpartyDraft lascia il soggetto non risolto quando non trova un match reale', () => {
+  const header = resolveRegistrazioneHeaderCounterpartyDraft(
+    { soggetto: 'Cliente libero' },
+    [{ id: 'c1', codice: '100', descrizione: 'Cassa', livello: 3, tipo: 'FINALE' }]
+  )
+
+  assert.equal(header.clienteFornitoreId, '')
+  assert.equal(header.clienteFornitoreCodice || '', '')
+  assert.equal(header.clienteFornitoreNome || '', '')
+  assert.equal(header.clienteFornitoreTipo || '', '')
+  assert.equal(header.soggetto, 'Cliente libero')
 })
 
 test('buildRegistrazioneDraft non risolve testo conto arbitrario senza corrispondenza esatta', () => {
@@ -662,15 +1043,15 @@ test('buildRegistrazioneIvaDraft costruisce un draft IVA predisposto', () => {
         dataOperazione: '2026-05-01',
       },
       causaliIva: [
-        { id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, registroIva: 'ACQ', segnoRegistro: '+', percentualeDetraibilita: 100 },
+        { id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, registroIva: '01', segnoRegistro: '+', percentualeDetraibilita: 100 },
       ],
     },
-    { behavior, causaliIva: [{ id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, registroIva: 'ACQ', segnoRegistro: '+', percentualeDetraibilita: 100 }] }
+    { behavior, causaleContabile: causaleDocumentoPassiva, causaliIva: [{ id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, registroIva: '01', segnoRegistro: '+', percentualeDetraibilita: 100 }] }
   )
 
   assert.equal(draft.active, true)
   assert.equal(draft.causaleIvaId, 'iva-22')
-  assert.equal(draft.registroIva, 'ACQ')
+  assert.equal(draft.registroIva, '01')
   assert.equal(draft.segnoRegistro, '+')
   assert.equal(draft.totaleImponibile, 1000)
   assert.equal(draft.totaleImposta, 220)
@@ -680,7 +1061,7 @@ test('buildRegistrazioneIvaDraft costruisce un draft IVA predisposto', () => {
   assert.equal(draft.protocolloDefinitivo, 'da assegnare')
   assert.equal(Array.isArray(draft.rows), true)
   assert.equal(draft.rows[0].causaleIvaCodice, 'IVA22')
-  assert.equal(draft.rows[0].registroIva, 'ACQ')
+  assert.equal(draft.rows[0].registroIva, '01')
   assert.equal(draft.status === 'ok' || draft.status === 'warning', true)
 })
 
@@ -690,7 +1071,7 @@ test('resolveRegistrazioneCausaleIvaBehavior usa registro, segno e detraibilita 
       codice: 'IVA22',
       descrizione: 'Acquisti 22%',
       aliquota: 22,
-      registro_iva: 'ACQ',
+      codice_registro_iva: '01',
       segno_registro: '+',
       percentuale_detraibilita: 40,
     },
@@ -700,7 +1081,7 @@ test('resolveRegistrazioneCausaleIvaBehavior usa registro, segno e detraibilita 
   })
 
   assert.equal(behavior.codice, 'IVA22')
-  assert.equal(behavior.registroIva, 'ACQ')
+  assert.equal(behavior.registroIva, '01')
   assert.equal(behavior.segnoRegistro, '+')
   assert.equal(behavior.percentualeDetraibilita, 40)
   assert.equal(behavior.detraibile, true)
@@ -729,6 +1110,82 @@ test('buildRegistrazioneIvaDraft calcola IVA parzialmente indetraibile', () => {
   assert.equal(draft.ivaIndetraibile, 13.2)
   assert.equal(draft.protocolloProvvisorio, 'da assegnare')
   assert.equal(draft.protocolloDefinitivo, 'da assegnare')
+})
+
+test('buildRegistrazioneIvaDraft per FF ordinaria eredita il registro reale 01 dalla policy senza fallback ACQ', () => {
+  const draft = buildRegistrazioneIvaDraft(
+    {
+      header: { dataRegistrazione: '2026-05-01' },
+      documentData: { imponibile: 100, totaleImposte: 22, totaleDocumento: 122 },
+      ivaData: {
+        causaleIvaId: 'iva-22',
+        percentualeDetraibilita: 100,
+      },
+      causaliIva: [
+        { id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 },
+      ],
+    },
+    {
+      behavior: resolveRegistrazioneCausaleBehavior(causaleDocumentoPassiva),
+      causaleContabile: causaleDocumentoPassiva,
+      causaliIva: [{ id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 }],
+    }
+  )
+
+  assert.equal(draft.registroIva, '01')
+  assert.equal(draft.rows[0].registroIva, '01')
+  assert.equal(draft.warnings.some((warning) => warning.includes('registro IVA non definito')), false)
+})
+
+test('buildRegistrazioneIvaDraft per FC ordinaria eredita il registro reale 02 dalla policy senza fallback VEN', () => {
+  const draft = buildRegistrazioneIvaDraft(
+    {
+      header: { dataRegistrazione: '2026-05-01' },
+      documentData: { imponibile: 100, totaleImposte: 22, totaleDocumento: 122 },
+      ivaData: {
+        causaleIvaId: 'iva-22',
+        percentualeDetraibilita: 100,
+      },
+      causaliIva: [
+        { id: 'iva-22', codice: 'IVA22', descrizione: 'Vendite 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 },
+      ],
+    },
+    {
+      behavior: resolveRegistrazioneCausaleBehavior(causaleDocumentoAttiva),
+      causaleContabile: causaleDocumentoAttiva,
+      causaliIva: [{ id: 'iva-22', codice: 'IVA22', descrizione: 'Vendite 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 }],
+    }
+  )
+
+  assert.equal(draft.registroIva, '02')
+  assert.equal(draft.rows[0].registroIva, '02')
+  assert.equal(draft.warnings.some((warning) => warning.includes('registro IVA non definito')), false)
+})
+
+test('buildRegistrazioneIvaDraft lascia il documento IVA incompleto se manca codice_registro_iva', () => {
+  const draft = buildRegistrazioneIvaDraft(
+    {
+      header: { dataRegistrazione: '2026-05-01' },
+      documentData: { imponibile: 100, totaleImposte: 22, totaleDocumento: 122 },
+      ivaData: {
+        causaleIvaId: 'iva-22',
+        percentualeDetraibilita: 100,
+      },
+      causaliIva: [
+        { id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 },
+      ],
+    },
+    {
+      behavior: resolveRegistrazioneCausaleBehavior({ ...causaleDocumentoPassiva, codice_registro_iva: '' }),
+      causaleContabile: { ...causaleDocumentoPassiva, codice_registro_iva: '' },
+      causaliIva: [{ id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 }],
+    }
+  )
+
+  assert.equal(draft.registroIva, 'da assegnare')
+  assert.equal(draft.rows[0].registroIva, 'da assegnare')
+  assert.equal(draft.warnings.some((warning) => warning.includes('registro IVA non definito')), true)
+  assert.notEqual(draft.status, 'ok')
 })
 
 test('buildRegistrazioneIvaDraft senza causale IVA produce warning non bloccante', () => {
@@ -1920,6 +2377,21 @@ test('buildCausaleContabilePolicy usa operazione partite come fonte primaria e n
   assert.equal(policy.partiteClose, false)
 })
 
+test('buildCausaleContabilePolicy assegna il registro IVA ai documenti FF ordinari senza configurazione esplicita', () => {
+  const policy = buildCausaleContabilePolicy(causaleDocumentoPassiva)
+
+  assert.equal(policy.isDocumentoIva, true)
+  assert.equal(policy.isFatturaPassiva, true)
+  assert.equal(policy.registroIva, '01')
+})
+
+test('buildCausaleContabilePolicy assegna il registro IVA ai documenti FC ordinari senza configurazione esplicita', () => {
+  const policy = buildCausaleContabilePolicy(causaleDocumentoAttiva)
+
+  assert.equal(policy.isDocumentoIva, true)
+  assert.equal(policy.registroIva, '02')
+})
+
 test('normalizeRegistrazioneRigheTemplate filtra gli inattivi e ordina per ordine', () => {
   const normalized = normalizeRegistrazioneRigheTemplate([
     { ordine: 3, attiva: true, formula_importo: 'manuale', ruolo: 'costo', hierarchyType: 'sottoconto', lato: 'dare' },
@@ -1927,7 +2399,7 @@ test('normalizeRegistrazioneRigheTemplate filtra gli inattivi e ordina per ordin
     { ordine: 2, attiva: true, formula_importo: 'manuale', ruolo: 'iva', hierarchyType: 'conto', lato: 'dare' },
   ])
 
-  assert.equal(normalized.rows.length, 2)
+      behavior: resolveRegistrazioneCausaleBehavior(causaleDocumentoAttiva),
   assert.equal(normalized.rows[0].ordine, 2)
   assert.equal(normalized.rows[1].ordine, 3)
   assert.equal(normalized.rows[0].hierarchyType, 'conto')
@@ -2262,8 +2734,8 @@ test('resolveRegistrazioneTemplateRowAccount rispetta la priorita del conto spec
     subjectAccountHistory: { costo: { conto_id: 'hist-1', conto_codice: '6 01 03 0001', conto_descrizione: 'Spese telefoniche', hierarchyType: 'sottoconto' } },
     procedureDefaults: { costo: { conto_id: 'proc-1', conto_codice: '6 01 09 0001', conto_descrizione: 'Spese varie', hierarchyType: 'sottoconto' } },
   })
-  assert.equal(defaultResult.source, 'subject_default_account')
-  assert.equal(defaultResult.conto_id, 'def-1')
+  assert.equal(defaultResult.source, 'subject_account_history')
+  assert.equal(defaultResult.conto_id, 'hist-1')
 
   const historyResult = resolveRegistrazioneTemplateRowAccount({
     rowRole: 'costo',

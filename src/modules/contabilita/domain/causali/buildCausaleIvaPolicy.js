@@ -26,6 +26,15 @@ function resolveRegistroIva({ causaleIva = {}, contabilePolicy = {}, ivaMode = '
   if (ivaMode === 'cee') return 'IVA-CEE'
   if (ivaMode === 'corrispettivo') return 'CORRISP'
   if (ivaMode === 'sola_iva') return 'SOLO-IVA'
+  
+  // Smart fallbacks based on invoice type
+  if (contabilePolicy.isFatturaPassiva || contabilePolicy.isNotaCreditoPassiva || contabilePolicy.isAcquistoCeeBeni || contabilePolicy.isAcquistoCeeServizi || contabilePolicy.isReverseCharge) {
+    return 'ACQ'
+  }
+  if (contabilePolicy.isFatturaAttiva || contabilePolicy.isNotaCreditoAttiva) {
+    return 'VEN'
+  }
+  
   return 'da assegnare'
 }
 

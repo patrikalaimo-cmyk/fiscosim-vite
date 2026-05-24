@@ -67,11 +67,11 @@ function buildRighePayload(rows = []) {
 export function buildRegistrazioneDraft(input = {}, options = {}) {
   const normalized = normalizeRegistrazioneInput(input, options)
   const behavior = options?.behavior || options?.config || options?.causaleConfig || {}
+  const templateSource = options?.selectedCausale || options?.causaleContabile || options?.causale || normalized?.header?.causaleContabile || {}
   const ivaDraft = buildRegistrazioneIvaDraft(
     { header: normalized.header, documentData: normalized.documentData, ivaData: normalized.ivaData, causaliIva: options?.causaliIva || [] },
-    { behavior, ...options }
+    { behavior, causaleContabile: templateSource, ...options }
   )
-  const templateSource = options?.selectedCausale || options?.causaleContabile || options?.causale || normalized?.header?.causaleContabile || {}
   const normalizedTemplate = normalizeRegistrazioneRigheTemplate(
     templateSource?.righe_prima_nota_template || templateSource?.righePrimaNotaTemplate || templateSource?.righe_prima_nota || []
   )
@@ -168,6 +168,15 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
       numeroDocumento: normalizedForDraft.header.numeroDocumento,
       causaleContabile: normalizedForDraft.header.causaleContabile,
       descrizioneGenerale: normalizedForDraft.header.descrizioneGenerale,
+      soggetto: normalizedForDraft.header.soggetto,
+      clienteFornitoreId: normalizedForDraft.header.clienteFornitoreId,
+      clienteFornitoreNome: normalizedForDraft.header.clienteFornitoreNome,
+      clienteFornitoreCodice: normalizedForDraft.header.clienteFornitoreCodice,
+      clienteFornitoreTipo: normalizedForDraft.header.clienteFornitoreTipo,
+      cliente_fornitore_id: normalizedForDraft.header.clienteFornitoreId,
+      cliente_fornitore_nome: normalizedForDraft.header.clienteFornitoreNome,
+      cliente_fornitore_codice: normalizedForDraft.header.clienteFornitoreCodice,
+      cliente_fornitore_tipo: normalizedForDraft.header.clienteFornitoreTipo,
     },
     rows: normalizedForDraft.rows,
     meta: {

@@ -11,7 +11,7 @@ import {
 function hasIvaDifferitaFlag(item) {
   return (
     pickPolicyBoolean(item, ['registro_iva_differita', 'iva_differita', 'differita_iva', 'esigibilita_differita']) === true ||
-    hasPolicyField(item, ['conto_iva_esig_differita', 'registro_iva_differita', 'tipo_doc_comunicaz_ft', 'tipo_doc_ft_elettroniche'])
+    hasPolicyField(item, ['conto_iva_esig_differita', 'registro_iva_differita'])
   )
 }
 
@@ -44,11 +44,12 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const dataDocumento = pickPolicyText(item, ['data_documento', 'dataDocumento'])
   const numeroDocumento = pickPolicyText(item, ['numero_documento', 'numeroDocumento'])
   const segnoRegistroIva = normalizeText(item?.segno_registro_iva || item?.segnoRegistroIva || '')
-  const registroIva = normalizeText(item?.codice_registro_iva || item?.registro_iva || '')
   const normalizedType = normalizePolicyKey(typeCausale)
   const partiteMode = operazionePartite || gestionePartite
   const operazioneGestita = normalizeCausaleOperazioneGestita(typeCausale, partiteMode, tipoDocumento, item)
   const operazionePolicy = buildCausaleOperazioneGestitaPolicy(typeCausale, partiteMode, operazioneGestita, item)
+  const tipoDocumentoNormalized = normalizePolicyKey(tipoDocumento)
+  const registroIva = normalizeText(item?.codice_registro_iva || '')
 
   const partiteOpen = isPolicyOneOf(operazionePartite, ['apre', 'apertura', 'aperti']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['apre', 'apertura']))
   const partiteClose = isPolicyOneOf(operazionePartite, ['chiude', 'chiusura']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['chiude', 'chiusura']))

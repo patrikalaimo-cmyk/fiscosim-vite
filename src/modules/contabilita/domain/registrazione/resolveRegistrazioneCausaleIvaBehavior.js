@@ -23,13 +23,13 @@ export function resolveRegistrazioneCausaleIvaBehavior({
 
   if (iva) {
     reasons.push('Causale IVA selezionata dalla lista disponibile.')
+    if (!policy.registroIva || policy.registroIva === 'da assegnare') warnings.push('registro IVA non definito sulla causale IVA')
+    if (!policy.aliquota && !policy.natura) warnings.push('aliquota/natura IVA non definita sulla causale IVA')
   } else {
     warnings.push('Causale IVA non selezionata: comportamento predisposto in modo neutro.')
     reasons.push('Fallback neutro per assenza di causale IVA.')
   }
 
-  if (!policy.registroIva || policy.registroIva === 'da assegnare') warnings.push('registro IVA non definito sulla causale IVA')
-  if (!policy.aliquota && !policy.natura) warnings.push('aliquota/natura IVA non definita sulla causale IVA')
   if (!normalizeText(documentData?.totaleDocumento) && !normalizeText(documentData?.totale_documento)) warnings.push('totale documento non ancora disponibile per il calcolo IVA')
 
   return {

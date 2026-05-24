@@ -1,3 +1,116 @@
+# BUGFIX-CAUSALI-01
+
+La causa precisa era un metodo legacy richiamato dalla view causali: `AnagraficheContabiliView.jsx` apriva la modifica con `contabilitaRepo.getCausaleById(table, causale.id)`, ma `src/modules/contabilita/data/contabilitaRepo.js` non esportava alcuna funzione con quel nome. Il risultato era un `TypeError: contabilitaRepo.getCausaleById is not a function` all’apertura/modifica delle impostazioni causali contabili.
+
+La view chiamava `getCausaleById`; nel repo erano disponibili `getCausali`, `getCausaliIvaAttive`, `bulkDeactivateCausali`, `updateCausale` e `insertCausale`, ma mancava proprio il getter puntuale per id.
+
+Fix applicato: aggiunto in `src/modules/contabilita/data/contabilitaRepo.js` un `getCausaleById(table, id)` minimo e coerente con lo stile del repository, che esegue `select('*').eq('id', id).limit(1).maybeSingle()` e restituisce `{ data, error }`.
+
+File modificati: `src/modules/contabilita/data/contabilitaRepo.js`, `REPORT/REPORT_CODEX.md`.
+
+Verifiche eseguite: nessun test specifico per causali/anagrafiche individuato nel perimetro; eseguito `npm run build` come verifica coerente del codice applicativo.
+
+Conferma perimetro: nessuna modifica a Registrazione Manuale, import, riconciliazione, DB, `src/App.jsx`, `src/assets/global.css` o `src/shared/constants/index.js`.
+
+Test manuali richiesti: aprire Anagrafiche/Impostazioni causali contabili, cliccare modifica su una causale, verificare che non compaia più `getCausaleById is not a function`, controllare che i dati della causale si carichino, salvare/annullare senza errori e verificare che Registrazione Manuale resti raggiungibile.
+
+COMMIT NON ESEGUITO.
+BACKUP NON ESEGUITO.
+RESET/CHECKOUT/RESTORE/CLEAN NON ESEGUITI.
+
+# IM-RECOVERY-06-sexies
+
+La causa del bug era nella policy IVA/contabile dei documenti semplici FF/FC: il codice registro veniva ancora inventato come ACQ/VEN invece di usare il campo reale `codice_registro_iva` della causale contabile. Quando il campo manca, il comportamento corretto non è inventare un codice, ma lasciare il documento IVA incompleto con il placeholder `da assegnare`.
+
+Fix applicato solo nel perimetro policy/draft/validator IVA: `buildCausaleContabilePolicy.js` ora espone solo il valore reale di `codice_registro_iva`, `buildCausaleIvaPolicy.js` eredita il registro dalla policy contabile senza fallback ACQ/VEN, e i test di registrazione confermano che FF usa `01`, FC usa `02` e che l'assenza del campo lascia il draft incompleto.
+
+File modificati: `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `REPORT/REPORT_CODEX.md`.
+
+Verifiche eseguite: `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js` = 113/113.
+
+Conferma perimetro: nessuna modifica a save reale, persistenza, DB, import, riconciliazione, `src/App.jsx`, `src/assets/global.css` o `src/shared/constants/index.js`.
+
+Test manuali richiesti: aprire un documento IVA semplice FF e verificare `registroIva = 01`, aprire un documento IVA semplice FC e verificare `registroIva = 02`, togliere il `codice_registro_iva` dalla causale e verificare che il draft resti incompleto con warning sul registro IVA mancante.
+
+COMMIT NON ESEGUITO.
+BACKUP NON ESEGUITO.
+RESET/CHECKOUT/RESTORE/CLEAN NON ESEGUITI.
+
+# IM-RECOVERY-06-quinquies
+
+Il warning `registro IVA non definito sulla riga 1` nel documento IVA semplice FF/FC arrivava dal fatto che la prima riga IVA restava con il placeholder `da assegnare` anche quando la policy del documento poteva già determinare il registro corretto. Il validator era quindi solo l'effetto finale: vedeva la prima riga senza registro reale e segnalava il blocco.
+
+Fix applicato nel solo perimetro policy/draft/validator IVA: `buildCausaleContabilePolicy.js` ora deriva `registroIva` anche dal tipo documento ordinario, `buildCausaleIvaPolicy.js` lo eredita dalla policy contabile quando la causale IVA non lo espone, `buildRegistrazioneIvaRows.js` e `buildRegistrazioneIvaDraft.js` trattano `da assegnare` come placeholder e lo sostituiscono con il valore reale della policy. Nessun intervento su save reale, persistenza, DB o UI.
+
+File modificati: `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `REPORT/REPORT_CODEX.md`.
+
+Test aggiunti: fallback policy FF con registro `ACQ`, fallback policy FC con registro `VEN`, draft IVA FF/FC senza registro esplicito sulla causale IVA, e conferma che il warning sul registro sparisce quando il placeholder viene sostituito.
+
+Verifiche eseguite: `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js` = 109/109; `node --test src/modules/contabilita/application/persistPrimaNotaDraft.test.js` = 9/9; `npm run build` completato con warning preesistenti non correlati al fix.
+
+Conferma perimetro: nessuna modifica a save reale, import, riconciliazione, DB, `src/App.jsx`, `src/assets/global.css` o `src/shared/constants/index.js`.
+
+Test manuali richiesti: aprire un documento IVA semplice FF o FC, verificare che la prima riga IVA erediti `ACQ`/`VEN` dalla policy e che non compaia più `registro IVA non definito sulla riga 1`.
+
+COMMIT NON ESEGUITO.
+BACKUP NON ESEGUITO.
+RESET/CHECKOUT/RESTORE/CLEAN NON ESEGUITI.
+
+# IM-RECOVERY-06-quater-bis
+
+Diagnosi: il campo `Cliente / Fornitore` della registrazione manuale sta usando il resolver condiviso in modo troppo aggressivo. In `RegistrazioneHeaderForm.jsx` `commitSoggetto()` viene chiamato a ogni digitazione e passa subito il testo al resolver; in `normalizeRegistrazioneInput.js` il resolver, oltre al match esatto, cade ancora su `findRegistrazioneContoByQuery(...)`, che fa ranking fuzzy su tutto `pianoConti`. Questo permette a un input parziale come `bi` di agganciare un conto generico del piano, ad esempio `IMMOBILIZZAZIONI`, e impedisce il clear perché il resolver tende a riusare i campi già presenti nella testata.
+
+La correzione prevista è separare testo digitato e selezione reale: il testo parziale resta solo testo visibile, mentre `clienteFornitoreId` si valorizza solo con match esatto di una controparte coerente. Il clear esplicito deve svuotare anche `soggetto`, `clienteFornitoreNome`, `clienteFornitoreCodice`, `clienteFornitoreTipo` e gli alias snake_case, senza riagganciarsi a valori precedenti.
+
+Implementazione: `resolveRegistrazioneControparti.js` ora filtra solo controparti reali, esclude i conti generici e offre un match esatto sulla controparte coerente con la causale; `normalizeRegistrazioneInput.js` usa il match esatto e non più il fallback fuzzy; `RegistrazioneHeaderForm.jsx` svuota esplicitamente tutti i campi canonici e snake_case quando il campo viene cancellato, mentre sul testo parziale mantiene solo il testo digitato senza assegnare un PK.
+
+File modificati: `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneControparti.js`, `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, `src/modules/contabilita/components/registrazione/RegistrazioneHeaderForm.jsx`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `REPORT/REPORT_CODEX.md`.
+
+Test aggiunti: `buildRegistrazioneContropartiList` esclude i generici, `findRegistrazioneControparteExactMatch` non risolve `bi`, `resolveRegistrazioneHeaderCounterpartyDraft` non aggancia PK con testo parziale, `buildRegistrazioneDraft` conserva il clear senza riaggancio, `resolveRegistrazioneHeaderCounterpartyDraft` continua a ricostruire il soggetto reale dalla label completa e a lasciare vuoto il soggetto non risolto quando non trova un match reale.
+
+Verifiche eseguite: `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js` = 112/112; `node --test src/modules/contabilita/application/persistPrimaNotaDraft.test.js` = 9/9; `npm run build` completato con warning preesistenti e non correlati su export mancanti in altri file della contabilità.
+
+Conferma perimetro: nessuna modifica a save reale, persistenza, DB, import, riconciliazione bancaria, `src/App.jsx`, `src/assets/global.css`, `src/shared/constants/index.js`, IVA reale, partitario reale, IVA per cassa o ritenute.
+
+Test manuali richiesti: in Registrazione Manuale FF digitare un prefisso come `bi` e verificare che non venga selezionato alcun conto, che il campo resti editabile e svuotabile, che il clear azzeri tutti i campi canonici/snake_case, e che la selezione reale avvenga solo con una label completa e coerente della controparte.
+
+COMMIT NON ESEGUITO.
+BACKUP NON ESEGUITO.
+RESET/CHECKOUT/RESTORE/CLEAN NON ESEGUITI.
+
+
+# IM-RECOVERY-06-quater
+
+La causa confermata era nel punto di emissione del soggetto in testata: `RegistrazioneHeaderForm.jsx` riceveva un input testuale con datalist e, prima del fix, propagava il solo testo; il PK reale entrava nello state solo se il match era perfetto. Il warning “cliente / fornitore non selezionato” era quindi corretto: la testata non aveva ancora un `clienteFornitoreId` reale.
+
+Fix applicato: introdotto un resolver canonico condiviso in `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js` (`resolveRegistrazioneHeaderCounterpartyDraft`) e usato sia nella normalizzazione del draft sia nel commit del campo soggetto in `src/modules/contabilita/components/registrazione/RegistrazioneHeaderForm.jsx`. Ora, quando il testo visibile corrisponde a una controparte reale, lo state riceve `clienteFornitoreId`, `clienteFornitoreNome`, `clienteFornitoreCodice`, `clienteFornitoreTipo`, `soggetto` e gli alias snake_case coerenti; se non c’è un match reale, i campi restano vuoti e la validazione continua a bloccare.
+
+File modificati: `src/modules/contabilita/components/registrazione/RegistrazioneHeaderForm.jsx`, `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `REPORT/REPORT_CODEX.md`.
+
+Test aggiunti: recupero canonico del soggetto dalla label visibile, ramo non risolto senza match reale, draft FF che ricostruisce il PK dalla sola label in testata, FF/FC senza warning cliente/fornitore quando il PK è reale, e blocco quando la testata resta senza PK anche se la riga soggetto è presente.
+
+Verifiche eseguite: `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js` = 105/105; `node --test src/modules/contabilita/application/persistPrimaNotaDraft.test.js` = 9/9; `npm run build` completato con warning preesistenti fuori perimetro.
+
+Conferma perimetro: nessuna modifica a save reale, persistenza, DB, import, riconciliazione, `src/App.jsx`, `src/assets/global.css` o `src/shared/constants/index.js`.
+
+Test manuali richiesti: selezionare un cliente/fornitore reale in testata documento IVA FF/FC e verificare che il soggetto venga risolto in PK reale; verificare che un testo non risolvibile lasci il warning attivo; verificare che PN semplice bilanciato resti valido.
+
+COMMIT NON ESEGUITO.
+BACKUP NON ESEGUITO.
+RESET/CHECKOUT/RESTORE/CLEAN NON ESEGUITI.
+
+# IM-RECOVERY-06-bis
+
+Il bug storico era nel contratto dati tra testata documento IVA e riga soggetto PN: la testata mostrava il soggetto, ma il draft perdeva i campi canonici e la validazione vedeva ancora `clienteFornitoreId` vuoto.
+
+Fix applicato solo nel mapping/normalizzazione verso il draft: `buildRegistrazioneDraft.js` ora porta nella testata del draft `soggetto`, `clienteFornitoreId`, `clienteFornitoreNome`, `clienteFornitoreCodice`, `clienteFornitoreTipo` e i rispettivi alias snake_case, così validator e riga soggetto leggono lo stesso contratto canonico già presente in UI.
+
+File modificati: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js` e `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`.
+
+Verifiche eseguite: `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js` = 102/102; `npm run build` completato con warning preesistenti fuori perimetro; `node --test src/modules/contabilita/application/persistPrimaNotaDraft.test.js` = 9/9.
+
+Conferma perimetro: nessuna modifica a save reale, persistenza, DB, import, riconciliazione, layout UI, `src/App.jsx`, `src/assets/global.css` o `src/shared/constants/index.js`.
+
 # IM-RECOVERY-04-bis
 
 Diagnosi completata: il blocco letterale `controparte mancante` per il movimento semplice di prima nota non nasce da `validateRegistrazioneDraft.js` né dalla policy semplice, ma dal wrapper di persistenza `src/modules/contabilita/application/persistPrimaNotaDraft.js`.
@@ -372,3 +485,17 @@ E. Se procedi con il prossimo step, terrei il cambiamento entro 2 file: primaNot
 - CLEAN NON ESEGUITO: sì
 - COMMIT NON ESEGUITO: sì
 - BACKUP NON ESEGUITO: sì
+
+## IM-RECOVERY-06 — documento IVA manuale semplice FF/FC
+- Data: 2026-05-24
+- Path usato: `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+- Modello/strumento usato: GPT 5.4 mini Medium; PowerShell; `read_file`, `apply_patch`, `run_in_terminal`, `grep_search`
+- Stato git iniziale: worktree già sporco con modifiche non correlate e file non tracciati fuori perimetro; nessun reset/checkout/restore/clean/backup/commit eseguito
+- File letti: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneTemplateRowAccount.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`, `src/modules/contabilita/domain/registrazione/buildRegistrazioneManualeUiPolicy.js`, `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/application/persistPrimaNotaDraft.test.js`, `REPORT/REPORT_CODEX.md`
+- File modificati: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneTemplateRowAccount.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `REPORT/REPORT_CODEX.md`
+- Analisi locale: il flow manuale FF/FC passava dalla sola UI policy e perdeva i flag attiva/passiva; inoltre la riga IVA e la riga economica fallback potevano risolversi sul conto del soggetto, invece di restare selezionabili o bloccate. La validazione, inoltre, non imponeva il soggetto sui documenti IVA quando `showPartitario` era falso ma `requiresSoggetto` era vero
+- Fix applicati: derivazione del comportamento documento dalla causale reale con i flag `isFatturaAttiva` / `isFatturaPassiva`; aggiunta della riga economica manuale per il fallback documentale; blocco del fallback del conto soggetto sulle righe non-soggetto; esposizione di `manualSelectionOnly` e `source` sulla riga generata; vincolo del soggetto in validazione quando il comportamento lo richiede; aggiornamento dei test FF/FC per usare la stessa config della view e dei controlli sui blocker
+- Verifiche eseguite: `node --test src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js` = 102/102; `node --test src/modules/contabilita/application/persistPrimaNotaDraft.test.js` = 9/9; `npm run build` completato con successo
+- Esito build: OK; restano warning preesistenti su export mancanti fuori perimetro in altre view/service, non introdotti da questo step
+- Perimetro non toccato: `src/App.jsx`, `src/assets/global.css`, `src/shared/constants/index.js`, `src/modules/contabilita/views/BankingView.jsx`, Import, Riconciliazione, DB/migration/auth/env/Supabase, persistenza e layout UI non sono stati modificati in questo step
+- Rischi residui: i warning build preesistenti restano aperti; il flow documentale semplice ora è coerente nel draft/righe/validazione, ma non è stato sbloccato alcun salvataggio reale per IVA o partitario

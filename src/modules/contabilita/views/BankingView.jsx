@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { fmtCurrency as fmt, fmtDate } from '../ui/formatters.js'
 import { getBankConnectionBadgeClass, getRiconciliazioneBadgeClass } from '../ui/viewMappers.js'
+import RiconciliazioneBancariaView from './RiconciliazioneBancariaView.jsx'
 
 export default function BankingView({ contTab, societaAttiva, setContTab }) {
   if (!societaAttiva) return null
+  if (contTab === 'riconciliazione') return <RiconciliazioneBancariaView />
   if (contTab !== 'movimenti_banca' && contTab !== 'riconciliazione') return null
   return <ModuloBanche societaId={societaAttiva?.id} contTab={contTab} setContTab={setContTab} />
 }

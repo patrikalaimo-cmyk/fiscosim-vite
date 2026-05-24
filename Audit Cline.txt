@@ -1,0 +1,272 @@
+# AUDIT FISCOSIM — STATO REALE E ROADMAP
+
+## 1. Sintesi esecutiva
+
+**Stato generale:** Progetto in avanzata fase di sviluppo con architettura solida ma con alcune aree critiche da stabilizzare.
+
+**Cosa funziona:**
+- Registrazione Manuale: PN semplice operativa con save reale (checkpoint c710ecd)
+- Motore draft/validation: coerente e ben strutturato
+- Import Fatture: pipeline consolidata
+- Schema DB: ben progettato con tabelle contabili complete
+
+**Cosa è fragile:**
+- Save reale: ancora bloccato da gate UI (`REAL_SAVE_TEMPORARILY_BLOCKED = true`)
+- Atomicità transazioni: cleanup best-effort, non transazionale
+- Legacy: moduli vietati ancora referenziati (prima_nota_guidata, import_fatture, import_unificato)
+
+**Rischio principale:** Regressioni da codice legacy ancora attivo o referenziato accidentalmente.
+
+**Priorità prossima:** Completare il save reale PN semplice, poi estendere a IVA/partitario.
+
+---
+
+## 2. Stato moduli principali
+
+| Modulo | Stato | Cosa funziona | Cosa manca | Rischio | Priorità |
+|--------|-------|---------------|------------|---------|----------|
+| Registrazione Manuale | 🟡 Giallo | PN semplice draft/save, validazione | Save sbloccato, IVA/partitario reali | Medio | 🔴 Alta |
+| Import Contabilità | 🟡 Giallo | Pipeline parsing, staging | Commit atomico consolidato | Medio | 🟡 Alta |
+| Consultazione Prima Nota | 🟢 Verde | Lettura scritture, filtri | - | Basso | 🟢 Media |
+| Riconciliazione bancaria | 🟡 Giallo | Modulo presente | Matching automatico, integrazione partitario | Medio | 🟡 Alta |
+| Piano dei conti | 🟢 Verde | Gestione anagrafiche | - | Basso | 🟢 Media |
+| Anagrafiche | 🟢 Verde | Clienti/fornitori/percipienti | - | Basso | 🟢 Media |
+| Liquidazioni IVA | 🟡 Giallo | Calcolo base | Integrazione completa con registri | Medio | 🟡 Alta |
+| Bilancio | ⚪ Futuro | Placeholder | Implementazione completa | Alto | ⚪ Bassa |
+
+---
+
+## 3. Registrazione Manuale — audit dettagliato
+
+### File principali:
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx` (1601 righe) - orchestratore UI
+- `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js` - builder draft
+- `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js` - validatore
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js` - wrapper persistenza
+- `services/primaNotaService.js` - write effettivo su DB
+
+### Flusso dati:
+```
+HeaderForm + RowsTable → buildRegistrazioneDraft() → validateRegistrazioneDraft() 
+→ [gate UI: REAL_SAVE_TEMPORARILY_BLOCKED] → persistPrimaNotaDraft() 
+→ createPrimaNotaCompleta() → prima_nota + prima_nota_righe
+```
+
+### Stato PN semplice:
+- ✅ Draft building: coerente
+- ✅ Validazione: completa (dare/avere, conti, causali)
+- ✅ Mapping DB: whitelist strutturale implementata
+- ⚠️ Save reale: bloccato da gate UI
+- ⚠️ Atomicità: best-effort cleanup, non transazionale
+
+### Stato documento IVA FF/FC:
+- 🟡 Template righe: implementato
+- 🟡 Causali IVA: integrate
+- ⚠️ Persistenza IVA: da consolidare
+
+### Stato partitario:
+- 🟡 Apertura/chiusura partite: logica presente
+- ⚠️ Persistenza partitario: da testare end-to-end
+
+### Stato IVA per cassa:
+- ⚪ Non ancora implementato nel flusso manuale
+
+### Stato ritenute:
+- ⚪ Non ancora implementato nel flusso manuale
+
+### Bug/fragilità:
+1. Gate `REAL_SAVE_TEMPORARILY_BLOCKED` blocca tutto
+2. Cleanup in `primaNotaService.js` è best-effort, non atomico
+3. `prima_nota_guidata.jsx` (1805 righe) è legacy ma ancora referenziato
+
+### Prossimi step consigliati:
+1. Sbloccare save reale solo per PN semplice
+2. Rafforzare atomicità con transazione vera
+3. Estendere a IVA documento
+4. Estendere a partitario
+5. Estendere a ritenute
+
+---
+
+## 4. Architettura contabile canonica
+
+**Flusso target:**
+```
+documento_contabilita → draft → prima_nota → prima_nota_righe 
+→ registri_iva → partitario → liquidazioni/bilancio/export
+```
+
+### Cosa è allineato:
+- ✅ `documenti_contabilita` tabella esiste
+- ✅ `prima_nota` e `prima_nota_righe` tabelle consolidate
+- ✅ Draft builder mappa correttamente
+- ✅ Validazione pre-persistenza implementata
+
+### Cosa è disallineato:
+- ⚠️ `prima_nota_iva` tabella esiste ma non pienamente integrata
+- ⚠️ `partitario` tabella esiste ma integrazione parziale
+- ⚠️ Registri IVA: tabella `registri_iva` da collegare a `prima_nota`
+- ⚠️ Doppioni: `prima_nota_guidata.jsx` vs `RegistrazioneManualeView.jsx`
+
+### Legacy/doppioni:
+- `prima_nota_guidata.jsx` (1805 righe) - VIETATO ma ancora in menu
+- `import_fatture/` - modulo legacy, sostituito da `import_contabilita/`
+- `import_unificato/` - modulo ibrido, da chiarire
+
+---
+
+## 5. Legacy/pericoli
+
+| File/Modulo | Perché pericoloso | Stato | Azione |
+|-------------|------------------|-------|--------|
+| `src/modules/contabilita/prima_nota_guidata.jsx` | 1805 righe, logica vecchia, referenziato nel menu | Legacy attivo | Isolare, rimuovere dal menu |
+| `src/modules/import_fatture/` | Sostituito da import_contabilita | Legacy | Marcato come vietato in REGOLE_CODEX |
+| `src/modules/import_unificato/` | Ibrido, confonde con import_contabilita | Ibrido | Chiarire perimetro o eliminare |
+| `DISUSO/` | Codice morto | Legacy | Verificare che non sia referenziato |
+| `src/modules/contabilita/index.jsx` | Contiene ancora riferimenti a prima_nota_guidata | Attivo | Rimuovere dal menu sidebar |
+
+---
+
+## 6. Colli di bottiglia
+
+### Architettura:
+- **Service layer sottile**: `primaNotaService.js` fa insert diretto senza transazioni
+- **Mancanza di repository pattern**: alcuni moduli accedono direttamente a Supabase
+- **Business logic in UI**: `RegistrazioneManualeView.jsx` è troppo grande (1601 righe)
+
+### UI:
+- **File monolitici**: `RegistrazioneManualeView.jsx` (1601 righe), `prima_nota_guidata.jsx` (1805 righe)
+- **Stato complesso**: gestione draft/validation/readiness sparsa
+
+### Performance:
+- **N+1 queries**: possibile in consultazione con molti record
+- **Mancanza di pagination**: in alcune viste
+
+### DB/Supabase:
+- **Indici**: da verificare su chiavi di ricerca frequenti
+- **RLS policies**: implementate ma da auditare
+
+### Test:
+- **Copertura**: test esistenti per registrazioneOperations (93/93 test passano)
+- **Integration test**: mancanti per flussi end-to-end
+
+### Dominio contabile/fiscale:
+- **Causali**: configurazione complessa, rischio errore operatore
+- **IVA per cassa**: non ancora implementato
+- **Ritenute**: non ancora integrate nel flusso manuale
+
+---
+
+## 7. Gap funzionali verso gestionale completo
+
+| Funzione | Stato | Gap |
+|----------|-------|-----|
+| Registrazione Manuale | 🟡 Parziale | Save sbloccato, IVA/partitario/ritenute reali |
+| Import Contabilità | 🟡 Parziale | Commit atomico, integrazione full |
+| Riconciliazione | 🟡 Parziale | Matching automatico, integrazione partitario |
+| Registri IVA | 🟡 Parziale | Lettura da prima_nota, stampa |
+| Liquidazioni IVA | 🟡 Parziale | Calcolo ok, integrazione con registri |
+| LIPE | ⚪ Placeholder | Implementazione completa |
+| IVA annuale | ⚪ Placeholder | Implementazione completa |
+| Partitario | 🟡 Parziale | Apertura/chiusura, scadenzario |
+| Bilancio | ⚪ Placeholder | Stato patrimoniale, conto economico |
+| Export dati | ⚪ Parziale | CSV/Excel base, formati fiscali mancanti |
+| F24 | 🟡 Parziale | Generazione da liquidazioni |
+| CU/770 | 🟡 Parziale | Percipienti ok, generazione file |
+
+---
+
+## 8. Roadmap realistica
+
+### Blocco 1: Consolidamento Registrazione Manuale (2-3 settimane)
+- **Obiettivo**: Save reale PN semplice operativo e blindato
+- **File**: `RegistrazioneManualeView.jsx`, `primaNotaService.js`, `persistPrimaNotaDraft.js`
+- **Rischio**: Regressioni su validazione esistente
+- **Test**: Manual test su save PN semplice + test automatici esistenti
+- **Commit**: Dopo ogni microfix, backup ZIP settimanale
+
+### Blocco 2: Documento IVA FF/FC (3-4 settimane)
+- **Obiettivo**: Registrazione documenti IVA con persistenza corretta
+- **File**: `buildRegistrazioneIvaDraft.js`, `validateRegistrazioneIvaDraft.js`, `primaNotaService.js`
+- **Rischio**: Complessità calcolo IVA, coerenza con registri
+- **Test**: Test su documenti con 1+ aliquote IVA
+
+### Blocco 3: Partitario reale (3-4 settimane)
+- **Obiettivo**: Apertura/chiusura partite con persistenza
+- **File**: `buildRegistrazionePartitarioDraft.js`, `primaNotaService.js`, tabella `partitario`
+- **Rischio**: Coerenza saldi, duplicati
+- **Test**: Scenari apertura/chiusura/chiusura parziale
+
+### Blocco 4: Ritenute (2-3 settimane)
+- **Obiettivo**: Ritenute d'acconto su parcelle
+- **File**: `buildRegistrazioneRitenutaDraft.js`, `primaNotaService.js`
+- **Rischio**: Calcolo corretto ritenuta, integrazione percipienti
+- **Test**: Parcelle con/senza cassa previdenza
+
+### Blocco 5: Registri IVA e Liquidazioni (4-5 settimane)
+- **Obiettivo**: Registri IVA da prima_nota, liquidazione periodica
+- **File**: `registri_iva` tabella, `liquidazioneIvaClient.js`, `liquidazioneIvaService.js`
+- **Rischio**: Coerenza con dichiarazioni, nature IVA
+- **Test**: Liquidazioni mensili/trimestrali
+
+### Blocco 6: Bilancio e Reporting (4-6 settimane)
+- **Obiettivo**: Situazione patrimoniale, conto economico, mastrini
+- **File**: `bilancio/` modulo, query aggregate su `prima_nota_righe`
+- **Rischio**: Correttezza contabile, classificazione conti
+- **Test**: Confronto con bilancio cartaceo
+
+---
+
+## 9. Stima realistica del lavoro residuo
+
+**Breve termine (1-2 mesi):**
+- Consolidamento Registrazione Manuale (Blocco 1-2)
+- Partitario base (Blocco 3)
+
+**Medio termine (3-6 mesi):**
+- Ritenute (Blocco 4)
+- Registri IVA e Liquidazioni (Blocco 5)
+- Riconciliazione bancaria completa
+
+**Lungo termine (6-12 mesi):**
+- Bilancio completo (Blocco 6)
+- LIPE/IVA annuale
+- Integrazione TeamSystem
+
+**Fattori che condizionano:**
+- Complessità fiscale italiana (IVA, ritenute, dichiarazioni)
+- Necessità di test approfonditi per evitare errori contabili
+- Integrazione con sistemi esistenti (Supabase, eventuale TeamSystem)
+
+---
+
+## 10. Raccomandazioni operative
+
+### Cosa fare:
+1. **Procedere per blocchi piccoli**: un problema alla volta, come previsto da REGOLE_CODEX
+2. **Testare dopo ogni modifica**: `npm run build` + test automatici esistenti
+3. **Backup frequenti**: ZIP settimanali del progetto
+4. **Commit piccoli e focalizzati**: una funzionalità per commit
+5. **Usare Cline per**: audit architetturali, refactoring mirati, analisi dominio contabile
+6. **Usare Copilot per**: completamento codice routine, boilerplate
+
+### Cosa evitare:
+1. **Refactor enormi**: non rifare da zero funzioni funzionanti
+2. **Modifiche trasversali**: un file alla volta
+3. **Scelte arbitrarie**: su conti, causali, soggetti senza configurazione
+4. **Toccare legacy**: non modificare `prima_nota_guidata.jsx`, `import_fatture/`, `import_unificato/`
+5. **Modificare DB senza approval**: no migration senza conferma esplicita
+
+### Quando usare modelli diversi:
+- **Cline (io)**: audit, architettura, dominio contabile complesso, refactoring strategico
+- **Copilot**: completamento codice, fix sintattici, boilerplate
+- **Modelli più potenti (GPT-4, Claude Opus)**: quando serve ragionamento fiscale molto complesso o analisi di grandi codebase
+
+### Quando fare commit/backup:
+- **Commit**: dopo ogni microfix testato, massimo 2-3 file modificati
+- **Backup ZIP**: prima di interventi importanti, ogni 2-3 giorni di lavoro intenso
+- **Checkpoint git**: alla fine di ogni blocco funzionale completato
+
+---
+
+*Audit completato in modalità READ-ONLY. Nessuna modifica apportata al codice.*

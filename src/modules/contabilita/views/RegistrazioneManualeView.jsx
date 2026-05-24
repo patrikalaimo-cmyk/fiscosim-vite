@@ -37,23 +37,17 @@ import { RegistrazioneShortcutFooter } from '../components/registrazione/Registr
 import { RegistrazioneAccountPickerModal } from '../components/registrazione/RegistrazioneAccountPickerModal.jsx'
 import { RegistrazioneAccountSearchModal } from '../components/registrazione/RegistrazioneAccountSearchModal.jsx'
 
-const REAL_SAVE_TEMPORARILY_BLOCKED = true
+const REAL_SAVE_TEMPORARILY_BLOCKED = false
 
 function canUseRealSaveForSimplePrimaNota(draftModel = {}, selectedCausaleConfig = {}) {
   const config = selectedCausaleConfig && typeof selectedCausaleConfig === 'object' ? selectedCausaleConfig : {}
   const validation = draftModel?.validation && typeof draftModel.validation === 'object' ? draftModel.validation : {}
   const totals = draftModel?.totals && typeof draftModel.totals === 'object' ? draftModel.totals : {}
-  const activeTabs = Array.isArray(config.activeTabs) ? config.activeTabs : []
-  const rowsOnly = activeTabs.length === 1 && activeTabs[0] === 'rows'
 
   return Boolean(
-    validation.status === 'ok' &&
+    validation.status !== 'blocked' &&
     totals.isBalanced === true &&
-    !config.showDocumentPanel &&
-    !config.showIvaPanel &&
-    !config.showPartitario &&
-    !config.showRitenute &&
-    rowsOnly
+    !config.showRitenute
   )
 }
 
@@ -1323,14 +1317,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           onConfirmExerciseUpdate={confirmExerciseUpdate}
         />
 
-        <div className="alert alert-warn" style={{ marginBottom: '.55rem', padding: '.45rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}>
-          <strong>{realSaveEnabled ? 'Salvataggio reale abilitato per prima nota semplice.' : 'Salvataggio reale disabilitato.'}</strong>
-          <div style={{ fontSize: '.75rem', marginTop: '.15rem' }}>
-            {realSaveEnabled
-              ? 'Il salvataggio reale resta disponibile solo per la prima nota semplice bilanciata; i casi complessi restano bloccati.'
-              : <><strong>Controlla registrazione</strong> per il dry-run. Il salvataggio reale resta bloccato in questa fase.</>}
-          </div>
-        </div>
+
 
         <div
           className={Array.isArray(effectivePianoConti) && effectivePianoConti.length > 0 ? 'alert alert-info' : 'alert alert-err'}
@@ -1429,6 +1416,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                 behavior={selectedCausaleConfig}
                 draft={draftModel.ivaDraft}
                 causaliIva={effectiveCausaliIva}
+                causaleContabile={selectedCausale}
               />
             ) : activeTab === 'partitario' ? (
               <RegistrazionePartitarioPanel

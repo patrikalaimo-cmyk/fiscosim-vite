@@ -1,0 +1,1835 @@
+# Audit profondo FiscoSim `Copia1205`
+Audit eseguito su:
+- [fiscosim-viteBACKUP - Copia1205](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205)
+
+Obiettivo considerato:
+- portare FiscoSim al livello di un **gestionale fiscale-contabile italiano avanzato**
+- **senza invio telematico diretto**
+- quindi con focus su:
+  - raccolta dati
+  - controllo
+  - quadrature
+  - predisposizione
+  - audit trail
+  - export/print
+  - governance operatore
+
+---
+
+# 1. Verdetto secco
+
+## Stato attuale
+FiscoSim oggi è:
+- **molto avanti sul nucleo contabile**
+- **parziale sui flussi fiscali completi**
+- **frammentato architetturalmente**
+- **non ancora allineato a un unico motore dati e workflow**
+
+## Giudizio complessivo
+Se lo confrontiamo con un gestionale italiano “vero” da studio, senza telematico:
+- **base tecnica**: buona
+- **base funzionale**: buona ma incompleta
+- **maturità operativa**: media
+- **maturità di prodotto da studio**: ancora parziale
+
+## Problema principale
+Non è “mancano solo funzioni”.
+Il problema più forte è questo:
+
+**convivono ancora tre strati diversi**
+1. flussi legacy
+2. nuovi flussi contabili strutturati
+3. infrastruttura canonica di commit ancora non completata
+
+Questo rallenta tutto:
+- registrazione manuale
+- import
+- partitario
+- registri IVA
+- bilancio
+- riconciliazione
+
+---
+
+# 2. Perimetro normativo e funzionale da coprire
+
+Per un gestionale italiano avanzato senza telematico, il perimetro minimo serio è questo:
+
+## A. Contabilità generale
+- piano dei conti per società
+- causali contabili configurabili
+- prima nota
+- libro giornale / mastrini / bilancio di verifica
+- scritture di assestamento
+- ratei/risconti
+- chiusure/aperture esercizio
+- quadrature contabili
+- audit delle modifiche
+
+## B. IVA
+- registri IVA vendite/acquisti/corrispettivi
+- gestione IVA ordinaria
+- reverse charge
+- split payment
+- IVA per cassa / esigibilità differita
+- rettifiche detrazione
+- liquidazioni periodiche IVA
+- LIPE predisposta
+- controllo aliquote / nature / detraibilità
+- collegamento documento → registrazione → registro IVA
+
+## C. Ciclo attivo / passivo amministrativo
+Anche senza SDI e invio:
+- gestione fatture clienti/fornitori importate o manuali
+- note di credito
+- data/numero documento
+- controparti
+- partite aperte/chiuse
+- scadenze
+- pagamenti/incassi
+- storno e rettifiche
+
+## D. Partitari e scadenzario
+- partitario clienti
+- partitario fornitori
+- aperture/chiusure
+- residui
+- scadenze
+- aging
+- riconciliazione tra movimenti e partite
+
+## E. Ritenute / sostituto
+- anagrafica percipienti
+- ritenute su documento
+- ritenute su pagamento
+- CU predisposta
+- 770 predisposto
+- F24 predisposto per ritenute
+- quadratura versamenti vs certificazioni
+
+## F. Cespiti
+- beni ammortizzabili
+- quote annuali
+- fondo ammortamento
+- residuo
+- collegamento a registrazioni contabili
+- eventuale rettifica IVA beni ammortizzabili
+
+## G. F24 e fiscal outputs
+Senza invio:
+- compilazione logica F24
+- codici tributo
+- periodo/anno
+- debiti/crediti/compensazioni
+- stampa/export
+- storicizzazione predisposti
+
+## H. Bilancio e reporting
+- bilancio di verifica
+- stato patrimoniale / conto economico
+- riclassificazioni
+- drill-down sulle scritture
+- coerenza con prima nota e IVA
+- controlli di quadratura
+
+## I. Workflow operatore
+- AI propone, operatore conferma
+- nessuna scrittura automatica
+- motivi blocco espliciti
+- draft / dry-run / reale separati
+- rollback / idempotenza / audit
+
+---
+
+# 3. Fonti ufficiali usate per il perimetro
+
+Ho incrociato il codice con queste fonti primarie:
+
+- [DPR 600/1973 - scritture contabili imprese](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Apresidente.repubblica%3Adecreto%3A1973-09-29%3B600~art14-com6=)
+- [DPR 600/1973 - contabilità semplificata](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Apresidente.repubblica%3Adecreto%3A1973-09-29%3B600~art18=)
+- [DPR 600/1973 - tenuta e conservazione scritture](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Apresidente.repubblica%3Adecreto%3A1973-09-29%3B600~art22=)
+- [DPR 633/1972 - disciplina IVA](https://www.normattiva.it/atto/caricaDettaglioAtto?atto.codiceRedazionale=072U0633&atto.dataPubblicazioneGazzetta=1972-11-11&bloccoAggiornamentoBreadCrumb=true&classica=true&dataVigenza=&generaTabId=true&qId=&tabID=&tipoDettaglio=multivigenza&title=lbl.dettaglioAtto)
+- [DPR 633/1972 - registri e conservazione IVA art. 39](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Astato%3Adecreto.legge%3A1972%3B633~art39%21vig=)
+- [DPR 633/1972 - attività separate art. 36](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Astato%3Adecreto.del.presidente.della.repubblica%3A1972-00-00%3B633~art36%21vig=)
+- [DPR 633/1972 - rettifica detrazione beni ammortizzabili art. 19-bis.2](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Astato%3Adecreto%3A1972-10-26%3B633~art19bis.2%21vig=)
+- [DLgs 241/1997 - versamenti/F24](https://www.normattiva.it/atto/caricaDettaglioAtto?atto.codiceRedazionale=097G0277&atto.dataPubblicazioneGazzetta=1997-07-28&classica=true&qId=&tipoDettaglio=multivigenza)
+- [Agenzia Entrate - F24 Web / compilazione F24](https://telematici.agenziaentrate.gov.it/Main/F24web.jsp)
+- [Agenzia Entrate - ricerca codici tributo](https://www1.agenziaentrate.gov.it/servizi/codici/ricerca/index.php)
+- [Agenzia Entrate - scadenzario LIPE](https://www1.agenziaentrate.gov.it/servizi/scadenzario/main.php?chi=1595&come=518&cosa=11479&entroil=02-03-2026&op=4)
+- [DLgs 175/2014 - certificazioni / obblighi CU](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Astato%3Adecreto.legislativo%3A2014-11-21%3B175~art2=)
+- [DPR 695/1996 - registro beni ammortizzabili](https://www.normattiva.it/uri-res/N2Ls?urn%3Anir%3Apresidente.repubblica%3Adecreto%3A1996-12-21%3B695~art2-com1=)
+
+Nota:
+- questo audit è **prodotto/architettura**, non parere professionale o fiscale sostitutivo.
+
+---
+
+# 4. Fotografia attuale del codice
+
+## Stato repo
+Il progetto `Copia1205` è oggi in stato:
+- **molto mosso**
+- con molti file modificati e non tracciati
+- quindi **non è una baseline pulita**
+
+Segnali forti:
+- [src/App.jsx](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/src/App.jsx)
+- [src/core/workflow.js](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/src/core/workflow.js)
+- [services/canonicalAccountingCommitService.js](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/services/canonicalAccountingCommitService.js)
+- [supabase/migrations/20260508140000_core_commit_canonical_accounting_payload.sql](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/supabase/migrations/20260508140000_core_commit_canonical_accounting_payload.sql)
+
+## Stato architetturale reale
+### Punti forti
+- esiste una nuova contabilità strutturata
+- esiste una nuova Registrazione manuale:
+  - [src/modules/contabilita/views/RegistrazioneManualeView.jsx](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/src/modules/contabilita/views/RegistrazioneManualeView.jsx)
+- esistono import contabili più maturi:
+  - [src/modules/import_contabilita/index.jsx](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/src/modules/import_contabilita/index.jsx)
+- esiste un layer di commit canonico:
+  - [services/canonicalAccountingCommitService.js](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/services/canonicalAccountingCommitService.js)
+
+### Debiti strutturali attivi
+- `import_unificato` è ancora attivo in app:
+  - [src/App.jsx](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/src/App.jsx)
+- `import_fatture` è ancora attivo in app
+- `prima_nota_guidata` è ancora presente e ancora citata:
+  - [src/modules/contabilita/prima_nota_guidata.jsx](C:/Users/patri/Desktop/fiscosim-viteBACKUP%20-%20Copia1205/src/modules/contabilita/prima_nota_guidata.jsx)
+- il commit canonico reale è ancora bloccato:
+  - warning `dry_run_only`
+  - `real_commit_not_implemented`
+
+Questo è il segnale più importante dell’intero audit:
+> il progetto sta ancora transitando da una generazione vecchia a una nuova, e non ha ancora completato il passaggio.
+
+---
+
+# 5. Mappa attuale per area funzionale
+
+## 5.1 Contabilità generale
+**Stato:** buono ma incompleto
+
+### C’è già
+- nuova registrazione manuale
+- consultazione prima nota
+- piano dei conti
+- causali contabili
+- quadratura righe
+- componenti per IVA / partitario / ritenute
+- bilancio di verifica base
+- canonical payload design
+
+### Manca o è fragile
+- real save unico e consolidato
+- storni / rettifiche / annullamenti robusti
+- assestamenti e chiusure di esercizio
+- ratei / risconti veri
+- scritture automatiche di fine periodo
+- libro giornale e stampe consolidate sul nuovo modello
+- unificazione definitiva col partitario e coi registri IVA
+
+## 5.2 IVA
+**Stato:** parziale
+
+### C’è già
+- causali IVA
+- registri IVA a livello schema
+- righe IVA nella registrazione
+- scenari semplici e mappature
+- liquidazione IVA come area funzionale
+- LIPE come concetto presente in tax compliance/export
+
+### Manca o è da chiudere
+- percorso unico e stabile documento → prima nota → registro IVA
+- reverse charge completo
+- split payment completo
+- IVA per cassa completa
+- rettifiche detrazione / prorata / beni ammortizzabili
+- controlli robusti per casi misti
+- liquidazione IVA consolidata sul nuovo asse dati
+- predisposizione LIPE industrializzata
+
+## 5.3 Ciclo passivo / attivo amministrativo
+**Stato:** parziale forte sul passivo documentale, più debole come ciclo completo
+
+### C’è già
+- import fatture
+- parsing XML / documenti
+- causali FF/FC e logiche collegate
+- flussi da documento verso draft contabile
+
+### Manca
+- vero ciclo operativo fornitori/clienti chiuso
+- documenti manuali completi
+- note di credito robuste
+- stato documento / registrazione / partita ben unificato
+- scadenze da documento affidabili
+- workflow di approvazione operatore
+
+## 5.4 Partitario
+**Stato:** parziale
+
+### C’è già
+- modulo partitario
+- pannelli e draft partitario
+- base schema `partitario`
+- logica su aperture/chiusure in alcune aree
+
+### Manca
+- unificazione con vecchio `partitari`
+- gestione completa apertura/chiusura residui
+- aging / estratti conto robusti
+- partitario pienamente integrato in RM/import/riconciliazione
+- controlli di coerenza scrittura-partita-scadenza
+
+## 5.5 Ritenute / CU / 770
+**Stato:** parziale
+
+### C’è già
+- `percipienti`
+- modulo `CU`
+- campi e pannelli ritenute
+- `fiscal_outputs` che contempla `CU` e `DICHIARAZIONE_770`
+
+### Manca
+- ciclo completo documento con ritenuta
+- ritenuta su pagamento
+- quadratura con F24
+- predisposizione 770 forte e tracciabile
+- controlli annuali coerenti su sostituto, percipienti, versamenti
+
+## 5.6 Cespiti
+**Stato:** parziale buono
+
+### C’è già
+- beni ammortizzabili
+- quote ammortamento
+- modulo ammortamenti
+
+### Manca
+- link robusto alla prima nota
+- gestione dismissioni/cessioni/plus-minus
+- rettifica IVA beni
+- integrazione chiusure annuali
+
+## 5.7 F24
+**Stato:** parziale fragile
+
+### C’è già
+- modulo F24
+- tabelle / concetto F24
+- codici tributo consultabili come requisito di prodotto
+
+### Manca
+- vera predisposizione strutturata da:
+  - liquidazioni IVA
+  - ritenute
+  - ravvedimenti
+- coerenza schema UI / schema DB
+- export/stampa forte
+- raccordo con scadenzario
+
+## 5.8 Bilancio / reporting
+**Stato:** parziale
+
+### C’è già
+- modulo bilancio
+- viste e report base
+- aggregazione su righe contabili
+
+### Manca
+- riclassificazioni serie
+- bilanci per esercizio consolidati
+- assestamenti / chiusure
+- reporting comparativo
+- raccordo solido tra nuovo modello e viste legacy
+
+## 5.9 Riconciliazione bancaria
+**Stato:** area più indietro
+
+### C’è già
+- nuova view dedicata
+- componenti numerosi
+- matching, guided import, audit, working tables
+- build commit input di riconciliazione
+
+### Manca
+- evidenza di flow pienamente stabile end-to-end
+- allineamento totale con partitario / prima nota reale
+- pulizia dai riferimenti demo/mock
+- motore decisionale operatore completo e sicuro
+
+## 5.10 Workflow studio / audit / sicurezza operativa
+**Stato:** buono nelle intenzioni, incompleto nel consolidamento
+
+### C’è già
+- concetto di AI propone / operatore conferma
+- audit commit canonico
+- access scope
+- multi-società
+- diagnostics/debug
+
+### Manca
+- un solo flusso auth/sessione definitivo
+- policy uniforme tra moduli
+- audit trail utente-operazione-documento completo su tutti i flussi
+- governance di rollback e blocco casi non supportati uniforme
+
+---
+
+# 6. Cosa deve avere un gestionale italiano avanzato senza telematico
+
+Qui non sto guardando il codice: sto definendo il **target di prodotto**.
+
+## Must-have assoluti
+
+### Contabilità
+- piano dei conti per società
+- causali contabili configurabili
+- scritture manuali, automatiche, di assestamento
+- prima nota e libro giornale
+- mastrini
+- bilancio di verifica
+
+### IVA
+- registri IVA
+- liquidazioni periodiche
+- gestione acquisti/vendite/corrispettivi
+- reverse charge
+- split payment
+- esigibilità differita / IVA per cassa
+- note di variazione
+- LIPE predisposta
+
+### Clienti / fornitori / partite
+- anagrafiche
+- partite aperte/chiuse
+- scadenze
+- incassi/pagamenti
+- estratti conto
+- aging
+
+### Ritenute
+- percipienti
+- ritenute su documento e/o pagamento
+- CU predisposta
+- 770 predisposto
+- quadratura versamenti/F24
+
+### F24
+- compilazione logica
+- codici tributo
+- rateazioni
+- compensazioni
+- scadenze
+- storico predisposti
+
+### Cespiti
+- anagrafica beni
+- quote
+- piano ammortamento
+- scritture e residui
+
+### Documentale
+- import XML/PDF/Excel
+- stato documento
+- aggancio a registrazione
+- storicizzazione modifiche operatore
+- preview e correzione
+
+### Reporting
+- bilancio
+- registri
+- partitari
+- liquidazioni
+- scadenziario
+- audit operativo
+
+### UX studio
+- draft
+- dry-run
+- commit reale separato
+- motivi blocco chiari
+- ricerca e filtri
+- export pdf/xlsx/csv
+- multi-società
+- ruoli/permessi
+
+---
+
+# 7. Gap reale di FiscoSim rispetto al target
+
+## Quello che manca davvero
+### Manca da completare, non da inventare
+- nuova Registrazione manuale fino a flow reale unico
+- consultazione prima nota con azioni correttive vere
+- import contabilità fino a commit completo
+- registri IVA reali sul nuovo modello
+- partitario pienamente integrato
+- liquidazione IVA coerente
+- F24 predisposto vero
+- ritenute/CU/770 robusti
+- bilancio unificato sul nuovo modello
+- riconciliazione bancaria senza layer demo
+
+### Manca da integrare
+- scadenzario forte e notifiche
+- workflow documento → scrittura → partita → scadenza
+- chiusure/aperture esercizio
+- ratei/risconti
+- cespiti collegati alle scritture
+- controlli annuali e quadrature fiscali
+- reportistica da studio più solida
+
+### Manca da spegnere
+- path legacy attivi
+- flussi duplicati
+- vecchi componenti che confondono il dominio
+- login/auth di generazioni diverse
+- dipendenza da dati e helper non allineati
+
+---
+
+# 8. Priorità di sviluppo consigliata
+
+## Fase 0 — Bonifica architetturale
+**Obiettivo:** evitare di costruire sopra sabbie mobili
+
+### Da fare
+- congelare una baseline pulita
+- spegnere o isolare:
+  - `import_fatture`
+  - `import_unificato`
+  - `prima_nota_guidata`
+  - moduli legacy non target
+- definire il solo asse attivo:
+  - `RegistrazioneManualeView`
+  - `ConsultazionePrimaNotaView`
+  - `ImportContabilitaWorkingView`
+  - `RiconciliazioneBancariaView`
+- fissare il contratto unico dati:
+  - `prima_nota`
+  - `prima_nota_righe`
+  - `registri_iva`
+  - `partitario`
+  - `documenti_contabilita`
+
+### Perché
+Senza questa fase, ogni sviluppo futuro rischia di essere rifatto.
+
+---
+
+## Fase 1 — Core contabile operativo
+**Obiettivo:** avere un modulo contabile da studio realmente usabile
+
+### Da chiudere
+- registrazione manuale non IVA
+- registrazione manuale IVA semplice
+- consultazione prima nota
+- storno/annullamento/rettifica
+- controlli quadratura
+- salvataggio reale unico e sicuro
+- allineamento conti/causali/controparti
+- audit utente-operazione
+
+### Output atteso
+Una prima nota davvero affidabile.
+
+---
+
+## Fase 2 — Documento → contabilità
+**Obiettivo:** gestire il ciclo passivo/attivo amministrativo senza telematico
+
+### Da chiudere
+- import documenti
+- documento contabile
+- validazione campi
+- proposta scrittura
+- conferma operatore
+- creazione prima nota
+- scrittura registri IVA
+- eventuale apertura partita
+- storico documento e stato workflow
+
+### Output atteso
+Fattura fornitore e fattura cliente gestibili bene senza SDI.
+
+---
+
+## Fase 3 — IVA vera
+**Obiettivo:** chiudere l’area fiscale operativa
+
+### Da chiudere
+- registri IVA affidabili
+- liquidazioni periodiche
+- reverse charge
+- split payment
+- esigibilità differita / IVA per cassa
+- note di credito/variazione
+- LIPE predisposta
+- quadratura IVA ↔ prima nota ↔ registri
+
+### Output atteso
+FiscoSim diventa davvero usabile per la fiscalità IVA operativa.
+
+---
+
+## Fase 4 — Partitario e scadenze
+**Obiettivo:** governare crediti/debiti e non solo scritture
+
+### Da chiudere
+- partite aperte/chiuse
+- residui
+- incassi/pagamenti
+- aging
+- scadenziario
+- collegamento a riconciliazione bancaria
+
+### Output atteso
+Il gestionale smette di essere solo “prima nota” e diventa amministrativo.
+
+---
+
+## Fase 5 — Ritenute, CU, 770, F24
+**Obiettivo:** portare il perimetro sostituto d’imposta a livello serio
+
+### Da chiudere
+- ritenute su documento
+- ritenute su pagamento
+- CU predisposta
+- 770 predisposto
+- F24 predisposto da ritenute e IVA
+- quadrature annuali
+
+---
+
+## Fase 6 — Cespiti, assestamenti, bilancio
+**Obiettivo:** chiusura completa di studio
+
+### Da chiudere
+- cespiti collegati a contabilità
+- ratei/risconti
+- scritture di assestamento
+- chiusure/aperture
+- bilancio e riclassificazioni
+
+---
+
+# 9. Piano di sviluppo completo
+
+## Blocco A — Fondamenta
+Durata rough: **2-4 settimane**
+- baseline pulita
+- spegnimento legacy
+- login/sessione unica
+- access scope stabile
+- schema logico ufficiale dei moduli attivi
+
+## Blocco B — Contabilità vera
+Durata rough: **4-8 settimane**
+- RM
+- prima nota
+- consultazione
+- commit reale controllato
+- audit/storno/rettifica
+
+## Blocco C — Documento e IVA
+Durata rough: **6-10 settimane**
+- import documenti
+- documento contabile
+- registri IVA
+- liquidazioni
+- LIPE
+
+## Blocco D — Partitario e banca
+Durata rough: **6-10 settimane**
+- partite/scadenze
+- pagamenti/incassi
+- riconciliazione bancaria
+
+## Blocco E — Fiscale annuale e amministrativo studio
+Durata rough: **6-10 settimane**
+- CU
+- 770
+- F24 predisposti
+- cespiti
+- bilancio avanzato
+- assestamenti
+
+---
+
+# 10. Cosa sviluppare subito e cosa lasciare dopo
+
+## Subito
+1. baseline pulita del progetto
+2. nuovo login/sessione coerente
+3. registrazione manuale nuova
+4. consultazione prima nota nuova
+5. import contabilità nuovo
+6. commit canonico reale o persistenza unica sostitutiva
+7. registri IVA sul nuovo modello
+8. partitario base integrato
+
+## Dopo
+1. reverse charge / split / IVA per cassa completi
+2. LIPE industrializzata
+3. CU / 770 solidi
+4. F24 predisposti robusti
+5. cespiti con integrazione contabile
+6. chiusure, ratei, risconti, bilancio avanzato
+7. riconciliazione bancaria “enterprise”
+
+## Da non fare ora
+- nuovo telematico
+- automazioni che scrivono senza conferma
+- nuovi moduli laterali finché il core non è chiuso
+- ulteriore evoluzione dei path legacy
+
+---
+
+# 11. Roadmap prodotto consigliata
+
+## Obiettivo realistico
+Portare FiscoSim a:
+- **gestionale interno di studio**
+- forte su contabilità + IVA + partitario + adempimenti predisposti
+- senza invio telematico
+- con governance operatore e audit
+
+## Sequenza migliore
+1. **core contabile**
+2. **documento + IVA**
+3. **partitario + scadenze**
+4. **ritenute + CU/770 + F24**
+5. **cespiti + bilancio + chiusure**
+6. **riconciliazione bancaria completa**
+
+---
+
+# 12. Conclusione finale
+
+## Fotografia attuale
+FiscoSim non è un progetto “vuoto” o solo demo.
+Ha già:
+- un perimetro contabile ampio
+- una base Supabase ricca
+- un nuovo asse architetturale sensato
+- un buon livello di specializzazione da studio
+
+## Ma oggi non è ancora un gestionale completo
+Per diventarlo deve chiudere:
+- unificazione architetturale
+- contabilità reale sul nuovo modello
+- IVA completa
+- partitario/scadenze
+- F24/CU/770 predisposti
+- cespiti/chiusure/bilancio
+- riconciliazione bancaria vera
+
+## Mio giudizio netto
+Se il target è:
+> “gestionale italiano avanzato senza invio telematico”
+
+allora FiscoSim è oggi circa:
+- **60% sul core contabile**
+- **35-45% sul perimetro fiscale operativo completo**
+- **25-35% sulla maturità da gestionale di studio completo**
+
+La direzione è giusta.  
+Il rischio non è “non si può fare”.  
+Il rischio è **continuare a stratificare nuovo sopra legacy senza prima chiudere il nucleo**.
+
+Se vuoi, nel prossimo passo posso trasformare questo audit in un documento operativo molto concreto, con:
+1. **mappa moduli attivi vs legacy da spegnere**
+2. **backlog per aree**
+3. **roadmap 30/60/90 giorni**
+4. **ordine di sviluppo file-per-file e modulo-per-modulo**
+
+Sì. Ti preparo i 4 punti in modo operativo, non teorico.
+
+# Piano operativo FiscoSim
+
+Base logica considerata:
+- repo di lavoro: [C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205)
+- vincoli architetturali attivi:
+  - niente telematico
+  - AI propone, operatore conferma
+  - niente modifiche casuali a moduli funzionanti
+  - un problema per volta
+  - no env/auth/DB/migration se non strettamente richiesto
+
+---
+
+# 1. Mappa moduli attivi vs legacy da spegnere
+
+## Regola guida
+Per ogni area dobbiamo distinguere tra:
+- `ATTIVO`: modulo da evolvere
+- `TRANSIZIONE`: modulo ancora utile in lettura/supporto, ma non base futura
+- `LEGACY DA SPEGNERE`: modulo da congelare e poi rimuovere dal flusso operativo
+
+## 1.1 Moduli core da tenere attivi
+
+| Modulo | Stato | Motivo |
+|---|---|---|
+| [src/modules/contabilita](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita) | ATTIVO | è il cuore del prodotto |
+| [src/modules/contabilita/views/RegistrazioneManualeView.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\views\RegistrazioneManualeView.jsx) | ATTIVO | nuova registrazione manuale |
+| [src/modules/contabilita/views/PrimaNotaHubView.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\views\PrimaNotaHubView.jsx) | ATTIVO | hub corretto della nuova prima nota |
+| [src/modules/import_contabilita](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\import_contabilita) | ATTIVO | è il flusso import da portare a regime |
+| [src/modules/partitario](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\partitario) | ATTIVO | area necessaria per ciclo amministrativo |
+| [src/modules/piano_conti](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\piano_conti) | ATTIVO | anagrafica base contabile |
+| [src/modules/ammortamenti](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\ammortamenti) | ATTIVO | cespiti da completare |
+| [src/modules/f24](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\f24) | ATTIVO | da riallineare ma necessario |
+| [src/modules/cu](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\cu) | ATTIVO | perimetro sostituto d’imposta |
+| [src/modules/iva](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\iva) | TRANSIZIONE | utile come riferimento, ma l’IVA va riportata nel core contabile |
+| [src/modules/clienti](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\clienti) | ATTIVO | anagrafica attiva, da estendere a controparti |
+
+## 1.2 Moduli attivi ma da riperimetrare
+
+| Modulo | Stato | Azione |
+|---|---|---|
+| [src/modules/fatture_ade](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\fatture_ade) | TRANSIZIONE | tenere parsing/import, ma agganciare al flusso documento contabile unico |
+| [src/modules/export_dati](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\export_dati) | TRANSIZIONE | usarlo come hub export, non come logica di dominio |
+| [src/modules/dashboard](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\dashboard) | TRANSIZIONE | dopo chiusura core |
+| [src/modules/agecon](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\agecon) | TRANSIZIONE | area specialistica dopo stabilizzazione core |
+| [src/modules/adempimenti](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\adempimenti) | TRANSIZIONE | utile, ma non priorità 1 |
+| [src/modules/agenda](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\agenda) | TRANSIZIONE | agganciare più avanti allo scadenzario vero |
+
+## 1.3 Legacy da congelare subito
+
+| Modulo/file | Stato | Motivo |
+|---|---|---|
+| [src/modules/import_fatture](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\import_fatture) | LEGACY DA SPEGNERE | path vietato e architettura vecchia |
+| [src/modules/import_unificato](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\import_unificato) | LEGACY DA SPEGNERE | path vietato e fortemente legacy |
+| [src/modules/contabilita/prima_nota_guidata.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\prima_nota_guidata.jsx) | LEGACY DA SPEGNERE | esiste ma non deve più guidare lo sviluppo |
+| [src/modules/lettura_mail](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\lettura_mail) | STUB/CONGELARE | non prioritaria e spenta |
+| aree `DISUSO` | LEGACY DA SPEGNERE | fuori perimetro |
+
+## 1.4 File infrastrutturali critici da tenere centrali
+
+| File | Stato |
+|---|---|
+| [src/App.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\App.jsx) | ATTIVO, da ripulire come router principale |
+| [src/core/workflow.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\core\workflow.js) | ATTIVO, da proteggere come orchestratore |
+| [services/canonicalAccountingCommitService.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\services\canonicalAccountingCommitService.js) | ATTIVO, centrale |
+| [services/canonicalAccountingCommitRepository.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\services\canonicalAccountingCommitRepository.js) | ATTIVO |
+| [src/shared/utils/accessScope.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\shared\utils\accessScope.js) | ATTIVO |
+
+## 1.5 Decisione pratica
+### Da oggi
+- si sviluppa su:
+  - `contabilita`
+  - `import_contabilita`
+  - `partitario`
+  - `f24`
+  - `ammortamenti`
+  - `cu`
+- si legge soltanto:
+  - `import_fatture`
+  - `import_unificato`
+  - `prima_nota_guidata`
+- non si aggiungono nuove feature ai legacy
+
+---
+
+# 2. Backlog per aree
+
+## 2.1 Area Contabilità generale
+### Priorità alta
+- chiudere la Registrazione manuale semplice
+- chiudere Registrazione manuale documento IVA semplice
+- unificare salvataggio reale/dry-run
+- introdurre storno/rettifica/annullamento
+- consolidare consultazione prima nota
+
+### Priorità media
+- scritture di assestamento
+- ratei/risconti
+- chiusure/aperture esercizio
+- libro giornale / stampe contabili
+
+## 2.2 Area Documento contabile / ciclo attivo-passivo
+### Priorità alta
+- documento contabile unico
+- FF/FC/NC manuali corretti
+- documento → prima nota → registri IVA
+- documento → partita, se previsto
+
+### Priorità media
+- note di credito complete
+- stati workflow documento
+- allegati, note operatore, audit
+
+## 2.3 Area IVA
+### Priorità alta
+- registri IVA coerenti sul nuovo modello
+- causali IVA stabili
+- liquidazione IVA base
+- LIPE predisposta base
+
+### Priorità media
+- reverse charge
+- split payment
+- IVA per cassa / esigibilità differita
+- rettifiche e prorata
+
+## 2.4 Area Partitario e scadenze
+### Priorità alta
+- apertura partita da documento
+- chiusura partita da pagamento/incasso
+- residui
+- estratto partite aperte
+
+### Priorità media
+- aging
+- scadenzario clienti/fornitori
+- collegamento banca-partitario
+
+## 2.5 Area Ritenute / CU / 770
+### Priorità alta
+- anagrafica percipienti coerente
+- ritenuta su documento
+- ritenuta su pagamento
+- CU predisposta base
+
+### Priorità media
+- 770 predisposto
+- quadratura annua ritenute
+- raccordo F24 ritenute
+
+## 2.6 Area F24
+### Priorità alta
+- modello dati coerente
+- alimentazione da IVA e ritenute
+- predisposizione e stampa/export
+
+### Priorità media
+- compensazioni
+- rateazioni
+- storico e scadenzario
+
+## 2.7 Area Cespiti
+### Priorità alta
+- collegamento cespite → scrittura contabile
+- quote su esercizio
+
+### Priorità media
+- dismissioni
+- plus/minusvalenze
+- rettifica IVA beni
+
+## 2.8 Area Bilancio
+### Priorità alta
+- bilancio di verifica coerente
+- riclassificazione base
+- drill-down prima nota
+
+### Priorità media
+- bilancio civilistico base
+- comparativi esercizi
+- chiusure e assestamenti collegati
+
+## 2.9 Area Riconciliazione bancaria
+### Priorità alta
+- perimetro attivo chiaro
+- matching affidabile
+- proposta scrittura controllata
+
+### Priorità media
+- integrazione partitario
+- incassi/pagamenti complessi
+- riconciliazione multi-movimento
+
+## 2.10 Area Studio / governance
+### Priorità alta
+- backup automatici
+- audit trail operatore
+- perimetro attivo vs legacy
+- checklist rilascio locale
+
+### Priorità media
+- dashboard studio
+- notifiche e agenda operative
+- report operativi da studio
+
+---
+
+# 3. Roadmap 30/60/90 giorni
+
+## Giorni 0-30
+### Obiettivo
+Stabilizzare il core e fermare il caos.
+
+### Deliverable
+1. congelamento legacy
+2. baseline attiva dichiarata
+3. nuova Registrazione manuale RM-01 stabile
+4. FF manuale base stabile
+5. consultazione prima nota affidabile
+6. persistenza reale controllata o commit unico chiarito
+7. primo set test manuali standard
+
+### Focus moduli
+- [src/modules/contabilita](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita)
+- [services/canonicalAccountingCommitService.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\services\canonicalAccountingCommitService.js)
+- [src/App.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\App.jsx)
+
+### KPI fine 30 giorni
+- scrittura generica manuale: OK
+- fattura fornitore manuale base: OK
+- prima nota consultabile: OK
+- nessun flusso legacy usato operativamente: OK
+
+---
+
+## Giorni 31-60
+### Obiettivo
+Chiudere documento, IVA base e partitario base.
+
+### Deliverable
+1. documento contabile unico
+2. documento → prima nota
+3. prima nota → registro IVA
+4. apertura partitario su FF/FC se richiesto
+5. chiusura partitario base con pagamento/incasso
+6. scadenze base da partite
+7. liquidazione IVA base
+
+### Focus moduli
+- `contabilita`
+- `import_contabilita`
+- `partitario`
+- `iva`
+
+### KPI fine 60 giorni
+- FF/FC documentale base: OK
+- registri IVA base: OK
+- partita aperta/chiusa base: OK
+- liquidazione IVA base: OK
+
+---
+
+## Giorni 61-90
+### Obiettivo
+Portare FiscoSim da “contabilità funzionante” a “gestionale studio credibile”.
+
+### Deliverable
+1. LIPE predisposta base
+2. F24 predisposto da IVA/ritenute base
+3. CU base
+4. scadenzario operativo
+5. bilancio di verifica coerente
+6. cespiti agganciati alla contabilità
+7. backlog riconciliazione bancarie trasformato in piano esecutivo
+
+### Focus moduli
+- `f24`
+- `cu`
+- `ammortamenti`
+- `bilancio`
+- `partitario`
+
+### KPI fine 90 giorni
+- area fiscale periodica base: OK
+- area sostituto base: parzialmente OK
+- area scadenze: OK base
+- reporting studio: OK base
+
+---
+
+# 4. Ordine di sviluppo file-per-file e modulo-per-modulo
+
+## Regola
+Qui non ti sto dicendo “tocca tutto”.
+Ti sto dando l’ordine giusto per non rompere il progetto.
+
+## Fase A — Perimetro e bootstrap
+### 1. Router e perimetro attivo
+- [src/App.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\App.jsx)
+- [src/core/workflow.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\core\workflow.js)
+
+### Obiettivo
+- chiarire i moduli attivi
+- spegnere dal flusso i legacy
+- non rimuoverli subito, ma toglierli dal percorso operativo
+
+---
+
+## Fase B — Nuova Registrazione manuale
+### 2. View principale
+- [src/modules/contabilita/views/RegistrazioneManualeView.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\views\RegistrazioneManualeView.jsx)
+
+### 3. Componenti registrazione
+- [src/modules/contabilita/components/registrazione](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\components\registrazione)
+
+### 4. Draft / validazione / rows
+- [src/modules/contabilita/application/registrazioneOperations](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\application\registrazioneOperations)
+- [src/modules/contabilita/domain/registrazione](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\domain\registrazione)
+
+### Obiettivo
+- chiudere RM-01
+- chiudere FF/FC base
+- fare in modo che la UI nuova sia il solo riferimento
+
+---
+
+## Fase C — Persistenza reale / commit unico
+### 5. Servizi canonici
+- [services/canonicalAccountingCommitService.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\services\canonicalAccountingCommitService.js)
+- [services/canonicalAccountingCommitRepository.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\services\canonicalAccountingCommitRepository.js)
+
+### 6. Builder canonical contabilità
+- [src/modules/contabilita/canonical](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\canonical)
+
+### Obiettivo
+- un solo modo corretto di arrivare a:
+  - `prima_nota`
+  - `prima_nota_righe`
+  - `registri_iva`
+  - `partitario`
+
+---
+
+## Fase D — Consultazione Prima Nota
+### 7. Hub e consultazione
+- [src/modules/contabilita/views/PrimaNotaHubView.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\views\PrimaNotaHubView.jsx)
+- [src/modules/contabilita/components/consultazione](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\components\consultazione)
+- [src/modules/contabilita/domain/consultazione](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\domain\consultazione)
+
+### Obiettivo
+- lettura affidabile
+- filtri
+- dettaglio
+- storno/rettifica successivamente
+
+---
+
+## Fase E — Documento contabile e import
+### 8. Import contabilità
+- [src/modules/import_contabilita](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\import_contabilita)
+
+### 9. Documento contabile / parsing / helper
+- [src/shared/utils/primaNotaDraftFromDocumento.js](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\shared\utils\primaNotaDraftFromDocumento.js)
+- [src/modules/fatture_ade](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\fatture_ade)
+
+### Obiettivo
+- import come sorgente documento
+- documento come input del draft contabile
+- no scrittura fuori asse
+
+---
+
+## Fase F — Partitario
+### 10. Modulo dedicato
+- [src/modules/partitario](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\partitario)
+
+### 11. Pannelli partitario in contabilità
+- [src/modules/contabilita/components/registrazione/RegistrazionePartitarioPanel.jsx](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\components\registrazione\RegistrazionePartitarioPanel.jsx)
+
+### Obiettivo
+- apertura/chiusura partita
+- residui
+- partite da documento
+- base scadenze
+
+---
+
+## Fase G — IVA
+### 12. Core IVA in contabilità
+- [src/modules/contabilita/components/registrazione](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\components\registrazione)
+- [src/modules/contabilita/application](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\application)
+
+### 13. Modulo IVA standalone, solo come supporto evolutivo
+- [src/modules/iva](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\iva)
+
+### Obiettivo
+- registro IVA
+- liquidazione
+- LIPE base
+- reverse/split/per cassa in step successivi
+
+---
+
+## Fase H — F24 / ritenute / CU
+### 14. F24
+- [src/modules/f24](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\f24)
+
+### 15. CU
+- [src/modules/cu](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\cu)
+
+### 16. Percipienti / ritenute
+- area dati e riferimenti in contabilità + eventuale anagrafica percipienti
+
+### Obiettivo
+- predisposizione F24
+- CU base
+- 770 dopo consolidamento CU
+
+---
+
+## Fase I — Cespiti e bilancio
+### 17. Cespiti
+- [src/modules/ammortamenti](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\ammortamenti)
+
+### 18. Bilancio
+- [src/modules/bilancio](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\bilancio)
+
+### Obiettivo
+- chiusura esercizio
+- quote
+- bilancio di verifica e riclassifiche base
+
+---
+
+## Fase J — Riconciliazione bancaria
+### 19. Riconciliazione
+- [src/modules/contabilita/components/riconciliazione](C:\Users\patri\Desktop\fiscosim-viteBACKUP%20-%20Copia1205\src\modules\contabilita\components\riconciliazione)
+
+### Obiettivo
+- ultimo grande blocco, non il primo
+- integrarla solo quando contabilità + partitario sono affidabili
+
+---
+
+# Come conviene lavorare davvero
+
+## Modello consigliato
+### Io
+- audit
+- implementazione
+- test build
+- test flusso locale
+- coerenza tecnica
+
+### Tu
+- conferma funzionale
+- priorità da studio
+- validazione operativa
+
+### ChatGPT
+- architetto/controller
+- backlog/spec/review
+- non esecutore parallelo sul codice
+
+## Regola d’oro
+**Un solo agente che scrive codice nel repo.**
+Per questo progetto, oggi, conviene che sia io.
+
+---
+
+# Metodo pratico di lavoro
+
+## Per ogni feature
+1. audit mirato
+2. patch minima
+3. build
+4. test manuale
+5. freeze
+6. passaggio al task successivo
+
+## Per ogni area
+- file attivi
+- file legacy
+- test standard
+- rischi noti
+- criterio di done
+
+---
+
+# Raccomandazione finale
+
+Se vuoi portare FiscoSim a livello gestionale studio senza impazzire, la sequenza giusta è:
+
+1. spegnere il rumore legacy
+2. chiudere contabilità nuova
+3. chiudere documento + IVA base
+4. chiudere partitario + scadenze
+5. chiudere F24/CU/770
+6. chiudere cespiti/bilancio
+7. solo dopo banca avanzata
+
+Se vuoi, nel prossimo messaggio ti preparo anche il passo successivo più utile:
+**un “Master Backlog” già trasformato in sprint esecutivi**, con task numerati e priorità `P0/P1/P2`.
+
+Sì, facciamo così: ti lascio una fotografia operativa completa e poi ti dico anche **come conviene lavorare davvero** per non ricadere nel caos.
+
+# Quadro reale di FiscoSim
+
+## Verdetto secco
+FiscoSim **non è messo male come prodotto**, ma è messo male come **transizione**.
+
+Il problema principale non è “mancano 100 funzioni”.
+Il problema è questo:
+
+1. convivono ancora **flussi legacy**
+2. convivono **nuovi flussi contabili migliori**
+3. il **motore canonico unico** non è ancora il centro vero del sistema
+
+Questa combinazione crea:
+- regressioni
+- doppie logiche
+- schermate che sembrano giuste ma scrivono/leggono su assi diversi
+- difficoltà enormi nel capire “qual è il flusso giusto”
+
+## Dove FiscoSim è già forte
+- contabilità generale
+- nuova registrazione manuale
+- piano dei conti / causali
+- import contabile/staging
+- base IVA e tax compliance
+- audit e concetto di dry-run
+- multi-società
+- base partitario / documento / scadenze
+
+## Dove oggi è ancora fragile
+- unificazione tra nuovo e vecchio modello
+- real save contabile unico
+- registri IVA davvero allineati
+- partitario davvero integrato
+- F24 predisposto coerente
+- ritenute / CU / 770 complete
+- riconciliazione bancaria realmente chiusa
+- bilancio e chiusure su un solo asse dati
+
+---
+
+# Cosa deve diventare
+
+L’obiettivo realistico non è “fare TeamSystem intero”.
+L’obiettivo giusto è:
+
+## Gestionale italiano avanzato senza telematico
+Quindi deve coprire bene:
+
+1. contabilità generale
+2. IVA completa operativa
+3. ciclo fatture attive/passive amministrativo
+4. partitario clienti/fornitori
+5. scadenzario
+6. ritenute / CU / 770 predisposti
+7. F24 predisposto
+8. cespiti
+9. bilancio / verifiche / chiusure
+10. riconciliazione bancaria
+11. audit operatore, controlli, export, workflow studio
+
+Non serve inviare telematicamente.
+Serve però arrivare a:
+- dati corretti
+- controlli corretti
+- predisposizione corretta
+- tracciabilità completa
+
+---
+
+# Fotografia attuale per area
+
+## 1. Contabilità generale
+**Stato:** buono ma incompleto
+
+### C’è già
+- nuova registrazione manuale
+- consultazione prima nota
+- piano dei conti
+- causali
+- quadratura
+- bozza / validazione / anteprima
+- impostazione canonical
+
+### Manca
+- un salvataggio reale unico e stabile
+- storni e rettifiche robusti
+- assestamenti
+- ratei/risconti
+- chiusure/aperture esercizio
+- libro giornale e stampe consolidati sul nuovo modello
+
+## 2. IVA
+**Stato:** parziale
+
+### C’è già
+- causali IVA
+- basi per registri IVA
+- logiche documento IVA
+- liquidazione IVA come perimetro
+- LIPE come concetto
+
+### Manca
+- percorso unico documento → prima nota → registri IVA
+- reverse charge completo
+- split payment completo
+- IVA per cassa / esigibilità differita completa
+- rettifiche e casi speciali
+- liquidazione IVA industrializzata sul nuovo modello
+
+## 3. Ciclo attivo/passivo
+**Stato:** parziale
+
+### C’è già
+- import documenti
+- parsing XML/PDF
+- draft contabile
+- causali fattura
+
+### Manca
+- ciclo cliente/fornitore chiuso
+- note di credito forti
+- stato documento coerente
+- partita/scadenza generate in modo affidabile
+- workflow operatore stabile
+
+## 4. Partitario
+**Stato:** parziale
+
+### C’è già
+- modulo partitario
+- basi aperture/chiusure
+- pannelli in registrazione
+
+### Manca
+- integrazione completa con nuova contabilità
+- aging serio
+- estratti conto robusti
+- collegamento stabile con pagamenti/incassi e banca
+
+## 5. Ritenute / CU / 770
+**Stato:** parziale
+
+### C’è già
+- anagrafica percipienti
+- modulo CU
+- presenza di fiscal outputs
+- campi e segnali ritenute
+
+### Manca
+- ritenuta su documento e su pagamento ben chiuse
+- quadratura con F24
+- predisposizione 770 forte
+- controlli annuali completi
+
+## 6. F24
+**Stato:** parziale fragile
+
+### C’è già
+- modulo
+- concetto di scadenza/predisposizione
+
+### Manca
+- alimentazione coerente da IVA e ritenute
+- compilazione logica completa
+- compensazioni/rateazioni
+- export/stampa forte
+- raccordo scadenzario
+
+## 7. Cespiti
+**Stato:** discreto ma incompleto
+
+### C’è già
+- beni ammortizzabili
+- quote
+
+### Manca
+- integrazione con prima nota
+- dismissioni/cessioni
+- rettifiche IVA beni
+- assestamenti di fine anno
+
+## 8. Bilancio
+**Stato:** parziale
+
+### C’è già
+- bilancio e report base
+
+### Manca
+- riclassificazioni serie
+- chiusure/aperture
+- assestamenti
+- allineamento totale al nuovo modello dati
+
+## 9. Riconciliazione bancaria
+**Stato:** la più indietro
+
+### C’è già
+- molte schermate
+- strutture e componenti
+- concetti di matching e commit
+
+### Manca
+- una chiusura davvero affidabile end-to-end
+- pulizia dai layer demo/mock
+- forte integrazione con partitario e prima nota reale
+
+---
+
+# Problema architetturale centrale
+
+## Oggi convivono troppo
+- `import_fatture`
+- `import_unificato`
+- vecchie logiche prima nota
+- nuova `RegistrazioneManualeView`
+- nuovo asse `prima_nota` / `prima_nota_righe`
+- vecchio asse `accounting_entries`
+- doppio partitario
+
+Finché questo non viene chiuso, ogni sviluppo rischia di:
+- rompere altro
+- duplicare logiche
+- creare UI giuste sopra dati sbagliati
+
+---
+
+# Cosa manca davvero per arrivare a “gestionale italiano avanzato”
+
+## Livello 1: indispensabile
+1. nuovo asse contabile unico
+2. registrazione manuale reale
+3. consultazione prima nota vera
+4. documento → scrittura → IVA → partita
+5. registri IVA veri
+6. partitario vero
+7. scadenzario vero
+8. F24 predisposto
+9. ritenute/CU/770 coerenti
+10. bilancio e chiusure coerenti
+
+## Livello 2: importante
+1. reverse charge
+2. split payment
+3. IVA per cassa
+4. cespiti completi
+5. assestamenti
+6. riconciliazione bancaria completa
+
+## Livello 3: evolutivo
+1. automazioni assistite
+2. AI reviewer sui flussi
+3. dashboard studio mature
+4. controlli avanzati cross-modulo
+
+---
+
+# Piano di sviluppo completo
+
+## Fase 0 — Congelare e ripulire
+**Obiettivo:** avere un perimetro sicuro su cui lavorare
+
+### Da fare
+- scegliere una baseline buona
+- separare moduli attivi da legacy
+- dichiarare ufficialmente cosa è:
+  - attivo
+  - legacy
+  - vietato
+- definire l’asse dati ufficiale
+
+### Output
+- una sola contabilità “vera”
+- niente più dubbi su quale schermata usare
+
+---
+
+## Fase 1 — Core contabile chiuso
+**Obiettivo:** prima nota affidabile da studio
+
+### Da chiudere
+- RM non IVA
+- RM IVA semplice
+- salvataggio reale controllato
+- consultazione
+- storni/rettifiche
+- quadrature
+- audit
+
+### Output
+- contabilità generale davvero usabile
+
+---
+
+## Fase 2 — Documento e IVA
+**Obiettivo:** ciclo fatture amministrativo affidabile
+
+### Da chiudere
+- documento contabile
+- import
+- proposta registrazione
+- conferma operatore
+- scrittura contabile
+- scrittura registri IVA
+- eventuale apertura partita
+
+### Output
+- fatture clienti/fornitori gestibili bene senza telematico
+
+---
+
+## Fase 3 — Partitario e scadenze
+**Obiettivo:** governare crediti/debiti
+
+### Da chiudere
+- partite aperte/chiuse
+- residui
+- incassi/pagamenti
+- aging
+- scadenzario
+
+### Output
+- amministrazione clienti/fornitori seria
+
+---
+
+## Fase 4 — IVA avanzata
+**Obiettivo:** coprire davvero il perimetro IVA
+
+### Da chiudere
+- reverse charge
+- split payment
+- IVA per cassa
+- esigibilità differita
+- note di variazione
+- liquidazioni
+- LIPE predisposta
+
+### Output
+- area IVA robusta
+
+---
+
+## Fase 5 — Ritenute / CU / 770 / F24
+**Obiettivo:** sostituto d’imposta completo senza telematico
+
+### Da chiudere
+- ritenute documento/pagamento
+- CU predisposta
+- 770 predisposto
+- F24 predisposto
+- quadrature annuali
+
+---
+
+## Fase 6 — Cespiti / assestamenti / bilancio
+**Obiettivo:** chiusura completa di studio
+
+### Da chiudere
+- cespiti con integrazione contabile
+- ratei/risconti
+- scritture di assestamento
+- chiusure/aperture
+- bilancio avanzato
+
+---
+
+## Fase 7 — Riconciliazione bancaria
+**Obiettivo:** chiudere il cerchio operativo
+
+### Da chiudere
+- matching stabile
+- conferma operatore
+- scrittura contabile corretta
+- impatto su partite/scadenze
+
+---
+
+# Priorità vere, nell’ordine giusto
+
+## Ordine consigliato
+1. baseline pulita
+2. contabilità generale nuova
+3. documento + IVA semplice
+4. partitario + scadenze
+5. IVA avanzata
+6. ritenute/CU/770/F24
+7. cespiti + bilancio + chiusure
+8. riconciliazione bancaria completa
+
+## Ordine sbagliato
+- continuare a toccare 10 moduli insieme
+- lasciare attivi tutti i legacy
+- aprire nuove funzioni prima di chiudere il core
+- far scrivere a più agenti sullo stesso flusso senza regia
+
+---
+
+# Come conviene lavorare davvero
+
+Qui ti rispondo in modo netto, perché è il punto più importante.
+
+## Opzione 1 — Io faccio tutto
+### Pro
+- un solo esecutore
+- meno conflitti
+- più coerenza
+- più velocità pratica
+
+### Contro
+- rischio di perdere un livello di review esterna se non ci fermiamo a fare checkpoint
+
+## Opzione 2 — Io locale + ChatGPT architetto/controller
+### Pro
+- buona separazione ruoli
+- uno esegue, uno controlla
+- utile per documenti, backlog, review, regole
+
+### Contro
+- funziona solo se i ruoli sono rigidissimi
+- se ChatGPT inizia a “inventare patch” o Copilot/Claude toccano codice in parallelo, si spacca tutto
+- serve disciplina vera
+
+## Opzione 3 — Claude/Copilot/ChatGPT/Codex tutti insieme
+### Verdetto
+**No.**
+È il modo più veloce per distruggere coerenza, perché:
+- ognuno ragiona con contesto parziale
+- ognuno “sistema” un pezzo senza vedere il modello intero
+- il progetto diventa una stratificazione incoerente
+
+---
+
+# La mia raccomandazione vera
+
+## Modello migliore per FiscoSim
+**Io come agente locale principale**
+e **ChatGPT solo come architetto/test controller/document writer**, non come coder parallelo.
+
+### Quindi:
+- **io**
+  - leggo repo
+  - faccio diagnosi
+  - modifico file
+  - verifico build
+  - faccio test locali
+  - tengo coerenza tecnica
+
+- **ChatGPT**
+  - produce specifiche
+  - scrive requisiti
+  - fa checklist
+  - fa review di backlog
+  - controlla piani e priorità
+  - aiuta su documentazione e processi
+
+### Non deve fare
+- patch parallele sul repo
+- refactor indipendenti
+- “soluzioni” senza vedere il contesto reale locale
+
+---
+
+# Workflow che ti consiglio da domani
+
+## Regola 1
+**Un solo esecutore sul codice**
+Meglio io.
+
+## Regola 2
+**Una feature per volta**
+Esempio:
+1. Registrazione manuale semplice
+2. fattura fornitore
+3. partitario
+non tutto insieme.
+
+## Regola 3
+**Ogni feature con 4 fasi**
+1. audit
+2. patch minima
+3. build/test
+4. freeze
+
+## Regola 4
+**Legacy dichiarato**
+Per ogni area diciamo:
+- attivo
+- legacy
+- vietato
+
+## Regola 5
+**Backup automatici**
+Sì, conviene impostarli ogni 2 giorni, e anche:
+- backup prima di ogni fase grossa
+- zip nominato con data
+- retention ultimi 10/15
+
+## Regola 6
+**Checkpoint documento**
+Per ogni area teniamo un file di stato:
+- cosa funziona
+- cosa no
+- file attivi
+- file legacy
+- test fatti
+
+---
+
+# Se vuoi la mia proposta concreta di organizzazione
+
+## Io farei così
+### Ruolo mio
+- implementazione
+- audit
+- test
+- stabilizzazione
+
+### Ruolo tuo
+- decisioni funzionali
+- priorità business/fiscali
+- validazione operativa da studio
+
+### Ruolo eventuale ChatGPT
+- architetto/prompt controller
+- revisore specifiche
+- generatore documenti/backlog
+- non esecutore codice
+
+---
+
+# La scelta più sana
+
+## Se vuoi massima affidabilità
+**Io locale faccio tutto il lavoro tecnico.**
+ChatGPT al massimo:
+- piano
+- review
+- checklist
+- documentazione
+
+## Se vuoi massima velocità ma controllata
+**Io locale + ChatGPT controller**
+ma con regola ferrea:
+- ChatGPT non tocca il codice
+- solo specifica e controllo
+
+---
+
+# Cosa farei io, concretamente, come prossimi passi
+
+1. congelare la baseline buona su `Copia1205`
+2. impostare backup automatici
+3. scrivere un file “perimetro attivo vs legacy”
+4. chiudere definitivamente:
+   - Registrazione manuale semplice
+   - fattura fornitore
+   - partitario base
+5. poi solo dopo passare a IVA avanzata
+
+---
+
+# Mia raccomandazione finale
+
+**Sì, io posso fare tutto io.**
+Ed è probabilmente la scelta più sicura adesso.
+
+La formula migliore secondo me è:
+
+## Formula consigliata
+- **Codex locale = esecutore principale**
+- **tu = decisore funzionale**
+- **ChatGPT = architetto/controller opzionale**
+- **Claude/Copilot fuori dal ciclo operativo sul repo**
+
+Per questo progetto, oggi, la coerenza vale più del parallelismo.
+
+Se vuoi, al prossimo messaggio ti preparo subito un piano ultra pratico in 3 documenti:
+
+1. **mappa moduli attivi vs legacy da spegnere**
+2. **roadmap 30/60/90 giorni**
+3. **ordine di sviluppo preciso modulo per modulo per portare FiscoSim a livello gestionale studio**

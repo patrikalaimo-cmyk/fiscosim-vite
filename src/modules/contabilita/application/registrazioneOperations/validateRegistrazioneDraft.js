@@ -35,6 +35,7 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
   const warnings = []
   const info = []
   const rowIssues = []
+  const clienteFornitoreId = String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim()
 
   if (!String(header.dataRegistrazione || '').trim()) blockers.push('data registrazione mancante')
   if (!String(header.esercizioContabile || '').trim()) blockers.push('esercizio contabile mancante')
@@ -43,9 +44,9 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
   if (Array.isArray(behavior?.warnings)) warnings.push(...behavior.warnings)
   if (Array.isArray(behavior?.reasons)) info.push(...behavior.reasons)
   const soggettoText = String(header.soggetto || '').trim()
-  if (behavior?.showPartitario && !String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim()) {
+  if ((behavior?.showPartitario || behavior?.requiresSoggetto) && !clienteFornitoreId) {
     if (soggettoText) blockers.push('cliente / fornitore non selezionato')
-    else if (behavior?.requiresSoggetto) blockers.push('cliente / fornitore mancante')
+    else blockers.push('cliente / fornitore mancante')
   }
 
   const manualUiPolicy = buildRegistrazioneManualeUiPolicy(behavior)
@@ -66,7 +67,7 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
       field === 'causaleContabile'
         ? header.causaleContabile
         : field === 'clienteFornitoreId'
-          ? header.clienteFornitoreId || header.cliente_fornitore_id
+          ? clienteFornitoreId
           : header[field]
     const isEmpty =
       field === 'causaleContabile'
@@ -79,7 +80,7 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
 
   if (behavior?.requiresDocumentDate && !String(header.dataDocumento || '').trim()) blockers.push('data documento mancante')
   if (behavior?.requiresDocumentNumber && !String(header.numeroDocumento || '').trim()) blockers.push('numero documento mancante')
-  if (behavior?.requiresDocumentTotal && !String(header.totaleDocumento || '').trim()) warnings.push('totale documento non compilato')
+  if (behavior?.requiresDocumentTotal && !String(header.totaleDocumento || '').trim()) blockers.push('totale documento mancante')
   if (behavior?.requiresSoggetto && !String(header.soggetto || '').trim()) blockers.push('soggetto mancante')
   if (behavior?.requiresRitenuteData) {
     const hasRitenuteAnchor = Boolean(String(header.soggetto || '').trim() || String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim())

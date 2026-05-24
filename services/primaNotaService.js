@@ -23,8 +23,17 @@ export async function insertPrimaNotaPartitario({
   partEntries,
   partitarioSelect = '*',
 }) {
-  const query = db.from('prima_nota_partitario').insert(partEntries)
+  const query = db.from('partitario').insert(partEntries)
   return partitarioSelect ? query.select(partitarioSelect) : query.select()
+}
+
+export async function insertRegistriIva({
+  db = sb,
+  vatEntries,
+  vatSelect = '*',
+}) {
+  const query = db.from('registri_iva').insert(vatEntries)
+  return vatSelect ? query.select(vatSelect) : query.select()
 }
 
 export async function deletePrimaNotaById({
@@ -45,12 +54,20 @@ async function deletePrimaNotaPartitarioByPrimaNotaId({
   db = sb,
   primaNotaId,
 }) {
-  return db.from('prima_nota_partitario').delete().eq('prima_nota_id', primaNotaId)
+  return db.from('partitario').delete().eq('prima_nota_id', primaNotaId)
+}
+
+async function deleteRegistriIvaByPrimaNotaId({
+  db = sb,
+  primaNotaId,
+}) {
+  return db.from('registri_iva').delete().eq('prima_nota_id', primaNotaId)
 }
 
 async function cleanupPrimaNotaCompleta({ db = sb, primaNotaId }) {
   for (const cleanupStep of [
     () => deletePrimaNotaPartitarioByPrimaNotaId({ db, primaNotaId }),
+    () => deleteRegistriIvaByPrimaNotaId({ db, primaNotaId }),
     () => deletePrimaNotaRigheByPrimaNotaId({ db, primaNotaId }),
     () => deletePrimaNotaById({ db, primaNotaId }),
   ]) {
@@ -67,13 +84,15 @@ export async function createPrimaNotaCompleta({
   pnPayload,
   righePayload = [],
   partEntries = [],
+  vatEntries = [],
   headerSelect = 'id',
   righeSelect = '*',
   partitarioSelect = '*',
+  vatSelect = '*',
   rollbackOnRigheError = true,
 }) {
   const { data: pn, error: pnErr } = await createPrimaNota({ db, pnPayload, headerSelect })
-  if (pnErr) return { data: null, error: pnErr, pn: null, righeIns: null, partIns: null }
+  if (pnErr) return { data: null, error: pnErr, pn: null, righeIns: null, vatIns: null, partIns: null }
 
   const primaNotaId = pn?.id
   if (!primaNotaId) {
@@ -82,6 +101,7 @@ export async function createPrimaNotaCompleta({
       error: new Error('Insert prima_nota: id mancante'),
       pn,
       righeIns: null,
+      vatIns: null,
       partIns: null,
     }
   }
@@ -95,7 +115,20 @@ export async function createPrimaNotaCompleta({
     righeIns = await insertPrimaNotaRighe({ db, righePayload: righeWithPrimaNotaId, righeSelect })
     if (righeIns.error && rollbackOnRigheError) {
       await cleanupPrimaNotaCompleta({ db, primaNotaId })
-      return { data: null, error: righeIns.error, pn, righeIns, partIns: null }
+      return { data: null, error: righeIns.error, pn, righeIns, vatIns: null, partIns: null }
+    }
+  }
+
+  let vatIns = null
+  if (Array.isArray(vatEntries) && vatEntries.length > 0) {
+    const vatEntriesWithPrimaNotaId = vatEntries.map((r) => ({
+      prima_nota_id: primaNotaId,
+      ...r,
+    }))
+    vatIns = await insertRegistriIva({ db, vatEntries: vatEntriesWithPrimaNotaId, vatSelect })
+    if (vatIns.error) {
+      await cleanupPrimaNotaCompleta({ db, primaNotaId })
+      return { data: null, error: vatIns.error, pn, righeIns, vatIns, partIns: null }
     }
   }
 
@@ -105,38 +138,53 @@ export async function createPrimaNotaCompleta({
       prima_nota_id: primaNotaId,
       ...r,
     }))
-    partIns = await insertPrimaNotaPartitario({ db, partEntries: partEntriesWithPrimaNotaId, partitarioSelect })
-    if (partIns.error) {
-      await cleanupPrimaNotaCompleta({ db, primaNotaId })
-      return {
-        data: null,
-        error: partIns.error,
-        pn,
-        righeIns,
-        partIns,
+
+    // Separate openings from closures: closures have a 'documento_id' pointing to the original invoice,
+    // while openings are new records to be inserted in the partitario ledger.
+    const openings = partEntriesWithPrimaNotaId.filter(r => !r.documento_id || r.tipo_movimento === 'apertura')
+    const closures = partEntriesWithPrimaNotaId.filter(r => r.documento_id && r.tipo_movimento !== 'apertura')
+
+    if (openings.length > 0) {
+      // Clean up local property before db insert to prevent Supabase from complaining about unknown columns
+      const sanitizedOpenings = openings.map(({ tipo_movimento, ...rest }) => rest)
+      partIns = await insertPrimaNotaPartitario({ db, partEntries: sanitizedOpenings, partitarioSelect })
+      if (partIns.error) {
+        await cleanupPrimaNotaCompleta({ db, primaNotaId })
+        return {
+          data: null,
+          error: partIns.error,
+          pn,
+          righeIns,
+          vatIns,
+          partIns,
+        }
       }
     }
 
-    // Update the open items ledger (partitario) so residuals/states are consistent across the app.
-    try {
-      await applyPartitarioClosures(db, { primaNotaId, partEntries: partEntriesWithPrimaNotaId })
-    } catch (closureError) {
-      await cleanupPrimaNotaCompleta({ db, primaNotaId })
-      return {
-        data: null,
-        error: closureError,
-        pn,
-        righeIns,
-        partIns,
+    if (closures.length > 0) {
+      // Update the open items ledger (partitario) so residuals/states are consistent across the app.
+      try {
+        await applyPartitarioClosures(db, { primaNotaId, partEntries: closures })
+      } catch (closureError) {
+        await cleanupPrimaNotaCompleta({ db, primaNotaId })
+        return {
+          data: null,
+          error: closureError,
+          pn,
+          righeIns,
+          vatIns,
+          partIns,
+        }
       }
     }
   }
 
   return {
-    data: { primaNotaId, pn, righeIns, partIns },
+    data: { primaNotaId, pn, righeIns, vatIns, partIns },
     error: null,
     pn,
     righeIns,
+    vatIns,
     partIns,
   }
 }

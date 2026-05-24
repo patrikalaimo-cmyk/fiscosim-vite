@@ -17,6 +17,7 @@ import { ModuloImpostazioni }     from './modules/impostazioni'
 import { ModuloImpostazioniProcedure } from './modules/impostazioni_procedure'
 import { ModuloDeleghe }          from './modules/deleghe'
 import { ModuloImportUnificato }  from './modules/import_unificato'
+import { ModuloImportContabilita } from './modules/import_contabilita'
 import { ModuloExportDati }       from './modules/export_dati'
 import { ModuloContabilita }      from './modules/contabilita'
 import { ModuloPianoConti }       from './modules/piano_conti'
@@ -74,6 +75,7 @@ function ShellIcon({ itemId, className = '' }) {
       return <svg {...props}><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM16.5 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM3.5 18.5c.8-2.4 3-3.5 4.8-3.5 1.8 0 4 .9 4.7 3M13 18c.5-1.6 1.9-2.5 3.5-2.5 1.4 0 2.8.7 3.5 2" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'import':
     case 'import_unificato':
+    case 'import_contabilita':
     case 'export_dati':
       return <svg {...props}><path d="M12 3v11M7.5 9.5 12 14l4.5-4.5M5 19h14" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     case 'fatture_ade':
@@ -244,7 +246,7 @@ function App() {
   const logout = () => { setUtente(null); setTab('dashboard'); setShowLogoutConfirm(false) }
   const navigateTo = (nextTab) => {
     if (nextTab === 'import_nuovo') {
-      setTab('import_unificato')
+      setTab('import_contabilita')
       return
     }
     if (nextTab === 'iva') {
@@ -488,6 +490,7 @@ function App() {
           {tab === 'deleghe'      && <ModuloDeleghe />}
 
           {/* DOCUMENT HUB */}
+          {tab === 'import_contabilita' && <ModuloImportContabilita ruolo={ruolo} />}
           {tab === 'import_unificato'  && <ModuloImportUnificato ruolo={ruolo} />}
           {tab === 'export_dati'       && <ModuloExportDati onNavigate={navigateTo} />}
           {tab === 'fatture_ade'       && <ModuloFattureADE />}

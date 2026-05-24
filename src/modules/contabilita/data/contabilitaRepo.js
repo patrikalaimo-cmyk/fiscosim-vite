@@ -488,6 +488,12 @@ export function bulkDeactivateCausali(table, ids) {
   return sb.from(table).update({ attivo: false }).in('id', ids)
 }
 
+export async function getCausaleById(table, id) {
+  if (!table || !id) return { data: null, error: null }
+  const { data, error } = await sb.from(table).select('*').eq('id', id).limit(1).maybeSingle()
+  return { data: data || null, error: error || null }
+}
+
 export function updateCausale(table, id, updates) {
   return sb.from(table).update(updates).eq('id', id)
 }

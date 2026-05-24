@@ -32,7 +32,7 @@ const SETTINGS_TABS = [
 
 const BANCHE_TABS = [
   { id: 'movimenti_banca', label: 'Movimenti bancari' },
-  { id: 'riconciliazione', label: 'Riconciliazione' },
+  { id: 'riconciliazione', label: 'Riconciliazione bancaria' },
 ]
 
 const ADEMPIMENTI_TABS = [
@@ -70,7 +70,7 @@ const CONT_SIDEBAR_MENU = [
   {
     section: 'STRUMENTI / FUNZIONI',
     items: [
-      { id: 'riconciliazione', icon: 'bank', label: 'Riconciliazione avanzata' },
+      { id: 'riconciliazione', icon: 'bank', label: 'Riconciliazione bancaria' },
       { id: 'stampe', icon: 'book_open', label: 'Stampe' },
       { id: 'adempimenti', icon: 'percent', label: 'Adempimenti' },
       { id: 'impostazioni', icon: 'building', label: 'Impostazioni' },
@@ -143,7 +143,7 @@ const CONT_TAB_META = {
     subtitle: 'Riconciliazione e controllo dei movimenti con focus operativo sui flussi ancora aperti.',
   },
   riconciliazione: {
-    title: 'Riconciliazione',
+    title: 'Riconciliazione bancaria',
     subtitle: 'Workspace dedicato al matching fra movimenti e contabilita per chiudere i disallineamenti.',
   },
   liquidazioni_iva: {
@@ -608,7 +608,7 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
           <div className="empty"><div className="empty-ico">🏢</div><div className="empty-t">Seleziona o crea una società</div></div>
         ):(
           <div className="cont-module-shell compact-shell">
-            {!isDaValidareWorkspace && effectiveTab !== 'prima_nota_guidata' && (
+            {!isDaValidareWorkspace && effectiveTab !== 'prima_nota_guidata' && effectiveTab !== 'riconciliazione' && (
               <ModuleHeader
                 sectionLabel="Contabilità"
                 title={headerTitle}
