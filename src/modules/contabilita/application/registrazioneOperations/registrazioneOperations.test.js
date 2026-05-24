@@ -36,6 +36,7 @@ import { normalizeRegistrazioneRigheTemplate } from '../../domain/registrazione/
 import { buildCausaleStructureHistory } from './buildCausaleStructureHistory.js'
 import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/resolveRegistrazioneRigheTemplate.js'
 import { resolveRegistrazioneTemplateRowAccount } from './resolveRegistrazioneTemplateRowAccount.js'
+import { createPrimaNotaCompleta } from '../../../../../services/primaNotaService.js'
 
 const pianoConti = [
   { id: 'c1', codice: '100', descrizione: 'Cassa', livello: 3, tipo: 'FINALE' },
@@ -97,6 +98,67 @@ const causaleTemplateFF = {
       attiva: true,
     },
   ],
+}
+
+function buildPrimaNotaCompletaDbMock({
+  headerId = 'pn-1',
+  righeError = null,
+  partError = null,
+} = {}) {
+  const calls = []
+
+  const buildInsertQuery = (table, payload) => {
+    if (table === 'prima_nota') {
+      return {
+        select: () => ({
+          single: () => ({ data: { id: headerId }, error: null }),
+        }),
+      }
+    }
+
+    if (table === 'prima_nota_righe') {
+      return {
+        select: () => ({
+          data: righeError ? null : payload,
+          error: righeError,
+        }),
+      }
+    }
+
+    if (table === 'prima_nota_partitario') {
+      return {
+        select: () => ({
+          data: partError ? null : payload,
+          error: partError,
+        }),
+      }
+    }
+
+    throw new Error(`Unexpected insert table: ${table}`)
+  }
+
+  return {
+    calls,
+    db: {
+      from(table) {
+        return {
+          insert(payload) {
+            calls.push({ kind: 'insert', table, payload })
+            return buildInsertQuery(table, payload)
+          },
+          delete() {
+            calls.push({ kind: 'delete', table })
+            return {
+              eq(column, value) {
+                calls.push({ kind: 'eq', table, column, value })
+                return { data: null, error: null }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
 }
 
 test('calculateRegistrazioneTotals somma dare, avere e differenza', () => {
@@ -161,10 +223,14 @@ test('buildRegistrazioneDraft produce pnPayload e righePayload compatibili', () 
 
   assert.equal(result.validation.status, 'ok')
   assert.equal(result.draft.pnPayload.societa_id, 'soc-1')
-  assert.equal(result.draft.pnPayload.esercizio_contabile, '2026')
+  assert.equal(result.draft.pnPayload.esercizio, 2026)
+  assert.equal(result.draft.pnPayload.numero_documento, 'A-100')
   assert.equal(result.draft.pnPayload.causale_codice, 'FF')
+  assert.equal(Object.hasOwn(result.draft.pnPayload, 'scope'), false)
   assert.equal(result.draft.righePayload.length, 2)
   assert.equal(result.draft.righePayload[0].conto_id, 'c1')
+  assert.equal(result.draft.righePayload[0].dare, 100)
+  assert.equal(result.draft.righePayload[1].avere, 100)
 })
 
 test('buildRegistrazioneDraft conserva il cliente/fornitore selezionato dal piano conti', () => {
@@ -859,6 +925,45 @@ test('buildRegistrazionePartitarioDraft costruisce una apertura partita automati
   assert.equal(draft.importoAperto, 1220)
   assert.equal(draft.rows[0].stato, 'apertura_predisposta')
   assert.equal(draft.rows[0].source, 'document_data')
+})
+
+test('createPrimaNotaCompleta pulisce testata e righe se fallisce l inserimento righe', async () => {
+  const righeError = new Error('righe insert failed')
+  const { db, calls } = buildPrimaNotaCompletaDbMock({ righeError })
+
+  const result = await createPrimaNotaCompleta({
+    db,
+    pnPayload: { societa_id: 'soc-1', esercizio_contabile: '2026' },
+    righePayload: [{ conto_id: 'c1', dare: 100, avere: 0 }],
+  })
+
+  assert.equal(result.error, righeError)
+  assert.deepEqual(
+    calls
+      .filter((call) => call.kind === 'delete')
+      .map((call) => call.table),
+    ['prima_nota_partitario', 'prima_nota_righe', 'prima_nota']
+  )
+})
+
+test('createPrimaNotaCompleta pulisce anche il ramo partitario se fallisce l inserimento partitario', async () => {
+  const partError = new Error('partitario insert failed')
+  const { db, calls } = buildPrimaNotaCompletaDbMock({ partError })
+
+  const result = await createPrimaNotaCompleta({
+    db,
+    pnPayload: { societa_id: 'soc-1', esercizio_contabile: '2026' },
+    righePayload: [{ conto_id: 'c1', dare: 100, avere: 0 }],
+    partEntries: [{ documento_id: 'part-1', importo_chiuso: 50 }],
+  })
+
+  assert.equal(result.error, partError)
+  assert.deepEqual(
+    calls
+      .filter((call) => call.kind === 'delete')
+      .map((call) => call.table),
+    ['prima_nota_partitario', 'prima_nota_righe', 'prima_nota']
+  )
 })
 
 test('buildRegistrazionePartitarioDraft usa il totale della testata quando documentData e vuoto', () => {

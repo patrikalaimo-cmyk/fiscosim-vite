@@ -39,6 +39,24 @@ import { RegistrazioneAccountSearchModal } from '../components/registrazione/Reg
 
 const REAL_SAVE_TEMPORARILY_BLOCKED = true
 
+function canUseRealSaveForSimplePrimaNota(draftModel = {}, selectedCausaleConfig = {}) {
+  const config = selectedCausaleConfig && typeof selectedCausaleConfig === 'object' ? selectedCausaleConfig : {}
+  const validation = draftModel?.validation && typeof draftModel.validation === 'object' ? draftModel.validation : {}
+  const totals = draftModel?.totals && typeof draftModel.totals === 'object' ? draftModel.totals : {}
+  const activeTabs = Array.isArray(config.activeTabs) ? config.activeTabs : []
+  const rowsOnly = activeTabs.length === 1 && activeTabs[0] === 'rows'
+
+  return Boolean(
+    validation.status === 'ok' &&
+    totals.isBalanced === true &&
+    !config.showDocumentPanel &&
+    !config.showIvaPanel &&
+    !config.showPartitario &&
+    !config.showRitenute &&
+    rowsOnly
+  )
+}
+
 async function loadPianoContiFromLocalApi(societaId) {
   const id = String(societaId || '').trim()
   if (!id) return []
@@ -424,6 +442,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const resolvedRows = draftModel.normalized.rows
   const totals = draftModel.totals
   const templateRowsDraft = draftModel.templateRowsDraft || null
+  const realSaveEnabled = canUseRealSaveForSimplePrimaNota(draftModel, selectedCausaleConfig)
   const canRunDryCommit = Boolean(draftStarted && totals?.isBalanced && draftModel.validation?.status === 'ok' && !saving)
   const dryCommitBlockReason = String(
     draftModel.validation?.blockers?.[0] ||
@@ -1161,12 +1180,12 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       setError('Seleziona una società attiva prima di salvare.')
       return
     }
-    if (REAL_SAVE_TEMPORARILY_BLOCKED) {
-      setError('Salvataggio reale disabilitato. Usa Controlla registrazione.')
-      return
-    }
     if (draftModel.validation.status === 'blocked') {
       setError(draftModel.validation.blockers.join(' · '))
+      return
+    }
+    if (REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled) {
+      setError('Salvataggio reale ancora non abilitato per questo caso. Usa Controlla registrazione.')
       return
     }
     setSaving(true)
@@ -1271,7 +1290,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           onGotoChange={scrollToSection}
           gotoTarget={gotoTarget}
           saving={saving}
-          realSaveBlocked={REAL_SAVE_TEMPORARILY_BLOCKED}
+          realSaveBlocked={REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled}
           draftStarted={draftStarted}
         />
 
@@ -1286,9 +1305,11 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         />
 
         <div className="alert alert-warn" style={{ marginBottom: '.55rem', padding: '.45rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}>
-          <strong>Salvataggio reale disabilitato.</strong>
+          <strong>{realSaveEnabled ? 'Salvataggio reale abilitato per prima nota semplice.' : 'Salvataggio reale disabilitato.'}</strong>
           <div style={{ fontSize: '.75rem', marginTop: '.15rem' }}>
-            Usa <strong>Controlla registrazione</strong> per il dry-run. Il salvataggio reale resta bloccato in questa fase.
+            {realSaveEnabled
+              ? 'Il salvataggio reale resta disponibile solo per la prima nota semplice bilanciata; i casi complessi restano bloccati.'
+              : <><strong>Controlla registrazione</strong> per il dry-run. Il salvataggio reale resta bloccato in questa fase.</>}
           </div>
         </div>
 

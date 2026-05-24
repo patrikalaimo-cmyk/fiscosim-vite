@@ -34,6 +34,34 @@ export async function deletePrimaNotaById({
   return db.from('prima_nota').delete().eq('id', primaNotaId)
 }
 
+async function deletePrimaNotaRigheByPrimaNotaId({
+  db = sb,
+  primaNotaId,
+}) {
+  return db.from('prima_nota_righe').delete().eq('prima_nota_id', primaNotaId)
+}
+
+async function deletePrimaNotaPartitarioByPrimaNotaId({
+  db = sb,
+  primaNotaId,
+}) {
+  return db.from('prima_nota_partitario').delete().eq('prima_nota_id', primaNotaId)
+}
+
+async function cleanupPrimaNotaCompleta({ db = sb, primaNotaId }) {
+  for (const cleanupStep of [
+    () => deletePrimaNotaPartitarioByPrimaNotaId({ db, primaNotaId }),
+    () => deletePrimaNotaRigheByPrimaNotaId({ db, primaNotaId }),
+    () => deletePrimaNotaById({ db, primaNotaId }),
+  ]) {
+    try {
+      await cleanupStep()
+    } catch {
+      // best effort cleanup: preserve the original save failure
+    }
+  }
+}
+
 export async function createPrimaNotaCompleta({
   db = sb,
   pnPayload,
@@ -66,11 +94,7 @@ export async function createPrimaNotaCompleta({
     }))
     righeIns = await insertPrimaNotaRighe({ db, righePayload: righeWithPrimaNotaId, righeSelect })
     if (righeIns.error && rollbackOnRigheError) {
-      try {
-        await deletePrimaNotaById({ db, primaNotaId })
-      } catch {
-        // rollback best effort
-      }
+      await cleanupPrimaNotaCompleta({ db, primaNotaId })
       return { data: null, error: righeIns.error, pn, righeIns, partIns: null }
     }
   }
@@ -82,22 +106,29 @@ export async function createPrimaNotaCompleta({
       ...r,
     }))
     partIns = await insertPrimaNotaPartitario({ db, partEntries: partEntriesWithPrimaNotaId, partitarioSelect })
-    if (!partIns.error) {
-      // Update the open items ledger (partitario) so residuals/states are consistent across the app.
-      try {
-        await applyPartitarioClosures(db, { primaNotaId, partEntries: partEntriesWithPrimaNotaId })
-      } catch {
-        // best effort: never block PN creation for a closure side effect
+    if (partIns.error) {
+      await cleanupPrimaNotaCompleta({ db, primaNotaId })
+      return {
+        data: null,
+        error: partIns.error,
+        pn,
+        righeIns,
+        partIns,
       }
     }
-  }
-  if (partIns?.error) {
-    return {
-      data: null,
-      error: partIns.error,
-      pn,
-      righeIns,
-      partIns,
+
+    // Update the open items ledger (partitario) so residuals/states are consistent across the app.
+    try {
+      await applyPartitarioClosures(db, { primaNotaId, partEntries: partEntriesWithPrimaNotaId })
+    } catch (closureError) {
+      await cleanupPrimaNotaCompleta({ db, primaNotaId })
+      return {
+        data: null,
+        error: closureError,
+        pn,
+        righeIns,
+        partIns,
+      }
     }
   }
 
