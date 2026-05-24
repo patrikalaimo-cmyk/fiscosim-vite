@@ -95,7 +95,9 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
     const contoItem = hasPianoConti && state.hasConto ? pianoConti.find((item) => String(item?.id || '').trim() === state.contoId) || null : null
     const contoHierarchy = contoItem ? resolveContoHierarchyView(contoItem) : null
     const contoInCatalog = Boolean(contoItem)
-    if (!state.hasConto && !hasContaText) blockers.push(`${rowLabel}: conto mancante`)
+    if (!state.hasConto) {
+      blockers.push(hasPianoConti && hasContaText ? `${rowLabel}: conto inesistente, selezionare un conto oppure eliminare la riga` : `${rowLabel}: conto mancante`)
+    }
     if (hasPianoConti && ((hasContaText && !state.hasConto) || (state.hasConto && !contoInCatalog))) {
       blockers.push(`${rowLabel}: conto inesistente, selezionare un conto oppure eliminare la riga`)
     }

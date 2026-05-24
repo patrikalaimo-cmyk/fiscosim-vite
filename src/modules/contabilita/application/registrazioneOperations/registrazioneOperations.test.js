@@ -257,6 +257,65 @@ test('buildRegistrazioneDraft conserva il cliente/fornitore selezionato dal pian
   assert.equal(result.draft.pnPayload.cliente_fornitore_nome, '2 03 08 0001 - Piccoli cespiti')
 })
 
+test('buildRegistrazioneDraft risolve il PK reale anche quando la riga porta una label conto', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        causaleContabileId: 'ff',
+        soggetto: 'Fornitore demo',
+        clienteFornitoreId: 'cf-1',
+        clienteFornitoreNome: 'Fornitore demo',
+        clienteFornitoreCodice: '2 03 08 0001',
+        clienteFornitoreTipo: 'fornitore',
+      },
+      rows: [
+        { contoQuery: '2 03 08 0001 - Fornitore demo', conto_id: '2 03 08 0001 - Fornitore demo', descrizione: 'Fornitore', dare: 0, avere: 122 },
+        { contoQuery: '6 01 03 0001 - Spese telefoniche', conto_id: '6 01 03 0001 - Spese telefoniche', descrizione: 'Costo', dare: 100, avere: 0 },
+      ],
+    },
+    {
+      pianoConti: [
+        { id: 'cf-1', codice: '2 03 08 0001', descrizione: 'Fornitore demo', is_fornitore: true, livello: 3, tipo: 'FINALE' },
+        { id: 'costo-1', codice: '6 01 03 0001', descrizione: 'Spese telefoniche', livello: 3, tipo: 'FINALE' },
+      ],
+      causaliContabili: [causaleTemplateFF],
+      selectedCausale: causaleTemplateFF,
+    }
+  )
+
+  assert.equal(result.normalized.rows[0].conto_id, 'cf-1')
+  assert.equal(result.normalized.rows[0].conto_codice, '2 03 08 0001')
+  assert.equal(result.normalized.rows[0].conto_descrizione, 'Fornitore demo')
+})
+
+test('buildRegistrazioneDraft blocca una riga che espone solo una label conto senza PK reale', () => {
+  const result = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-05-01',
+        causaleContabileId: 'mg',
+      },
+      rows: [
+        { contoQuery: '2 03 08 0001 - Fornitore demo', conto_id: '2 03 08 0001 - Fornitore demo', dare: 0, avere: 122 },
+        { contoQuery: '6 01 03 0001 - Spese telefoniche', conto_id: '6 01 03 0001 - Spese telefoniche', dare: 122, avere: 0 },
+      ],
+    },
+    {
+      pianoConti: [],
+      causaliContabili: [{ id: 'mg', codice: 'MG', descrizione: 'Movimento generale' }],
+      selectedCausale: { id: 'mg', codice: 'MG', descrizione: 'Movimento generale' },
+    }
+  )
+
+  assert.equal(result.validation.status, 'blocked')
+  assert.ok(result.validation.blockers.some((item) => String(item).includes('conto mancante')))
+})
+
 test('resolveRegistrazioneEsercizio propone esercizio coerente con la data', () => {
   const result = resolveRegistrazioneEsercizio({
     esercizio: '2025',
@@ -1894,6 +1953,53 @@ test('buildRegistrazioneRowsFromTemplate genera il template FF con importi coere
   assert.equal(result.rows[0].avere, '122.00')
   assert.equal(result.rows[1].dare, '22.00')
   assert.equal(result.rows[2].dare, '100.00')
+})
+
+test('buildRegistrazioneRowsFromTemplate orienta il soggetto in avere per il fornitore e in dare per il cliente', () => {
+  const fornitoreRows = buildRegistrazioneRowsFromTemplateResolved({
+    templateRows: [{ ordine: 1, ruolo: 'soggetto', lato: 'dare', formula_importo: 'totale_documento', attiva: true }],
+    documentData: { totaleDocumento: 122 },
+    soggetto: { clienteFornitoreId: 'cf-1', clienteFornitoreCodice: '2 03 08 0001', clienteFornitoreNome: 'Fornitore demo', clienteFornitoreTipo: 'fornitore' },
+    currentRows: [],
+    causaleBehavior: resolveRegistrazioneCausaleBehavior(causaleTemplateFF),
+  })
+
+  const clienteRows = buildRegistrazioneRowsFromTemplateResolved({
+    templateRows: [{ ordine: 1, ruolo: 'soggetto', lato: 'avere', formula_importo: 'totale_documento', attiva: true }],
+    documentData: { totaleDocumento: 122 },
+    soggetto: { clienteFornitoreId: 'cl-1', clienteFornitoreCodice: '1 01 01 0001', clienteFornitoreNome: 'Cliente demo', clienteFornitoreTipo: 'cliente' },
+    currentRows: [],
+    causaleBehavior: resolveRegistrazioneCausaleBehavior(causaleTemplateFF),
+  })
+
+  assert.equal(fornitoreRows.rows[0].lato, 'avere')
+  assert.equal(fornitoreRows.rows[0].avere, '122.00')
+  assert.equal(clienteRows.rows[0].lato, 'dare')
+  assert.equal(clienteRows.rows[0].dare, '122.00')
+})
+
+test('buildRegistrazioneRowsFromTemplate aggiorna gli importi template al cambiare del totale documento', () => {
+  const initial = buildRegistrazioneRowsFromTemplateResolved({
+    templateRows: causaleTemplateFF.righe_prima_nota_template,
+    documentData: { totaleDocumento: 122, imponibile: 100 },
+    ivaDraft: { ivaDetraibile: 22 },
+    soggetto: { clienteFornitoreId: 'cf-1', clienteFornitoreTipo: 'fornitore' },
+    currentRows: [],
+    causaleBehavior: resolveRegistrazioneCausaleBehavior(causaleTemplateFF),
+  })
+
+  const rerun = buildRegistrazioneRowsFromTemplateResolved({
+    templateRows: causaleTemplateFF.righe_prima_nota_template,
+    documentData: { totaleDocumento: 140, imponibile: 118 },
+    ivaDraft: { ivaDetraibile: 22 },
+    soggetto: { clienteFornitoreId: 'cf-1', clienteFornitoreTipo: 'fornitore' },
+    currentRows: initial.rows,
+    causaleBehavior: resolveRegistrazioneCausaleBehavior(causaleTemplateFF),
+  })
+
+  assert.equal(initial.rows[0].avere, '122.00')
+  assert.equal(rerun.rows[0].avere, '140.00')
+  assert.equal(rerun.rows[2].dare, '118.00')
 })
 
 test('buildRegistrazioneRowsFromTemplate considera il conto scope come template e non come finale', () => {

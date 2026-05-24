@@ -176,6 +176,20 @@ E. Se procedi con il prossimo step, terrei il cambiamento entro 2 file: primaNot
 - Rischi residui: build con warning non bloccanti fuori perimetro; atomicità solo best effort; worktree già sporco con modifiche non correlate
 - Test manuali richiesti: dopo il microfix, provare una registrazione manuale semplice bilanciata, verificare che il dry-run resti pulito e che il save, quando abilitato, scriva solo PN + righe senza effetti collaterali extra
 - RESET NON ESEGUITO: sì
+
+## BACKUP ZIP CHECKPOINT — save reale PN semplice
+- Path repo sorgente: `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+- Cartella backup destinazione: `C:\Users\patri\Desktop\copie backup fiscosim`
+- Nome file ZIP creato: `fiscosim-checkpoint-save-pn-semplice-2026-05-24-0252.zip`
+- Percorso completo ZIP: `C:\Users\patri\Desktop\copie backup fiscosim\fiscosim-checkpoint-save-pn-semplice-2026-05-24-0252.zip`
+- Dimensione ZIP: `2866465` byte
+- Commit hash checkpoint incluso: `c710ecd3acf2bf6b78fd467cb29674f80ddd76d8`
+- Git status prima del backup: `M src/App.jsx`, `M src/assets/global.css`, `M src/modules/contabilita/index.jsx`, `M src/modules/contabilita/views/BankingView.jsx`, `M src/shared/constants/index.js`, più molti file non tracciati fuori perimetro; il checkpoint era già presente in `git log`
+- Conferma esclusioni: `node_modules`, `.git`, `dist`, `.vite`, `coverage` esclusi dallo ZIP; il backup è stato creato tramite staging temporaneo fuori repo
+- Conferma che codice non è stato modificato: sì, nessun file codice della repo è stato modificato per creare il backup ZIP
+- Conferma che reset/checkout/restore/clean/commit non sono stati eseguiti: sì, non eseguiti per il backup
+- Eventuali file lasciati unstaged già presenti: `src/App.jsx`, `src/assets/global.css`, `src/modules/contabilita/index.jsx`, `src/modules/contabilita/views/BankingView.jsx`, `src/shared/constants/index.js`, più numerosi file non tracciati fuori perimetro già presenti nel worktree
+- Prossimo step consigliato: backup ZIP datato
 - CHECKOUT NON ESEGUITO: sì
 - RESTORE NON ESEGUITO: sì
 - CLEAN NON ESEGUITO: sì
@@ -210,12 +224,13 @@ E. Se procedi con il prossimo step, terrei il cambiamento entro 2 file: primaNot
 
 ## COMMIT CHECKPOINT — save reale PN semplice
 - Path usato: `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
-- Git status iniziale: `M REPORT/REPORT_CODEX.md`, `M services/primaNotaService.js`, `M src/App.jsx`, `M src/assets/global.css`, `M src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `M src/modules/contabilita/index.jsx`, `M src/modules/contabilita/views/BankingView.jsx`, `M src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `M src/shared/constants/index.js`, più molti file non tracciati fuori perimetro lasciati invariati
-- File staged: da completare dopo staging ristretto ai soli file autorizzati effettivamente modificati
-- File lasciati unstaged: tutti i file fuori perimetro, inclusi `src/App.jsx`, `src/assets/global.css`, `src/shared/constants/index.js`, `src/modules/contabilita/index.jsx`, `src/modules/contabilita/views/BankingView.jsx`, i file Import Contabilità, i file Import Documenti, i file Riconciliazione bancaria, i DB/migration/env/Supabase, e ogni altro file non elencato tra quelli autorizzati
-- Commit hash creato: da completare dopo il commit
-- Git status finale: da completare dopo il commit
-- Conferma file vietati non staged: da verificare dopo lo staging ristretto
+- Git status iniziale: `M REPORT/REPORT_CODEX.md`, `M src/App.jsx`, `M src/assets/global.css`, `M src/modules/contabilita/index.jsx`, `M src/modules/contabilita/views/BankingView.jsx`, `M src/shared/constants/index.js`, più molti file non tracciati fuori perimetro
+- Commit già esistente o creato: già esistente; nessun nuovo commit creato in questa verifica
+- Commit hash: `c710ecd3acf2bf6b78fd467cb29674f80ddd76d8`
+- File staged: nessuno in questa verifica
+- File lasciati unstaged: `REPORT/REPORT_CODEX.md`, `src/App.jsx`, `src/assets/global.css`, `src/modules/contabilita/index.jsx`, `src/modules/contabilita/views/BankingView.jsx`, `src/shared/constants/index.js`, più molti file non tracciati fuori perimetro
+- Git status finale: worktree ancora sporco con gli stessi file non staged sopra e molti file non tracciati fuori perimetro
+- Conferma file vietati non staged: sì, i file vietati non sono stati staged
 - Conferma reset/checkout/restore/clean non eseguiti: sì, non eseguiti
 - Prossimo step consigliato: backup ZIP datato
 
@@ -286,6 +301,21 @@ E. Se procedi con il prossimo step, terrei il cambiamento entro 2 file: primaNot
 - CLEAN NON ESEGUITO: sì
 - COMMIT NON ESEGUITO: sì
 - BACKUP NON ESEGUITO: sì
+
+## VERIFICA DIFF IM-RECOVERY-05
+- Data: 2026-05-24
+- Path usato: `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`
+- Modello/strumento usato: GPT 5.4 mini Medium; PowerShell; `read_file`, `apply_patch`, `run_in_terminal`, `grep_search`
+- Stato git iniziale: worktree già sporco con modifiche non correlate e file non tracciati fuori perimetro; nessun reset/checkout/restore eseguito
+- File letti: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`, `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneRigheTemplate.js`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`, `src/modules/contabilita/domain/registrazione/buildRegistrazioneManualeUiPolicy.js`, `REPORT/REPORT_CODEX.md`
+- File modificati nel diff review: `REPORT/REPORT_CODEX.md`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`, `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/application/registrazioneOperations/registrazioneOperations.test.js`; inoltre `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js` e `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js` risultano nuovi file untracked nel worktree e quindi non compaiono in `git diff --stat`
+- Motivo di `normalizeRegistrazioneInput.js`: serve a eliminare il fallback da label/codice verso `conto_id` e a propagare `clienteFornitoreTipo` nell'header; senza questa normalizzazione il bug label/PK resta possibile anche se validatore e view sono corretti
+- Indispensabilità: sì, per evitare che una label identifichi un conto al posto del PK reale e per mantenere coerente il contesto soggetto nelle righe generate da template
+- Rischio regressione PN semplice: basso ma non nullo; il cambio restringe il `conto_id` ai soli ID reali e può far emergere come errore casi che prima passavano con label non risolte, ma non altera i casi già risolti correttamente con PK valido
+- Ambito toccato: non solo normalizzazione conto; la modifica tocca anche header soggetto/cliente-fornitore, orientamento delle righe template e validazione del draft, oltre ai test di regressione
+- Modifiche fuori perimetro non giustificate: nel diff review di IM-RECOVERY-05 non emergono nuove modifiche a `src/App.jsx`, `src/assets/global.css`, `src/shared/constants/index.js`, `src/modules/contabilita/index.jsx`, `src/modules/contabilita/views/BankingView.jsx`, Import o Riconciliazione; queste restano dirty nel worktree ma non sono state toccate in questo step
+- Esito diff: la correzione è tecnicamente coerente e mirata al bug PK/label; l'unico punto da chiarire prima del commit è che due file nuovi sono ancora untracked e vanno considerati parte esplicita della stessa fix, non aggiunte accidentali
+- Raccomandazione: accettare il fix come corretto sul merito, ma prima del commit allineare lo staging includendo esplicitamente anche i due file nuovi se si vuole chiudere IM-RECOVERY-05 in modo pulito
 
 ## IM-RECOVERY-03 — blindare save PN semplice prima di sbloccare il save reale
 - Path usato: `C:\Users\patri\Desktop\fiscosim-viteBACKUP - Copia1205`

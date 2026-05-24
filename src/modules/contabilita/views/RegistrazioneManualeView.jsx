@@ -147,6 +147,18 @@ function makeEmptyIvaRow(index = 0) {
   }
 }
 
+function resolveCounterpartyRole(conto = {}) {
+  if (conto?.is_fornitore) return 'fornitore'
+  if (conto?.is_cliente) return 'cliente'
+  return ''
+}
+
+function resolveCounterpartySide(conto = {}, fallback = '') {
+  if (conto?.is_fornitore) return 'avere'
+  if (conto?.is_cliente) return 'dare'
+  return fallback === 'avere' || fallback === 'dare' ? fallback : ''
+}
+
 function hasManualRegistrazioneRowContent(row = {}) {
   if (!row || typeof row !== 'object') return false
   if (row.manualEdited || row.manualAmountOverride || row.subjectAccountSynced) return true
@@ -880,7 +892,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           ? {
               ...row,
               contoQuery: contoLabel || contoDescrizione,
-              conto_id: selected.id || selected.value || selected.codice || selected.code || '',
+              conto_id: String(selected.id || selected.value || '').trim(),
               conto_codice: String(selected.codice || selected.code || selected.sigla || selected.id || '').trim(),
               conto_descrizione: contoDescrizione,
               manualEdited: true,
@@ -897,11 +909,12 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     return focusField
   }
 
-  const buildCounterpartyHeader = (prevHeader, { contoId = '', contoCode = '', contoName = '', soggetto = '' }) => {
+  const buildCounterpartyHeader = (prevHeader, { contoId = '', contoCode = '', contoName = '', soggetto = '', contoTipo = '' }) => {
     const nextSoggetto = String(soggetto || contoName || '').trim()
     const nextId = String(contoId || '').trim()
     const nextCode = String(contoCode || '').trim()
     const nextName = String(contoName || nextSoggetto || '').trim()
+    const nextTipo = String(contoTipo || '').trim()
 
     return {
       ...prevHeader,
@@ -912,6 +925,8 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       cliente_fornitore_codice: nextCode,
       clienteFornitoreNome: nextName,
       cliente_fornitore_nome: nextName,
+      clienteFornitoreTipo: nextTipo,
+      cliente_fornitore_tipo: nextTipo,
     }
   }
 
@@ -945,15 +960,16 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       if (updated || !isTemplateSubjectRowCandidate(row)) return row
       if (row.manualEdited || row.manualAmountOverride) return row
       updated = true
+      const role = resolveCounterpartyRole(selected)
       return {
         ...row,
-        templateRole: 'soggetto',
+        templateRole: role || 'soggetto',
         subjectAccountSynced: true,
         templateGenerated: row.templateGenerated !== false,
         templateScope: false,
         isTemplateScope: false,
         contoQuery,
-        conto_id: String(subjectSelection.id || subjectSelection.value || subjectSelection.codice || subjectSelection.code || '').trim(),
+        conto_id: String(subjectSelection.id || subjectSelection.value || '').trim(),
         conto_codice: String(subjectSelection.codice || subjectSelection.code || subjectSelection.sigla || subjectSelection.id || '').trim(),
         conto_descrizione: contoDescrizione,
         hierarchyType: String(hierarchy?.hierarchyType || subjectSelection.hierarchyType || row.hierarchyType || '').trim(),
@@ -963,6 +979,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         templateConfidence: 1,
         templateReasons: ['Conto risolto dal soggetto selezionato in testata'],
         templateWarnings: [],
+        lato: resolveCounterpartySide(selected, row.lato),
       }
     })
   }
@@ -972,10 +989,11 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     setError('')
     setSuccess('')
     const selected = buildRegistrazioneContoSelection(conto, conto?.__label || conto?.conto_label || conto?.displayLabel || resolveRegistrazioneContoLabel(conto))
-    const contoId = String(selected.id || selected.value || selected.codice || selected.code || '').trim()
+    const contoId = String(selected.id || selected.value || '').trim()
     const contoCode = String(selected.codice || selected.code || selected.sigla || selected.id || '').trim()
     const selectedLabel = selected.__label || resolveRegistrazioneContoLabel(selected)
     const contoDescrizione = selected.conto_descrizione || resolveRegistrazioneContoDescrizione(selected)
+    const contoTipo = resolveCounterpartyRole(selected)
     setState((prev) => ({
       ...prev,
       header: buildCounterpartyHeader(prev.header, {
@@ -983,6 +1001,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         contoCode,
         contoName: selectedLabel || contoDescrizione,
         soggetto: selectedLabel,
+        contoTipo,
       }),
       rows: syncCounterpartySubjectRow(prev.rows, selected),
     }))
