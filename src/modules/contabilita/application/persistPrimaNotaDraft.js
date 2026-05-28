@@ -1,6 +1,8 @@
 import { createPrimaNotaCompleta } from '../../../../services/primaNotaService.js'
 import { calculatePrimaNotaDraftTotals } from './canonical_mapper/calculatePrimaNotaDraftTotals.js'
 import { normalizeText, round2 } from './canonical_mapper/utils.js'
+import { mapRegistrazioneManualeToCanonical } from '../canonical/mappers/mapRegistrazioneManualeToCanonical.js'
+
 
 function normalizeDbText(value) {
   const text = normalizeText(value)
@@ -289,6 +291,39 @@ function mapPartitarioClosureForDb(row = {}, pnPayload = {}) {
   }
 }
 
+function mapRitenutaRowForDb(ritDraft = {}, pnPayload = {}) {
+  const compensoLordo = normalizeDbAmount(ritDraft.importoCompenso)
+  const ritenuta = normalizeDbAmount(ritDraft.ritenuta)
+  const compensoNetto = normalizeDbAmount(ritDraft.netto)
+
+  const auditPayload = {
+    primaNotaId: '__PRIMA_NOTA_ID_PLACEHOLDER__',
+    causaleCu: ritDraft.causaleCu || null,
+    codiceTributo: ritDraft.codiceTributo || null,
+    aliquotaRitenuta: ritDraft.aliquotaRitenuta || 0,
+    aliquotaCassa: ritDraft.aliquotaCassa || 0,
+    importoCassa: ritDraft.importoCassa || 0,
+    codiceCassa: ritDraft.codiceCassa || null,
+    sommeNonSoggette: ritDraft.sommeNonSoggette || 0,
+    quotaNonSoggetta: ritDraft.quotaNonSoggetta || 0
+  }
+
+  const userNote = normalizeText(ritDraft.note)
+  const noteStr = `[FSM_PARCELLA_AUDIT]${JSON.stringify(auditPayload)}${userNote ? ' | ' + userNote : ''}`
+
+  return {
+    societa_id: pnPayload.societa_id || null,
+    percipiente_cf: normalizeText(ritDraft.codiceFiscale || ritDraft.percipienteRecord?.codice_fiscale || ''),
+    percipiente_denominazione: normalizeText(ritDraft.percipiente || ritDraft.percipienteNome || ''),
+    data_pagamento: normalizeText(ritDraft.dataPagamento || pnPayload.data_registrazione || ''),
+    compenso_lordo: compensoLordo,
+    ritenuta: ritenuta,
+    compenso_netto: compensoNetto,
+    causale: normalizeText(ritDraft.causaleCu || ritDraft.causaleReddituale || ''),
+    note: noteStr
+  }
+}
+
 export async function persistPrimaNotaDraft({
   db,
   draft = {},
@@ -297,6 +332,35 @@ export async function persistPrimaNotaDraft({
 } = {}) {
   const resolved = resolveDraftBundle(draft)
   const validation = buildPersistenceValidation(resolved)
+
+  // FASE 2: Esecuzione della validazione canonica prima del write
+  let canonicalBlockers = []
+  let canonicalWarnings = []
+  try {
+    const operatorId = draft?.meta?.operatorId || draft?.pnPayload?.created_by || 'sistema'
+    const createdAt = draft?.meta?.createdAt || draft?.pnPayload?.created_at || new Date().toISOString()
+    const { validationResult } = mapRegistrazioneManualeToCanonical(draft, { 
+      mode: 'commit',
+      operatorId,
+      createdAt
+    })
+    if (validationResult) {
+      canonicalBlockers = validationResult.blocking || []
+      canonicalWarnings = validationResult.warnings || []
+    }
+  } catch (err) {
+    console.error('[persistPrimaNotaDraft] Errore durante il mapping canonico:', err)
+    canonicalBlockers.push(`Errore mapping canonico: ${err.message}`)
+  }
+
+  if (canonicalBlockers.length > 0) {
+    validation.status = 'blocked'
+    validation.blockers = Array.from(new Set([...(validation.blockers || []), ...canonicalBlockers]))
+  }
+  if (canonicalWarnings.length > 0) {
+    validation.warnings = Array.from(new Set([...(validation.warnings || []), ...canonicalWarnings]))
+  }
+
   if (validation.status === 'blocked') {
     return {
       data: null,
@@ -332,12 +396,21 @@ export async function persistPrimaNotaDraft({
         })
     : []
 
+  const ritenuteDraft = resolved.innerDraft?.ritenutaDraft || resolved.bundle?.ritenutaDraft || resolved.innerDraft?.ritenutaData || null
+  const ritenutaEnabled = Boolean(ritenuteDraft?.active && ritenuteDraft?.mode === 'pagamento')
+  const ritenutaEntriesForDb = ritenutaEnabled
+    ? (Array.isArray(ritenuteDraft?.rows)
+        ? ritenuteDraft.rows.map(row => mapRitenutaRowForDb(row, pnPayloadForDb))
+        : [mapRitenutaRowForDb(ritenuteDraft, pnPayloadForDb)])
+    : []
+
   const complete = await createPrimaNotaCompleta({
     db,
     pnPayload: pnPayloadForDb,
     righePayload: righePayloadForDb,
     vatEntries: vatEntriesForDb,
     partEntries: partEntriesForDb,
+    ritenutaEntries: ritenutaEntriesForDb,
     headerSelect,
     righeSelect,
     partitarioSelect: '*',
@@ -352,6 +425,7 @@ export async function persistPrimaNotaDraft({
       righeIns: complete.righeIns || null,
       vatIns: complete.vatIns || null,
       partIns: complete.partIns || null,
+      ritenuteIns: complete.ritenuteIns || null,
     }
     return {
       data: null,
@@ -362,6 +436,7 @@ export async function persistPrimaNotaDraft({
       righeIns: complete.righeIns || null,
       vatIns: complete.vatIns || null,
       partIns: complete.partIns || null,
+      ritenuteIns: complete.ritenuteIns || null,
       rollback: complete.rollback || null,
     }
   }
@@ -375,6 +450,18 @@ export async function persistPrimaNotaDraft({
   const vatCreated = Array.isArray(complete?.vatIns?.data)
     ? complete.vatIns.data.length
     : vatEntriesForDb.length
+
+  // Trace tecnico temporaneo per FASE 2
+  console.log('[AUDIT_PN_SEMPLICE_TRACE]', {
+    event: 'prima_nota_salvata',
+    primaNotaId,
+    societaId: pnPayloadForDb.societa_id,
+    dataRegistrazione: pnPayloadForDb.data_registrazione,
+    totaleDare: pnPayloadForDb.totale_dare,
+    totaleAvere: pnPayloadForDb.totale_avere,
+    operatore: pnPayloadForDb.created_by || 'sistema',
+    timestamp: new Date().toISOString(),
+  })
 
   return {
     data: {
@@ -394,6 +481,7 @@ export async function persistPrimaNotaDraft({
     righeIns: complete.righeIns || null,
     vatIns: complete.vatIns || null,
     partIns: complete.partIns || null,
+    ritenuteIns: complete.ritenuteIns || null,
     rollback: complete.rollback || null,
   }
 }

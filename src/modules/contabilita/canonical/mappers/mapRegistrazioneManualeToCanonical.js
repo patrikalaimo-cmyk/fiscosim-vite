@@ -1,5 +1,7 @@
 import { createEmptyCanonicalAccountingPayload } from '../canonicalAccountingPayload.defaults.js'
 import { validateCanonicalAccountingPayload } from '../validateCanonicalAccountingPayload.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
+
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -428,7 +430,29 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.header.descrizione = firstText(draft?.header?.descrizioneGenerale, draft?.pnPayload?.descrizione, documentDraft.note)
   payload.header.protocollo = firstText(ivaDraft.protocolloDefinitivo, ivaDraft.protocolloProvvisorio, draft?.pnPayload?.protocollo)
   payload.header.numeroRegistrazione = firstText(options?.numeroRegistrazione, draft?.pnPayload?.numero_documento, draft?.header?.numeroDocumento)
-  payload.header.stato = firstText(draft?.stato) || 'bozza'
+  const rawDraftStato = firstText(draft?.stato, draft?.header?.stato, draft?.pnPayload?.stato)
+  let draftStato = 'bozza'
+  const normalizedStato = rawDraftStato.toLowerCase().trim().replace(/ /g, '_')
+  if (normalizedStato.includes('bozza') || normalizedStato.includes('draft')) {
+    draftStato = 'bozza'
+  } else if (normalizedStato.includes('verific')) {
+    draftStato = 'da_verificare'
+  } else if (normalizedStato.includes('confermat') || normalizedStato.includes('confirm')) {
+    draftStato = 'confermata'
+  } else if (normalizedStato.includes('contabilizzat')) {
+    draftStato = 'contabilizzata'
+  } else if (normalizedStato.includes('annullat')) {
+    draftStato = 'annullata'
+  } else if (normalizedStato.includes('stornat')) {
+    draftStato = 'stornata'
+  } else if (normalizedStato.includes('rettificat')) {
+    draftStato = 'rettificata'
+  } else if (normalizedStato.includes('chius')) {
+    draftStato = 'chiusa'
+  } else if (normalizedStato.includes('esportat')) {
+    draftStato = 'esportata'
+  }
+  payload.header.stato = draftStato
   payload.header.currency = currency
   payload.header.totals = {
     totaleDare: numberOrZero(draft?.totals?.totaleDare),
@@ -533,14 +557,65 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.audit.overrides = Array.isArray(options?.overrides) ? [...options.overrides] : []
   payload.audit.reasons = Array.isArray(draft?.meta?.templateRows?.reasons) ? [...draft.meta.templateRows.reasons] : []
 
+  // Risoluzione policy causale contabile per FASE 2
+  const policy = buildCausaleContabilePolicy(payload.header.causaleContabile)
+
+  const hasRealVatRows = (Array.isArray(ivaDraft?.rows) && ivaDraft.rows.length > 0 && ivaDraft.rows.some(r => toNumber(r.imponibile) > 0 || toNumber(r.imposta) > 0 || text(r.causaleIvaId))) ||
+    toNumber(ivaDraft?.imponibile) > 0 || toNumber(ivaDraft?.totaleImponibile) > 0 || toNumber(ivaDraft?.totaleIva) > 0 || toNumber(ivaDraft?.totaleImposta) > 0
+  const hasRealLedgerRows = Array.isArray(partitarioDraft?.rows) && partitarioDraft.rows.length > 0 && partitarioDraft.rows.some(r => toNumber(r.amount) > 0 || text(r.documentRef))
+  const hasRealWithholdingRows = (Array.isArray(ritenutaDraft?.rows) && ritenutaDraft.rows.length > 0 && ritenutaDraft.rows.some(r => toNumber(r.amount) > 0 || text(r.causaleCu))) ||
+    toNumber(ritenutaDraft?.ritenuta) > 0 || toNumber(ritenutaDraft?.importoCompenso) > 0
+
   payload.postCommitTargets.shouldCreateDocumentiContabilita = false
   payload.postCommitTargets.shouldCreatePrimaNota = true
-  payload.postCommitTargets.shouldCreateIva = Boolean(behavior.showIvaPanel || payload.vat.enabled || payload.vat.rows.length)
-  payload.postCommitTargets.shouldCreateLedger = Boolean(behavior.showPartitario || payload.ledger.enabled || payload.ledger.rows.length)
-  payload.postCommitTargets.shouldCreateWithholding = Boolean(behavior.showRitenute || payload.withholding.enabled || payload.withholding.rows.length)
+  payload.postCommitTargets.shouldCreateIva = Boolean(policy.isDocumentoIva === true || (behavior.showIvaPanel && hasRealVatRows))
+  payload.postCommitTargets.shouldCreateLedger = Boolean((policy.gestionePartitario !== 'nessuno' && policy.gestionePartitario !== '') || (behavior.showPartitario && hasRealLedgerRows))
+  payload.postCommitTargets.shouldCreateWithholding = Boolean((policy.gestioneRitenute !== 'nessuna' && policy.gestioneRitenute !== '') || (behavior.showRitenute && hasRealWithholdingRows))
   payload.postCommitTargets.shouldCreateScadenziario = false
   payload.postCommitTargets.shouldAttachSourceDocument = false
   payload.postCommitTargets.shouldUpdateAuditTrail = true
+
+  // Pulizia payload in caso di moduli non attivi per PN semplice
+  if (!payload.postCommitTargets.shouldCreateIva) {
+    payload.vat.enabled = false
+    payload.vat.rows = []
+    payload.vat.registerType = ''
+    payload.vat.sezionale = ''
+    payload.vat.protocolNumber = ''
+    payload.vat.competencePeriod = ''
+    payload.vat.causaleIvaId = ''
+    payload.vat.causaleIva = ''
+    payload.vat.aliquota = ''
+    payload.vat.natura = ''
+    payload.vat.imponibile = 0
+    payload.vat.imposta = 0
+    payload.vat.detraibilitaPercent = 0
+    payload.vat.indetraibileAmount = 0
+    payload.vat.esigibilita = ''
+    payload.vat.splitPayment = false
+    payload.vat.reverseCharge = false
+    payload.vat.reverseChargeMode = ''
+    payload.vat.ivaPerCassa = false
+    payload.vat.proRata = ''
+    payload.vat.autofattura = false
+    payload.vat.integrazioneEstero = false
+    payload.fiscalContext.tipoRegistro = ''
+  }
+
+  if (!payload.postCommitTargets.shouldCreateLedger) {
+    payload.ledger.enabled = false
+    payload.ledger.mode = 'none'
+    payload.ledger.accountId = ''
+    payload.ledger.subjectId = ''
+    payload.ledger.rows = []
+  }
+
+  if (!payload.postCommitTargets.shouldCreateWithholding) {
+    payload.withholding.enabled = false
+    payload.withholding.eventType = 'document'
+    payload.withholding.recipient = null
+    payload.withholding.rows = []
+  }
 
   const baseValidation = buildValidationSnapshot(payload, draft)
   let validationResult = null

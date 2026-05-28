@@ -3,12 +3,14 @@ import {
   CANONICAL_ACCOUNTING_LEDGER_MODES,
   CANONICAL_ACCOUNTING_PAYLOAD_SECTIONS,
   CANONICAL_ACCOUNTING_POST_COMMIT_TARGETS,
+  CANONICAL_ACCOUNTING_REGISTRATION_STATES,
   CANONICAL_ACCOUNTING_SOURCE_MODULES,
   CANONICAL_ACCOUNTING_SUBJECT_ROLES,
   CANONICAL_ACCOUNTING_VAT_REGISTER_TYPES,
   CANONICAL_ACCOUNTING_WITHHOLDING_EVENT_TYPES,
 } from './canonicalAccountingPayload.schema.js'
 import { CANONICAL_ACCOUNTING_SCHEMA_VERSION } from './canonicalAccountingPayload.defaults.js'
+import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleContabilePolicy.js'
 
 const SUPPORTED_SCHEMA_VERSIONS = [CANONICAL_ACCOUNTING_SCHEMA_VERSION]
 
@@ -61,6 +63,11 @@ function validateRequiredSections(payload, mode, errors, warnings, blocking) {
       if (!Array.isArray(payload?.subjects)) missing.push(section)
       continue
     }
+    if (section === 'schemaVersion') {
+      const val = payload?.[section]
+      if (typeof val !== 'string' && !isPlainObject(val)) missing.push(section)
+      continue
+    }
     if (!isPlainObject(payload?.[section])) missing.push(section)
   }
 
@@ -87,6 +94,19 @@ function validatePostCommitTargets(payload, mode, errors, warnings, blocking) {
 function validateSubjects(payload, mode, targets, errors, warnings, blocking) {
   const subjects = asArray(payload?.subjects)
   const allowedRoles = new Set(CANONICAL_ACCOUNTING_SUBJECT_ROLES)
+
+  // Verifichiamo se il flusso coinvolge effettivamente dei soggetti
+  const coinvolgeSoggetti = Boolean(
+    targets?.shouldCreateLedger || 
+    targets?.shouldCreateWithholding || 
+    payload?.fiscalContext?.tipoRegistro
+  )
+
+  if (!coinvolgeSoggetti) {
+    // Se il flusso non coinvolge soggetti, non richiediamo che subjects sia popolato
+    return
+  }
+
   if (!subjects.length) {
     const message = 'subjects deve contenere almeno un elemento quando il flusso coinvolge soggetti'
     addIssue(errors, message)
@@ -154,6 +174,71 @@ function validatePrimaNota(payload, mode, targets, errors, blocking) {
 
   for (const [ok, message] of required) {
     if (!ok) {
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+  }
+
+  // Stato ammesso check
+  const allowedStates = new Set(CANONICAL_ACCOUNTING_REGISTRATION_STATES)
+  const stato = text(header.stato)
+  if (!stato) {
+    const message = 'header.stato mancante'
+    addIssue(errors, message)
+    if (mode === 'commit') addIssue(blocking, message)
+  } else if (!allowedStates.has(stato)) {
+    const message = 'header.stato non valido'
+    addIssue(errors, message)
+    if (mode === 'commit') addIssue(blocking, message)
+  }
+
+  // Rows check (missing accountId, negative / zero amounts, mutual exclusion)
+  rows.forEach((row, index) => {
+    if (!isPlainObject(row)) {
+      const message = `accounting.rows[${index}] non valido`
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+      return
+    }
+    if (!text(row.accountId)) {
+      const message = `accounting.rows[${index}].accountId mancante`
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+    const dare = Number(row.dare ?? 0)
+    const avere = Number(row.avere ?? 0)
+    if (!Number.isFinite(dare) || dare < 0) {
+      const message = `accounting.rows[${index}].dare deve essere un numero non negativo`
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+    if (!Number.isFinite(avere) || avere < 0) {
+      const message = `accounting.rows[${index}].avere deve essere un numero non negativo`
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+    if (dare === 0 && avere === 0) {
+      const message = `accounting.rows[${index}] deve avere un importo in dare o avere maggiore di zero`
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+    if (dare > 0 && avere > 0) {
+      const message = `accounting.rows[${index}] non può avere importi sia in dare che in avere`
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+  })
+
+  // Causale contabile policy check (shouldCreateIva, shouldCreateLedger)
+  if (isPlainObject(header.causaleContabile)) {
+    const policy = buildCausaleContabilePolicy(header.causaleContabile)
+    if (policy.isDocumentoIva === true && targets.shouldCreateIva !== true) {
+      const message = 'causale contabile richiede IVA ma modulo IVA non attivo'
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+    if (policy.gestionePartitario !== 'nessuno' && targets.shouldCreateLedger !== true) {
+      const message = 'causale contabile richiede partitario ma modulo partitario non attivo'
       addIssue(errors, message)
       if (mode === 'commit') addIssue(blocking, message)
     }
@@ -418,10 +503,10 @@ export function validateCanonicalAccountingPayload(payload, options = {}) {
     addIssue(blocking, message)
   }
 
-  if (mode === 'commit' && !text(payload?.company?.societaId)) {
+  if (!text(payload?.company?.societaId)) {
     const message = 'company.societaId mancante'
     addIssue(errors, message)
-    addIssue(blocking, message)
+    if (mode === 'commit') addIssue(blocking, message)
   }
 
   validateRequiredSections(payload, mode, errors, warnings, blocking)
