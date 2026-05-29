@@ -47,5 +47,8 @@ export function normalizeConsultazioneFilters(filters = {}) {
     protocolloIva: trim(merged.protocolloIva),
     testoLibero: trim(merged.testoLibero),
     descrizioneRiga: trim(merged.descrizioneRiga),
+    tipoScrittureOrdinarie: merged.tipoScrittureOrdinarie !== false,
+    tipoScrittureStornate: merged.tipoScrittureStornate === true,
+    tipoScrittureSimulate: merged.tipoScrittureSimulate === true,
   }
 }

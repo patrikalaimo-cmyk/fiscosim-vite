@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { normalizeText } from '../../application/canonical_mapper/utils.js'
 import { buildRegistrazioneIvaRows } from '../../application/registrazioneOperations/buildRegistrazioneIvaRows.js'
 import { REG_SECTION_TITLE_STYLE, formatMoney } from './registrazioneUi.js'
@@ -98,9 +98,9 @@ const CELL_BASE = {
 
 const CELL_ACTIVE = {
   ...CELL_BASE,
-  borderColor: 'rgba(255,208,92,.65)',
-  boxShadow: '0 0 0 2px rgba(255,208,92,.13), inset 0 1px 2px rgba(0,0,0,.12)',
-  background: 'rgba(255,208,92,.05)',
+  borderColor: '#E8922A',
+  boxShadow: '0 0 0 2px rgba(232, 146, 42, .16), inset 0 1px 2px rgba(0,0,0,.12)',
+  background: 'rgba(232, 146, 42, .04)',
 }
 
 const READONLY_CELL = {
@@ -113,7 +113,7 @@ const READONLY_CELL = {
 }
 
 // ─── IvaCell – input navigabile ───────────────────────────────────────────────
-function IvaCell({ rowId, field, value, onChange, onBlur, onKeyDown, placeholder, type = 'text', inputMode, disabled, activeCellKey, style = {}, inputRef }) {
+function IvaCell({ rowId, field, value, onChange, onBlur, onKeyDown, placeholder, type = 'text', inputMode, disabled, activeCellKey, style = {}, inputRef, ...props }) {
   const cellKey = ivaKey(rowId, field)
   const isActive = activeCellKey === cellKey
   return (
@@ -133,86 +133,12 @@ function IvaCell({ rowId, field, value, onChange, onBlur, onKeyDown, placeholder
       data-reg-section="iva"
       data-reg-key={cellKey}
       autoComplete="off"
+      {...props}
     />
   )
 }
 
-// ─── Dropdown suggerimenti causale IVA ───────────────────────────────────────
-function IvaSuggestDropdown({ anchor, matches, onPick, onClose }) {
-  if (!anchor || !matches.length) return null
-
-  const dropdown = (
-    <div
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
-      style={{ position: 'fixed', inset: 0, zIndex: 8000 }}
-    >
-      <div
-        style={{
-          position: 'fixed',
-          top: anchor.top,
-          left: anchor.left,
-          width: anchor.width,
-          maxHeight: anchor.maxHeight || 240,
-          overflowY: 'auto',
-          zIndex: 8001,
-          borderRadius: 10,
-          border: '1px solid rgba(96,165,250,.22)',
-          background: 'rgba(8,18,32,.97)',
-          backdropFilter: 'blur(12px)',
-          boxShadow: '0 16px 40px rgba(0,0,0,.5)',
-          padding: '.3rem',
-          display: 'grid',
-          gap: '.18rem',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {matches.map((item, i) => {
-          const label = resolveIvaLabel(item)
-          const meta = resolveIvaMeta(item)
-          return (
-            <button
-              key={item?.id || item?.codice || i}
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); onPick?.(item) }}
-              style={{
-                display: 'flex', flexDirection: 'column', gap: '.06rem',
-                width: '100%', textAlign: 'left',
-                padding: '.32rem .5rem', borderRadius: 7, border: 'none',
-                background: i === 0 ? 'rgba(255,208,92,.08)' : 'transparent',
-                outline: i === 0 ? '1px solid rgba(255,208,92,.25)' : 'none',
-                color: 'rgba(236,244,255,.95)', cursor: 'pointer',
-                transition: 'background .1s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
-                <span style={{ fontWeight: 700, fontSize: '.75rem' }}>{label}</span>
-                {meta.aliquota ? (
-                  <span style={{
-                    padding: '1px 6px', borderRadius: 20,
-                    background: 'rgba(96,165,250,.15)', border: '1px solid rgba(96,165,250,.25)',
-                    color: 'rgba(147,197,253,.9)', fontSize: '.58rem', fontWeight: 700,
-                  }}>{meta.aliquota}</span>
-                ) : null}
-                {meta.natura ? (
-                  <span style={{
-                    padding: '1px 6px', borderRadius: 20,
-                    background: 'rgba(167,139,250,.12)', border: '1px solid rgba(167,139,250,.22)',
-                    color: 'rgba(196,181,253,.9)', fontSize: '.58rem', fontWeight: 700,
-                  }}>{meta.natura}</span>
-                ) : null}
-              </div>
-              {meta.registro ? (
-                <span style={{ fontSize: '.6rem', color: 'rgba(147,197,253,.55)' }}>Registro: {meta.registro}</span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-
-  return typeof document === 'undefined' ? dropdown : createPortal(dropdown, document.body)
-}
+// (IvaSuggestDropdown definition removed to unify with portal dropdown)
 
 // ─── Etichetta colonna ────────────────────────────────────────────────────────
 function ColHdr({ children, align = 'left' }) {
@@ -268,6 +194,7 @@ export function RegistrazioneIvaPanel({
   const panelRef = useRef(null)
   const [activeCellKey, setActiveCellKey] = useState(null)
   const [suggestState, setSuggestState] = useState({ rowId: null, query: '', anchor: null })
+  const [selectedSuggestIndex, setSelectedSuggestIndex] = useState(0)
 
   // ── Righe calcolate ────────────────────────────────────────────────────
   const computedRows = useMemo(() => {
@@ -328,52 +255,6 @@ export function RegistrazioneIvaPanel({
     if (el?.focus) { el.focus(); setActiveCellKey(key) }
   }, [])
 
-  const handleKeyDown = useCallback((e, rowId, field) => {
-    const rowIndex = rows.findIndex((r) => String(r.id) === String(rowId))
-    const fieldIndex = IVA_FIELDS.indexOf(field)
-    const isLastRow = rowIndex === rows.length - 1
-    const isLastField = fieldIndex === IVA_FIELDS.length - 1
-    const isFirstField = fieldIndex === 0
-
-    // Non intercettare i tasti freccia quando c'è dropdown suggerimenti aperto
-    if (suggestState.rowId === rowId && suggestState.query && field === 'causaleIva') {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') return
-    }
-
-    if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) {
-      if (isLastField) { if (!isLastRow) { e.preventDefault(); focusCell(rows[rowIndex + 1].id, IVA_FIELDS[0]) } }
-      else { e.preventDefault(); focusCell(rowId, IVA_FIELDS[fieldIndex + 1]) }
-      return
-    }
-    if (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) {
-      if (isFirstField) { if (rowIndex > 0) { e.preventDefault(); focusCell(rows[rowIndex - 1].id, IVA_FIELDS[IVA_FIELDS.length - 1]) } }
-      else { e.preventDefault(); focusCell(rowId, IVA_FIELDS[fieldIndex - 1]) }
-      return
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (!isLastRow) focusCell(rows[rowIndex + 1].id, field)
-      return
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (rowIndex > 0) focusCell(rows[rowIndex - 1].id, field)
-      return
-    }
-    if (e.key === 'Escape') {
-      setSuggestState({ rowId: null, query: '', anchor: null })
-    }
-    if (e.key === 'Enter' && field === 'causaleIva') {
-      const matches = searchCausaliIva(suggestState.query, causaliIva)
-      if (matches.length) {
-        e.preventDefault()
-        applyCausaleIva(rowId, matches[0], rowIndex)
-        setSuggestState({ rowId: null, query: '', anchor: null })
-        setTimeout(() => focusCell(rowId, 'imponibile'), 20)
-      }
-    }
-  }, [rows, suggestState, focusCell, causaliIva])
-
   // ── Selezione causale IVA ──────────────────────────────────────────────
   const applyCausaleIva = useCallback((rowId, item, rowIndex) => {
     const label = resolveIvaLabel(item)
@@ -402,6 +283,85 @@ export function RegistrazioneIvaPanel({
     mutateRow(rowId, (r) => ({ ...r, ...patch }), extraPatch)
   }, [mutateRow])
 
+  const handleKeyDown = useCallback((e, rowId, field) => {
+    const rowIndex = rows.findIndex((r) => String(r.id) === String(rowId))
+    const fieldIndex = IVA_FIELDS.indexOf(field)
+    const isLastRow = rowIndex === rows.length - 1
+    const isLastField = fieldIndex === IVA_FIELDS.length - 1
+    const isFirstField = fieldIndex === 0
+
+    const isCausaleIva = field === 'causaleIva'
+    const matches = isCausaleIva && suggestState.rowId === rowId && suggestState.query
+      ? searchCausaliIva(suggestState.query, causaliIva)
+      : []
+    const hasSuggestions = matches.length > 0
+
+    // Gestione tastiera avanzata causale IVA con autocomplete
+    if (isCausaleIva && hasSuggestions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedSuggestIndex((prev) => (prev + 1) % matches.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedSuggestIndex((prev) => (prev - 1 + matches.length) % matches.length)
+        return
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const selectedMatch = matches[selectedSuggestIndex] || matches[0]
+        if (selectedMatch) {
+          applyCausaleIva(rowId, selectedMatch, rowIndex)
+        }
+        setSuggestState({ rowId: null, query: '', anchor: null })
+        setSelectedSuggestIndex(0)
+        setTimeout(() => focusCell(rowId, 'imponibile'), 20)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSuggestState({ rowId: null, query: '', anchor: null })
+        setSelectedSuggestIndex(0)
+        return
+      }
+      if (e.key === 'Tab') {
+        setSuggestState({ rowId: null, query: '', anchor: null })
+        setSelectedSuggestIndex(0)
+        // lascia procedere la navigazione standard
+      }
+    }
+
+    if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) {
+      if (isLastField) { if (!isLastRow) { e.preventDefault(); focusCell(rows[rowIndex + 1].id, IVA_FIELDS[0]) } }
+      else { e.preventDefault(); focusCell(rowId, IVA_FIELDS[fieldIndex + 1]) }
+      return
+    }
+    if (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) {
+      if (isFirstField) { if (rowIndex > 0) { e.preventDefault(); focusCell(rows[rowIndex - 1].id, IVA_FIELDS[IVA_FIELDS.length - 1]) } }
+      else { e.preventDefault(); focusCell(rowId, IVA_FIELDS[fieldIndex - 1]) }
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!isLastRow) focusCell(rows[rowIndex + 1].id, field)
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (rowIndex > 0) focusCell(rows[rowIndex - 1].id, field)
+      return
+    }
+    if (e.key === 'Escape') {
+      setSuggestState({ rowId: null, query: '', anchor: null })
+      setSelectedSuggestIndex(0)
+    }
+    if (e.key === 'Enter' && isCausaleIva) {
+      e.preventDefault()
+      focusCell(rowId, 'imponibile')
+    }
+  }, [rows, suggestState, focusCell, causaliIva, selectedSuggestIndex, setSelectedSuggestIndex, applyCausaleIva])
+
   // ── Griglia colonne ────────────────────────────────────────────────────
   // causaleIva | imponibile | ivaDetratta | ivaIndetr | totale | aliquota | natura | compIva | dataOp | registro | segno | prot.prov | prot.def | stato | ×
   const COLS = '210px 90px 90px 82px 90px 58px 64px 100px 100px 82px 44px 88px 88px 70px 28px'
@@ -416,24 +376,24 @@ export function RegistrazioneIvaPanel({
 
       {/* ── Header ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.6rem',
-        padding: '.55rem .8rem .45rem', borderBottom: '1px solid rgba(136,169,204,.07)', flexWrap: 'wrap',
+        display: 'flex', alignItems: 'center', justifycontent: 'space-between', gap: '.6rem',
+        padding: '.55rem .8rem .45rem', borderBottom: '1px solid rgba(13, 122, 140, .07)', flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '.1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
             <span style={REG_SECTION_TITLE_STYLE}>Movimenti IVA</span>
             <span style={{
               padding: '2px 8px', borderRadius: 20, fontSize: '.58rem', fontWeight: 700,
-              background: 'rgba(34,197,94,.1)', border: '1px solid rgba(74,222,128,.2)',
+              background: 'rgba(13, 122, 140, .1)', border: '1px solid rgba(26, 168, 191, .2)',
               color: 'rgba(134,239,172,.9)',
             }}>Predisposto</span>
             <span style={{
               padding: '2px 8px', borderRadius: 20, fontSize: '.58rem', fontWeight: 700,
-              background: 'rgba(96,165,250,.1)', border: '1px solid rgba(96,165,250,.22)',
+              background: 'rgba(13, 122, 140, .08)', border: '1px solid rgba(13, 122, 140, .18)',
               color: 'rgba(147,197,253,.8)',
             }}>{rows.length} {rows.length === 1 ? 'riga' : 'righe'}</span>
           </div>
-          <span style={{ fontSize: '.68rem', color: 'rgba(188,204,226,.45)' }}>
+          <span style={{ fontSize: '.68rem', color: 'var(--mu)' }}>
             ↑↓ naviga righe · ←→ naviga campi · Invio seleziona causale
           </span>
         </div>
@@ -444,9 +404,9 @@ export function RegistrazioneIvaPanel({
           style={{
             display: 'flex', alignItems: 'center', gap: '.3rem',
             padding: '.3rem .65rem', borderRadius: 8,
-            border: '1px solid rgba(96,165,250,.28)',
-            background: 'linear-gradient(180deg,rgba(59,130,246,.18),rgba(37,99,235,.12))',
-            color: 'rgba(147,197,253,.95)', fontSize: '.72rem', fontWeight: 600,
+            border: '1px solid rgba(26, 168, 191, .3)',
+            background: 'linear-gradient(180deg, rgba(13, 122, 140, .2), rgba(13, 122, 140, .1))',
+            color: '#1AA8BF', fontSize: '.72rem', fontWeight: 600,
             cursor: 'pointer', transition: 'all .15s',
           }}
         >
@@ -456,12 +416,12 @@ export function RegistrazioneIvaPanel({
 
       {/* ── Griglia IVA ── */}
       <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
-        <div ref={panelRef} style={{ minWidth: 1380, display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div ref={panelRef} style={{ minWidth: 1380, display: 'flex', flexDirection: 'column', gap: '5px', padding: '.4rem .8rem' }}>
 
           {/* Intestazioni colonne */}
           <div style={{
             display: 'grid', gridTemplateColumns: COLS, gap: '.22rem',
-            padding: '.32rem .8rem .2rem', borderBottom: '1px solid rgba(136,169,204,.07)',
+            padding: '.32rem .8rem .2rem', borderBottom: '1px solid rgba(13, 122, 140, .07)',
           }}>
             {colHeaders.map((h, i) => <ColHdr key={i}>{h}</ColHdr>)}
           </div>
@@ -475,22 +435,23 @@ export function RegistrazioneIvaPanel({
             const segno = row.segnoRegistro || '+'
 
             const rowBg = isActiveRow
-              ? 'linear-gradient(180deg,rgba(59,130,246,.07),rgba(37,99,235,.04))'
-              : rowIndex % 2 === 0 ? 'rgba(255,255,255,.012)' : 'transparent'
+              ? '#0E3A4A'
+              : rowIndex % 2 === 0 ? 'rgba(255, 255, 255, .015)' : 'rgba(255, 255, 255, .005)'
 
             const rowBorder = isActiveRow
-              ? '1px solid rgba(59,130,246,.22)'
-              : '1px solid transparent'
+              ? '1px solid rgba(13, 122, 140, .4)'
+              : '1px solid rgba(255, 255, 255, .03)'
 
             return (
               <div
                 key={row.id || rowIndex}
                 style={{
                   display: 'grid', gridTemplateColumns: COLS, gap: '.22rem',
-                  alignItems: 'center', padding: '.3rem .8rem',
+                  alignItems: 'center', padding: '.4rem .8rem',
                   background: rowBg, border: rowBorder,
-                  borderRadius: isActiveRow ? 8 : 4,
-                  margin: isActiveRow ? '.04rem 0' : 0,
+                  borderLeft: isActiveRow ? '3px solid #E8922A' : undefined,
+                  borderRadius: 8,
+                  margin: 0,
                   transition: 'background .12s, border-color .12s',
                   position: 'relative', zIndex: isActiveRow ? 20 : 1,
                 }}
@@ -503,41 +464,60 @@ export function RegistrazioneIvaPanel({
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '.04rem' }}>
                   <IvaCell
                     rowId={row.id} field="causaleIva"
-                    value={query || selectedLabel}
+                    value={query || (selectedLabel.toLowerCase() === 'da selezionare' ? '' : selectedLabel)}
                     activeCellKey={activeCellKey}
                     disabled={disabled}
-                    placeholder="Cerca causale IVA…"
+                    placeholder={selectedLabel.toLowerCase() === 'da selezionare' ? 'Da selezionare' : 'Cerca causale IVA…'}
                     onKeyDown={(e) => handleKeyDown(e, row.id, 'causaleIva')}
+                    data-has-suggestions={suggestions.length > 0 && suggestState.rowId === row.id ? 'true' : 'false'}
                     onChange={(e) => {
                       const v = e.target.value
-                      mutateRow(row.id, (r) => createPatchForField(r, 'causaleIvaQuery', v))
-                      setSuggestState({ rowId: row.id, query: v, anchor: null })
+                      if (v === '') {
+                        mutateRow(row.id, (r) => ({
+                          ...r,
+                          causaleIvaId: '',
+                          causaleIvaCodice: '',
+                          causaleIvaDescrizione: '',
+                          causaleIvaLabel: 'da selezionare',
+                          causaleIvaQuery: '',
+                          aliquota: '',
+                          natura: '',
+                          percentualeDetraibilita: '',
+                          percentualeIndetraibilita: '',
+                          registroIva: '',
+                          segnoRegistro: '+',
+                          manualEdited: true,
+                          lastEditedField: 'causaleIva'
+                        }), rowIndex === 0 ? {
+                          causaleIvaId: '', causaleIvaCodice: '',
+                          causaleIvaDescrizione: '', causaleIva: 'da selezionare',
+                          aliquotaIva: '', naturaIva: '',
+                          registroIva: '', segnoRegistro: '+',
+                          percentualeDetraibilita: '',
+                          percentualeIndetraibilita: '',
+                        } : null)
+                        setSuggestState({ rowId: null, query: '', anchor: null })
+                        setSelectedSuggestIndex(0)
+                      } else {
+                        mutateRow(row.id, (r) => createPatchForField(r, 'causaleIvaQuery', v))
+                        setSuggestState({ rowId: row.id, query: v, anchor: null })
+                        setSelectedSuggestIndex(0)
+                      }
                     }}
                     onBlur={() => {
                       setTimeout(() => {
-                        if (suggestState.rowId === row.id) setSuggestState({ rowId: null, query: '', anchor: null })
+                        if (suggestState.rowId === row.id) {
+                          setSuggestState({ rowId: null, query: '', anchor: null })
+                          setSelectedSuggestIndex(0)
+                        }
                       }, 150)
                     }}
                   />
-                  {selectedLabel && !query ? (
+                  {selectedLabel && selectedLabel.toLowerCase() !== 'da selezionare' && !query ? (
                     <span style={{ fontSize: '.58rem', color: 'rgba(147,197,253,.55)', lineHeight: 1 }}>
                       ✓ {selectedLabel}
                     </span>
                   ) : null}
-                  {/* Dropdown suggerimenti */}
-                  {suggestions.length > 0 && suggestState.rowId === row.id && (
-                    <IvaSuggestDropdown
-                      anchor={{ top: 0, left: 0, width: 280, maxHeight: 220, _inline: true }}
-                      matches={suggestions}
-                      onPick={(item) => {
-                        applyCausaleIva(row.id, item, rowIndex)
-                        setSuggestState({ rowId: null, query: '', anchor: null })
-                        setTimeout(() => focusCell(row.id, 'imponibile'), 20)
-                      }}
-                      onClose={() => setSuggestState({ rowId: null, query: '', anchor: null })}
-                      inline
-                    />
-                  )}
                 </div>
 
                 {/* Imponibile */}
@@ -553,7 +533,7 @@ export function RegistrazioneIvaPanel({
                   disabled={disabled} placeholder="0,00" inputMode="decimal"
                   onKeyDown={(e) => handleKeyDown(e, row.id, 'ivaDetratta')}
                   onChange={(e) => mutateRow(row.id, (r) => createPatchForField(r, 'ivaDetratta', e.target.value))}
-                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono,monospace)', color: 'rgba(134,239,172,.9)' }}
+                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono,monospace)', color: '#1AA8BF', fontWeight: 600 }}
                 />
 
                 {/* IVA indetraibile */}
@@ -561,7 +541,7 @@ export function RegistrazioneIvaPanel({
                   disabled={disabled} placeholder="0,00" inputMode="decimal"
                   onKeyDown={(e) => handleKeyDown(e, row.id, 'ivaIndetraibile')}
                   onChange={(e) => mutateRow(row.id, (r) => createPatchForField(r, 'ivaIndetraibile', e.target.value))}
-                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono,monospace)', color: 'rgba(251,113,133,.75)' }}
+                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono,monospace)', color: '#E8922A', fontWeight: 600 }}
                 />
 
                 {/* Totale */}
@@ -569,7 +549,7 @@ export function RegistrazioneIvaPanel({
                   disabled={disabled} placeholder="0,00" inputMode="decimal"
                   onKeyDown={(e) => handleKeyDown(e, row.id, 'totale')}
                   onChange={(e) => mutateRow(row.id, (r) => createPatchForField(r, 'totale', e.target.value))}
-                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono,monospace)', fontWeight: 700 }}
+                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono,monospace)', fontWeight: 700, color: 'var(--tx)' }}
                 />
 
                 {/* Aliquota */}
@@ -648,18 +628,23 @@ export function RegistrazioneIvaPanel({
 
       {/* ── Dropdown inline suggerimenti (portal) ── */}
       {suggestState.rowId && suggestState.query && (
-        <IvaSuggestDropdownPortal
+        <IvaSuggestDropdown
           query={suggestState.query}
           causaliIva={causaliIva}
           panelRef={panelRef}
           rowId={suggestState.rowId}
+          selectedIndex={selectedSuggestIndex}
           onPick={(item) => {
             const rowIndex = rows.findIndex((r) => String(r.id) === String(suggestState.rowId))
             applyCausaleIva(suggestState.rowId, item, rowIndex)
             setSuggestState({ rowId: null, query: '', anchor: null })
+            setSelectedSuggestIndex(0)
             setTimeout(() => focusCell(suggestState.rowId, 'imponibile'), 20)
           }}
-          onClose={() => setSuggestState({ rowId: null, query: '', anchor: null })}
+          onClose={() => {
+            setSuggestState({ rowId: null, query: '', anchor: null })
+            setSelectedSuggestIndex(0)
+          }}
         />
       )}
 
@@ -702,9 +687,19 @@ function SummaryPill({ label, value, color }) {
   )
 }
 
-// ─── Portal dropdown (posizionato vicino al campo attivo) ─────────────────────
-function IvaSuggestDropdownPortal({ query, causaliIva, panelRef, rowId, onPick, onClose }) {
+// ─── Portal dropdown (posizionato vicino al campo attivo con scroll tastiera) ──
+function IvaSuggestDropdown({ query, causaliIva, panelRef, rowId, onPick, onClose, selectedIndex = 0 }) {
   const matches = useMemo(() => searchCausaliIva(query, causaliIva), [query, causaliIva])
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const highlighted = containerRef.current.querySelector('[data-highlighted="true"]')
+    if (highlighted) {
+      highlighted.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selectedIndex, matches])
+
   if (!matches.length) return null
 
   // Trova il campo causale della riga attiva per posizionarsi
@@ -718,6 +713,7 @@ function IvaSuggestDropdownPortal({ query, causaliIva, panelRef, rowId, onPick, 
       style={{ position: 'fixed', inset: 0, zIndex: 8000 }}
     >
       <div
+        ref={containerRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           position: 'fixed',
@@ -743,13 +739,14 @@ function IvaSuggestDropdownPortal({ query, causaliIva, panelRef, rowId, onPick, 
             <button
               key={item?.id || item?.codice || i}
               type="button"
+              data-highlighted={i === selectedIndex ? 'true' : 'false'}
               onMouseDown={(e) => { e.preventDefault(); onPick?.(item) }}
               style={{
                 display: 'flex', flexDirection: 'column', gap: '.05rem',
                 width: '100%', textAlign: 'left', padding: '.3rem .48rem',
                 borderRadius: 7, border: 'none',
-                background: i === 0 ? 'rgba(255,208,92,.08)' : 'transparent',
-                outline: i === 0 ? '1px solid rgba(255,208,92,.2)' : 'none',
+                background: i === selectedIndex ? 'rgba(255,208,92,.08)' : 'transparent',
+                outline: i === selectedIndex ? '1px solid rgba(255,208,92,.2)' : 'none',
                 color: 'rgba(236,244,255,.95)', cursor: 'pointer',
               }}
             >

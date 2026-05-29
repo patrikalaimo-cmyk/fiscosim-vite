@@ -189,15 +189,28 @@ function normalizeAccountingRows(draft = {}) {
       ? draft.rows
       : []
 
-  return rows.map((row, index) => {
+  const activeRows = rows.filter(row => {
+    const query = String(row.contoQuery ?? row.conto ?? row.conto_id ?? row.accountId ?? '').trim()
+    const isPlaceholder = query.toLowerCase() === 'descrizione conto non disponibile' || query.toLowerCase() === 'conto da selezionare';
+    const cleanQuery = isPlaceholder ? '' : query;
+    const dare = Number(row.dare ?? row.importo_dare ?? 0)
+    const avere = Number(row.avere ?? row.importo_avere ?? 0)
+    const desc = String(row.descrizione ?? row.descrizione_riga ?? '').trim()
+    return cleanQuery || dare > 0 || avere > 0 || desc
+  })
+
+  return activeRows.map((row, index) => {
     const dare = numberOrZero(row?.dare, row?.importo_dare)
     const avere = numberOrZero(row?.avere, row?.importo_avere)
+    const q = String(row.contoQuery ?? '').trim();
+    const isPlaceholder = q.toLowerCase() === 'descrizione conto non disponibile' || q.toLowerCase() === 'conto da selezionare';
     return {
       ...row,
       rowNumber: Number.isFinite(Number(row?.riga_numero)) ? Number(row.riga_numero) : index + 1,
       accountId: text(row?.conto_id || row?.accountId),
       accountCode: text(row?.conto_codice || row?.accountCode),
       accountDescription: text(row?.conto_descrizione || row?.accountDescription),
+      contoQuery: isPlaceholder ? '' : row.contoQuery,
       description: text(row?.descrizione_riga || row?.descrizione || row?.description),
       dare,
       avere,
@@ -216,32 +229,36 @@ function normalizeVatRows(draft = {}) {
 
   return {
     enabled: Boolean(ivaDraft.enabled || ivaDraft.active || rows.length),
-    rows: rows.map((row, index) => ({
-      ...row,
-      rowNumber: Number.isFinite(Number(row?.riga)) ? Number(row.riga) : index + 1,
-      registerType: text(row?.registerType || registerType),
-      sezionale: text(row?.sezionale || sezionale),
-      protocolNumber: text(row?.protocolNumber || row?.protocolloProvvisorio || protocolNumber),
-      competencePeriod: text(row?.competencePeriod || row?.competenzaIva || competencePeriod),
-      causaleIvaId: text(row?.causaleIvaId || ivaDraft.causaleIvaId),
-      causaleIva: text(row?.causaleIva || row?.causaleIvaLabel || ivaDraft.causaleIva || ivaDraft.causaleIvaDescrizione),
-      imponibile: numberOrZero(row?.imponibile, row?.taxable, ivaDraft.imponibile, ivaDraft.totaleImponibile),
-      imposta: numberOrZero(row?.imposta, row?.tax, ivaDraft.totaleIva, ivaDraft.totaleImposta),
-      aliquota: row?.aliquota ?? row?.rate ?? ivaDraft.aliquota ?? ivaDraft.aliquotaIva ?? '',
-      natura: text(row?.natura || ivaDraft.natura || ivaDraft.naturaIva),
-      detraibilitaPercent: numberOrZero(row?.detraibilitaPercent, row?.percentualeDetraibilita, ivaDraft.percentualeDetraibilita),
-      indetraibileAmount: numberOrZero(row?.indetraibileAmount, row?.ivaIndetraibile, ivaDraft.ivaIndetraibile),
-      splitPayment: Boolean(row?.splitPayment || ivaDraft.splitPayment),
-      reverseCharge: Boolean(row?.reverseCharge || ivaDraft.reverseCharge),
-      ivaPerCassa: Boolean(row?.ivaPerCassa || ivaDraft.ivaPerCassa),
-      proRata: text(row?.proRata || ivaDraft.proRata),
-    })),
+    rows: rows.map((row, index) => {
+      const civId = text(row?.causaleIvaId || ivaDraft.causaleIvaId);
+      const civ = text(row?.causaleIva || row?.causaleIvaLabel || ivaDraft.causaleIva || ivaDraft.causaleIvaDescrizione);
+      return {
+        ...row,
+        rowNumber: Number.isFinite(Number(row?.riga)) ? Number(row.riga) : index + 1,
+        registerType: text(row?.registerType || registerType),
+        sezionale: text(row?.sezionale || sezionale),
+        protocolNumber: text(row?.protocolNumber || row?.protocolloProvvisorio || protocolNumber),
+        competencePeriod: text(row?.competencePeriod || row?.competenzaIva || competencePeriod),
+        causaleIvaId: civId.toLowerCase() === 'da selezionare' ? '' : civId,
+        causaleIva: civ.toLowerCase() === 'da selezionare' ? '' : civ,
+        imponibile: numberOrZero(row?.imponibile, row?.taxable, ivaDraft.imponibile, ivaDraft.totaleImponibile),
+        imposta: numberOrZero(row?.imposta, row?.tax, ivaDraft.totaleIva, ivaDraft.totaleImposta),
+        aliquota: row?.aliquota ?? row?.rate ?? ivaDraft.aliquota ?? ivaDraft.aliquotaIva ?? '',
+        natura: text(row?.natura || ivaDraft.natura || ivaDraft.naturaIva),
+        detraibilitaPercent: numberOrZero(row?.detraibilitaPercent, row?.percentualeDetraibilita, ivaDraft.percentualeDetraibilita),
+        indetraibileAmount: numberOrZero(row?.indetraibileAmount, row?.ivaIndetraibile, ivaDraft.ivaIndetraibile),
+        splitPayment: Boolean(row?.splitPayment || ivaDraft.splitPayment),
+        reverseCharge: Boolean(row?.reverseCharge || ivaDraft.reverseCharge),
+        ivaPerCassa: Boolean(row?.ivaPerCassa || ivaDraft.ivaPerCassa),
+        proRata: text(row?.proRata || ivaDraft.proRata),
+      };
+    }),
     registerType,
     sezionale,
     protocolNumber,
     competencePeriod,
-    causaleIvaId: text(ivaDraft.causaleIvaId),
-    causaleIva: text(ivaDraft.causaleIva || ivaDraft.causaleIvaDescrizione),
+    causaleIvaId: text(ivaDraft.causaleIvaId).toLowerCase() === 'da selezionare' ? '' : text(ivaDraft.causaleIvaId),
+    causaleIva: text(ivaDraft.causaleIva || ivaDraft.causaleIvaDescrizione).toLowerCase() === 'da selezionare' ? '' : text(ivaDraft.causaleIva || ivaDraft.causaleIvaDescrizione),
     aliquota: ivaDraft.aliquota ?? ivaDraft.aliquotaIva ?? '',
     natura: text(ivaDraft.natura || ivaDraft.naturaIva),
     imponibile: numberOrZero(ivaDraft.imponibile, ivaDraft.totaleImponibile),
@@ -431,26 +448,36 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.header.protocollo = firstText(ivaDraft.protocolloDefinitivo, ivaDraft.protocolloProvvisorio, draft?.pnPayload?.protocollo)
   payload.header.numeroRegistrazione = firstText(options?.numeroRegistrazione, draft?.pnPayload?.numero_documento, draft?.header?.numeroDocumento)
   const rawDraftStato = firstText(draft?.stato, draft?.header?.stato, draft?.pnPayload?.stato)
-  let draftStato = 'bozza'
-  const normalizedStato = rawDraftStato.toLowerCase().trim().replace(/ /g, '_')
-  if (normalizedStato.includes('bozza') || normalizedStato.includes('draft')) {
-    draftStato = 'bozza'
-  } else if (normalizedStato.includes('verific')) {
-    draftStato = 'da_verificare'
-  } else if (normalizedStato.includes('confermat') || normalizedStato.includes('confirm')) {
-    draftStato = 'confermata'
-  } else if (normalizedStato.includes('contabilizzat')) {
-    draftStato = 'contabilizzata'
-  } else if (normalizedStato.includes('annullat')) {
-    draftStato = 'annullata'
-  } else if (normalizedStato.includes('stornat')) {
-    draftStato = 'stornata'
-  } else if (normalizedStato.includes('rettificat')) {
-    draftStato = 'rettificata'
-  } else if (normalizedStato.includes('chius')) {
-    draftStato = 'chiusa'
-  } else if (normalizedStato.includes('esportat')) {
-    draftStato = 'esportata'
+  let draftStato = 'confermata'
+  if (draft?.isSimulata || draft?.meta?.isSimulata || normalized?.meta?.isSimulata) {
+    draftStato = 'simulata'
+  } else if (rawDraftStato) {
+    const normalizedStato = rawDraftStato.toLowerCase().trim().replace(/ /g, '_')
+    if (normalizedStato.includes('simulat') || normalizedStato.includes('mock') || normalizedStato.includes('temp')) {
+      draftStato = 'simulata'
+    } else if (normalizedStato.includes('bozza') || normalizedStato.includes('draft')) {
+      draftStato = 'confermata'
+    } else if (normalizedStato.includes('verific')) {
+      draftStato = 'da_verificare'
+    } else if (normalizedStato.includes('confermat') || normalizedStato.includes('confirm') || normalizedStato.includes('definitiva')) {
+      draftStato = 'confermata'
+    } else if (normalizedStato.includes('contabilizzat')) {
+      draftStato = 'contabilizzata'
+    } else if (normalizedStato.includes('annullat')) {
+      draftStato = 'annullata'
+    } else if (normalizedStato.includes('stornat')) {
+      draftStato = 'stornata'
+    } else if (normalizedStato.includes('storno')) {
+      draftStato = 'storno'
+    } else if (normalizedStato.includes('rettificat')) {
+      draftStato = 'rettificata'
+    } else if (normalizedStato.includes('chius')) {
+      draftStato = 'chiusa'
+    } else if (normalizedStato.includes('esportat')) {
+      draftStato = 'esportata'
+    } else {
+      draftStato = rawDraftStato
+    }
   }
   payload.header.stato = draftStato
   payload.header.currency = currency
@@ -560,7 +587,7 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   // Risoluzione policy causale contabile per FASE 2
   const policy = buildCausaleContabilePolicy(payload.header.causaleContabile)
 
-  const hasRealVatRows = (Array.isArray(ivaDraft?.rows) && ivaDraft.rows.length > 0 && ivaDraft.rows.some(r => toNumber(r.imponibile) > 0 || toNumber(r.imposta) > 0 || text(r.causaleIvaId))) ||
+  const hasRealVatRows = (Array.isArray(ivaDraft?.rows) && ivaDraft.rows.length > 0 && ivaDraft.rows.some(r => toNumber(r.imponibile) > 0 || toNumber(r.imposta) > 0 || (text(r.causaleIvaId) && !String(r.causaleIvaId).startsWith('iva-row-')))) ||
     toNumber(ivaDraft?.imponibile) > 0 || toNumber(ivaDraft?.totaleImponibile) > 0 || toNumber(ivaDraft?.totaleIva) > 0 || toNumber(ivaDraft?.totaleImposta) > 0
   const hasRealLedgerRows = Array.isArray(partitarioDraft?.rows) && partitarioDraft.rows.length > 0 && partitarioDraft.rows.some(r => toNumber(r.amount) > 0 || text(r.documentRef))
   const hasRealWithholdingRows = (Array.isArray(ritenutaDraft?.rows) && ritenutaDraft.rows.length > 0 && ritenutaDraft.rows.some(r => toNumber(r.amount) > 0 || text(r.causaleCu))) ||

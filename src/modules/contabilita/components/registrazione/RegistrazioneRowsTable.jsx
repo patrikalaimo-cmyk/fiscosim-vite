@@ -22,8 +22,8 @@ const CELL_INPUT_BASE = {
   fontSize: '.76rem',
   lineHeight: 1.2,
   borderRadius: 8,
-  border: '1px solid rgba(136,169,204,.14)',
-  background: 'rgba(255,255,255,.025)',
+  border: '1px solid rgba(13, 122, 140, .18)',
+  background: 'rgba(255,255,255,.02)',
   color: 'var(--tx)',
   outline: 'none',
   transition: 'border-color .15s, box-shadow .15s, background .15s',
@@ -33,9 +33,9 @@ const CELL_INPUT_BASE = {
 
 const CELL_INPUT_ACTIVE = {
   ...CELL_INPUT_BASE,
-  borderColor: 'rgba(255,208,92,.65)',
-  boxShadow: '0 0 0 2px rgba(255,208,92,.13), inset 0 1px 2px rgba(0,0,0,.12)',
-  background: 'rgba(255,208,92,.05)',
+  borderColor: '#E8922A',
+  boxShadow: '0 0 0 2px rgba(232, 146, 42, .16), inset 0 1px 2px rgba(0,0,0,.12)',
+  background: 'rgba(232, 146, 42, .04)',
 }
 
 const CELL_INPUT_ERROR = {
@@ -382,12 +382,12 @@ export function RegistrazioneRowsTable({
         justifyContent: 'space-between',
         gap: '.6rem',
         padding: '.55rem .8rem .45rem',
-        borderBottom: '1px solid rgba(136,169,204,.07)',
+        borderBottom: '1px solid rgba(13, 122, 140, .07)',
         flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '.1rem' }}>
           <span style={REG_SECTION_TITLE_STYLE}>Righe Prima Nota</span>
-          <span style={{ fontSize: '.68rem', color: 'rgba(188,204,226,.55)' }}>
+          <span style={{ fontSize: '.68rem', color: 'var(--mu)' }}>
             ↑↓ naviga righe · ←→ naviga campi · ↓ su ultima riga aggiunge
           </span>
         </div>
@@ -404,9 +404,9 @@ export function RegistrazioneRowsTable({
               display: 'flex', alignItems: 'center', gap: '.3rem',
               padding: '.3rem .65rem',
               borderRadius: 8,
-              border: '1px solid rgba(96,165,250,.28)',
-              background: 'linear-gradient(180deg,rgba(59,130,246,.18),rgba(37,99,235,.12))',
-              color: 'rgba(147,197,253,.95)',
+              border: '1px solid rgba(26, 168, 191, .3)',
+              background: 'linear-gradient(180deg, rgba(13, 122, 140, .2), rgba(13, 122, 140, .1))',
+              color: '#1AA8BF',
               fontSize: '.72rem', fontWeight: 600, cursor: 'pointer',
               transition: 'all .15s',
             }}
@@ -423,16 +423,16 @@ export function RegistrazioneRowsTable({
           margin: '.4rem .8rem 0',
           padding: '.28rem .52rem',
           borderRadius: 8,
-          border: '1px solid rgba(96,165,250,.12)',
-          background: 'rgba(96,165,250,.04)',
+          border: '1px solid rgba(13, 122, 140, .15)',
+          background: 'rgba(13, 122, 140, .04)',
           fontSize: '.65rem', color: 'rgba(147,197,253,.8)',
         }}>
           <span>📋 {templateNotice}</span>
           {templateActionLabel && onApplySuggestedRows ? (
             <button type="button" onClick={onApplySuggestedRows} style={{
               padding: '.18rem .42rem', borderRadius: 6,
-              border: '1px solid rgba(96,165,250,.22)',
-              background: 'rgba(96,165,250,.1)',
+              border: '1px solid rgba(13, 122, 140, .22)',
+              background: 'rgba(13, 122, 140, .1)',
               color: 'rgba(147,197,253,.9)', fontSize: '.63rem', cursor: 'pointer',
             }}>
               {templateActionLabel}
@@ -445,9 +445,9 @@ export function RegistrazioneRowsTable({
       {(!Array.isArray(pianoConti) || pianoConti.length === 0) ? (
         <div style={{
           margin: '.4rem .8rem 0', padding: '.32rem .52rem', borderRadius: 8,
-          border: '1px dashed rgba(251,191,36,.2)',
-          background: 'rgba(251,191,36,.04)',
-          color: 'rgba(251,191,36,.8)', fontSize: '.65rem',
+          border: '1px dashed rgba(232, 146, 42, .2)',
+          background: 'rgba(232, 146, 42, .04)',
+          color: '#E8922A', fontSize: '.65rem',
         }}>
           ⚠ Piano dei conti non caricato per la società selezionata
         </div>
@@ -460,7 +460,7 @@ export function RegistrazioneRowsTable({
         gap: '.25rem',
         padding: '.3rem .8rem .18rem',
         marginTop: '.5rem',
-        borderBottom: '1px solid rgba(136,169,204,.07)',
+        borderBottom: '1px solid rgba(13, 122, 140, .07)',
       }}>
         {['#', 'Conto', 'Denominazione conto', 'Dare', 'Avere', 'Descrizione riga', ''].map((h, i) => (
           <div key={i} style={{
@@ -468,7 +468,7 @@ export function RegistrazioneRowsTable({
             fontWeight: 700,
             letterSpacing: '.08em',
             textTransform: 'uppercase',
-            color: 'rgba(147,197,253,.5)',
+            color: 'var(--mu)',
             textAlign: (h === 'Dare' || h === 'Avere') ? 'right' : 'left',
             paddingRight: (h === 'Dare' || h === 'Avere') ? '.2rem' : 0,
           }}>
@@ -478,7 +478,7 @@ export function RegistrazioneRowsTable({
       </div>
 
       {/* ── Righe ── */}
-      <div ref={tableRef} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div ref={tableRef} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '.4rem .8rem' }}>
         {effectiveRows.map((row, index) => {
           const { canonicalRow, contoState, contoIsInvalid, rowState, isActiveRow, activeCellKey, isGhost, rowIssue } = getRowMeta(row, index)
           const isLastReal = !isGhost && index === rows.length - 1
@@ -488,20 +488,20 @@ export function RegistrazioneRowsTable({
           const displayDesc = isGhost ? ghostData.descrizione : (row.descrizione || '')
 
           const rowBg = isGhost
-            ? 'rgba(255,208,92,.025)'
+            ? 'rgba(232, 146, 42, .03)'
             : isActiveRow
-              ? 'linear-gradient(180deg,rgba(59,130,246,.07),rgba(37,99,235,.04))'
+              ? '#0E3A4A'
               : rowState.isIncomplete
-                ? 'rgba(251,191,36,.025)'
-                : index % 2 === 0 ? 'rgba(255,255,255,.012)' : 'transparent'
+                ? 'rgba(232, 146, 42, .015)'
+                : index % 2 === 0 ? 'rgba(255, 255, 255, .015)' : 'rgba(255, 255, 255, .005)'
 
           const rowBorder = isGhost
-            ? '1px dashed rgba(255,208,92,.25)'
+            ? '1px dashed rgba(232, 146, 42, .3)'
             : isActiveRow
-              ? '1px solid rgba(59,130,246,.22)'
+              ? '1px solid rgba(13, 122, 140, .4)'
               : rowIssue
-                ? '1px solid rgba(251,113,133,.1)'
-                : '1px solid transparent'
+                ? '1px solid rgba(251, 113, 133, .15)'
+                : '1px solid rgba(255, 255, 255, .035)'
 
           return (
             <div
@@ -511,11 +511,12 @@ export function RegistrazioneRowsTable({
                 gridTemplateColumns: '36px 1fr 1fr 110px 110px 1fr 32px',
                 gap: '.25rem',
                 alignItems: 'center',
-                padding: '.28rem .8rem',
+                padding: '.42rem .8rem',
                 background: rowBg,
                 border: rowBorder,
-                borderRadius: isActiveRow || isGhost ? 8 : 4,
-                margin: isActiveRow || isGhost ? '.05rem 0' : 0,
+                borderLeft: isActiveRow ? '4px solid #E8922A' : undefined,
+                borderRadius: 8,
+                margin: 0,
                 transition: 'background .12s, border-color .12s',
                 opacity: isGhost ? 0.75 : 1,
               }}
@@ -542,7 +543,13 @@ export function RegistrazioneRowsTable({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '.06rem', minWidth: 0 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 24px', gap: '.2rem', alignItems: 'center' }}>
                   <RowInput
-                    value={displayConto}
+                    value={
+                      displayConto === 'Descrizione conto non disponibile' || 
+                      displayConto.toLowerCase() === 'descrizione conto non disponibile' || 
+                      displayConto.toLowerCase() === 'conto da selezionare'
+                        ? '' 
+                        : displayConto
+                    }
                     onChange={(e) => {
                       const v = e.target.value
                       if (isGhost) {
@@ -559,7 +566,13 @@ export function RegistrazioneRowsTable({
                       }
                     }}
                     onKeyDown={(e) => handleKeyDown(e, row.id, 'conto')}
-                    placeholder={isGhost ? 'Digita conto…' : 'Codice o descrizione'}
+                    placeholder={
+                      displayConto === 'Descrizione conto non disponibile' || 
+                      displayConto.toLowerCase() === 'descrizione conto non disponibile' || 
+                      displayConto.toLowerCase() === 'conto da selezionare'
+                        ? displayConto 
+                        : (isGhost ? 'Digita conto…' : 'Codice o descrizione')
+                    }
                     list={datalistId}
                     disabled={disabled}
                     field="conto"
@@ -639,7 +652,7 @@ export function RegistrazioneRowsTable({
                   field="dare"
                   rowId={row.id}
                   activeCellKey={activeCellKey}
-                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}
+                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: '#1AA8BF', fontWeight: 600 }}
                 />
               </div>
 
@@ -666,7 +679,7 @@ export function RegistrazioneRowsTable({
                   field="avere"
                   rowId={row.id}
                   activeCellKey={activeCellKey}
-                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}
+                  style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: '#E8922A', fontWeight: 600 }}
                 />
                 {rowIssue ? (
                   <div style={{
@@ -821,9 +834,9 @@ function KbdButton({ onClick, label, kbd }) {
 }
 
 function BalanceBadge({ isBalanced, sbilancio, validation, totals }) {
-  const color = isBalanced ? '#4ade80' : '#fbbf24'
-  const bg = isBalanced ? 'rgba(34,197,94,.12)' : 'rgba(251,191,36,.1)'
-  const border = isBalanced ? 'rgba(74,222,128,.25)' : 'rgba(251,191,36,.25)'
+  const color = isBalanced ? '#1AA8BF' : '#E8922A'
+  const bg = isBalanced ? 'rgba(13, 122, 140, .1)' : 'rgba(232, 146, 42, .1)'
+  const border = isBalanced ? 'rgba(26, 168, 191, .3)' : 'rgba(232, 146, 42, .3)'
   const icon = isBalanced ? '✓' : '⚖'
 
   let label

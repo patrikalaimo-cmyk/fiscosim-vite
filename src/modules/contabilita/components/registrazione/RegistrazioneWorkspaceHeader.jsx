@@ -32,11 +32,13 @@ export function RegistrazioneWorkspaceHeader({
   draftStarted = false,
 }) {
   const societaLabel = resolveSocietaLabel(societaAttiva)
-  const saveLabel = realSaveBlocked
-    ? 'Salvataggio reale disabilitato'
-    : saving
-      ? 'Salvataggio...'
-      : 'Salva registrazione'
+  const saveLabel = typeof realSaveBlocked === 'string'
+    ? realSaveBlocked
+    : realSaveBlocked
+      ? 'Salvataggio reale disabilitato'
+      : saving
+        ? 'Salvataggio...'
+        : 'Salva registrazione'
 
   return (
     <div className="erp-flat-panel" style={{ marginBottom: '.75rem', padding: '.9rem 1rem' }}>

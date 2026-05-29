@@ -87,6 +87,28 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
     if (!hasRitenuteAnchor) warnings.push('dati ritenute da completare')
   }
 
+  const dataRegStr = String(header.dataRegistrazione || '').trim()
+  const dataDocStr = String(header.dataDocumento || '').trim()
+  if (dataRegStr && dataDocStr) {
+    const dReg = new Date(dataRegStr)
+    const dDoc = new Date(dataDocStr)
+    if (!isNaN(dReg.getTime()) && !isNaN(dDoc.getTime())) {
+      const diffMs = Math.abs(dReg.getTime() - dDoc.getTime())
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+      if (diffDays > 30) {
+        warnings.push('La data del documento differisce dalla data di registrazione di oltre 30 giorni.')
+      }
+    }
+  }
+
+  if (behavior?.requiresDocumentTotal && header.totaleDocumento) {
+    const totDoc = Number(String(header.totaleDocumento || '').replace(',', '.')) || 0
+    const totRows = totals.dare || 0
+    if (Math.abs(totRows - totDoc) > 0.01) {
+      warnings.push(`Il totale del documento (${totDoc.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €) non coincide con il totale delle righe registrate (${totRows.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €).`)
+    }
+  }
+
   const rowStates = rows.map((row, index) => {
     const state = resolveRegistrazioneRowState(row)
     const rowLabel = `riga ${index + 1}`

@@ -8,6 +8,20 @@ export const CANONICAL_ACCOUNTING_SOURCE_MODULES = [
   'migrazione/legacy_bridge',
 ]
 
+export const CANONICAL_ACCOUNTING_REGISTRATION_STATES = [
+  'bozza',
+  'da_verificare',
+  'confermata',
+  'simulata',
+  'contabilizzata',
+  'annullata',
+  'stornata',
+  'storno',
+  'rettificata',
+  'chiusa',
+  'esportata',
+]
+
 export const CANONICAL_ACCOUNTING_SUBJECT_ROLES = [
   'primary',
   'counterparty',

@@ -2,6 +2,146 @@ import { useMemo, useState } from 'react'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../../utils/pipelineLogger.js'
 import { DaValidareSplitView } from '../da_validare_split_view.jsx'
 import { RegistrazioneManualeView } from './RegistrazioneManualeView.jsx'
+
+function buildDraftFromPrimaNota(scrittura = {}, righe = []) {
+  if (!scrittura) return null
+  const safeRighe = Array.isArray(righe) ? righe : []
+  const formatIso = (val) => {
+    if (!val) return ''
+    return String(val).slice(0, 10)
+  }
+  const exercise = scrittura.esercizio || String(new Date(scrittura.data_registrazione || Date.now()).getFullYear())
+  return {
+    header: {
+      esercizioContabile: String(exercise),
+      dataRegistrazione: formatIso(scrittura.data_registrazione),
+      dataDocumento: formatIso(scrittura.data_documento || scrittura.data_registrazione),
+      numeroDocumento: scrittura.numero_documento || '',
+      causaleContabileId: scrittura.causale_codice || '',
+      soggetto: scrittura.cliente_fornitore_nome || '',
+      clienteFornitoreId: scrittura.cliente_fornitore_id || '',
+      clienteFornitoreNome: scrittura.cliente_fornitore_nome || '',
+      clienteFornitoreCodice: scrittura.cliente_fornitore_codice || '',
+      totaleDocumento: String(scrittura.totale_dare || scrittura.totale_avere || ''),
+      descrizioneGenerale: scrittura.descrizione || '',
+      stato: scrittura.stato || 'bozza',
+      versione: scrittura.versione || 1,
+    },
+    documentData: {
+      divisa: 'EUR',
+      cambio: '1,000000',
+      condizioniPagamento: '',
+      modalitaPagamento: '',
+      totaleImponibile: '',
+      totaleImposte: '',
+      totaleDocumento: String(scrittura.totale_dare || scrittura.totale_avere || ''),
+    },
+    ivaData: {
+      causaleIvaId: scrittura.causale_iva_id || '',
+      causaleIvaCodice: scrittura.causale_iva_codice || '',
+      causaleIvaDescrizione: '',
+      registroIva: '',
+      segnoRegistro: '',
+      protocolloProvvisorio: '',
+      protocolloDefinitivo: '',
+      protocolloCee: '',
+      dataCompetenza: formatIso(scrittura.data_registrazione),
+      dataOperazione: formatIso(scrittura.data_registrazione),
+      imponibile: '',
+      totaleImponibile: '',
+      totaleImposta: '',
+      totaleDocumento: String(scrittura.totale_dare || scrittura.totale_avere || ''),
+      ivaDetratta: '',
+      ivaIndetraibile: '',
+      percentualeDetraibilita: '',
+      percentualeIndetraibilita: '',
+      causaleIva: '',
+      aliquotaIva: '',
+      naturaIva: '',
+      rows: [],
+      stato: 'predisposto',
+    },
+    partitarioData: {
+      selectedPartitaId: '',
+      tipoMovimento: '',
+      numeroDocumento: '',
+      dataDocumento: '',
+      tipoDocumento: '',
+      importoOrigine: '',
+      saldoResiduo: '',
+      importoAperto: '',
+      selectedPartitaNumeroDocumento: '',
+      selectedPartitaDataDocumento: '',
+      selectedPartitaTipoDocumento: '',
+      selectedPartitaImportoOrigine: '',
+      selectedPartitaSaldoResiduo: '',
+      importoChiusura: '',
+      manualImportoApertoOverride: false,
+      manualImportoChiusuraOverride: false,
+      segnoChiusura: 'A',
+      stato: 'predisposto',
+    },
+    ritenutaData: {
+      mode: '',
+      percipienteId: '',
+      percipiente: '',
+      percipienteNome: '',
+      codiceFiscale: '',
+      causaleCu: '',
+      causaleReddituale: '',
+      codiceTributo: '',
+      imponibile: '',
+      imponibileReddito: '',
+      importoCompenso: '',
+      quotaNonSoggetta: '',
+      sommeNonSoggette: '',
+      codiceQuotaNonSoggetta: '',
+      codiceSommeNonSoggette: '',
+      codiceEsclusione: '',
+      cassaPrevidenziale: '',
+      baseImponibile: '',
+      baseRitenuta: '',
+      imponibileSoggettoRitenuta: '',
+      aliquotaRitenuta: '',
+      ritenuta: '',
+      netto: '',
+      importoPagamento: '',
+      dataPagamento: '',
+      note: '',
+      escludiDaCu: false,
+      manualBaseOverride: false,
+      manualRitenutaOverride: false,
+      manualNettoOverride: false,
+      manualCompensoOverride: false,
+      stato: 'predisposto',
+    },
+    rows: safeRighe.map((r, index) => {
+      const dareVal = Number(r.importo_dare ?? r.dare) || 0
+      const avereVal = Number(r.importo_avere ?? r.avere) || 0
+      return {
+        id: r.id || `row-${Date.now()}-${index}`,
+        contoQuery: r.conto_codice ? `${r.conto_codice} - ${r.conto_descrizione}` : r.conto_descrizione || '',
+        conto_id: r.conto_id || '',
+        conto_codice: r.conto_codice || '',
+        conto_descrizione: r.conto_descrizione || '',
+        descrizione: r.descrizione_riga || r.descrizione || '',
+        dare: dareVal > 0 ? String(dareVal) : '',
+        avere: avereVal > 0 ? String(avereVal) : '',
+        autoResidualApplied: false,
+        manualAmountOverride: true,
+        manualEdited: true,
+        templateGenerated: false,
+        templateKey: '',
+        templateScope: false,
+      }
+    }),
+    meta: {
+      primaNotaId: scrittura.id,
+      stato: scrittura.stato || 'bozza',
+      versione: scrittura.versione || 1,
+    }
+  }
+}
 import { ConsultazionePrimaNotaView } from './ConsultazionePrimaNotaView.jsx'
 import ArchivioStoricoAIView from './ArchivioStoricoAIView.jsx'
 import ImportStoricoNesView from './ImportStoricoNesView.jsx'
@@ -387,6 +527,7 @@ function RegistrateView({ documenti, onOpenScrittura }) {
 
 export default function PrimaNotaHubView({
   contTab,
+  setContTab,
   documenti,
   scritture,
   pianoConti,
@@ -736,6 +877,8 @@ export default function PrimaNotaHubView({
           causaliIva={causaliIva}
           societaAttiva={societaAttiva}
           onRefresh={caricaTutto}
+          initialDraft={pnGuidataDraft}
+          utente={utente}
         />
       )}
 
@@ -745,6 +888,18 @@ export default function PrimaNotaHubView({
           pianoConti={pianoConti}
           causaliContabili={causaliContabili}
           causaliIva={causaliIva}
+          utente={utente}
+          onEditScrittura={(id, scrittura, righe, mode = 'edit') => {
+            const draft = buildDraftFromPrimaNota(scrittura, righe)
+            if (draft) {
+              draft.meta = {
+                ...draft.meta,
+                operationMode: mode
+              }
+            }
+            setPnGuidataDraft(draft)
+            setContTab('prima_nota_guidata')
+          }}
         />
       )}
 

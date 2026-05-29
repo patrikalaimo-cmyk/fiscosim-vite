@@ -9,50 +9,88 @@
   /*
   --font-ui:'Manrope',sans-serif;
   */
-  --bg:#0f141c;
-  --bg-main:#16263a;
-  --bg-sidebar:#0f1c2c;
-  --bg-surface:rgba(255,255,255,0.06);
-  --bg-card:rgba(255,255,255,0.08);
-  --bg-input:var(--bg-surface);
+
+  /* ==========================================
+     ORIGINAL DEEP DARK THEME (COMMENTED FOR BACKUP/ROLLBACK)
+     ==========================================
+     --bg:#0f141c;
+     --bg-main:#16263a;
+     --bg-sidebar:#0f1c2c;
+     --bg-surface:rgba(255,255,255,0.06);
+     --bg-card:rgba(255,255,255,0.08);
+     --bg-input:var(--bg-surface);
+     --bg-secondary:var(--bg-card);
+     --bg-row:rgba(255,255,255,.012);
+     --bg-row-hover:rgba(255,255,255,.03);
+     --s1:#151c26;
+     --s2:#1a2230;
+     --s3:#202a3a;
+     --bd:#263142;
+     --bd2:#324055;
+     --border:rgba(255,255,255,0.10);
+     --border-subtle:rgba(255,255,255,0.10);
+     --border-strong:rgba(255,255,255,0.08);
+     --gold:#d4af37;
+     --gld2:#e7c78b;
+     --accent-gold:var(--gold);
+     --accent-gold-soft:rgba(212,175,55,.08);
+     --accent-gold-border:rgba(212,175,55,.4);
+     ========================================== */
+
+  /* --- PALETTE PETROLIO & ORO --- */
+  --bg:#0C1628;              /* Midnight Navy */
+  --bg-main:#0C1628;
+  --bg-sidebar:#09111E;      /* Navy extra-scuro per sidebar */
+  --bg-surface:#112038;      /* Pannelli */
+  --bg-card:#152744;         /* Sfondo card */
+  --bg-input:#081422;        /* Sfondo input più scuro */
   --bg-secondary:var(--bg-card);
-  --bg-row:rgba(255,255,255,.012);
-  --bg-row-hover:rgba(255,255,255,.03);
-  --s1:#151c26;
-  --s2:#1a2230;
-  --s3:#202a3a;
-  --bd:#263142;
-  --bd2:#324055;
-  --border:rgba(255,255,255,0.10);
-  --border-subtle:rgba(255,255,255,0.10);
-  --border-strong:rgba(255,255,255,0.08);
-  --gold:#d4af37;
-  --gld2:#e7c78b;
+  --bg-row:rgba(255,255,255,.015);
+  --bg-row-hover:rgba(255,255,255,.035);
+
+  --s1:#0E1B2E;
+  --s2:#12233C;
+  --s3:#172E4F;
+  --bd:#1C375E;
+  --bd2:#25487B;
+  --border:rgba(255,255,255,0.06);
+  --border-subtle:rgba(255,255,255,0.05);
+  --border-strong:rgba(255,255,255,0.09);
+
+  --gold:#E8922A;            /* Oro Arancione */
+  --gld2:#F5B96A;            /* Oro Chiaro */
   --accent-gold:var(--gold);
-  --accent-gold-soft:rgba(212,175,55,.08);
-  --accent-gold-border:rgba(212,175,55,.4);
-  --status-error-bg:rgba(224,82,82,.10);
-  --status-error-border:rgba(224,82,82,.22);
-  --status-error-text:#e8a2a2;
-  --status-warning-bg:rgba(212,175,55,.10);
-  --status-warning-border:rgba(212,175,55,.24);
-  --status-warning-text:#d8bc74;
-  --status-success-bg:rgba(52,194,122,.10);
-  --status-success-border:rgba(52,194,122,.22);
-  --status-success-text:#7bcf9d;
-  --status-neutral-bg:rgba(107,122,153,.11);
-  --status-neutral-border:rgba(107,122,153,.20);
-  --status-neutral-text:#9eabc0;
-  --tx:#f4f7fb;
-  --mu:#a9b7cc;
-  --text-primary:#f1f5f9;
-  --text-secondary:#aab6c8;
-  --muted-2:#a9b4c8;
-  --gr:#34c27a;
-  --rd:#e05252;
-  --bl:#4e8ef7;
-  --pu:#a78bfa;
-  --cy:#22d3ee;
+  --accent-gold-soft:rgba(232,146,42,.08);
+  --accent-gold-border:rgba(232,146,42,.35);
+
+  --petrolio:#0D7A8C;        /* Blu Petrolio */
+  --petrolio-light:#1AA8BF;  /* Blu Petrolio Chiaro (DARE) */
+  --petrolio-soft:rgba(13,122,140,.08);
+  --petrolio-border:rgba(13,122,140,.3);
+
+  --status-error-bg:rgba(232,146,42,.08);      /* Avere sbilancio usa sfumature oro */
+  --status-error-border:rgba(232,146,42,.25);
+  --status-error-text:#F5B96A;
+  --status-warning-bg:rgba(232,146,42,.08);
+  --status-warning-border:rgba(232,146,42,.25);
+  --status-warning-text:#F5B96A;
+  --status-success-bg:rgba(13,122,140,.08);     /* Quadrato usa sfumature petrolio */
+  --status-success-border:rgba(13,122,140,.25);
+  --status-success-text:#1AA8BF;
+  --status-neutral-bg:rgba(94,126,158,.11);
+  --status-neutral-border:rgba(94,126,158,.20);
+  --status-neutral-text:#DDE8F5;
+
+  --tx:#DDE8F5;              /* Testo primario bianco-blu */
+  --mu:#5E7E9E;              /* Testo secondario blu-grigio */
+  --text-primary:#DDE8F5;
+  --text-secondary:#5E7E9E;
+  --muted-2:#5E7E9E;
+  --gr:#1AA8BF;              /* Petrolio chiaro (DARE) */
+  --rd:#E8922A;              /* Oro arancione (AVERE) */
+  --bl:#0D7A8C;              /* Petrolio */
+  --pu:#8B5CF6;
+  --cy:#06B6D4;
   --sp-1:8px;
   --sp-2:16px;
   --sp-3:24px;

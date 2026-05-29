@@ -23,4 +23,7 @@ export const CONSULTAZIONE_FILTER_DEFAULTS = Object.freeze({
   protocolloIva: '',
   testoLibero: '',
   descrizioneRiga: '',
+  tipoScrittureOrdinarie: true,
+  tipoScrittureStornate: false,
+  tipoScrittureSimulate: false,
 })

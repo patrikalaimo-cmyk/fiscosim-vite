@@ -116,10 +116,25 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     { force: Boolean(options?.forceTemplateRows) }
   )
   const effectiveRows = templateRowsDraft.applied ? templateRowsDraft.rows : normalized.rows
+  const cleanedEffectiveRows = (Array.isArray(effectiveRows) ? effectiveRows : []).map(row => {
+    const q = String(row.contoQuery ?? '').trim();
+    const isPlaceholder = q.toLowerCase() === 'descrizione conto non disponibile' || q.toLowerCase() === 'conto da selezionare';
+    return {
+      ...row,
+      contoQuery: isPlaceholder ? '' : row.contoQuery
+    };
+  });
+  const filteredRows = cleanedEffectiveRows.filter(row => {
+    const query = String(row.contoQuery ?? row.conto ?? row.conto_id ?? row.conto_codice ?? row.conto_descrizione ?? '').trim();
+    const dare = Number(row.dare ?? row.importo_dare ?? 0);
+    const avere = Number(row.avere ?? row.importo_avere ?? 0);
+    const desc = String(row.descrizione ?? row.descrizione_riga ?? '').trim();
+    return query || dare > 0 || avere > 0 || desc;
+  });
   const normalizedForDraft = {
     ...normalized,
-    rows: effectiveRows,
-  }
+    rows: filteredRows,
+  };
   const totals = calculateRegistrazioneTotals(normalizedForDraft.rows)
   const documentDraft = buildRegistrazioneDocumentDraft(normalizedForDraft, behavior)
   const partitarioDraft = buildRegistrazionePartitarioDraft({
@@ -141,6 +156,7 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
       ritenutaData: normalizedForDraft.ritenutaData,
       currentRitenutaDraft: normalizedForDraft.ritenutaData,
       percipienti: Array.isArray(options?.percipienti) ? options.percipienti : [],
+      rows: normalizedForDraft.rows,
     },
     { behavior, causaleRitenutaDefaults: options?.causaleRitenutaDefaults || {}, ...options }
   )

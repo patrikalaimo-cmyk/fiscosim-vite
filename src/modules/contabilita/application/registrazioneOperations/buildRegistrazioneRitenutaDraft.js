@@ -11,6 +11,7 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   const partitarioDraft = input?.partitarioDraft && typeof input.partitarioDraft === 'object' ? input.partitarioDraft : {}
   const currentRitenutaDraft = input?.currentRitenutaDraft && typeof input.currentRitenutaDraft === 'object' ? input.currentRitenutaDraft : ritenutaData
   const percipienti = Array.isArray(input?.percipienti) ? input.percipienti : Array.isArray(options?.percipienti) ? options.percipienti : []
+  const rows = Array.isArray(input?.rows) ? input.rows : []
   const causaleRitenutaDefaults = options?.causaleRitenutaDefaults && typeof options.causaleRitenutaDefaults === 'object' ? options.causaleRitenutaDefaults : {}
   const behavior = options?.behavior && typeof options.behavior === 'object' ? options.behavior : {}
   const modeHint = normalizeText(behavior?.ritenuteMode || behavior?.opRitenute || behavior?.op_ritenute || ritenutaData.mode || '').toLowerCase()
@@ -32,6 +33,7 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     percipienti,
     causaleRitenutaDefaults,
     behavior,
+    rows,
   })
   const baseDocumento = {
     totaleDocumento: documentData.totaleDocumento || documentData.totale_documento || header.totaleDocumento || header.totale_documento || '',
@@ -62,6 +64,9 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     codiceSommeNonSoggette: normalizeText(currentRitenutaDraft.codiceSommeNonSoggette || currentRitenutaDraft.codice_somme_non_soggette || ''),
     codiceEsclusione: normalizeText(currentRitenutaDraft.codiceEsclusione || currentRitenutaDraft.codice_esclusione || causaleRitenutaDefaults.codiceEsclusione || ''),
     cassaPrevidenziale: currentRitenutaDraft.cassaPrevidenziale ?? currentRitenutaDraft.cassa_previdenziale ?? defaults.cassaPrevidenziale ?? 0,
+    aliquotaCassa: currentRitenutaDraft.aliquotaCassa ?? currentRitenutaDraft.cassaPrevidenziale ?? currentRitenutaDraft.cassa_previdenziale ?? defaults.cassaPrevidenziale ?? 0,
+    importoCassa: currentRitenutaDraft.importoCassa ?? currentRitenutaDraft.importo_cassa ?? '',
+    codiceCassa: currentRitenutaDraft.codiceCassa || currentRitenutaDraft.codice_cassa || '',
     baseImponibile: currentRitenutaDraft.baseImponibile ?? currentRitenutaDraft.base_imponibile ?? currentRitenutaDraft.baseRitenuta ?? currentRitenutaDraft.imponibileSoggettoRitenuta ?? '',
     baseRitenuta: currentRitenutaDraft.baseRitenuta ?? currentRitenutaDraft.base_imponibile ?? currentRitenutaDraft.imponibileSoggettoRitenuta ?? '',
     aliquotaRitenuta: currentRitenutaDraft.aliquotaRitenuta ?? causaleRitenutaDefaults.aliquotaRitenuta ?? defaults.aliquotaRitenuta ?? 0,
@@ -104,6 +109,9 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
         codiceSommeNonSoggette: base.codiceSommeNonSoggette,
         codiceEsclusione: base.codiceEsclusione,
         cassaPrevidenziale: totals.cassaPrevidenziale,
+        aliquotaCassa: totals.aliquotaCassa,
+        importoCassa: totals.importoCassa,
+        codiceCassa: base.codiceCassa,
         baseImponibile: totals.baseImponibile,
         baseRitenuta: totals.baseRitenuta,
         imponibileSoggettoRitenuta: totals.imponibileSoggettoRitenuta,

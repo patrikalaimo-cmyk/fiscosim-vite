@@ -10,6 +10,7 @@ function MetricCard({ label, value, tone = 'neutral', compact = false }) {
     positive: { fg: '#8be28e' },
     negative: { fg: '#ff8f8f' },
     accent: { fg: '#9bd3ff' },
+    warning: { fg: '#ffb054' },
   }
   const style = palette[tone] || palette.neutral
 
@@ -65,7 +66,7 @@ export function ConsultazioneSaldoSummary({ summary, compact = false, note = '' 
     { label: 'Totale dare', value: summary.totaleDare, tone: 'positive' },
     { label: 'Totale avere', value: summary.totaleAvere, tone: 'negative' },
     { label: 'Saldo', value: summary.saldo, tone: Number(summary.saldo || 0) >= 0 ? 'positive' : 'negative' },
-    { label: 'Conti movimentati', value: summary.contiMovimentati, tone: 'neutral' },
+    { label: 'Da verificare / Non quadrate', value: summary.daVerificare || 0, tone: (summary.daVerificare || 0) > 0 ? 'warning' : 'neutral' },
   ]
 
   return (

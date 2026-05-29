@@ -1,4 +1,4 @@
-﻿import { parseXMLFattura } from '../../../domain/fatture.js'
+import { parseXMLFattura } from '../../../domain/fatture.js'
 import { trace } from '../../core/debug/trace'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
@@ -697,6 +697,7 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
                 )}
           <PrimaNotaHubView
             contTab={effectiveTab}
+            setContTab={setContTab}
             documenti={documenti}
             scritture={scritture}
             pianoConti={pianoConti}

@@ -59,6 +59,9 @@ export function useRegistrazioneKeyboardShortcuts({
   canOpenPartite = false,
   focusDataRegistrazione,
   activeCell = null,
+  allowedTabs = ['rows'],
+  activeTab = 'rows',
+  setActiveTab,
 } = {}) {
   useEffect(() => {
     const root = rootRef?.current
@@ -95,6 +98,42 @@ export function useRegistrazioneKeyboardShortcuts({
       }
 
       if (!isWithinRegistrazioneRoot(event.target)) return
+
+      // Alt + Freccia Destra / Sinistra tab switching
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        if (key === 'ArrowRight') {
+          stopEvent(event)
+          const currentIndex = allowedTabs.indexOf(activeTab)
+          if (currentIndex !== -1 && currentIndex < allowedTabs.length - 1) {
+            const nextTab = allowedTabs[currentIndex + 1]
+            setActiveTab?.(nextTab)
+            window.requestAnimationFrame(() => {
+              const nextSection = root.querySelector(`[data-reg-section="${nextTab}"]`)
+              const firstFocusable = nextSection?.querySelector('[data-reg-focusable="true"]')
+              if (firstFocusable && typeof firstFocusable.focus === 'function') {
+                firstFocusable.focus()
+              }
+            })
+          }
+          return
+        }
+        if (key === 'ArrowLeft') {
+          stopEvent(event)
+          const currentIndex = allowedTabs.indexOf(activeTab)
+          if (currentIndex > 0) {
+            const prevTab = allowedTabs[currentIndex - 1]
+            setActiveTab?.(prevTab)
+            window.requestAnimationFrame(() => {
+              const prevSection = root.querySelector(`[data-reg-section="${prevTab}"]`)
+              const firstFocusable = prevSection?.querySelector('[data-reg-focusable="true"]')
+              if (firstFocusable && typeof firstFocusable.focus === 'function') {
+                firstFocusable.focus()
+              }
+            })
+          }
+          return
+        }
+      }
 
       const activeField = String(event.target?.dataset?.regField || event.target?.dataset?.regKey || '')
       const activeRowId = String(event.target?.dataset?.regRowId || activeCell?.rowId || '')
@@ -149,6 +188,10 @@ export function useRegistrazioneKeyboardShortcuts({
       }
 
       if ((key === 'Enter' || key === 'Return') && typingTarget && event.target?.tagName?.toLowerCase() !== 'textarea') {
+        if (event.target?.dataset?.hasSuggestions === 'true') {
+          // Lascia scorrere l'evento Enter al gestore locale per selezionare il suggerimento
+          return
+        }
         stopEvent(event)
         if (nextKey === '__add_iva_row__') {
           const rowId = onAddIvaRow?.({ focusAfterAdd: true })
@@ -239,5 +282,8 @@ export function useRegistrazioneKeyboardShortcuts({
     onOpenPartite,
     onSave,
     rootRef,
+    allowedTabs,
+    activeTab,
+    setActiveTab,
   ])
 }

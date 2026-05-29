@@ -64,8 +64,16 @@ async function deleteRegistriIvaByPrimaNotaId({
   return db.from('registri_iva').delete().eq('prima_nota_id', primaNotaId)
 }
 
+async function deleteRitenuteDaccontoByPrimaNotaId({
+  db = sb,
+  primaNotaId,
+}) {
+  return db.from('ritenute_dacconto').delete().like('note', `%${primaNotaId}%`)
+}
+
 async function cleanupPrimaNotaCompleta({ db = sb, primaNotaId }) {
   for (const cleanupStep of [
+    () => deleteRitenuteDaccontoByPrimaNotaId({ db, primaNotaId }),
     () => deletePrimaNotaPartitarioByPrimaNotaId({ db, primaNotaId }),
     () => deleteRegistriIvaByPrimaNotaId({ db, primaNotaId }),
     () => deletePrimaNotaRigheByPrimaNotaId({ db, primaNotaId }),
@@ -85,14 +93,16 @@ export async function createPrimaNotaCompleta({
   righePayload = [],
   partEntries = [],
   vatEntries = [],
+  ritenutaEntries = [],
   headerSelect = 'id',
   righeSelect = '*',
   partitarioSelect = '*',
   vatSelect = '*',
+  ritenutaSelect = '*',
   rollbackOnRigheError = true,
 }) {
   const { data: pn, error: pnErr } = await createPrimaNota({ db, pnPayload, headerSelect })
-  if (pnErr) return { data: null, error: pnErr, pn: null, righeIns: null, vatIns: null, partIns: null }
+  if (pnErr) return { data: null, error: pnErr, pn: null, righeIns: null, vatIns: null, partIns: null, ritenuteIns: null }
 
   const primaNotaId = pn?.id
   if (!primaNotaId) {
@@ -103,6 +113,7 @@ export async function createPrimaNotaCompleta({
       righeIns: null,
       vatIns: null,
       partIns: null,
+      ritenuteIns: null,
     }
   }
 
@@ -115,7 +126,7 @@ export async function createPrimaNotaCompleta({
     righeIns = await insertPrimaNotaRighe({ db, righePayload: righeWithPrimaNotaId, righeSelect })
     if (righeIns.error && rollbackOnRigheError) {
       await cleanupPrimaNotaCompleta({ db, primaNotaId })
-      return { data: null, error: righeIns.error, pn, righeIns, vatIns: null, partIns: null }
+      return { data: null, error: righeIns.error, pn, righeIns, vatIns: null, partIns: null, ritenuteIns: null }
     }
   }
 
@@ -128,7 +139,17 @@ export async function createPrimaNotaCompleta({
     vatIns = await insertRegistriIva({ db, vatEntries: vatEntriesWithPrimaNotaId, vatSelect })
     if (vatIns.error) {
       await cleanupPrimaNotaCompleta({ db, primaNotaId })
-      return { data: null, error: vatIns.error, pn, righeIns, vatIns, partIns: null }
+      return { data: null, error: vatIns.error, pn, righeIns, vatIns, partIns: null, ritenuteIns: null }
+    }
+  }
+
+  let ritenuteIns = null
+  if (Array.isArray(ritenutaEntries) && ritenutaEntries.length > 0) {
+    const query = db.from('ritenute_dacconto').insert(ritenutaEntries)
+    ritenuteIns = await (ritenutaSelect ? query.select(ritenutaSelect) : query.select())
+    if (ritenuteIns.error) {
+      await cleanupPrimaNotaCompleta({ db, primaNotaId })
+      return { data: null, error: ritenuteIns.error, pn, righeIns, vatIns, partIns: null, ritenuteIns }
     }
   }
 
@@ -157,6 +178,7 @@ export async function createPrimaNotaCompleta({
           righeIns,
           vatIns,
           partIns,
+          ritenuteIns,
         }
       }
     }
@@ -174,18 +196,20 @@ export async function createPrimaNotaCompleta({
           righeIns,
           vatIns,
           partIns,
+          ritenuteIns,
         }
       }
     }
   }
 
   return {
-    data: { primaNotaId, pn, righeIns, vatIns, partIns },
+    data: { primaNotaId, pn, righeIns, vatIns, partIns, ritenuteIns },
     error: null,
     pn,
     righeIns,
     vatIns,
     partIns,
+    ritenuteIns,
   }
 }
 

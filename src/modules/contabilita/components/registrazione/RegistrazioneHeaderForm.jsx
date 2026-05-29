@@ -156,6 +156,18 @@ export function RegistrazioneHeaderForm({
         <div style={{ display: 'grid', gap: '.08rem' }}>
           <div style={REG_SECTION_TITLE_STYLE}>Testata registrazione</div>
         </div>
+        {!header.primaNotaId && !header.prima_nota_id && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem', fontSize: '.78rem', color: '#6be3f9', cursor: 'pointer', userSelect: 'none', fontWeight: '500' }}>
+            <input
+              type="checkbox"
+              checked={header.isSimulata || false}
+              onChange={(e) => onChange?.('isSimulata', e.target.checked)}
+              disabled={disabled}
+              style={{ cursor: 'pointer', accentColor: '#1ab8bf' }}
+            />
+            <span>Prima nota simulata</span>
+          </label>
+        )}
       </div>
 
       <div className="reg-header-grid reg-header-grid-compact">

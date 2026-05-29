@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import * as contabilitaRepo from '../../data/contabilitaRepo.js'
 import { REG_CARD_STYLE, REG_INPUT_STYLE, REG_SECTION_TITLE_STYLE, formatMoney } from './registrazioneUi.js'
 
 function normalizeText(value) {
@@ -113,6 +115,7 @@ export function RegistrazioneRitenuteDraftPanel({
   behavior = null,
   draft = null,
   percipienti = [],
+  onRefreshPercipienti,
 }) {
   const active = Boolean(behavior?.showRitenute)
   const mode = normalizeText(draft?.mode || ritenutaData?.mode || behavior?.ritenuteMode || 'documento').toLowerCase()
@@ -128,7 +131,23 @@ export function RegistrazioneRitenuteDraftPanel({
     )
   )
 
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [quickForm, setQuickForm] = useState({
+    nome: '',
+    cognome: '',
+    ragione_sociale: '',
+    codice_fiscale: '',
+    data_nascita: '',
+    residenza_fiscale: '',
+    causale_prevalente: 'A',
+    cassa_previdenziale: 4,
+    soggetto_cassa_prev: true,
+    regime_fiscale: 'ordinario',
+    tipo_persona: 'fisica',
+  })
+
   const setField = (field) => (event) => onChange?.(field, event?.target?.type === 'checkbox' ? event?.target?.checked : event?.target?.value ?? '')
+  
   const setPrefilledPercipiente = (value) => {
     onChange?.('percipiente', value)
     const match = resolvePercipiente(value, percipienteOptions)
@@ -148,9 +167,18 @@ export function RegistrazioneRitenuteDraftPanel({
     }
     const aliquota = match.aliquota_ritenuta ?? match.aliquotaRitenuta
     if (aliquota != null && aliquota !== '') onChange?.('aliquotaRitenuta', aliquota)
-    const cassa = match.cassa_previdenziale ?? match.cassaPrevidenziale
-    if (cassa != null && cassa !== '') onChange?.('cassaPrevidenziale', cassa)
+    
+    // Auto-fill cassa previdenziale percentage if present in percipiente
+    const cassa = match.cassa_previdenziale ?? match.cassaPrevidenziale ?? 0
+    if (cassa > 0) {
+      onChange?.('cassaPrevidenziale', cassa)
+      onChange?.('aliquotaCassa', cassa)
+    } else {
+      onChange?.('cassaPrevidenziale', 0)
+      onChange?.('aliquotaCassa', 0)
+    }
   }
+
   const setCausale = (value) => {
     onChange?.('causaleCu', value)
     onChange?.('causaleReddituale', value)
@@ -168,12 +196,78 @@ export function RegistrazioneRitenuteDraftPanel({
   const ritenutaValue = row.ritenuta ?? ritenutaData.ritenuta ?? ''
   const nettoValue = row.netto ?? ritenutaData.netto ?? ''
   const cassaValue = row.cassaPrevidenziale ?? ritenutaData.cassaPrevidenziale ?? ''
-  const codiceCassaValue = row.codiceCassa ?? ritenutaData.codiceCassa ?? ''
   const aliquotaCassaValue = row.aliquotaCassa ?? ritenutaData.aliquotaCassa ?? ''
   const importoCassaValue = row.importoCassa ?? ritenutaData.importoCassa ?? ''
+  const codiceCassaValue = row.codiceCassa ?? ritenutaData.codiceCassa ?? ''
   const codiceTributoValue = row.codiceTributo ?? ritenutaData.codiceTributo ?? '1040'
   const statusValue = row.stato || ritenutaData.stato || 'predisposto'
   const draftValidation = draft?.validation || {}
+
+  const handleOpenQuickCreate = () => {
+    const value = percipienteValue || ''
+    const isCompany = value.toLowerCase().includes('s.r.l.') || value.toLowerCase().includes('s.p.a.') || value.toLowerCase().includes('snc') || value.toLowerCase().includes('studio')
+    
+    setQuickForm({
+      nome: isCompany ? '' : value.split(' ').slice(1).join(' ') || '',
+      cognome: isCompany ? '' : value.split(' ')[0] || value,
+      ragione_sociale: isCompany ? value : '',
+      codice_fiscale: String(draft?.codiceFiscale || ritenutaData?.codiceFiscale || header?.codiceFiscale || '').trim().toUpperCase(),
+      data_nascita: '',
+      residenza_fiscale: '',
+      causale_prevalente: 'A',
+      cassa_previdenziale: 4,
+      soggetto_cassa_prev: true,
+      regime_fiscale: 'ordinario',
+      tipo_persona: isCompany ? 'giuridica' : 'fisica',
+    })
+    setQuickCreateOpen(true)
+  }
+
+  const handleSaveQuickCreate = async () => {
+    if (!(quickForm.codice_fiscale || '').trim()) {
+      alert('Il codice fiscale è obbligatorio.')
+      return
+    }
+    const displayName = quickForm.tipo_persona === 'giuridica' 
+      ? quickForm.ragione_sociale 
+      : `${quickForm.cognome} ${quickForm.nome}`.trim()
+      
+    if (!displayName) {
+      alert('Il nome/ragione sociale è obbligatorio.')
+      return
+    }
+
+    const record = {
+      societa_id: ritenutaData.societaId || draft?.societaId || '',
+      tipo_persona: quickForm.tipo_persona,
+      codice_fiscale: quickForm.codice_fiscale.trim().toUpperCase(),
+      ragione_sociale: quickForm.tipo_persona === 'giuridica' ? quickForm.ragione_sociale : displayName,
+      nome: quickForm.tipo_persona === 'fisica' ? quickForm.nome : '',
+      cognome: quickForm.tipo_persona === 'fisica' ? quickForm.cognome : '',
+      data_nascita: quickForm.data_nascita || null,
+      residenza_fiscale: quickForm.residenza_fiscale || '',
+      causale_prevalente: quickForm.causale_prevalente,
+      aliquota_ritenuta: 20,
+      tipo_ritenuta: 'acconto',
+      soggetto_ritenuta: true,
+      soggetto_cu: true,
+      soggetto_770: true,
+      cassa_previdenziale: quickForm.soggetto_cassa_prev ? Number(quickForm.cassa_previdenziale) : 0,
+      attivo: true
+    }
+
+    const { data: inserted, error } = await contabilitaRepo.insertPercipiente(record)
+    if (error) {
+      alert('Errore durante il salvataggio del percipiente: ' + error.message)
+      return
+    }
+
+    setQuickCreateOpen(false)
+    if (onRefreshPercipienti) {
+      await onRefreshPercipienti()
+    }
+    setPrefilledPercipiente(displayName)
+  }
 
   const summaryRows = [
     { label: 'Compenso', value: draft?.importoCompenso ?? importoCompensoValue ?? 0, tone: 'positive' },
@@ -197,6 +291,224 @@ export function RegistrazioneRitenuteDraftPanel({
   const mainMessage = active
     ? 'Ritenute predisposte. CU/770, scadenzario e F24 non sono generati in questa fase.'
     : 'La causale corrente non prevede ritenute operative. Se cambi causale, la tab si predisporrà in modo automatico.'
+
+  const renderQuickCreateModal = () => {
+    if (!quickCreateOpen) return null
+    return (
+      <div 
+        style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(10, 20, 30, 0.85)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }}
+        onMouseDown={(e) => e.target === e.currentTarget && setQuickCreateOpen(false)}
+      >
+        <div 
+          style={{
+            background: 'linear-gradient(180deg, #132D46, #0C1F31)',
+            border: '1px solid rgba(96,165,250,.2)',
+            borderRadius: '24px',
+            width: '100%',
+            maxWidth: '560px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            display: 'grid',
+            gap: '1.2rem',
+            padding: '1.5rem',
+            color: 'var(--tx)',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#f7c843' }}>Nuovo Percipiente (Inserimento Rapido)</h3>
+            <button 
+              type="button" 
+              onClick={() => setQuickCreateOpen(false)}
+              style={{ background: 'none', border: 'none', color: 'rgba(188,204,226,.6)', fontSize: '1.5rem', cursor: 'pointer' }}
+            >
+              ×
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '.4rem', marginBottom: '.4rem' }}>
+            <button 
+              type="button"
+              onClick={() => setQuickForm(p => ({ ...p, tipo_persona: 'fisica' }))}
+              style={{
+                padding: '.35rem .85rem', borderRadius: '12px', fontSize: '.76rem', fontWeight: 700, cursor: 'pointer',
+                background: quickForm.tipo_persona === 'fisica' ? 'rgba(96,165,250,.2)' : 'rgba(255,255,255,.03)',
+                color: quickForm.tipo_persona === 'fisica' ? '#f7c843' : 'rgba(188,204,226,.7)',
+                border: '1px solid ' + (quickForm.tipo_persona === 'fisica' ? 'rgba(96,165,250,.3)' : 'rgba(255,255,255,.05)')
+              }}
+            >
+              Persona fisica
+            </button>
+            <button 
+              type="button"
+              onClick={() => setQuickForm(p => ({ ...p, tipo_persona: 'giuridica' }))}
+              style={{
+                padding: '.35rem .85rem', borderRadius: '12px', fontSize: '.76rem', fontWeight: 700, cursor: 'pointer',
+                background: quickForm.tipo_persona === 'giuridica' ? 'rgba(96,165,250,.2)' : 'rgba(255,255,255,.03)',
+                color: quickForm.tipo_persona === 'giuridica' ? '#f7c843' : 'rgba(188,204,226,.7)',
+                border: '1px solid ' + (quickForm.tipo_persona === 'giuridica' ? 'rgba(96,165,250,.3)' : 'rgba(255,255,255,.05)')
+              }}
+            >
+              Persona giuridica
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '.8rem' }}>
+            {quickForm.tipo_persona === 'giuridica' ? (
+              <div style={{ gridColumn: 'span 2', display: 'grid', gap: '.25rem' }}>
+                <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>RAGIONE SOCIALE *</label>
+                <input 
+                  value={quickForm.ragione_sociale} 
+                  onChange={(e) => setQuickForm(p => ({ ...p, ragione_sociale: e.target.value }))}
+                  style={REG_INPUT_STYLE}
+                  placeholder="Es. Studio Tecnico SRL"
+                />
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gap: '.25rem' }}>
+                  <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>COGNOME *</label>
+                  <input 
+                    value={quickForm.cognome} 
+                    onChange={(e) => setQuickForm(p => ({ ...p, cognome: e.target.value.toUpperCase() }))}
+                    style={REG_INPUT_STYLE}
+                    placeholder="ROSSI"
+                  />
+                </div>
+                <div style={{ display: 'grid', gap: '.25rem' }}>
+                  <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>NOME *</label>
+                  <input 
+                    value={quickForm.nome} 
+                    onChange={(e) => setQuickForm(p => ({ ...p, nome: e.target.value.toUpperCase() }))}
+                    style={REG_INPUT_STYLE}
+                    placeholder="MARIO"
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'grid', gap: '.25rem' }}>
+              <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>CODICE FISCALE *</label>
+              <input 
+                value={quickForm.codice_fiscale} 
+                onChange={(e) => setQuickForm(p => ({ ...p, codice_fiscale: e.target.value.toUpperCase() }))}
+                style={REG_INPUT_STYLE}
+                maxLength={16}
+                placeholder="RSSMRA80A01H501U"
+              />
+            </div>
+
+            <div style={{ display: 'grid', gap: '.25rem' }}>
+              <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>DATA DI NASCITA</label>
+              <input 
+                type="date"
+                value={quickForm.data_nascita} 
+                onChange={(e) => setQuickForm(p => ({ ...p, data_nascita: e.target.value }))}
+                style={REG_INPUT_STYLE}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gap: '.25rem', gridColumn: 'span 2' }}>
+              <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>RESIDENZA / INDIRIZZO</label>
+              <input 
+                value={quickForm.residenza_fiscale} 
+                onChange={(e) => setQuickForm(p => ({ ...p, residenza_fiscale: e.target.value }))}
+                style={REG_INPUT_STYLE}
+                placeholder="Via Roma 12, Milano"
+              />
+            </div>
+
+            <div style={{ display: 'grid', gap: '.25rem' }}>
+              <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>CAUSALE CU *</label>
+              <select
+                value={quickForm.causale_prevalente}
+                onChange={(e) => setQuickForm(p => ({ ...p, causale_prevalente: e.target.value }))}
+                style={{ ...REG_INPUT_STYLE, padding: '.55rem .7rem' }}
+              >
+                <option value="A">A - Lavoro autonomo abituale</option>
+                <option value="B">B - Diritti d'autore (da autore)</option>
+                <option value="L">L - Diritti d'autore (non autore)</option>
+                <option value="M">M - Lavoro autonomo occasionale</option>
+                <option value="R">R - Provvigioni</option>
+                <option value="V">V - Appalti condominio</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gap: '.25rem' }}>
+              <label style={{ fontSize: '.68rem', fontWeight: 700, color: 'rgba(188,204,226,.78)' }}>REGIME FISCALE *</label>
+              <select
+                value={quickForm.regime_fiscale}
+                onChange={(e) => setQuickForm(p => ({ ...p, regime_fiscale: e.target.value }))}
+                style={{ ...REG_INPUT_STYLE, padding: '.55rem .7rem' }}
+              >
+                <option value="ordinario">Ordinario</option>
+                <option value="forfettario">Forfettario</option>
+                <option value="semplificato">Semplificato</option>
+              </select>
+            </div>
+
+            <div style={{ gridColumn: 'span 2', padding: '.45rem .6rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,.05)', background: 'rgba(255,255,255,.02)', display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+              <input
+                type="checkbox"
+                id="quick-soggetto-cassa"
+                checked={quickForm.soggetto_cassa_prev}
+                onChange={(e) => setQuickForm(p => ({ ...p, soggetto_cassa_prev: e.target.checked }))}
+                style={{ width: 16, height: 16, accentColor: '#f7c843' }}
+              />
+              <label htmlFor="quick-soggetto-cassa" style={{ fontSize: '.74rem', color: 'rgba(188,204,226,.88)', cursor: 'pointer', flex: 1 }}>
+                Soggetto a cassa professionale
+              </label>
+              {quickForm.soggetto_cassa_prev && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '.2rem' }}>
+                  <input
+                    type="number"
+                    value={quickForm.cassa_previdenziale}
+                    onChange={(e) => setQuickForm(p => ({ ...p, cassa_previdenziale: Number(e.target.value) }))}
+                    style={{ ...REG_INPUT_STYLE, width: '50px', padding: '.25rem .45rem', textAlign: 'center' }}
+                  />
+                  <span style={{ fontSize: '.74rem', color: 'rgba(188,204,226,.6)' }}>%</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'flex-end', marginTop: '.4rem' }}>
+            <button 
+              type="button" 
+              onClick={() => setQuickCreateOpen(false)}
+              style={{
+                padding: '.55rem 1.1rem', borderRadius: '12px', fontSize: '.78rem', fontWeight: 700, cursor: 'pointer',
+                background: 'rgba(255,255,255,.04)', color: 'rgba(188,204,226,.8)', border: '1px solid rgba(255,255,255,.08)'
+              }}
+            >
+              Annulla
+            </button>
+            <button 
+              type="button" 
+              onClick={handleSaveQuickCreate}
+              style={{
+                padding: '.55rem 1.1rem', borderRadius: '12px', fontSize: '.78rem', fontWeight: 700, cursor: 'pointer',
+                background: 'linear-gradient(180deg, #E8922A, #d07e20)', color: '#fff', border: 'none',
+                boxShadow: '0 4px 12px rgba(232, 146, 42, 0.2)'
+              }}
+            >
+              Salva percipiente
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="erp-flat-panel" style={{ padding: '.8rem .9rem', height: '100%', display: 'grid', gap: '.55rem' }}>
@@ -229,17 +541,50 @@ export function RegistrazioneRitenuteDraftPanel({
               <div style={{ display: 'grid', gap: '.58rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '.52rem' }}>
                   <Field label="Percipiente">
-                    <input
-                      list="ritenute-percipiente-list"
-                      value={percipienteValue}
-                      onChange={(event) => setPrefilledPercipiente(event?.target?.value ?? '')}
-                      disabled={disabled}
-                      placeholder="Studio Rossi"
-                      style={REG_INPUT_STYLE}
-                      data-reg-focusable="true"
-                      data-reg-key="ritenuteDraftPercipiente"
-                      data-reg-mode={mode}
-                    />
+                    <div style={{ display: 'flex', gap: '.35rem', alignItems: 'center' }}>
+                      <input
+                        list="ritenute-percipiente-list"
+                        value={percipienteValue}
+                        onChange={(event) => setPrefilledPercipiente(event?.target?.value ?? '')}
+                        disabled={disabled}
+                        placeholder="Studio Rossi"
+                        style={{ ...REG_INPUT_STYLE, flex: 1, minWidth: '100px' }}
+                        data-reg-focusable="true"
+                        data-reg-key="ritenuteDraftPercipiente"
+                        data-reg-mode={mode}
+                      />
+                      {percipienteValue && (
+                        draft?.percipienteRecord ? (
+                          <span style={{ fontSize: '.7rem', color: '#8be28e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '.15rem', whiteSpace: 'nowrap' }}>
+                            🟢 Collegato
+                          </span>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '.25rem' }}>
+                            <span style={{ fontSize: '.7rem', color: '#ff8f8f', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              🔴 Assente
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleOpenQuickCreate}
+                              style={{
+                                padding: '.25rem .5rem',
+                                fontSize: '.68rem',
+                                borderRadius: '8px',
+                                background: 'linear-gradient(180deg, #E8922A, #d07e20)',
+                                color: '#fff',
+                                border: 'none',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              + Aggiungi
+                            </button>
+                          </div>
+                        )
+                      )}
+                    </div>
                   </Field>
                   <Field label="Codice fiscale">
                     <input
@@ -259,7 +604,7 @@ export function RegistrazioneRitenuteDraftPanel({
                       value={causaleValue}
                       onChange={(event) => setCausale(event?.target?.value ?? '')}
                       disabled={disabled}
-                      placeholder="A - Lavoro autonomo"
+                      placeholder="A - Lavoro autonomo abituale"
                       style={REG_INPUT_STYLE}
                       data-reg-focusable="true"
                       data-reg-key="ritenuteDraftCausale"
@@ -290,21 +635,33 @@ export function RegistrazioneRitenuteDraftPanel({
                       data-reg-mode={mode}
                     />
                   </Field>
-                  <Field label="Cassa previdenza">
+                  <Field label="Cassa previdenza %">
                     <input
-                      value={cassaValue}
-                      onChange={setField('cassaPrevidenziale')}
+                      value={aliquotaCassaValue || cassaValue}
+                      onChange={setField('aliquotaCassa')}
                       disabled={disabled}
-                      placeholder="EPAP"
+                      placeholder="4"
                       style={REG_INPUT_STYLE}
                       data-reg-focusable="true"
                       data-reg-key="ritenuteDraftCassa"
                       data-reg-mode={mode}
                     />
                   </Field>
+                  <Field label="Importo cassa">
+                    <input
+                      value={importoCassaValue}
+                      onChange={setField('importoCassa')}
+                      disabled={disabled}
+                      placeholder="0,00"
+                      style={REG_INPUT_STYLE}
+                      data-reg-focusable="true"
+                      data-reg-key="ritenuteDraftImportoCassa"
+                      data-reg-mode={mode}
+                    />
+                  </Field>
                   <Field label="Importo compenso">
                     <input
-                      value={row.importoCompenso ?? ritenutaData.importoCompenso ?? row.imponibileReddito ?? row.imponibile ?? ''}
+                      value={importoCompensoValue}
                       onChange={setField('importoCompenso')}
                       disabled={disabled}
                       placeholder="0,00"
@@ -434,30 +791,6 @@ export function RegistrazioneRitenuteDraftPanel({
                       data-reg-mode={mode}
                     />
                   </Field>
-                  <Field label="Aliquota cassa">
-                    <input
-                      value={aliquotaCassaValue}
-                      onChange={setField('aliquotaCassa')}
-                      disabled={disabled}
-                      placeholder="5"
-                      style={REG_INPUT_STYLE}
-                      data-reg-focusable="true"
-                      data-reg-key="ritenuteDraftAliquotaCassa"
-                      data-reg-mode={mode}
-                    />
-                  </Field>
-                  <Field label="Importo cassa">
-                    <input
-                      value={importoCassaValue}
-                      onChange={setField('importoCassa')}
-                      disabled={disabled}
-                      placeholder="0,00"
-                      style={REG_INPUT_STYLE}
-                      data-reg-focusable="true"
-                      data-reg-key="ritenuteDraftImportoCassa"
-                      data-reg-mode={mode}
-                    />
-                  </Field>
                   <Field label="Stato">
                     <input
                       value={statusValue}
@@ -565,6 +898,8 @@ export function RegistrazioneRitenuteDraftPanel({
           <option key={value} value={value} />
         ))}
       </datalist>
+
+      {renderQuickCreateModal()}
     </div>
   )
 }

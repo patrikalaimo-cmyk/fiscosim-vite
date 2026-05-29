@@ -171,7 +171,7 @@ export function ConsultazioneFiltersPanel({
           </button>
         </div>
 
-        <Field label="Causale contabile" span={4}>
+        <Field label="Causale contabile" span={3}>
           <select value={filters.causaleContabile} onChange={setField('causaleContabile')} onKeyDown={handleEnter} style={controlStyle}>
             <option value="">Tutte</option>
             {contabiliOptions.map((item) => {
@@ -185,7 +185,7 @@ export function ConsultazioneFiltersPanel({
             })}
           </select>
         </Field>
-        <Field label="Causale IVA" span={4}>
+        <Field label="Causale IVA" span={3}>
           <select value={filters.causaleIva} onChange={setField('causaleIva')} onKeyDown={handleEnter} style={controlStyle}>
             <option value="">Tutte</option>
             {ivaOptions.map((item) => {
@@ -199,13 +199,158 @@ export function ConsultazioneFiltersPanel({
             })}
           </select>
         </Field>
-        <Field label="Stato quadratura" span={4}>
+        <Field label="Stato quadratura" span={3}>
           <select value={filters.statoQuadratura} onChange={setField('statoQuadratura')} style={controlStyle}>
             <option value="tutti">Tutti</option>
             <option value="quadrata">Quadrata</option>
             <option value="non_quadrata">Non quadrata</option>
           </select>
         </Field>
+        <div className="fg" style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: '.3rem', alignSelf: 'center', marginTop: '.3rem' }}>
+          <label style={{ fontSize: '.52rem', lineHeight: 1, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--mu)', marginBottom: '1px' }}>
+            Tipo Scritture in Ricerca
+          </label>
+          <div style={{ display: 'flex', gap: '.85rem', alignItems: 'center' }}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '.35rem',
+                fontSize: '.72rem',
+                color: '#fff',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={filters.tipoScrittureOrdinarie}
+                onChange={(e) => onChange('tipoScrittureOrdinarie', e.target.checked)}
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                  pointerEvents: 'none',
+                }}
+              />
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: filters.tipoScrittureOrdinarie
+                    ? '2.5px solid var(--gold)'
+                    : '2.5px solid var(--bd)',
+                  background: filters.tipoScrittureOrdinarie
+                    ? 'rgba(232, 146, 42, 0.15)'
+                    : 'transparent',
+                  boxShadow: filters.tipoScrittureOrdinarie
+                    ? '0 0 6px rgba(232, 146, 42, 0.4)'
+                    : 'none',
+                  transition: 'all 0.15s ease-in-out',
+                  display: 'inline-block',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <span style={{ color: filters.tipoScrittureOrdinarie ? '#fff' : 'var(--mu)', fontWeight: 600 }}>
+                Ordinarie
+              </span>
+            </label>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '.35rem',
+                fontSize: '.72rem',
+                color: '#fff',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={filters.tipoScrittureStornate}
+                onChange={(e) => onChange('tipoScrittureStornate', e.target.checked)}
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                  pointerEvents: 'none',
+                }}
+              />
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: filters.tipoScrittureStornate
+                    ? '2.5px solid var(--gold)'
+                    : '2.5px solid var(--bd)',
+                  background: filters.tipoScrittureStornate
+                    ? 'rgba(232, 146, 42, 0.15)'
+                    : 'transparent',
+                  boxShadow: filters.tipoScrittureStornate
+                    ? '0 0 6px rgba(232, 146, 42, 0.4)'
+                    : 'none',
+                  transition: 'all 0.15s ease-in-out',
+                  display: 'inline-block',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <span style={{ color: filters.tipoScrittureStornate ? '#fff' : 'var(--mu)', fontWeight: 600 }}>
+                Stornate
+              </span>
+            </label>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '.35rem',
+                fontSize: '.72rem',
+                color: '#fff',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={filters.tipoScrittureSimulate}
+                onChange={(e) => onChange('tipoScrittureSimulate', e.target.checked)}
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                  pointerEvents: 'none',
+                }}
+              />
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: filters.tipoScrittureSimulate
+                    ? '2.5px solid var(--gold)'
+                    : '2.5px solid var(--bd)',
+                  background: filters.tipoScrittureSimulate
+                    ? 'rgba(232, 146, 42, 0.15)'
+                    : 'transparent',
+                  boxShadow: filters.tipoScrittureSimulate
+                    ? '0 0 6px rgba(232, 146, 42, 0.4)'
+                    : 'none',
+                  transition: 'all 0.15s ease-in-out',
+                  display: 'inline-block',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <span style={{ color: filters.tipoScrittureSimulate ? '#fff' : 'var(--mu)', fontWeight: 600 }}>
+                Simulate
+              </span>
+            </label>
+          </div>
+        </div>
         {advancedOpen ? (
           <div style={{ gridColumn: '1 / -1', marginTop: '.1rem' }}>
             <div

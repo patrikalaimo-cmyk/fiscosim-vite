@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { sb } from '../../../lib/supabase'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
-import { persistPrimaNotaDraft } from '../application/persistPrimaNotaDraft.js'
+import { persistPrimaNotaDraft, mapPrimaNotaPayloadForDb, mapPrimaNotaRigaForDb, resolveDraftBundle } from '../application/persistPrimaNotaDraft.js'
+import { getOperationGuards, updatePrimaNotaControllata, annullaPrimaNotaLogica, stornaPrimaNota } from '../application/primaNotaMutationService.js'
 import { buildRegistrazioneDraft } from '../application/registrazioneOperations/buildRegistrazioneDraft.js'
 import { buildRegistrazioneRowsFromTemplateResolved } from '../application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js'
 import { applyRegistrazioneAutoResidualToRow } from '../application/registrazioneOperations/applyRegistrazioneAutoResidualToRow.js'
@@ -350,11 +351,166 @@ function tabLabel(id) {
   return 'Righe prima nota'
 }
 
-export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causaliContabili = [], causaliIva = [], onRefresh }) {
+async function resolveUtenteStudioId(utente) {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user?.id) {
+      const { data: profile } = await sb.from('utenti_studio')
+        .select('id')
+        .eq('auth_user_id', session.user.id)
+        .eq('attivo', true)
+        .maybeSingle();
+      if (profile?.id) {
+        return profile.id;
+      }
+    }
+  } catch (e) {
+    console.warn('[resolveUtenteStudioId] failed to fetch from active auth session:', e);
+  }
+  
+  if (utente?.id) return utente.id;
+  if (utente?.utente_studio_id) return utente.utente_studio_id;
+  if (utente?.user_id) return utente.user_id;
+  return '00000000-0000-0000-0000-000000000000';
+}
+
+export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causaliContabili = [], causaliIva = [], onRefresh, initialDraft, utente }) {
   const currentYear = new Date().getFullYear()
   const [lastExerciseUsed, setLastExerciseUsed] = useState(String(currentYear))
   const [state, setState] = useState(() => makeInitialState(String(currentYear)))
   const [draftStarted, setDraftStarted] = useState(false)
+
+  // Stati aggiuntivi per flussi di modifica/storno controllati
+  const [operationGuards, setOperationGuards] = useState(null)
+  const [loadingGuards, setLoadingGuards] = useState(false)
+  const [motivoOperazione, setMotivoOperazione] = useState('Errata contabilizzazione')
+  const [dataStornoInput, setDataStornoInput] = useState('')
+
+  const isAnnullaOrStorno = state.meta?.operationMode === 'annulla' || state.meta?.operationMode === 'storno'
+
+  useEffect(() => {
+    if (state.meta?.primaNotaId && isAnnullaOrStorno && societaAttiva?.id) {
+      let alive = true
+      const fetchGuards = async () => {
+        setLoadingGuards(true)
+        setError('')
+        try {
+          const opType = state.meta.operationMode.toUpperCase()
+          const res = await getOperationGuards(state.meta.primaNotaId, societaAttiva.id, opType)
+          if (alive) {
+            if (res.error) {
+              setError('Errore caricamento barriere di sicurezza: ' + (res.error.message || String(res.error)))
+              setOperationGuards(null)
+            } else {
+              setOperationGuards(res.data || null)
+            }
+          }
+        } catch (e) {
+          if (alive) {
+            setError(e?.message || String(e))
+            setOperationGuards(null)
+          }
+        } finally {
+          if (alive) setLoadingGuards(false)
+        }
+      }
+      void fetchGuards()
+      
+      if (state.meta.operationMode === 'storno' && state.header?.dataRegistrazione) {
+        setDataStornoInput(state.header.dataRegistrazione)
+      } else {
+        setDataStornoInput(new Date().toISOString().slice(0, 10))
+      }
+
+      return () => {
+        alive = false
+      }
+    }
+  }, [state.meta?.primaNotaId, state.meta?.operationMode, societaAttiva?.id])
+
+  const handleConfirmOperation = async () => {
+    setError('')
+    setSuccess('')
+    if (!societaAttiva?.id) {
+      setError('Seleziona una società attiva prima di procedere.')
+      return
+    }
+    if (!state.meta?.primaNotaId) {
+      setError('Identificativo prima nota mancante.')
+      return
+    }
+    if (motivoOperazione.trim().length < 15) {
+      setError('Il motivo dell\'operazione deve contenere almeno 15 caratteri per finalità di audit.')
+      return
+    }
+    if (!operationGuards) {
+      setError('Controlli di sicurezza non caricati.')
+      return
+    }
+    if (!operationGuards.can_execute) {
+      const blockers = Array.isArray(operationGuards.blocking_reasons) ? operationGuards.blocking_reasons.join(' · ') : 'Operazione bloccata.'
+      setError(`Operazione bloccata dai controlli di sicurezza: ${blockers}`)
+      return
+    }
+
+    if (operationGuards.warning_level && operationGuards.warning_level !== 'verde') {
+      const warningList = Array.isArray(operationGuards.warnings) ? operationGuards.warnings.join('\n- ') : 'Nessuno'
+      const impactedList = Array.isArray(operationGuards.impacted_outputs) ? operationGuards.impacted_outputs.join('\n- ') : 'Nessuno'
+      const followupList = Array.isArray(operationGuards.required_followups) ? operationGuards.required_followups.join('\n- ') : 'Nessuno'
+      
+      const confirmMsg = `Attenzione (Livello ${operationGuards.warning_level.toUpperCase()})\n\n` +
+        `Warnings:\n- ${warningList}\n\n` +
+        `Output Impattati:\n- ${impactedList}\n\n` +
+        `Follow-up richiesti:\n- ${followupList}\n\n` +
+        `Sei sicuro di voler procedere con l'operazione?`
+        
+      if (!window.confirm(confirmMsg)) {
+        return
+      }
+    }
+
+    setSaving(true)
+    try {
+      const opUtenteId = await resolveUtenteStudioId(utente)
+      const opMode = state.meta.operationMode
+      
+      let res
+      if (opMode === 'annulla') {
+        res = await annullaPrimaNotaLogica(state.meta.primaNotaId, societaAttiva.id, motivoOperazione, opUtenteId)
+      } else if (opMode === 'storno') {
+        res = await stornaPrimaNota(state.meta.primaNotaId, societaAttiva.id, motivoOperazione, dataStornoInput, opUtenteId)
+      }
+
+      if (res.error || (res.data && !res.data.success)) {
+        const detailMsg = res.data?.error || (res.error?.message || String(res.error || 'Errore sconosciuto'))
+        throw new Error(`Impossibile completare l'operazione di ${opMode.toUpperCase()}: ${detailMsg}`)
+      }
+
+      const resData = res.data || {}
+      if (opMode === 'annulla') {
+        setSuccess('Scrittura contabile annullata logicamente con successo.')
+      } else {
+        setSuccess(`Storno contabile speculare completato con successo. Creato storno ID: ${resData.stornoId || 'n/d'} con N° Registrazione: ${resData.numeroStorno || 'n/d'}`)
+      }
+      
+      resetDraft(true, false, state.header.esercizioContabile, false)
+      onRefresh?.()
+    } catch (err) {
+      setError(err?.message || String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (initialDraft) {
+      setState(initialDraft)
+      setDraftStarted(true)
+      if (initialDraft.header?.esercizioContabile) {
+        setLastExerciseUsed(initialDraft.header.esercizioContabile)
+      }
+    }
+  }, [initialDraft])
   const [activeTab, setActiveTab] = useState('rows')
   const [previewMode, setPreviewMode] = useState('overview')
   const [modalState, setModalState] = useState(null)
@@ -449,6 +605,10 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const totals = draftModel.totals
   const templateRowsDraft = draftModel.templateRowsDraft || null
   const realSaveEnabled = canUseRealSaveForSimplePrimaNota(draftModel, selectedCausaleConfig)
+  const isReadOnlyMode = Boolean(state.meta?.primaNotaId && ['annullata', 'stornata', 'storno'].includes(state.meta?.stato))
+  const computedRealSaveBlocked = isReadOnlyMode
+    ? "Scrittura bloccata (Neutralizzata)"
+    : (REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled)
   const canRunDryCommit = Boolean(draftStarted && totals?.isBalanced && draftModel.validation?.status === 'ok' && !saving)
   const dryCommitBlockReason = String(
     draftModel.validation?.blockers?.[0] ||
@@ -710,6 +870,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     setState((prev) => ({
       ...prev,
       header: { ...prev.header, [field]: value },
+      ...(field === 'isSimulata' ? { isSimulata: value } : {}),
       documentData:
         field === 'totaleDocumento'
           ? { ...prev.documentData, totaleDocumento: value }
@@ -832,6 +993,18 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     }))
   }
 
+  const reloadPercipientiCatalog = async () => {
+    if (!societaAttiva?.id) return
+    try {
+      const { data, error: qErr } = await contabilitaRepo.getPercipientiAttivi(societaAttiva.id)
+      if (qErr) throw qErr
+      setPercipientiCatalog(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error('Errore nel ricaricare i percipienti:', e)
+    }
+  }
+
+
   const applyRowPatch = (rowId, patch, options = {}) => {
     setError('')
     setSuccess('')
@@ -903,12 +1076,14 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     return focusField
   }
 
-  const buildCounterpartyHeader = (prevHeader, { contoId = '', contoCode = '', contoName = '', soggetto = '', contoTipo = '' }) => {
+  const buildCounterpartyHeader = (prevHeader, { contoId = '', contoCode = '', contoName = '', soggetto = '', contoTipo = '', codiceFiscale = '', partitaIva = '' }) => {
     const nextSoggetto = String(soggetto || contoName || '').trim()
     const nextId = String(contoId || '').trim()
     const nextCode = String(contoCode || '').trim()
     const nextName = String(contoName || nextSoggetto || '').trim()
     const nextTipo = String(contoTipo || '').trim()
+    const nextCf = String(codiceFiscale || '').trim()
+    const nextPiva = String(partitaIva || '').trim()
 
     return {
       ...prevHeader,
@@ -921,6 +1096,8 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       cliente_fornitore_nome: nextName,
       clienteFornitoreTipo: nextTipo,
       cliente_fornitore_tipo: nextTipo,
+      codiceFiscale: nextCf || nextPiva,
+      clienteFornitoreCodiceFiscale: nextCf || nextPiva
     }
   }
 
@@ -984,10 +1161,15 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     setSuccess('')
     const selected = buildRegistrazioneContoSelection(conto, conto?.__label || conto?.conto_label || conto?.displayLabel || resolveRegistrazioneContoLabel(conto))
     const contoId = String(selected.id || selected.value || '').trim()
-    const contoCode = String(selected.codice || selected.code || selected.sigla || selected.id || '').trim()
+    const contoCode = String(selected.code || selected.sigla || selected.id || '').trim()
     const selectedLabel = selected.__label || resolveRegistrazioneContoLabel(selected)
     const contoDescrizione = selected.conto_descrizione || resolveRegistrazioneContoDescrizione(selected)
     const contoTipo = resolveCounterpartyRole(selected)
+
+    // Extract tax credentials
+    const codiceFiscale = conto?.codice_fiscale || conto?.cf || selected?.codice_fiscale || selected?.cf || ''
+    const partitaIva = conto?.partita_iva || conto?.piva || selected?.partita_iva || selected?.piva || ''
+
     setState((prev) => ({
       ...prev,
       header: buildCounterpartyHeader(prev.header, {
@@ -996,8 +1178,21 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         contoName: selectedLabel || contoDescrizione,
         soggetto: selectedLabel,
         contoTipo,
+        codiceFiscale,
+        partitaIva,
       }),
       rows: syncCounterpartySubjectRow(prev.rows, selected),
+      ritenutaData: {
+        ...prev.ritenutaData,
+        percipienteId: '',
+        percipiente: '',
+        percipienteNome: '',
+        codiceFiscale: '',
+        manualCompensoOverride: false,
+        manualBaseOverride: false,
+        manualRitenutaOverride: false,
+        manualNettoOverride: false,
+      }
     }))
     setTimeout(() => {
       const nextField = rootRef.current?.querySelector?.('[data-reg-key="totaleDocumento"]')
@@ -1197,21 +1392,120 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       setError(draftModel.validation.blockers.join(' · '))
       return
     }
-    if (REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled) {
+    if (computedRealSaveBlocked && !isReadOnlyMode) {
       setError('Salvataggio reale ancora non abilitato per questo caso. Usa Controlla registrazione.')
       return
     }
     setSaving(true)
     try {
-      const result = await persistPrimaNotaDraft({ db: sb, draft: draftModel.draft })
-      if (result?.error) {
-        setError(result.error?.message || String(result.error))
-        return
+      if (state.meta?.primaNotaId) {
+        // 1. Modifica controllata: verificare se è un movimento generale non IVA
+        const isIvaPanelActive = Boolean(selectedCausaleConfig?.showIvaPanel || draftModel.draft.ivaDraft?.active)
+        if (isIvaPanelActive) {
+          throw new Error("La modifica controllata con audit è abilitata unicamente per i movimenti generali non IVA in questa fase.")
+        }
+        
+        // 2. Chiamare operation guards
+        const guardsRes = await getOperationGuards(state.meta.primaNotaId, societaAttiva.id, 'UPDATE')
+        if (guardsRes.error) {
+          throw new Error('Errore nel recupero delle barriere di sicurezza: ' + (guardsRes.error.message || String(guardsRes.error)))
+        }
+        
+        const guards = guardsRes.data || {}
+        if (!guards.can_execute) {
+          const reasons = Array.isArray(guards.blocking_reasons) ? guards.blocking_reasons.join(' · ') : 'Operazione non consentita'
+          throw new Error(`Salvataggio bloccato: ${reasons}`)
+        }
+        
+        // 3. Mostrare warning se presenti (giallo, rosso, nero)
+        if (guards.warning_level && guards.warning_level !== 'verde') {
+          const warningList = Array.isArray(guards.warnings) ? guards.warnings.join('\n- ') : 'Nessuno'
+          const impactedList = Array.isArray(guards.impacted_outputs) ? guards.impacted_outputs.join('\n- ') : 'Nessuno'
+          const followupList = Array.isArray(guards.required_followups) ? guards.required_followups.join('\n- ') : 'Nessuno'
+          
+          const confirmMsg = `Attenzione (Livello ${guards.warning_level.toUpperCase()})\n\n` +
+            `Warnings:\n- ${warningList}\n\n` +
+            `Output Impattati:\n- ${impactedList}\n\n` +
+            `Follow-up richiesti:\n- ${followupList}\n\n` +
+            `Vuoi procedere comunque con il salvataggio?`
+            
+          if (!window.confirm(confirmMsg)) {
+            setSaving(false)
+            return
+          }
+        }
+        
+        // 4. Chiedere motivo obbligatorio di almeno 15 caratteri
+        const motivo = window.prompt("Fornisci il motivo obbligatorio della modifica (almeno 15 caratteri):", "Errata contabilizzazione")
+        if (motivo === null) {
+          setSaving(false)
+          return // User cancelled prompt
+        }
+        if (motivo.trim().length < 15) {
+          throw new Error("Il motivo della modifica deve contenere almeno 15 caratteri per finalità di audit.")
+        }
+        
+        // 5. Preparare payload mappati per la RPC
+        const resolved = resolveDraftBundle(draftModel.draft)
+        const headerDb = mapPrimaNotaPayloadForDb(resolved.pnPayload)
+        
+        // Assicurarsi che totali e metadati siano allineati
+        headerDb.totale_dare = totals.dare
+        headerDb.totale_avere = totals.avere
+        
+        const rowsDb = Array.isArray(resolved.righePayload)
+          ? resolved.righePayload.map((row, index) => mapPrimaNotaRigaForDb(row, index))
+          : []
+          
+        const opUtenteId = await resolveUtenteStudioId(utente)
+        
+        // 6. Eseguire l'RPC transazionale updatePrimaNotaControllata
+        const updateRes = await updatePrimaNotaControllata(
+          state.meta.primaNotaId,
+          societaAttiva.id,
+          headerDb,
+          rowsDb,
+          motivo,
+          opUtenteId
+        )
+        
+        if (updateRes.error || (updateRes.data && !updateRes.data.success)) {
+          const detailMsg = updateRes.data?.error || (updateRes.error?.message || String(updateRes.error || 'Errore sconosciuto'))
+          throw new Error('Impossibile effettuare la modifica controllata: ' + detailMsg)
+        }
+        
+        const resData = updateRes.data || {}
+        setSuccess(`Modifica salvata con successo. Nuova versione: ${resData.versione || 'n/d'}`)
+        setLastExerciseUsed(state.header.esercizioContabile || lastExerciseUsed)
+        resetDraft(true, false, state.header.esercizioContabile, false)
+        onRefresh?.()
+      } else {
+        if (state.header.isSimulata) {
+          if (!window.confirm("Attenzione: stai salvando in Prima Nota simulata. Sei sicuro?")) {
+            setSaving(false);
+            return;
+          }
+        }
+
+        const activeDraft = {
+          ...draftModel.draft,
+          isSimulata: Boolean(state.header.isSimulata),
+          meta: {
+            ...(draftModel.draft?.meta || {}),
+            isSimulata: Boolean(state.header.isSimulata),
+          }
+        };
+
+        const result = await persistPrimaNotaDraft({ db: sb, draft: activeDraft })
+        if (result?.error) {
+          setError(result.error?.message || String(result.error))
+          return
+        }
+        setSuccess(`Registrazione salvata con ID ${result?.data?.prima_nota_id || 'n/d'}`)
+        setLastExerciseUsed(state.header.esercizioContabile || lastExerciseUsed)
+        resetDraft(true, false, state.header.esercizioContabile, false)
+        onRefresh?.()
       }
-      setSuccess(`Registrazione salvata con ID ${result?.data?.prima_nota_id || 'n/d'}`)
-      setLastExerciseUsed(state.header.esercizioContabile || lastExerciseUsed)
-      resetDraft(true, false, state.header.esercizioContabile, false)
-      onRefresh?.()
     } catch (err) {
       setError(err?.message || String(err))
     } finally {
@@ -1255,6 +1549,9 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     canOpenPartite: Boolean(selectedCausaleConfig?.supportsPartitePanel),
     focusDataRegistrazione,
     activeCell,
+    allowedTabs,
+    activeTab,
+    setActiveTab,
   })
 
   if (!societaAttiva) return null
@@ -1303,9 +1600,64 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           onGotoChange={scrollToSection}
           gotoTarget={gotoTarget}
           saving={saving}
-          realSaveBlocked={REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled}
+          realSaveBlocked={computedRealSaveBlocked}
           draftStarted={draftStarted}
         />
+
+        {state.meta?.primaNotaId && (
+          <div
+            className="erp-flat-panel"
+            style={{
+              marginBottom: '.55rem',
+              padding: '.8rem 1.2rem',
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(26, 168, 191, 0.15) 0%, rgba(9, 17, 30, 0.6) 100%)',
+              border: '1px solid rgba(26, 168, 191, 0.4)',
+              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.2)',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>⚙️</span>
+                <div>
+                  <div style={{ fontSize: '.7rem', color: '#1AA8BF', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                    Modalità Modifica Attiva (Audit-Safe)
+                  </div>
+                  <div style={{ fontSize: '.85rem', color: '#fff', fontWeight: 700, marginTop: '2px' }}>
+                    Scrittura ID: <span style={{ fontFamily: 'monospace', color: '#ffb054' }}>{state.meta.primaNotaId}</span> | Versione: <span style={{ color: '#ffb054' }}>{state.meta.versione || 1}</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <span className={`bdg ${state.meta.stato === 'annullata' || state.meta.stato === 'stornata' ? 'bdg-red' : 'bdg-green'}`} style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '.7rem', padding: '.3rem .6rem' }}>
+                  Stato: {state.meta.stato || 'confermata'}
+                </span>
+              </div>
+            </div>
+            
+            {(state.meta.stato === 'annullata' || state.meta.stato === 'stornata') && (
+              <div
+                style={{
+                  marginTop: '.6rem',
+                  padding: '.6rem .8rem',
+                  borderRadius: 8,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#ff8f8f',
+                  fontSize: '.78rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '.5rem',
+                }}
+              >
+                <span>⚠️</span>
+                <span>SCRITTURA BLOCCATA: questa scrittura è stata già ANNULLATA o STORNATA. Nessun salvataggio consentito.</span>
+              </div>
+            )}
+          </div>
+        )}
 
         <RegistrazioneContextBanner
           esercizio={state.header.esercizioContabile}
@@ -1317,189 +1669,437 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           onConfirmExerciseUpdate={confirmExerciseUpdate}
         />
 
-
-
-        <div
-          className={Array.isArray(effectivePianoConti) && effectivePianoConti.length > 0 ? 'alert alert-info' : 'alert alert-err'}
-          style={{ marginBottom: '.55rem', padding: '.45rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}
-        >
-          <strong>Piano conti</strong>
-          <div style={{ fontSize: '.75rem', marginTop: '.15rem' }}>
-            {Array.isArray(effectivePianoConti) && effectivePianoConti.length > 0
-              ? `Caricato ${effectivePianoConti.length} conto/i per la società selezionata.`
-              : pianoContiLoadError || 'Piano dei conti non caricato per la società selezionata'}
-          </div>
-        </div>
-
-        {error ? (
-          <div className="bdg bdg-red" style={{ marginBottom: '.55rem', padding: '.5rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}>
-            {error}
-          </div>
-        ) : null}
-        {success ? (
-          <div className="bdg bdg-green" style={{ marginBottom: '.55rem', padding: '.5rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}>
-            {success}
-          </div>
-        ) : null}
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '.7rem', alignItems: 'stretch', marginBottom: '.7rem' }}>
-          {topPanels}
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.72fr) minmax(360px, .92fr)',
-            gap: '.75rem',
-            alignItems: 'start',
-          }}
-        >
-          <div ref={rowsRef}>
-            <RegistrazioneTabs
-              tabs={allowedTabs.map((id) => ({ id, label: tabLabel(id) }))}
-              activeTab={activeTab}
-              onChange={setActiveTab}
-            />
-
-            {!draftStarted ? (
-              <div className="card" style={{ margin: 0, padding: '.95rem', borderRadius: 18, background: 'linear-gradient(180deg, rgba(19,45,70,.82), rgba(12,31,49,.9))', border: '1px solid rgba(96,165,250,.1)' }}>
-                <div style={{ display: 'grid', gap: '.55rem' }}>
-                  <div style={{ fontSize: '.82rem', fontWeight: 800, color: 'var(--tx)' }}>Nuova registrazione</div>
-                  <div style={{ fontSize: '.74rem', color: 'rgba(188,204,226,.78)', lineHeight: 1.45 }}>
-                    Premi <strong>ALT+N</strong> oppure usa il pulsante dedicato per iniziare una nuova scrittura. Solo dopo si attivano i blocchi da compilare.
+        {isAnnullaOrStorno ? (
+          <div className="card" style={{ margin: '0.5rem 0', padding: '1.5rem', borderRadius: 20, background: 'linear-gradient(180deg, rgba(17,32,56,.95), rgba(9,17,30,.98))', border: '1px solid rgba(26, 168, 191, 0.35)', boxShadow: '0 12px 40px rgba(0,0,0,.4)' }}>
+            {/* Titolo e Intestazione */}
+            <div style={{ borderBottom: '1px solid rgba(255,255,255,.08)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                <span style={{ fontSize: '1.8rem' }}>🛡️</span>
+                <div>
+                  <div style={{ fontSize: '.75rem', color: '#ffb054', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                    Workspace Operazioni Protette
                   </div>
-                  <button type="button" className="btn" onClick={handleNewRegistration} style={{ width: 'fit-content' }}>
-                    Nuova registrazione
-                  </button>
+                  <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fff', margin: '4px 0 0 0' }}>
+                    {state.meta.operationMode === 'annulla' ? 'ANNULLAMENTO SCRITTURA CONTABILE' : 'STORNO SCRITTURA CONTABILE'}
+                  </h2>
                 </div>
               </div>
-            ) : activeTab === 'rows' ? (
-              <RegistrazioneRowsTable
-                rows={rowsWithCounterpartySync}
-                resolvedRows={resolvedRows}
-                pianoConti={effectivePianoConti}
-              onChangeRow={applyRowPatch}
-              onAddRow={handleAddRow}
-              onDeleteRow={handleDeleteRow}
-              onOpenAccountPicker={openAccountPicker}
-              onOpenAccountSearch={openAccountSearch}
-              onApplySbilancio={applySbilancio}
-              onOpenPartite={openPartite}
-              activeCell={activeCell}
-              onFocusCell={(rowId, field) => setActiveCell({ rowId, field })}
-              focusOrder={focusOrder}
-              totals={totals}
-              validation={draftModel.validation}
-              disabled={!draftStarted}
-              templateNotice={
-                templateRowsDraft?.source === 'causale_template'
-                  ? 'Righe proposte da template causale'
-                  : templateRowsDraft?.source === 'causale_structure_history'
-                    ? 'Righe proposte da storico causale'
-                    : templateRowsDraft?.source === 'behavior_fallback'
-                      ? 'Righe proposte da fallback causale'
-                      : templateRowsDraft?.source === 'none'
-                        ? 'Nessun template righe configurato'
-                        : ''
-              }
-              templateActionLabel={!templateRowsDraft?.applied && templateRowsDraft?.source && templateRowsDraft?.source !== 'none' ? 'Applica righe suggerite' : ''}
-              onApplySuggestedRows={!templateRowsDraft?.applied && templateRowsDraft?.source && templateRowsDraft?.source !== 'none' ? () => applySuggestedTemplateRows(false) : null}
-            />
-            ) : activeTab === 'iva' ? (
-              <RegistrazioneIvaPanel
-                ivaData={state.ivaData}
-                onChange={applyIvaPatch}
-                onAddRow={handleAddIvaRow}
-                onDeleteRow={handleDeleteIvaRow}
-                focusOrder={focusOrder}
-                disabled={!draftStarted}
-                behavior={selectedCausaleConfig}
-                draft={draftModel.ivaDraft}
-                causaliIva={effectiveCausaliIva}
-                causaleContabile={selectedCausale}
-              />
-            ) : activeTab === 'partitario' ? (
-              <RegistrazionePartitarioPanel
-                header={state.header}
-                partitarioData={state.partitarioData}
-                partite={selectedContropartePartite}
-                selectedCausale={selectedCausale}
-                onChange={applyPartitarioPatch}
-                onApplySelected={(row) => {
-                  if (!row) return
-                  const saldoRaw = row.saldoResiduo ?? row.importo_residuo ?? row.saldo ?? 0
-                  const saldo = Number.parseFloat(String(saldoRaw).replace(',', '.')) || 0
-                  setState((prev) => ({
-                    ...prev,
-                    partitarioData: {
-                      ...prev.partitarioData,
-                      selectedPartitaId: String(row.id || ''),
-                      selectedPartitaNumeroDocumento: String(row.numeroDocumento || row.numero_documento || ''),
-                      selectedPartitaDataDocumento: String(row.dataDocumento || row.data_documento || ''),
-                      selectedPartitaTipoDocumento: String(row.tipoDocumento || row.tipo_documento || ''),
-                      selectedPartitaImportoOrigine: String(row.importoOrigine || row.importo_originale || row.totale || 0),
-                      selectedPartitaSaldoResiduo: String(saldo),
-                      importoChiusura: String(Math.abs(saldo)),
-                      segnoChiusura: saldo < 0 ? 'D' : 'A',
-                      tipoMovimento: 'chiusura',
-                      manualImportoApertoOverride: false,
-                      manualImportoChiusuraOverride: false,
-                      stato: 'predisposto',
-                    },
-                  }))
-                  setPreviewMode('partite')
-                  scrollToSection('preview')
-                }}
-                focusOrder={focusOrder}
-                disabled={!draftStarted}
-                behavior={selectedCausaleConfig}
-                draft={draftModel.partitarioDraft}
-                validation={draftModel.partitarioDraft?.validation}
-              />
-            ) : activeTab === 'ritenute' ? (
-              <RegistrazioneRitenutePanel
-                ritenutaData={state.ritenutaData}
-                onChange={applyRitenutePatch}
-                focusOrder={focusOrder}
-                disabled={!draftStarted}
-                behavior={selectedCausaleConfig}
-                draft={draftModel.ritenutaDraft}
-                percipienti={percipientiCatalog}
-              />
-            ) : null}
-          </div>
+            </div>
 
-          <div ref={previewRef} style={{ minHeight: 0 }}>
-            <RegistrazionePreviewPanel
-              header={state.header}
-              selectedCausale={selectedCausale}
-              totals={totals}
-              validation={draftModel.validation}
-              dryRunReady={canRunDryCommit}
-              dryRunBlockedReason={dryCommitBlockReason}
-              onControlRegistration={handleControlRegistration}
-              showPartite={Boolean(selectedCausaleConfig?.showPartitario)}
-              partite={selectedContropartePartite}
-              mode={previewMode}
-              onSelectPartita={() => setPreviewMode('overview')}
-              documentDraft={draftModel.documentDraft}
-              ivaDraft={draftModel.ivaDraft}
-              partitarioDraft={draftModel.partitarioDraft}
-              ritenutaDraft={draftModel.ritenutaDraft}
-            />
-            {previewMode === 'partite' && selectedCausaleConfig?.showPartitario ? (
-              <div style={{ marginTop: '.45rem', fontSize: '.62rem', color: 'rgba(188,204,226,.72)' }}>
-                Partite in evidenza tramite scorciatoia F9.
+            {/* Dettaglio della scrittura target */}
+            <div style={{ background: 'rgba(255,255,255,.02)', border: '1px solid rgba(255,255,255,.04)', borderRadius: 12, padding: '1rem', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '.85rem', color: '#1AA8BF', fontWeight: 800, textTransform: 'uppercase', marginTop: 0, marginBottom: '.65rem' }}>Dati Scrittura Target</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '.6rem', fontSize: '.78rem' }}>
+                <div><span style={{ color: 'var(--mu)' }}>N° Registrazione:</span> <strong style={{ color: '#fff' }}>#{state.header.numeroDocumento || '—'}</strong></div>
+                <div><span style={{ color: 'var(--mu)' }}>Data Registrazione:</span> <strong style={{ color: '#fff' }}>{state.header.dataRegistrazione}</strong></div>
+                <div><span style={{ color: 'var(--mu)' }}>Causale Contabile:</span> <strong style={{ color: '#fff' }}>{state.header.causaleContabileId}</strong></div>
+                <div><span style={{ color: 'var(--mu)' }}>Soggetto:</span> <strong style={{ color: '#fff' }}>{state.header.clienteFornitoreNome || '—'}</strong></div>
+                <div><span style={{ color: 'var(--mu)' }}>Totale Dare:</span> <strong style={{ color: '#1AA8BF' }}>€ {formatMoney(totals.dare)}</strong></div>
+                <div><span style={{ color: 'var(--mu)' }}>Totale Avere:</span> <strong style={{ color: '#E8922A' }}>€ {formatMoney(totals.avere)}</strong></div>
+                <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--mu)' }}>Descrizione:</span> <strong style={{ color: '#fff' }}>{state.header.descrizioneGenerale || '—'}</strong></div>
+              </div>
+            </div>
+
+            {/* Anteprima storno (Dare e Avere invertiti) */}
+            {state.meta.operationMode === 'storno' && (
+              <div style={{ background: 'rgba(255,255,255,.02)', border: '1px solid rgba(255,255,255,.04)', borderRadius: 12, padding: '1rem', marginBottom: '1.25rem' }}>
+                <h3 style={{ fontSize: '.85rem', color: '#ffb054', fontWeight: 800, textTransform: 'uppercase', marginTop: 0, marginBottom: '.65rem' }}>
+                  Anteprima Contro-Scrittura di Storno (Dare ↔ Avere Invertiti)
+                </h3>
+                <table className="tbl" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ fontSize: '.7rem', color: 'var(--mu)', background: 'transparent', padding: '4px', textAlign: 'left' }}>Conto</th>
+                      <th style={{ fontSize: '.7rem', color: 'var(--mu)', background: 'transparent', padding: '4px', textAlign: 'right' }}>Dare</th>
+                      <th style={{ fontSize: '.7rem', color: 'var(--mu)', background: 'transparent', padding: '4px', textAlign: 'right' }}>Avere</th>
+                      <th style={{ fontSize: '.7rem', color: 'var(--mu)', background: 'transparent', padding: '4px', textAlign: 'left' }}>Descrizione</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.rows.map((row) => {
+                      const dareVal = Number(row.avere) || 0
+                      const avereVal = Number(row.dare) || 0
+                      return (
+                        <tr key={row.id} style={{ background: 'rgba(255,255,255,.005)' }}>
+                          <td style={{ fontSize: '.74rem', padding: '6px 4px', color: '#fff', textAlign: 'left' }}>
+                            {row.conto_codice} - {row.conto_descrizione}
+                          </td>
+                          <td style={{ fontSize: '.74rem', padding: '6px 4px', textAlign: 'right', color: '#1AA8BF', fontWeight: 700 }}>
+                            {dareVal > 0 ? `€ ${formatMoney(dareVal)}` : '—'}
+                          </td>
+                          <td style={{ fontSize: '.74rem', padding: '6px 4px', textAlign: 'right', color: '#E8922A', fontWeight: 700 }}>
+                            {avereVal > 0 ? `€ ${formatMoney(avereVal)}` : '—'}
+                          </td>
+                          <td style={{ fontSize: '.72rem', padding: '6px 4px', color: 'var(--mu)', textAlign: 'left' }}>
+                            STORNO - {row.descrizione || '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Stato caricamento barriere o visualizzazione barriere */}
+            {loadingGuards ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', background: 'rgba(255,255,255,.01)', borderRadius: 12, border: '1px solid rgba(255,255,255,.03)', color: 'var(--mu)', fontSize: '.8rem' }}>
+                ⏳ Analisi barriere di sicurezza e regole fiscali in corso…
+              </div>
+            ) : operationGuards ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
+                
+                {/* Banner Warning Level */}
+                <div style={{
+                  padding: '1rem',
+                  borderRadius: 12,
+                  background: operationGuards.can_execute 
+                    ? (operationGuards.warning_level === 'verde' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)')
+                    : 'rgba(239, 68, 68, 0.08)',
+                  border: `1px solid ${operationGuards.can_execute 
+                    ? (operationGuards.warning_level === 'verde' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)')
+                    : 'rgba(239, 68, 68, 0.3)'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '.4rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontWeight: 800, fontSize: '.8rem', color: operationGuards.can_execute 
+                    ? (operationGuards.warning_level === 'verde' ? '#10B981' : '#F59E0B')
+                    : '#EF4444' }}>
+                    <span>{operationGuards.can_execute ? '✓ CONTROLLO INTEGRITÀ SUPERATO' : '⚠️ OPERAZIONE BLOCCATA'}</span>
+                    <span style={{ fontSize: '.7rem', padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,.05)', marginLeft: 'auto' }}>
+                      Livello: {operationGuards.warning_level?.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '.76rem', color: 'rgba(255,255,255,.85)', lineHeight: 1.35 }}>
+                    {operationGuards.can_execute 
+                      ? (operationGuards.warning_level === 'verde' 
+                        ? 'Nessun vincolo bloccante o avvertimento rilevato. L\'operazione è sicura e può essere completata.' 
+                        : 'L\'operazione è consentita ma presenta degli impatti o avvisi contabili importanti che richiedono attenzione.')
+                      : 'I controlli fiscali ed amministrativi hanno rilevato dei blocchi inderogabili. Impossibile procedere:'}
+                  </div>
+
+                  {/* Blocking Reasons */}
+                  {!operationGuards.can_execute && Array.isArray(operationGuards.blocking_reasons) && operationGuards.blocking_reasons.length > 0 && (
+                    <ul style={{ margin: '.4rem 0 0 0', paddingLeft: '1.2rem', fontSize: '.74rem', color: '#ff8f8f', display: 'flex', flexDirection: 'column', gap: '.25rem' }}>
+                      {operationGuards.blocking_reasons.map((r, i) => <li key={i}>{r}</li>)}
+                    </ul>
+                  )}
+
+                  {/* Warnings */}
+                  {operationGuards.can_execute && Array.isArray(operationGuards.warnings) && operationGuards.warnings.length > 0 && (
+                    <ul style={{ margin: '.4rem 0 0 0', paddingLeft: '1.2rem', fontSize: '.74rem', color: '#ffb054', display: 'flex', flexDirection: 'column', gap: '.25rem' }}>
+                      {operationGuards.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Riepilogo effetti ed impatti */}
+                {operationGuards.can_execute && (
+                  <div style={{ background: 'rgba(26, 168, 191, 0.02)', border: '1px solid rgba(26, 168, 191, 0.1)', borderRadius: 12, padding: '1rem' }}>
+                    <h4 style={{ fontSize: '.76rem', color: '#1AA8BF', fontWeight: 800, textTransform: 'uppercase', margin: '0 0 .5rem 0' }}>Riepilogo Impatti Stimati</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem', fontSize: '.74rem' }}>
+                      <div>
+                        <span style={{ color: 'var(--mu)' }}>Azione consigliata:</span>{' '}
+                        <strong style={{ color: '#fff', textTransform: 'uppercase' }}>{operationGuards.suggested_workflow || 'procedi'}</strong>
+                      </div>
+                      
+                      {/* Output Impattati */}
+                      {Array.isArray(operationGuards.impacted_outputs) && operationGuards.impacted_outputs.length > 0 && (
+                        <div>
+                          <span style={{ color: 'var(--mu)', display: 'block', marginBottom: '2px' }}>Output ed elaborati impattati:</span>
+                          <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'rgba(255,255,255,.85)' }}>
+                            {operationGuards.impacted_outputs.map((out, i) => <li key={i}>{out}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Followup Richiesti */}
+                      {Array.isArray(operationGuards.required_followups) && operationGuards.required_followups.length > 0 && (
+                        <div>
+                          <span style={{ color: 'var(--mu)', display: 'block', marginBottom: '2px' }}>Follow-up ed adempimenti richiesti dopo l'operazione:</span>
+                          <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'rgba(255,255,255,.85)' }}>
+                            {operationGuards.required_followups.map((fol, i) => <li key={i}>{fol}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
             ) : null}
+
+            {/* Form inserimento motivazione e data storno */}
+            {operationGuards?.can_execute && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '.85rem', borderTop: '1px solid rgba(255,255,255,.05)', paddingTop: '1.25rem' }}>
+                
+                {/* Data Storno (solo se storno) */}
+                {state.meta.operationMode === 'storno' && (
+                  <div className="fg" style={{ maxWidth: 260 }}>
+                    <label style={{ fontSize: '.75rem', fontWeight: 700, color: 'var(--tx)', display: 'block', marginBottom: '4px' }}>
+                      Data Registrazione Contro-Scrittura (Storno)
+                    </label>
+                    <input 
+                      type="date" 
+                      value={dataStornoInput}
+                      onChange={(e) => setDataStornoInput(e.target.value)}
+                      style={{ width: '100%', background: '#0e1d32', border: '1px solid #1c3254', borderRadius: 8, color: '#fff', padding: '.45rem' }}
+                    />
+                  </div>
+                )}
+
+                {/* Motivazione */}
+                <div className="fg">
+                  <label style={{ fontSize: '.75rem', fontWeight: 700, color: 'var(--tx)', display: 'block', marginBottom: '4px' }}>
+                    Giustificazione dell'operazione contabile (obbligatoria, min. 15 caratteri)
+                  </label>
+                  <textarea
+                    placeholder="Fornisci una descrizione dettagliata del motivo dell'operazione..."
+                    value={motivoOperazione}
+                    onChange={(e) => setMotivoOperazione(e.target.value)}
+                    style={{ width: '100%', minHeight: 80, fontSize: '.78rem', background: '#0e1d32', border: '1px solid #1c3254', borderRadius: 8, color: '#fff', padding: '.5rem' }}
+                  />
+                  <div style={{ fontSize: '.68rem', color: motivoOperazione.trim().length >= 15 ? '#8be28e' : '#ff8f8f', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Stato validazione: {motivoOperazione.trim().length >= 15 ? 'Giustificazione valida' : 'Lunghezza insufficiente'}</span>
+                    <span>{motivoOperazione.trim().length} / 15 caratteri</span>
+                  </div>
+                </div>
+
+                {/* Azioni di conferma e annullamento */}
+                <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'flex-end', marginTop: '.75rem' }}>
+                  <button 
+                    type="button" 
+                    className="btn-sec"
+                    onClick={() => {
+                      resetDraft(true, false, state.header.esercizioContabile, false)
+                    }}
+                    disabled={saving}
+                  >
+                    Annulla ed Esci
+                  </button>
+                  
+                  <button
+                    type="button"
+                    className="btn-warn"
+                    style={{ 
+                      background: state.meta.operationMode === 'annulla' ? '#EF4444' : '#F59E0B', 
+                      color: '#000', 
+                      fontWeight: 'bold',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '.6rem 1.2rem',
+                      cursor: 'pointer'
+                    }}
+                    onClick={handleConfirmOperation}
+                    disabled={saving || motivoOperazione.trim().length < 15 || !operationGuards?.can_execute}
+                  >
+                    {saving 
+                      ? 'Elaborazione in corso…' 
+                      : (state.meta.operationMode === 'annulla' ? 'Conferma Annullamento Logico' : 'Conferma Storno Contabile')}
+                  </button>
+                </div>
+
+              </div>
+            )}
+
           </div>
-        </div>
+        ) : (
+          <>
+            <div
+              className={Array.isArray(effectivePianoConti) && effectivePianoConti.length > 0 ? 'alert alert-info' : 'alert alert-err'}
+              style={{ marginBottom: '.55rem', padding: '.45rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}
+            >
+              <strong>Piano conti</strong>
+              <div style={{ fontSize: '.75rem', marginTop: '.15rem' }}>
+                {Array.isArray(effectivePianoConti) && effectivePianoConti.length > 0
+                  ? `Caricato ${effectivePianoConti.length} conto/i per la società selezionata.`
+                  : pianoContiLoadError || 'Piano dei conti non caricato per la società selezionata'}
+              </div>
+            </div>
 
-        <RegistrazioneTotalsBar totals={totals} validation={draftModel.validation} />
+            {error ? (
+              <div className="bdg bdg-red" style={{ marginBottom: '.55rem', padding: '.5rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}>
+                {error}
+              </div>
+            ) : null}
+            {success ? (
+              <div className="bdg bdg-green" style={{ marginBottom: '.55rem', padding: '.5rem .72rem', borderRadius: 12, display: 'block', lineHeight: 1.35 }}>
+                {success}
+              </div>
+            ) : null}
 
-        <div ref={footerRef}>
-          <RegistrazioneShortcutFooter />
-        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '.7rem', alignItems: 'stretch', marginBottom: '.7rem' }}>
+              {topPanels}
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1.72fr) minmax(360px, .92fr)',
+                gap: '.75rem',
+                alignItems: 'start',
+              }}
+            >
+              <div ref={rowsRef}>
+                <RegistrazioneTabs
+                  tabs={allowedTabs.map((id) => ({ id, label: tabLabel(id) }))}
+                  activeTab={activeTab}
+                  onChange={setActiveTab}
+                />
+
+                {!draftStarted ? (
+                  <div className="card" style={{ margin: 0, padding: '.95rem', borderRadius: 18, background: 'linear-gradient(180deg, rgba(19,45,70,.82), rgba(12,31,49,.9))', border: '1px solid rgba(96,165,250,.1)' }}>
+                    <div style={{ display: 'grid', gap: '.55rem' }}>
+                      <div style={{ fontSize: '.82rem', fontWeight: 800, color: 'var(--tx)' }}>Nuova registrazione</div>
+                      <div style={{ fontSize: '.74rem', color: 'rgba(188,204,226,.78)', lineHeight: 1.45 }}>
+                        Premi <strong>ALT+N</strong> oppure usa il pulsante dedicato per iniziare una nuova scrittura. Solo dopo si attivano i blocchi da compilare.
+                      </div>
+                      <button type="button" className="btn" onClick={handleNewRegistration} style={{ width: 'fit-content' }}>
+                        Nuova registrazione
+                      </button>
+                    </div>
+                  </div>
+                ) : activeTab === 'rows' ? (
+                  <div data-reg-section="rows">
+                    <RegistrazioneRowsTable
+                      rows={rowsWithCounterpartySync}
+                      resolvedRows={resolvedRows}
+                      pianoConti={effectivePianoConti}
+                      onChangeRow={applyRowPatch}
+                      onAddRow={handleAddRow}
+                      onDeleteRow={handleDeleteRow}
+                      onOpenAccountPicker={openAccountPicker}
+                      onOpenAccountSearch={openAccountSearch}
+                      onApplySbilancio={applySbilancio}
+                      onOpenPartite={openPartite}
+                      activeCell={activeCell}
+                      onFocusCell={(rowId, field) => setActiveCell({ rowId, field })}
+                      focusOrder={focusOrder}
+                      totals={totals}
+                      validation={draftModel.validation}
+                      disabled={!draftStarted}
+                      templateNotice={
+                        templateRowsDraft?.source === 'causale_template'
+                          ? 'Righe proposte da template causale'
+                          : templateRowsDraft?.source === 'causale_structure_history'
+                            ? 'Righe proposte da storico causale'
+                            : templateRowsDraft?.source === 'behavior_fallback'
+                              ? 'Righe proposte da fallback causale'
+                              : templateRowsDraft?.source === 'none'
+                                ? 'Nessun template righe configurato'
+                                : ''
+                      }
+                      templateActionLabel={!templateRowsDraft?.applied && templateRowsDraft?.source && templateRowsDraft?.source !== 'none' ? 'Applica righe suggerite' : ''}
+                      onApplySuggestedRows={!templateRowsDraft?.applied && templateRowsDraft?.source && templateRowsDraft?.source !== 'none' ? () => applySuggestedTemplateRows(false) : null}
+                    />
+                  </div>
+                ) : activeTab === 'iva' ? (
+                  <div data-reg-section="iva">
+                    <RegistrazioneIvaPanel
+                      ivaData={state.ivaData}
+                      onChange={applyIvaPatch}
+                      onAddRow={handleAddIvaRow}
+                      onDeleteRow={handleDeleteIvaRow}
+                      focusOrder={focusOrder}
+                      disabled={!draftStarted}
+                      behavior={selectedCausaleConfig}
+                      draft={draftModel.ivaDraft}
+                      causaliIva={effectiveCausaliIva}
+                      causaleContabile={selectedCausale}
+                    />
+                  </div>
+                ) : activeTab === 'partitario' ? (
+                  <div data-reg-section="partitario">
+                    <RegistrazionePartitarioPanel
+                      header={state.header}
+                      partitarioData={state.partitarioData}
+                      partite={selectedContropartePartite}
+                      selectedCausale={selectedCausale}
+                      onChange={applyPartitarioPatch}
+                      onApplySelected={(row) => {
+                        if (!row) return
+                        const saldoRaw = row.saldoResiduo ?? row.importo_residuo ?? row.saldo ?? 0
+                        const saldo = Number.parseFloat(String(saldoRaw).replace(',', '.')) || 0
+                        setState((prev) => ({
+                          ...prev,
+                          partitarioData: {
+                            ...prev.partitarioData,
+                            selectedPartitaId: String(row.id || ''),
+                            selectedPartitaNumeroDocumento: String(row.numeroDocumento || row.numero_documento || ''),
+                            selectedPartitaDataDocumento: String(row.dataDocumento || row.data_documento || ''),
+                            selectedPartitaTipoDocumento: String(row.tipoDocumento || row.tipo_documento || ''),
+                            selectedPartitaImportoOrigine: String(row.importoOrigine || row.importo_originale || row.totale || 0),
+                            selectedPartitaSaldoResiduo: String(saldo),
+                            importoChiusura: String(Math.abs(saldo)),
+                            segnoChiusura: saldo < 0 ? 'D' : 'A',
+                            tipoMovimento: 'chiusura',
+                            manualImportoApertoOverride: false,
+                            manualImportoChiusuraOverride: false,
+                            stato: 'predisposto',
+                          },
+                        }))
+                        setPreviewMode('partite')
+                        scrollToSection('preview')
+                      }}
+                      focusOrder={focusOrder}
+                      disabled={!draftStarted}
+                      behavior={selectedCausaleConfig}
+                      draft={draftModel.partitarioDraft}
+                      validation={draftModel.partitarioDraft?.validation}
+                    />
+                  </div>
+                ) : activeTab === 'ritenute' ? (
+                  <div data-reg-section="ritenute">
+                    <RegistrazioneRitenutePanel
+                      ritenutaData={state.ritenutaData}
+                      onChange={applyRitenutePatch}
+                      focusOrder={focusOrder}
+                      disabled={!draftStarted}
+                      behavior={selectedCausaleConfig}
+                      draft={draftModel.ritenutaDraft}
+                      percipienti={percipientiCatalog}
+                      onRefreshPercipienti={reloadPercipientiCatalog}
+                      header={state.header}
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <div ref={previewRef} style={{ minHeight: 0 }}>
+                <RegistrazionePreviewPanel
+                  header={state.header}
+                  selectedCausale={selectedCausale}
+                  totals={totals}
+                  validation={draftModel.validation}
+                  dryRunReady={canRunDryCommit}
+                  dryRunBlockedReason={dryCommitBlockReason}
+                  onControlRegistration={handleControlRegistration}
+                  showPartite={Boolean(selectedCausaleConfig?.showPartitario)}
+                  partite={selectedContropartePartite}
+                  mode={previewMode}
+                  onSelectPartita={() => setPreviewMode('overview')}
+                  documentDraft={draftModel.documentDraft}
+                  ivaDraft={draftModel.ivaDraft}
+                  partitarioDraft={draftModel.partitarioDraft}
+                  ritenutaDraft={draftModel.ritenutaDraft}
+                />
+                {previewMode === 'partite' && selectedCausaleConfig?.showPartitario ? (
+                  <div style={{ marginTop: '.45rem', fontSize: '.62rem', color: 'rgba(188,204,226,.72)' }}>
+                    Partite in evidenza tramite scorciatoia F9.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <RegistrazioneTotalsBar totals={totals} validation={draftModel.validation} />
+
+            <div ref={footerRef}>
+              <RegistrazioneShortcutFooter />
+            </div>
+          </>
+        )}
       </div>
 
         <RegistrazioneAccountPickerModal

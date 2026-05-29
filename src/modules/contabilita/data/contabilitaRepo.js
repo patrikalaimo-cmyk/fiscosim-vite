@@ -747,3 +747,576 @@ export function insertRitenuta(record) {
 export function deleteRitenuta(id) {
   return sb.from('ritenute_dacconto').delete().eq('id', id)
 }
+
+// --- FASE 1.3: CONSULTAZIONE, STORNI E RETTIFICHE ---
+
+async function isIvaPeriodLiquidated(societaId, dataRegistrazioneStr) {
+  if (!dataRegistrazioneStr) return false
+  const date = new Date(dataRegistrazioneStr)
+  if (isNaN(date.getTime())) return false
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1 // 1-12
+  const quarter = Math.ceil(month / 3) // 1-4
+
+  const { data, error } = await sb
+    .from('liquidazioni_iva_societa')
+    .select('*')
+    .eq('societa_id', societaId)
+    .eq('anno', year)
+
+  if (error || !data || data.length === 0) return false
+
+  for (const liq of data) {
+    if (liq.tipo_periodo === 'mensile' && String(liq.periodo) === String(month)) {
+      return true
+    }
+    if (liq.tipo_periodo === 'trimestrale' && String(liq.periodo) === String(quarter)) {
+      return true
+    }
+  }
+  return false
+}
+
+export async function findPianoContoByCodice(societaId, codice) {
+  const { data, error } = await sb
+    .from('piano_conti')
+    .select('*')
+    .eq('societa_id', societaId)
+    .eq('codice', codice)
+    .maybeSingle()
+  return { data: data || null, error: error || null }
+}
+
+export async function getScritturaDettaglioById(primaNotaId) {
+  try {
+    const headerRes = await sb
+      .from('prima_nota')
+      .select('*')
+      .eq('id', primaNotaId)
+      .maybeSingle()
+    if (headerRes.error) throw headerRes.error
+    if (!headerRes.data) return { data: null, error: new Error('Registrazione non trovata') }
+
+    const righeRes = await sb
+      .from('prima_nota_righe')
+      .select('*')
+      .eq('prima_nota_id', primaNotaId)
+      .order('riga_numero', { ascending: true })
+    if (righeRes.error) throw righeRes.error
+
+    return {
+      data: {
+        scrittura: headerRes.data,
+        righe: righeRes.data || [],
+      },
+      error: null,
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+export async function getDeleteScritturaGuards(primaNotaId, societaId) {
+  try {
+    const opCtxRes = await getScritturaOperationContext(primaNotaId, societaId)
+    if (opCtxRes.error) throw opCtxRes.error
+
+    const opCtx = opCtxRes.data
+    const reasons = []
+
+    if (!opCtx.actionModel.canDeleteIsolated) {
+      const detailRes = await getScritturaDettaglioById(primaNotaId)
+      if (detailRes.error) throw detailRes.error
+      const { scrittura } = detailRes.data
+
+      if (scrittura.stato === 'annullata') {
+        reasons.push('La registrazione è già annullata.')
+      }
+
+      const isLiquidated = await isIvaPeriodLiquidated(societaId, scrittura.data_registrazione)
+      if (isLiquidated) {
+        reasons.push('Il periodo IVA relativo alla registrazione è già stato liquidato.')
+      }
+
+      const { data: partEntries } = await sb
+        .from('partitario')
+        .select('*')
+        .or(`prima_nota_id.eq.${primaNotaId},chiusa_da_prima_nota_id.eq.${primaNotaId}`)
+
+      if (partEntries && partEntries.length > 0) {
+        for (const entry of partEntries) {
+          if (entry.prima_nota_id === primaNotaId && Number(entry.importo_pagato || 0) > 0) {
+            reasons.push(`La fattura collegata ha pagamenti attivi per €${entry.importo_pagato}.`)
+          }
+          if (entry.chiusa_da_prima_nota_id === primaNotaId) {
+            reasons.push(`La scrittura è registrata come pagamento per la scadenza partita ID ${entry.id}.`)
+          }
+        }
+      }
+    }
+
+    return {
+      data: {
+        canDelete: reasons.length === 0,
+        reasons,
+      },
+      error: null,
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+export async function getScritturaOperationContext(primaNotaId, societaId) {
+  try {
+    const detailRes = await getScritturaDettaglioById(primaNotaId)
+    if (detailRes.error) throw detailRes.error
+    const { scrittura, righe } = detailRes.data
+
+    const isLiquidated = await isIvaPeriodLiquidated(societaId, scrittura.data_registrazione)
+
+    const { data: partEntries, error: partErr } = await sb
+      .from('partitario')
+      .select('*')
+      .or(`prima_nota_id.eq.${primaNotaId},chiusa_da_prima_nota_id.eq.${primaNotaId}`)
+    if (partErr) throw partErr
+
+    let hasPayments = false
+    let isPayment = false
+    const details = []
+
+    if (partEntries && partEntries.length > 0) {
+      for (const entry of partEntries) {
+        if (entry.prima_nota_id === primaNotaId) {
+          if (Number(entry.importo_pagato || 0) > 0) {
+            hasPayments = true
+            details.push(`Fattura incassata/pagata parzialmente o totalmente (pagato: €${entry.importo_pagato})`)
+          }
+        }
+        if (entry.chiusa_da_prima_nota_id === primaNotaId) {
+          isPayment = true
+          details.push(`Registrazione di pagamento collegata alla partita ID ${entry.id}`)
+        }
+      }
+    }
+
+    const isAnnullata = scrittura.stato === 'annullata'
+    const isIsolated = !hasPayments && !isPayment && !isLiquidated && !isAnnullata
+    const canDeleteIsolated = isIsolated
+    const requiresAnnullaRegistrazione = !isIsolated && !isAnnullata
+
+    let guidance = ''
+    if (isAnnullata) {
+      guidance = 'La registrazione è già stata annullata.'
+    } else if (isIsolated) {
+      guidance = 'Scrittura isolata. È possibile procedere con la cancellazione diretta transazionale.'
+    } else {
+      guidance = 'Scrittura collegata. ' + (
+        isLiquidated ? 'Il periodo IVA è già stato liquidato: è necessario eseguire uno storno contabile. ' : ''
+      ) + (
+        hasPayments ? 'La fattura è collegata a pagamenti attivi nel partitario: è necessario eseguire uno storno contabile. ' : ''
+      ) + (
+        isPayment ? 'Questa scrittura è un pagamento registrato nel partitario: è necessario eseguire uno storno contabile. ' : ''
+      )
+    }
+
+    return {
+      data: {
+        isIsolated,
+        actionModel: {
+          canDeleteIsolated,
+          requiresAnnullaRegistrazione,
+        },
+        guidance,
+      },
+      error: null,
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+export async function deleteScritturaControllata(primaNotaId, societaId) {
+  try {
+    const delRitRes = await sb.from('ritenute_dacconto').delete().like('note', `%${primaNotaId}%`)
+    if (delRitRes.error) throw delRitRes.error
+
+    const delPartRes = await sb.from('partitario').delete().eq('prima_nota_id', primaNotaId)
+    if (delPartRes.error) throw delPartRes.error
+
+    const delIvaRes = await sb.from('registri_iva').delete().eq('prima_nota_id', primaNotaId)
+    if (delIvaRes.error) throw delIvaRes.error
+
+    const delRigheRes = await sb.from('prima_nota_righe').delete().eq('prima_nota_id', primaNotaId)
+    if (delRigheRes.error) throw delRigheRes.error
+
+    const delPnRes = await sb.from('prima_nota').delete().eq('id', primaNotaId)
+    if (delPnRes.error) throw delPnRes.error
+
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+export async function prepareAnnullaRegistrazione(primaNotaId, societaId) {
+  try {
+    const detailRes = await getScritturaDettaglioById(primaNotaId)
+    if (detailRes.error) throw detailRes.error
+    const { scrittura, righe } = detailRes.data
+
+    const isAnnullata = scrittura.stato === 'annullata'
+    const reasons = []
+    const impattiPrevisti = []
+
+    if (isAnnullata) {
+      reasons.push('La registrazione è già in stato annullata.')
+    } else {
+      impattiPrevisti.push(`Generazione scrittura di storno Prima Nota con descrizione "STORNO REGISTRAZIONE N. ${scrittura.numero_registrazione || ''}"`)
+      impattiPrevisti.push('Inversione semantica delle righe contabili: Dare originario diventa Avere e viceversa')
+
+      const hasIva = righe && righe.some(r => Number(r.importo_iva || r.iva || 0) > 0 || r.causale_iva_codice)
+      if (hasIva || scrittura.causale_iva_codice) {
+        impattiPrevisti.push("Storno IVA con importi negativi in registri_iva per neutralizzare l'imposta")
+      }
+
+      const { data: partEntries } = await sb
+        .from('partitario')
+        .select('*')
+        .eq('prima_nota_id', primaNotaId)
+
+      if (partEntries && partEntries.length > 0) {
+        impattiPrevisti.push(`Chiusura delle partite aperte correlate nel partitario (${partEntries.length} scadenze)`)
+      }
+    }
+
+    return {
+      data: {
+        canPrepare: reasons.length === 0,
+        nextAction: 'annulla_registrazione_collegata',
+        reasons,
+        impattiPrevisti,
+      },
+      error: null,
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+export async function annullaRegistrazioneCollegata(primaNotaId, societaId) {
+  try {
+    const detailRes = await getScritturaDettaglioById(primaNotaId)
+    if (detailRes.error) throw detailRes.error
+    const { scrittura, righe } = detailRes.data
+
+    if (scrittura.stato === 'annullata') {
+      throw new Error('La registrazione è già in stato annullata.')
+    }
+
+    const { data: maxPn } = await sb
+      .from('prima_nota')
+      .select('numero_registrazione')
+      .eq('societa_id', societaId)
+      .order('numero_registrazione', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const nextNum = (Number(maxPn?.numero_registrazione) || 0) + 1
+
+    const todayStr = new Date().toISOString().slice(0, 10)
+
+    const stornoPnPayload = {
+      societa_id: societaId,
+      numero_registrazione: nextNum,
+      data_registrazione: todayStr,
+      data_documento: scrittura.data_documento,
+      numero_documento: scrittura.numero_documento,
+      causale_codice: scrittura.causale_codice,
+      causale_iva_codice: scrittura.causale_iva_codice,
+      descrizione: `STORNO REGISTRAZIONE N. ${scrittura.numero_registrazione || ''}`,
+      cliente_fornitore_id: scrittura.cliente_fornitore_id,
+      cliente_fornitore_nome: scrittura.cliente_fornitore_nome,
+      totale_dare: scrittura.totale_avere || 0,
+      totale_avere: scrittura.totale_dare || 0,
+      stato: 'definitiva',
+    }
+
+    const { data: stornoPn, error: stornoPnErr } = await sb
+      .from('prima_nota')
+      .insert([stornoPnPayload])
+      .select()
+      .single()
+
+    if (stornoPnErr) throw stornoPnErr
+    const stornoPnId = stornoPn.id
+
+    const stornoRighe = righe.map((r) => ({
+      prima_nota_id: stornoPnId,
+      riga_numero: r.riga_numero,
+      conto_id: r.conto_id,
+      conto_codice: r.conto_codice,
+      conto_descrizione: r.conto_descrizione,
+      descrizione_riga: `STORNO - ${r.descrizione_riga || ''}`,
+      dare: !r.dare,
+      avere: !r.avere,
+      importo_dare: r.importo_avere || 0,
+      importo_avere: r.importo_dare || 0,
+      causale_iva_codice: r.causale_iva_codice,
+      tipo_riga_auto: r.tipo_riga_auto,
+    }))
+
+    const { error: stornoRigheErr } = await sb
+      .from('prima_nota_righe')
+      .insert(stornoRighe)
+
+    if (stornoRigheErr) {
+      await sb.from('prima_nota').delete().eq('id', stornoPnId)
+      throw stornoRigheErr
+    }
+
+    const { data: originalIvaEntries } = await sb
+      .from('registri_iva')
+      .select('*')
+      .eq('prima_nota_id', primaNotaId)
+
+    if (originalIvaEntries && originalIvaEntries.length > 0) {
+      const stornoIvaEntries = originalIvaEntries.map((e) => ({
+        prima_nota_id: stornoPnId,
+        societa_id: societaId,
+        data: todayStr,
+        tipo: e.tipo,
+        registro_codice: e.registro_codice,
+        registro_nome: e.registro_nome,
+        causale_iva_codice: e.causale_iva_codice,
+        causale_iva_id: e.causale_iva_id,
+        documento_contabilita_id: e.documento_contabilita_id,
+        imponibile: -(e.imponibile || 0),
+        iva: -(e.iva || 0),
+        iva_detraibile: -(e.iva_detraibile || 0),
+        totale: -(e.totale || 0),
+      }))
+
+      const { error: stornoIvaErr } = await sb
+        .from('registri_iva')
+        .insert(stornoIvaEntries)
+
+      if (stornoIvaErr) {
+        await sb.from('prima_nota_righe').delete().eq('prima_nota_id', stornoPnId)
+        await sb.from('prima_nota').delete().eq('id', stornoPnId)
+        throw stornoIvaErr
+      }
+    }
+
+    const { data: partEntries } = await sb
+      .from('partitario')
+      .select('*')
+      .or(`prima_nota_id.eq.${primaNotaId},chiusa_da_prima_nota_id.eq.${primaNotaId}`)
+
+    if (partEntries && partEntries.length > 0) {
+      for (const entry of partEntries) {
+        if (entry.prima_nota_id === primaNotaId) {
+          const updates = {
+            importo_pagato: entry.importo_originale,
+            importo_residuo: 0,
+            stato: 'chiusa',
+            chiusa_da_prima_nota_id: stornoPnId,
+            data_chiusura: todayStr,
+            updated_at: new Date().toISOString(),
+          }
+          await sb.from('partitario').update(updates).eq('id', entry.id)
+        } else if (entry.chiusa_da_prima_nota_id === primaNotaId) {
+          const original = Number(entry.importo_originale || 0)
+          const updates = {
+            importo_pagato: 0,
+            importo_residuo: original,
+            stato: 'aperta',
+            chiusa_da_prima_nota_id: null,
+            data_chiusura: null,
+            updated_at: new Date().toISOString(),
+          }
+          await sb.from('partitario').update(updates).eq('id', entry.id)
+        }
+      }
+    }
+
+    const { error: updateOrigErr } = await sb
+      .from('prima_nota')
+      .update({ stato: 'annullata' })
+      .eq('id', primaNotaId)
+
+    if (updateOrigErr) throw updateOrigErr
+
+    return { data: { success: true, stornoPrimaNotaId: stornoPnId }, error: null }
+  } catch (error) {
+    console.error('[annullaRegistrazioneCollegata] Error:', error)
+    return { data: null, error }
+  }
+}
+
+export async function getPrimaNotaConsultazioneRowsAdvanced(
+  societaId,
+  {
+    dateFrom = null,
+    dateTo = null,
+    contoLike = '',
+    soggettoLike = '',
+    numeroDocumentoLike = '',
+    causaleContabile = '',
+    causaleIva = '',
+    testoLibero = '',
+    importoPreciso = '',
+    importoDa = '',
+    importoA = '',
+    registroIva = '',
+    protocolloIva = '',
+    page = 1,
+    pageSize = 50,
+    tipoScrittureOrdinarie = true,
+    tipoScrittureStornate = false,
+    tipoScrittureSimulate = false,
+  } = {}
+) {
+  try {
+    let q = sb
+      .from('prima_nota_righe')
+      .select('*, prima_nota!inner(*)', { count: 'exact' })
+      .eq('prima_nota.societa_id', societaId)
+
+    // Applica filtro sulle scritture ordinarie / stornate / simulate
+    const ord = tipoScrittureOrdinarie !== false
+    const storn = tipoScrittureStornate === true
+    const sim = tipoScrittureSimulate === true
+
+    if (ord && !storn && !sim) {
+      q = q.not('prima_nota.stato', 'in', '("stornata","storno","annullata","simulata")')
+    } else if (!ord && storn && !sim) {
+      q = q.in('prima_nota.stato', ['stornata', 'storno', 'annullata'])
+    } else if (!ord && !storn && sim) {
+      q = q.eq('prima_nota.stato', 'simulata')
+    } else if (ord && storn && !sim) {
+      q = q.not('prima_nota.stato', 'eq', 'simulata')
+    } else if (ord && !storn && sim) {
+      q = q.not('prima_nota.stato', 'in', '("stornata","storno","annullata")')
+    } else if (!ord && storn && sim) {
+      q = q.in('prima_nota.stato', ['stornata', 'storno', 'annullata', 'simulata'])
+    } else if (ord && storn && sim) {
+      // no state filter, include all
+    } else {
+      // all false fallback: default to ordinarie only
+      q = q.not('prima_nota.stato', 'in', '("stornata","storno","annullata","simulata")')
+    }
+
+    if (dateFrom) {
+      q = q.gte('prima_nota.data_registrazione', dateFrom)
+    }
+    if (dateTo) {
+      q = q.lte('prima_nota.data_registrazione', dateTo)
+    }
+    if (contoLike) {
+      q = q.or(`conto_codice.ilike.%${contoLike}%,conto_descrizione.ilike.%${contoLike}%,descrizione_riga.ilike.%${contoLike}%`)
+    }
+    if (soggettoLike) {
+      q = q.ilike('prima_nota.cliente_fornitore_nome', `%${soggettoLike}%`)
+    }
+    if (numeroDocumentoLike) {
+      q = q.ilike('prima_nota.numero_documento', `%${numeroDocumentoLike}%`)
+    }
+    if (causaleContabile) {
+      q = q.eq('prima_nota.causale_codice', causaleContabile)
+    }
+    if (causaleIva) {
+      q = q.or(`causale_iva_codice.eq.${causaleIva},prima_nota.causale_iva_codice.eq.${causaleIva}`)
+    }
+
+    if (testoLibero) {
+      const cleanTerm = testoLibero.trim()
+      if (cleanTerm) {
+        const numberVal = parseFloat(cleanTerm.replace(/[^\d.,]/g, '').replace(',', '.'))
+        let filterStr = `conto_codice.ilike.%${cleanTerm}%,conto_descrizione.ilike.%${cleanTerm}%,descrizione_riga.ilike.%${cleanTerm}%,prima_nota.cliente_fornitore_nome.ilike.%${cleanTerm}%,prima_nota.numero_documento.ilike.%${cleanTerm}%,prima_nota.descrizione.ilike.%${cleanTerm}%`
+        
+        if (Number.isFinite(numberVal)) {
+          filterStr += `,importo_dare.eq.${numberVal},importo_avere.eq.${numberVal}`
+        }
+        q = q.or(filterStr)
+      }
+    }
+
+    if (importoPreciso) {
+      const imp = parseFloat(String(importoPreciso).replace(/[^\d.,]/g, '').replace(',', '.'))
+      if (Number.isFinite(imp)) {
+        q = q.or(`importo_dare.eq.${imp},importo_avere.eq.${imp}`)
+      }
+    }
+    if (importoDa) {
+      const imp = parseFloat(String(importoDa).replace(/[^\d.,]/g, '').replace(',', '.'))
+      if (Number.isFinite(imp)) {
+        q = q.or(`importo_dare.gte.${imp},importo_avere.gte.${imp}`)
+      }
+    }
+    if (importoA) {
+      const imp = parseFloat(String(importoA).replace(/[^\d.,]/g, '').replace(',', '.'))
+      if (Number.isFinite(imp)) {
+        q = q.or(`importo_dare.lte.${imp},importo_avere.lte.${imp}`)
+      }
+    }
+    if (registroIva) {
+      q = q.or(`prima_nota.registro_iva_codice.ilike.%${registroIva}%,registro_iva_codice.ilike.%${registroIva}%`)
+    }
+    if (protocolloIva) {
+      q = q.or(`prima_nota.protocollo_iva.ilike.%${protocolloIva}%,protocollo_iva.ilike.%${protocolloIva}%`)
+    }
+
+    q = q
+      .order('data_registrazione', { foreignTable: 'prima_nota', ascending: false })
+      .order('numero_registrazione', { foreignTable: 'prima_nota', ascending: false })
+      .order('riga_numero', { ascending: true })
+
+    const fromIdx = (page - 1) * pageSize
+    const toIdx = page * pageSize - 1
+    q = q.range(fromIdx, toIdx)
+
+    const { data, error, count } = await q
+
+    if (error) throw error
+
+    return {
+      data: data || [],
+      totalRows: count || 0,
+      error: null,
+    }
+  } catch (error) {
+    console.error('[getPrimaNotaConsultazioneRowsAdvanced] Error:', error)
+    return {
+      data: [],
+      totalRows: 0,
+      error,
+    }
+  }
+}
+
+export async function getContoSaldoPrecedente(societaId, contoId, dateBefore) {
+  try {
+    const { data, error } = await sb
+      .from('prima_nota_righe')
+      .select('importo_dare, importo_avere, prima_nota!inner(data_registrazione, societa_id)')
+      .eq('prima_nota.societa_id', societaId)
+      .eq('conto_id', contoId)
+      .lt('prima_nota.data_registrazione', dateBefore)
+
+    if (error) throw error
+
+    const sum = (data || []).reduce((acc, row) => {
+      return acc + (Number(row.importo_dare) || 0) - (Number(row.importo_avere) || 0)
+    }, 0)
+
+    return { data: sum, error: null }
+  } catch (error) {
+    console.error('[getContoSaldoPrecedente] Error:', error)
+    return { data: 0, error }
+  }
+}
+
+export function updateScritturaHeaderById(id, updates) {
+  return sb.from('prima_nota').update(updates).eq('id', id)
+}
+

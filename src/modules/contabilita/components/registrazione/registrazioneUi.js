@@ -1,6 +1,6 @@
 export const REG_PAGE_STYLE = {
-  background: 'linear-gradient(180deg, rgba(8,21,37,.98), rgba(7,18,31,.995))',
-  backgroundColor: 'rgba(7,18,31,.995)',
+  background: 'linear-gradient(180deg, #0C1628 0%, #08101E 100%)',
+  backgroundColor: '#0C1628',
   minHeight: '100vh',
   height: '100%',
   paddingBottom: '1.25rem',
@@ -15,25 +15,25 @@ export const REG_CONTAINER_STYLE = {
   width: '100%',
   flex: 1,
   minHeight: '100%',
-  background: 'linear-gradient(180deg, rgba(8,21,37,.98), rgba(7,18,31,.995))',
-  backgroundColor: 'rgba(7,18,31,.995)',
+  background: 'linear-gradient(180deg, #0C1628 0%, #08101E 100%)',
+  backgroundColor: '#0C1628',
   display: 'flex',
   flexDirection: 'column',
 }
 
 export const REG_CARD_STYLE = {
   borderRadius: 16,
-  border: '1px solid rgba(136,169,204,.09)',
-  background: 'linear-gradient(180deg, rgba(14,34,52,.8), rgba(10,24,39,.9))',
-  boxShadow: '0 10px 24px rgba(0,0,0,.12)',
+  border: '1px solid rgba(13, 122, 140, .14)',
+  background: 'linear-gradient(180deg, #112038 0%, #0E1B2E 100%)',
+  boxShadow: '0 10px 24px rgba(0,0,0,.22)',
   backdropFilter: 'blur(6px)',
 }
 
 export const REG_SUBCARD_STYLE = {
   borderRadius: 14,
-  border: '1px solid rgba(136,169,204,.08)',
-  background: 'linear-gradient(180deg, rgba(13,31,48,.72), rgba(10,24,39,.86))',
-  boxShadow: '0 6px 18px rgba(0,0,0,.1)',
+  border: '1px solid rgba(13, 122, 140, .09)',
+  background: 'linear-gradient(180deg, #152744 0%, #112038 100%)',
+  boxShadow: '0 6px 18px rgba(0,0,0,.15)',
   backdropFilter: 'blur(6px)',
 }
 
@@ -51,15 +51,16 @@ export const REG_SMALL_INPUT_STYLE = {
 }
 
 export const REG_BUTTON_PRIMARY_STYLE = {
-  background: 'linear-gradient(180deg, #1f8f4d, #147640)',
-  border: '1px solid rgba(95,230,141,.2)',
-  color: '#effff1',
-  boxShadow: '0 10px 18px rgba(11,86,42,.22)',
+  background: 'linear-gradient(180deg, #E8922A, #C6751B)',
+  border: '1px solid rgba(245, 185, 106, .25)',
+  color: '#08101E',
+  fontWeight: 700,
+  boxShadow: '0 8px 20px rgba(232, 146, 42, .2)',
 }
 
 export const REG_BUTTON_DARK_STYLE = {
   background: 'rgba(255,255,255,.03)',
-  border: '1px solid rgba(136,169,204,.18)',
+  border: '1px solid rgba(13, 122, 140, .2)',
   color: 'var(--tx)',
 }
 

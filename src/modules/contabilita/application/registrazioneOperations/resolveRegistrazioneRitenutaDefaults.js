@@ -22,7 +22,25 @@ function resolvePercipienteRecord(percipienti = [], draft = {}, header = {}) {
   )
 }
 
-function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDraft = {}, mode = 'documento' } = {}) {
+function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDraft = {}, rows = [], header = {}, mode = 'documento' } = {}) {
+  const rowsList = Array.isArray(rows) ? rows : []
+  const costRowsAmount = rowsList
+    .filter(row => {
+      const contoId = String(row.conto_id || row.contoId || '').trim()
+      if (!contoId) return false
+      const isCounterparty = contoId === String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim()
+      const contoCod = String(row.conto_codice || row.contoCodice || '')
+      const isVat = contoCod.startsWith('22') || contoCod.startsWith('33')
+      const desc = String(row.conto_descrizione || row.contoDescrizione || '').toLowerCase()
+      const isVatByDesc = desc.includes('iva c/') || desc.includes('iva su ') || desc.includes('erario c/iva')
+      return !isCounterparty && !isVat && !isVatByDesc
+    })
+    .reduce((sum, row) => sum + toAmount(row.dare || row.importo_dare || row.avere || row.importo_avere || 0), 0)
+
+  if (costRowsAmount > 0) {
+    return costRowsAmount
+  }
+
   const ivaNetto = toAmount(
     ivaDraft?.imponibile ??
       ivaDraft?.totaleImponibile ??
@@ -75,6 +93,7 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
   const percipienti = Array.isArray(input?.percipienti) ? input.percipienti : []
   const causaleRitenutaDefaults = input?.causaleRitenutaDefaults && typeof input.causaleRitenutaDefaults === 'object' ? input.causaleRitenutaDefaults : {}
   const behavior = input?.behavior && typeof input.behavior === 'object' ? input.behavior : {}
+  const rows = Array.isArray(input?.rows) ? input.rows : []
   const modeHint = normalizeText(behavior?.ritenuteMode || behavior?.opRitenute || behavior?.op_ritenute || currentRitenutaDraft.mode || '').toLowerCase()
   const mode = modeHint.includes('pagamento')
     ? 'pagamento'
@@ -89,13 +108,13 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
   const percipienteNome = normalizeText(
     currentRitenutaDraft.percipiente || currentRitenutaDraft.percipienteNome || header.soggetto || header.clienteFornitoreNome || percipienteRecord?.ragione_sociale || percipienteRecord?.denominazione || percipienteRecord?.nome || ''
   )
-  const importoCompenso = resolveImportoCompenso({ documentData, ivaDraft, partitarioDraft, mode })
+  const importoCompenso = resolveImportoCompenso({ documentData, ivaDraft, partitarioDraft, rows, header, mode })
   return {
     mode,
     percipienteRecord,
     percipienteId: normalizeText(currentRitenutaDraft.percipienteId || percipienteRecord?.id || ''),
     percipienteNome,
-    codiceFiscale: normalizeText(currentRitenutaDraft.codiceFiscale || percipienteRecord?.codice_fiscale || percipienteRecord?.cf || ''),
+    codiceFiscale: normalizeText(currentRitenutaDraft.codiceFiscale || percipienteRecord?.codice_fiscale || percipienteRecord?.cf || header.codiceFiscale || ''),
     causaleCu: normalizeText(currentRitenutaDraft.causaleCu || currentRitenutaDraft.causaleReddituale || percipienteRecord?.causale_prevalente || percipienteRecord?.causale_reddituale || causaleRitenutaDefaults.causaleCu || ''),
     causaleReddituale: normalizeText(currentRitenutaDraft.causaleReddituale || currentRitenutaDraft.causaleCu || percipienteRecord?.causale_prevalente || percipienteRecord?.causale_reddituale || causaleRitenutaDefaults.causaleReddituale || ''),
     codiceTributo: resolveCodiceTributo({ currentDraft: currentRitenutaDraft, percipienteRecord }),

@@ -29,7 +29,7 @@ function setIfPresent(target, key, value) {
   }
 }
 
-function mapPrimaNotaPayloadForDb(pnPayload = {}) {
+export function mapPrimaNotaPayloadForDb(pnPayload = {}) {
   const source = pnPayload && typeof pnPayload === 'object' ? pnPayload : {}
   const mapped = {}
 
@@ -63,7 +63,7 @@ function mapPrimaNotaPayloadForDb(pnPayload = {}) {
   return mapped
 }
 
-function mapPrimaNotaRigaForDb(row = {}, index = 0, primaNotaId = null) {
+export function mapPrimaNotaRigaForDb(row = {}, index = 0, primaNotaId = null) {
   const source = row && typeof row === 'object' ? row : {}
   const mapped = {}
 
@@ -98,7 +98,7 @@ function mapPrimaNotaRigaForDb(row = {}, index = 0, primaNotaId = null) {
   return mapped
 }
 
-function resolveDraftBundle(input = {}) {
+export function resolveDraftBundle(input = {}) {
   const bundle = input && typeof input === 'object' ? input : {}
   const innerDraft = bundle.draft && typeof bundle.draft === 'object' ? bundle.draft : bundle
   const pnPayload = bundle.pnPayload && typeof bundle.pnPayload === 'object'
@@ -157,7 +157,7 @@ function requiresControparteForPersistence(resolved = {}) {
   )
 }
 
-function buildPersistenceValidation(resolved = {}) {
+export function buildPersistenceValidation(resolved = {}) {
   const {
     pnPayload,
     righePayload,
@@ -371,6 +371,9 @@ export async function persistPrimaNotaDraft({
   }
 
   const pnPayloadForDb = mapPrimaNotaPayloadForDb(resolved.pnPayload)
+  if (!pnPayloadForDb.stato || pnPayloadForDb.stato === 'bozza' || pnPayloadForDb.stato === 'provvisoria') {
+    pnPayloadForDb.stato = resolved.innerDraft?.isSimulata || resolved.innerDraft?.meta?.isSimulata || resolved.innerDraft?.pnPayload?.isSimulata || resolved.innerDraft?.header?.isSimulata ? 'simulata' : 'confermata'
+  }
   pnPayloadForDb.totale_dare = validation.totals.dare
   pnPayloadForDb.totale_avere = validation.totals.avere
 
