@@ -227,7 +227,8 @@ Test eseguiti in questa attività:
   - *Cosa è già canonico*: Tracciamento parziale nei log o in fase di storno.
   - *Cosa è mancante*: Una tabella dedicata `audit_log` append-only centralizzata nel database per monitorare ogni modifica contabile (before/after, utente, IP, timestamp).
 - **Stati Scrittura**:
-  - *Cosa è già canonico*: stati `bozza`, `confermata`, `annullata` in `prima_nota.stato`.
+  - *Cosa è canonico e attivo in FASE 3*: `simulata`, `confermata`, `stornata`, `storno`. Questi quattro stati sono operativi, testati e correttamente gestiti nel codice attuale.
+  - *Cosa era previsto come stati futuri / workflow avanzati (non ancora operativi)*: `bozza` (legacy, ammessa solo per compatibilità tecnica in fallback), `annullata` (prevista nelle RPC ma non esposta nella UI attuale), `contabilizzata`, `rettificata`, `chiusa`, `esportata` (tutti da implementare in fasi successive secondo ROADMAP). Questi stati non devono essere presentati come stati PN canonici attuali.
   - *Cosa è parziale*: Il blocco delle modifiche su periodi IVA consolidati o stampati definitivi (gestito parzialmente in UI ma non blindato nel DB).
 
 ---
@@ -1519,5 +1520,104 @@ I default di sistema definiti in [`consultazioneDefaults.js`](file:///c:/Users/p
 * **Esecuzione Manuale delle Stored Procedures**: Il funzionamento delle modifiche controllate e degli storni sulla UI dipende al 100% dall'applicazione delle stored procedure SQL (`rpc_update_prima_nota_generale_controllata`, `rpc_storna_prima_nota_generale`, ecc.) sul database Supabase reale. Per l'ambiente di Staging esse sono state applicate con successo, ma per l'ambiente di Produzione dovranno essere caricate manualmente dall'Editor SQL di Supabase Studio usando lo script documentato in [`FASE_3C_2_ESECUZIONE_MANUALE_SUPABASE.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/FASE_3C_2_ESECUZIONE_MANUALE_SUPABASE.md).
 
 ### 9. Prossimo Step Consigliato
-* **Apertura Nuova Sessione**: La FASE 3 è ufficialmente conclusa con successo e blindata al 100%. Si consiglia di aprire una nuova sessione di chat e ripartire prendendo come base di partenza questo report e la roadmap definita in `REPORT_CODEX.md` per procedere alla successiva fase della roadmap (FASE 4 - Riconciliazione bancaria avanzata).
+* **Apertura Nuova Sessione**: La FASE 3 è ufficialmente conclusa con successo e **blindata in sviluppo/staging; non ancora blindata in produzione** finché le RPC Supabase di modifica/storno non vengono applicate manualmente anche sul database di produzione. Si consiglia di aprire una nuova sessione di chat e ripartire da questo report.
+* **Blocco ponte operativo successivo**: Il prossimo blocco di lavoro è **"Consultazione Prima Nota — hardening read-only / stati / dettaglio / export base"** (corrispondente alla FASE 6 della roadmap studio-grade). Obiettivo: blindare definitivamente Consultazione come modulo sola lettura, verificare la corretta visualizzazione di tutti gli stati (`simulata`, `confermata`, `stornata`, `storno`), migliorare il dettaglio della sidebar e introdurre l'export base CSV/PDF delle righe filtrate.
+* **La Riconciliazione Bancaria NON è il prossimo step**: è prevista come FASE 9 della roadmap studio-grade, dopo il completamento di Consultazione (FASE 6), Modifica/Storno workflow (FASE 7), Import bozze canoniche (FASE 8). Non aprire la Riconciliazione prima di aver completato le fasi intermedie.
 
+---
+
+## RIALLINEAMENTO-DOCUMENTAZIONE-POST-FASE-3
+
+### 1. Obiettivo dell'Intervento
+Allineamento della documentazione (`REPORT_CODEX.md` e `ROADMAP_FISCOSIM_STUDIO_GRADE.md`) dopo la chiusura della FASE 3, senza modifiche al codice applicativo.
+
+### 2. File Modificati
+- [`REPORT/REPORT_CODEX.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md) — Corretti stati PN, corretto next-step errato, aggiunta nota di riallineamento.
+- [`REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md) — Aggiunta nota di avanzamento FASE 3 e blocco ponte successivo.
+
+### 3. Correzioni Apportate
+
+#### 3.1 Stati PN Canonici Attuali (FASE 3 chiusa)
+Gli stati operativi **attivi e testati** nel codice corrente sono esclusivamente:
+| Stato | Significato operativo |
+|---|---|
+| `simulata` | Scrittura provvisoria/temporanea, non contabile definitiva. Esclusa dalle ricerche ordinarie di default. |
+| `confermata` | Scrittura contabile valida e definitiva. Inclusa nelle ricerche ordinarie. |
+| `stornata` | Scrittura confermata neutralizzata da una contro-scrittura. Esclusa dalle ricerche ordinarie di default. |
+| `storno` | La contro-scrittura speculare opposta generata dallo storno. Esclusa dalle ricerche ordinarie di default. |
+
+Gli stati **non operativi** nel codice attuale (previsti come workflow/fasi future):
+- `bozza`: ammessa solo come fallback tecnico legacy nel mapper; non esposta nella UI come stato selezionabile.
+- `annullata`: prevista nelle RPC e nella ROADMAP (FASE 7) ma non operativa nella UI corrente.
+- `contabilizzata`, `rettificata`, `chiusa`, `esportata`: stati futuri, da implementare nelle rispettive fasi della ROADMAP studio-grade.
+
+#### 3.2 Correzione Next-Step Errato
+Il riferimento a "FASE 4 - Riconciliazione bancaria avanzata" come prossimo step era **errato**. La Riconciliazione è prevista come **FASE 9** nella roadmap studio-grade. Il blocco operativo immediato successivo alla FASE 3 è il **hardening di Consultazione Prima Nota** (FASE 6 roadmap).
+
+#### 3.3 Regola Architetturale Confermata
+- **Consultazione resta modulo read-only**: nessun write contabile diretto dalla Consultazione.
+- **Ogni scrittura, modifica e storno passa da Inserimento Manuale** o da servizi di mutation controllati (`primaNotaMutationService.js`).
+- Nessun write contabile complesso diretto da Consultazione è ammesso.
+
+#### 3.4 Stato FASE 3 — Riepilogo Ufficiale
+- ✅ FASE 3 chiusa in sviluppo e staging.
+- ✅ Backup ZIP creato: `fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip`.
+- ✅ Commit selettivo eseguito: hash `558d7a3` su branch `mio-branch`.
+- ✅ Test automatici: 51/51 verdi.
+- ✅ Build produzione: SUCCESS in 5.41s.
+- ⚠️ **Rischio residuo produzione**: Le RPC Supabase di modifica/storno (`rpc_update_prima_nota_generale_controllata`, `rpc_storna_prima_nota_generale`, `rpc_annulla_prima_nota_logica`, `rpc_get_prima_nota_operation_guards`) devono essere applicate manualmente sul database di Produzione tramite SQL Editor di Supabase Studio. Fino a quel momento le funzioni di modifica controllata e storno non saranno operative in produzione. Istruzioni: [`FASE_3C_2_ESECUZIONE_MANUALE_SUPABASE.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/FASE_3C_2_ESECUZIONE_MANUALE_SUPABASE.md).
+
+### 4. Test Eseguiti in Questa Attività
+- Nessun test applicativo necessario: il task riguarda esclusivamente documentazione.
+- Verificata la coerenza testuale tra `REPORT_CODEX.md`, `ROADMAP_FISCOSIM_STUDIO_GRADE.md` e `REGOLE_CODEX.md`.
+
+### 5. Prossimo Step Consigliato
+- Aprire nuova sessione di chat.
+- Fornire come contesto iniziale questo `REPORT_CODEX.md`.
+- Avviare il blocco operativo: **"Consultazione Prima Nota — hardening read-only / stati / dettaglio / export base"** (FASE 6 roadmap studio-grade).
+
+---
+
+## CORREZIONE-FINALE-RIALLINEAMENTO-ROADMAP
+
+### 1. Obiettivo dell'Intervento
+Correzione delle ultime incoerenze documentali rimaste dopo la chiusura di FASE 3, in `REPORT_CODEX.md` e `ROADMAP_FISCOSIM_STUDIO_GRADE.md`. Nessun codice applicativo modificato.
+
+### 2. File Modificati
+| File | Intervento |
+|---|---|
+| [`REPORT/REPORT_CODEX.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md) | Corretto "blindata al 100%" con formulazione staging/produzione. Aggiunta sezione `CORREZIONE-FINALE-RIALLINEAMENTO-ROADMAP`. |
+| [`REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md) | Corretta riga `Stato scrittura` nel contratto dati canonico. Riscritta sezione `Stato business standard` in `Stati PN canonici attivi e workflow futuri`. Corretto label `ponte FASE 3→FASE 4`. |
+
+### 3. Codice Applicativo
+- **Nessuna modifica** al codice applicativo (`src/`, `services/`, `tests/`, `supabase/`, `public/`).
+- **Nessuna modifica** a DB, migration, Supabase, auth, env.
+
+### 4. Test Eseguiti
+- Nessun test applicativo necessario (task esclusivamente documentale, conforme `REGOLE_CODEX.md §7.2`).
+- Verificata coerenza tra `REPORT_CODEX.md`, `ROADMAP_FISCOSIM_STUDIO_GRADE.md` e `REGOLE_CODEX.md`.
+
+### 5. Commit
+- **Commit non eseguito**: in attesa di conferma esplicita dell'operatore.
+
+### 6. Riepilogo Stati PN — Versione Definitiva
+
+Dopo questo riallineamento, la definizione canonica degli stati PN è:
+
+| Stato | Tipo | Operativo oggi |
+|---|---|---|
+| `simulata` | Stato PN canonico attivo | ✅ Sì |
+| `confermata` | Stato PN canonico attivo | ✅ Sì |
+| `stornata` | Stato PN canonico attivo | ✅ Sì |
+| `storno` | Stato PN canonico attivo | ✅ Sì |
+| `bozza` | Solo fallback tecnico legacy nel mapper | ⚠️ Solo fallback, non esposta in UI |
+| `annullata` | Workflow futuro (FASE 7) | ❌ Non ancora operativo |
+| `contabilizzata` | Workflow futuro (FASE 7) | ❌ Non ancora operativo |
+| `rettificata` | Workflow futuro (FASE 7/20) | ❌ Non ancora operativo |
+| `chiusa` | Workflow futuro (FASE 20/21) | ❌ Non ancora operativo |
+| `esportata` | Workflow futuro (FASE 23) | ❌ Non ancora operativo |
+
+### 7. Prossimo Step Confermato
+- Blocco operativo: **Consultazione Prima Nota — hardening read-only / stati / dettaglio / export base** (FASE 6 roadmap studio-grade).
+- Riconciliazione Bancaria: **FASE 9**, non anticipare.
+- Regola architetturale: Consultazione = modulo sola lettura; ogni write transita da Inserimento Manuale o `primaNotaMutationService.js`.

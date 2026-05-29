@@ -155,21 +155,34 @@ Il progetto e gia oltre una fase prototipale: i moduli core esistono, la direzio
 | Registri IVA | codice_registro, tipo, anno, numerazione | sezionale, riepilogo, note | Causale IVA, azienda | numerazione e periodo coerenti | Manuale, Import | Registri, liquidazioni, stampe | controlla protocolli e stampa |
 | Scadenze | soggetto_id, data_scadenza, tipo, importo | stato, link_scrittura, priorita | Partitario, ritenute, F24, ratei | data coerente, importo positivo | Manuale, Import, Banca | Agenda, F24, partitario | genera task e controlli |
 | Audit | id evento, entita, before, after, actor, reason, source | correlation_id, ip, user_agent | Tutti i commit | append-only, non mutabile, societa obbligatoria | Tutti i write path | Consultazione, compliance, debug | traccia ogni azione critica |
-| Stato scrittura | bozza, da_verificare, confermata, contabilizzata, annullata, stornata, rettificata, chiusa, esportata | locked_period, reopened_by_admin | Workflow canonico | transizioni consentite, blocco periodo, ruoli | Manuale, Import, Banca, Admin | Tutto il sistema | comanda l'ammissibilita delle azioni |
+| Stato scrittura | **Stati canonici attivi (FASE 3)**: `simulata`, `confermata`, `stornata`, `storno`. **Stati futuri / workflow avanzati (non ancora operativi)**: bozza (solo fallback tecnico legacy), annullata (FASE 7), contabilizzata, rettificata, chiusa, esportata (da implementare nelle rispettive fasi) | locked_period, reopened_by_admin | Workflow canonico | transizioni consentite, blocco periodo, ruoli | Manuale, Import, Admin | Tutto il sistema | comanda l'ammissibilita delle azioni |
 
-## 4. Stato business standard
+## 4. Stati PN canonici attivi e workflow futuri
 
-| Stato | Significato | Chi lo imposta | Azioni consentite | Azioni vietate | Effetto su periodo chiuso | Effetto su audit | Effetto su stampe definitive |
-|---|---|---|---|---|---|---|---|
-| bozza | Dati in composizione | Operatore, Import, Banca | edit, validazione, preview | export definitivo, contabilizzazione finale | nessun effetto | crea tracce di costruzione | nessun effetto |
-| da verificare | Pronta ma non ancora confermata | Operatore | correzione, approvazione, rifiuto | write definitivo | blocca passaggio automatico se ci sono warning rossi | registra warning/override | nessun effetto |
-| confermata | Contenuto approvato | Operatore con permesso | commit, annullo se aperto | modifiche arbitrarie | se periodo chiuso non passa | evento di conferma obbligatorio | stampabile provvisoriamente |
-| contabilizzata | Scrittura persistita | Sistema | consultazione, export, storno controllato | edit diretto | se chiuso resta read-only | audit append-only | stampabile provvisoria o definitiva se aperto |
-| annullata | Scrittura annullata con tracciamento | Operatore autorizzato, Admin | consultazione, riapertura tecnica se permessa | edit del contenuto originario | se chiuso richiede riapertura autorizzata | evento annullo obbligatorio | esclusa dalle definitive salvo ristampa storica |
-| stornata | Scrittura rovesciata da contro-scrittura | Sistema o Operatore autorizzato | consultazione, correlazione con originaria | modifica retroattiva | ammessa solo con workflow controllato | genera legame causale | impatta definitivi solo se periodo aperto |
-| rettificata | Correzione tracciata con nuova scrittura | Operatore autorizzato | consultazione, nuova registrazione | riscrittura silente | periodo chiuso solo con riapertura | storico before/after obbligatorio | aggiorna quadri ma non cancella storia |
-| chiusa | Periodo o esercizio chiuso | Admin/Owner | sola lettura, export, stampa | edit, commit, storno libero | blocca tutte le scritture non autorizzate | audit di chiusura obbligatorio | definitive bloccate |
-| esportata | Output inviato a file/sistema esterno | Sistema | consultazione, ristampa, duplicazione controllata | mutate payload esportato senza audit | nessun write automatico | traccia export e checksum | usata per consegne e controlli esterni |
+> **Nota di allineamento — 2026-05-30**: Gli unici stati PN operativi e canonici nel codice corrente (FASE 3 chiusa) sono `simulata`, `confermata`, `stornata`, `storno`. Tutti gli altri concetti elencati di seguito sono **workflow o stati futuri**, non ancora operativi come stati PN canonici nel codice attuale. La tabella seguente descrive la visione completa studio-grade per le fasi future, **non lo stato attuale del sistema**.
+
+### 4a. Stati PN canonici attivi — FASE 3 (operativi oggi)
+
+| Stato | Significato operativo | Chi lo imposta | Azioni consentite | Azioni vietate |
+|---|---|---|---|---|
+| `simulata` | Scrittura provvisoria/temporanea, non contabile definitiva | Operatore (scelta esplicita in salvataggio) | consultazione (con filtro dedicato), eliminazione con conferma | inclusa nei totali/saldi ordinari, modifica diretta senza workflow |
+| `confermata` | Scrittura contabile valida e definitiva | Operatore (salvataggio normale) | consultazione, modifica controllata (via IM), storno contabile (via IM) | modifica diretta senza guards, cancellazione fisica |
+| `stornata` | Scrittura confermata neutralizzata da una contro-scrittura speculare | Sistema (via RPC storno) | consultazione (con filtro Stornate), correlazione con storno collegato | modifica retroattiva, nuovo storno |
+| `storno` | La contro-scrittura speculare generata dall'operazione di storno | Sistema (via RPC storno) | consultazione (con filtro Stornate), correlazione con originaria stornata | modifica retroattiva, nuovo storno |
+
+### 4b. Workflow futuri / concetti operativi non ancora stati PN canonici
+
+> I seguenti concetti sono previsti nelle fasi successive della roadmap studio-grade. **Non devono essere usati come stati PN canonici nel codice attuale**. Ogni concetto diventerà operativo solo quando la relativa fase sarà completata e testata.
+
+| Concetto futuro | Fase roadmap | Significato previsto | Note |
+|---|---|---|---|
+| `bozza` | (legacy / solo fallback tecnico) | Dati in composizione non ancora confermati | Ammessa solo come fallback tecnico nel mapper per compatibilità. Non esposta nella UI come stato selezionabile. |
+| `da_verificare` | FASE 5 | Pronta ma in attesa di approvazione operatore | Da implementare con workflow di approvazione causali/impostazioni. |
+| `annullata` | FASE 7 | Scrittura annullata con tracciamento audit | Prevista nelle RPC ma non esposta nella UI corrente. Richiede workflow autorizzato. |
+| `contabilizzata` | FASE 7 | Scrittura persistita con effetti completi su IVA/partitario | Stadio avanzato post-conferma per fasi con registri IVA attivi. |
+| `rettificata` | FASE 7/20 | Correzione tracciata con nuova scrittura correttiva collegata | Richiede storico before/after e link alla scrittura originaria. |
+| `chiusa` | FASE 20/21 | Periodo o esercizio chiuso; sola lettura | Blocca tutte le scritture non autorizzate; riapertura solo Admin/Owner. |
+| `esportata` | FASE 23 | Output inviato a file o sistema esterno con checksum | Usata per consegne e controlli verso software esterni. |
 
 ## 5. Split payment
 
@@ -726,6 +739,28 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 | Annulla scrittura | tutti | annullo | dipende | dipende | conti originari | eventuale | partitario coerente | eventuale | dipende | neutralizza effetto | permesso e periodo | annullo non autorizzato | annullo | 7-20 |
 
 ## 16. Roadmap rigida per fasi
+
+> **Nota di avanzamento — aggiornamento 2026-05-30**
+>
+> **FASE 3 — CHIUSA** (sviluppo e staging):
+> - Inserimento Manuale PN generale: ✅
+> - Stati operativi canonici attivi: `simulata`, `confermata`, `stornata`, `storno` ✅
+> - Modifica controllata via `primaNotaMutationService.js`: ✅
+> - Storno contabile con contro-scrittura speculare: ✅
+> - Consultazione con filtri Ordinarie/Stornate/Simulate e toggle persistenti: ✅
+> - RPC guards/update/storno allineate allo schema reale: ✅
+> - Test 51/51 verdi, build OK, commit `558d7a3`: ✅
+> - ⚠️ RPC di produzione da applicare manualmente via Supabase Studio prima del deploy reale.
+>
+> **Blocco operativo intermedio prima delle fasi IVA avanzate**:
+> Il prossimo blocco di lavoro è **"Consultazione Prima Nota — hardening read-only / stati / dettaglio / export base"**, corrispondente alla **FASE 6** di questa roadmap.
+> - Obiettivo: blindare Consultazione come modulo sola lettura, corretta visualizzazione di tutti e quattro gli stati, miglioramento sidebar dettaglio, export base CSV/PDF righe filtrate.
+> - **La Riconciliazione Bancaria (FASE 9) NON è il prossimo step**: deve attendere il completamento di FASE 6 (Consultazione hardening), FASE 7 (Modifica/Storno workflow canonico) e FASE 8 (Import bozze canoniche).
+>
+> **Regola architetturale confermata**:
+> - Consultazione = modulo read-only; nessun write contabile diretto.
+> - Ogni scrittura, modifica e storno transita da Inserimento Manuale o da `primaNotaMutationService.js`.
+> - Nessun write contabile complesso ammesso direttamente da Consultazione.
 
 | Fase | Obiettivo | Prerequisiti | Moduli coinvolti | Implementazioni richieste | Vietato | Test obbligatori | Acceptance criteria | Rischi | Checkpoint |
 |---|---|---|---|---|---|---|---|---|---|
