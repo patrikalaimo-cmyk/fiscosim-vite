@@ -1453,7 +1453,7 @@ I default di sistema definiti in [`consultazioneDefaults.js`](file:///c:/Users/p
 * **Esclusioni Applicate**: `node_modules`, `dist`, `.git`, `coverage`, `.vite`, `scratch/`, e tutti i file con estensione `.zip`.
 
 ### 5. Registrazione del Commit Git
-* **Hash del Commit**: `[COMMIT_HASH_PLACEHOLDER]`
+* **Hash del Commit**: `558d7a3` (branch `mio-branch`)
 * **Message del Commit**: `checkpoint: chiusura fase 3 inserimento manuale stati modifica storno`
 
 ### 6. Elenco dei File Inclusi nel Commit (Pertinenti alla FASE 3)
