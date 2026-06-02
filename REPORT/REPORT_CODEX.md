@@ -1621,3 +1621,167 @@ Dopo questo riallineamento, la definizione canonica degli stati PN è:
 - Blocco operativo: **Consultazione Prima Nota — hardening read-only / stati / dettaglio / export base** (FASE 6 roadmap studio-grade).
 - Riconciliazione Bancaria: **FASE 9**, non anticipare.
 - Regola architetturale: Consultazione = modulo sola lettura; ogni write transita da Inserimento Manuale o `primaNotaMutationService.js`.
+
+---
+
+## AUDIT-CONSULTAZIONE-PRIMA-NOTA-STATI-DETTAGLIO-EXPORT
+
+### 1. Mappa dei File Consultazione Analizzati
+Prima di procedere con le modifiche di hardening, è stato eseguito un audit completo del modulo Consultazione:
+
+* **View principale**: [ConsultazionePrimaNotaView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx)
+  - Coordina i filtri, il caricamento asincrono con paginazione via `getPrimaNotaConsultazioneRowsAdvanced`, la gestione della demo locale, e la Sidebar di ispezione.
+* **Tabella risultati**: [ConsultazioneResultsTable.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx)
+  - Renderizza le righe contabili, evidenzia la riga selezionata e gestisce l'ordinamento (sort) lato client sulle colonne.
+* **Sidebar/Dettaglio**: [ConsultazioneDetailSidebar.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx)
+  - Ispeziona il record selezionato mostrando l'intestazione, le partite doppie quadrate e i pulsanti per Modifica Controllata, Storno Contabile o Elimina Simulata.
+* **Query Builder**: [buildConsultazioneQueryParams.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/buildConsultazioneQueryParams.js)
+  - Struttura i filtri in formato server/client prima della chiamata Supabase.
+* **Helper filtri**: [normalizeConsultazioneFilters.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/normalizeConsultazioneFilters.js)
+  - Normalizza i campi (date, importi, stringhe) e imposta i toggle booleani degli stati.
+* **Saldo progressivo**: [calculateConsultazioneSaldoProgressivo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/calculateConsultazioneSaldoProgressivo.js)
+  - Ordina cronologicamente le righe e calcola l'accumulato Dare - Avere a partire dal saldo d'apertura.
+* **Export esistenti**:
+  - [exportConsultazioneResults.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/exportConsultazioneResults.js) (formattatore CSV)
+  - [fetchConsultazioneExportRows.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/fetchConsultazioneExportRows.js) (paginatore di scaricamento totale)
+* **Repo/metodi database**:
+  - `getPrimaNotaConsultazioneRowsAdvanced` e `getContoSaldoPrecedente` in `contabilitaRepo.js`.
+* **Azioni esistenti**:
+  - Modifica e Storno: reindirizzano a manual input draft via `onEditScrittura`.
+  - Elimina simulata: esegue la cancellazione tecnica diretta sul DB previa conferma.
+
+### 2. Punti di Intervento
+1. Hardening stati in `getPrimaNotaConsultazioneRowsAdvanced` per restringere esattamente ai canonici attivi (`simulata`, `confermata`, `stornata`, `storno`) e fallback storico `definitiva`.
+2. Stato-coerenza del saldo precedente in `getContoSaldoPrecedente` e nel controller per evitare che scritture simulate inquinino i calcoli ordinari.
+3. Risoluzione bilaterale dello storno in view model e sidebar (esposizione del link sia da originale che da storno).
+4. Aggiunta dell'ordinamento visuale all'export CSV.
+5. Inserimento di badge informativi non euristici per IVA e Partitario basati sui dati già popolati.
+6. Suite di test dedicati `consultazioneOperationsHardening.test.js`.
+
+### 3. File Modificati
+- [`src/modules/contabilita/data/contabilitaRepo.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js)
+  * Modificata `getPrimaNotaConsultazioneRowsAdvanced` per filtrare rigorosamente solo per gli stati attivi (`confermata`, `stornata`, `storno`, `simulata`, con fallback `definitiva`).
+  * Estesa `getContoSaldoPrecedente` per accettare opzioni di stato contabili ed evitare conteggi errati da record simulati.
+  * Corretto l'import ESM del client Supabase (`../../../lib/supabase.js`) per abilitare il funzionamento nativo nei test Node.js.
+- [`src/modules/contabilita/application/consultazioneOperations/buildConsultazioneRowViewModel.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/buildConsultazioneRowViewModel.js)
+  * Risolto `stornoCollegatoId` in entrambe le direzioni (scansionando `storno_id` e `storno_of_id`).
+- [`src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx)
+  * Passati i toggle di stato a `getContoSaldoPrecedente` e aggiornata la lista delle dipendenze di `useEffect`.
+  * Aggiornata `handleExportCsv` per ordinare i dati CSV secondo la configurazione di ordinamento corrente (`sortField`, `sortDirection`).
+- [`src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx)
+  * Risolto `stornoCollegatoId` in entrambe le direzioni.
+  * Aggiunto box "Collegamenti Fiscali" informativo non euristico per mostrare i codici IVA e il partitario agganciato.
+
+### 4. File Creati
+- [`tests/consultazioneOperationsHardening.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/consultazioneOperationsHardening.test.js)
+  * Unit test suite per verificare: default stati, filtri indipendenti, storno bilaterale nel Row ViewModel, esportazione ordinata e calcolo del saldo precedente basato su stato.
+
+### 5. Test Eseguiti
+- Comando:
+  `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js`
+- Esito: **60 / 60 test passati con successo (100% SUCCESS)**. 🟢
+
+### 6. Esito della Build
+- Comando: `npm run build`
+- Esito: **Compilazione completata correttamente** (383 moduli trasformati in 5.43s, zero errori). 🟢
+
+### 7. Rischi Residui & TODO
+- **Nessuno**: Il modulo è stato blindato come read-only, preservando intatto il flusso di eliminazione protetto per scritture simulate. Non sono state introdotte euristiche o logiche fiscali arbitrarie.
+
+### 8. Prossimo Step Consigliato
+- Avviare il blocco operativo **"Modifica/Storno workflow — precheck / blocco IVA / motivazione storno"** (FASE 7 della roadmap studio-grade).
+
+---
+
+## 2026-06-02 — FIX-CONSULTAZIONE-VISUALIZZAZIONE-UNICA-ORDINAMENTO-GLOBALE
+
+### 1. Obiettivo
+Correggere la visualizzazione della Consultazione Prima Nota rimuovendo la paginazione visiva, abilitando il caricamento asincrono progressivo in background in chunk da 1.000 righe (fino a un limite tecnico di sicurezza di 10.000 righe) con un warning non bloccante basato sui risultati filtrati complessivi, rendendo `visualRows` l'unica fonte di verità sia per la tabella che per l'export CSV e introducendo l'ordinamento iniziale/globale corretto per data, numero prima nota e numero riga (numerico, per evitare 10 prima di 2).
+
+### 2. Punti di Intervento
+1. Rimozione di tutti gli stati e dei controlli di paginazione visiva in `ConsultazionePrimaNotaView.jsx`.
+2. Implementazione del fetch asincrono progressivo (in chunk da 1000 righe) in `ConsultazionePrimaNotaView.jsx` con stop certo, limite massimo a 10.000 righe e gestione degli errori.
+3. Aggiunta di `limitWarning` non bloccante se le righe totali filtrate superano quota 10.000, invitando l'utente a raffinare i filtri.
+4. Allineamento di `handleExportCsv` per usare `visualRows` direttamente come unica fonte di verità sia per la tabella che per il file CSV.
+5. Inserimento della colonna `N. Prima Nota` (corrispondente a `row.numeroRegistrazione`) come seconda colonna sia in `ConsultazioneResultsTable.jsx` e in `exportConsultazioneResults.js` (sia in modalità compatta che in modalità completa).
+6. Ottimizzazione degli ordinamenti numerici per evitare problemi lessicografici (es. ordinamento 10 prima di 2) per `numeroRegistrazione` e `rigaNumero`.
+7. Aggiornamento e ampliamento dei test in `tests/consultazioneOperationsHardening.test.js`.
+
+### 3. File Modificati
+- [`src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx)
+  * Rimossi stati di paginazione (`page`, `pageSize`, ecc.) e relative funzioni di callback.
+  * Sostituito il ciclo di caricamento con un fetch progressivo in chunk da 1000 (fino a 10.000 righe).
+  * Aggiunto il warning non bloccante `limitWarning` basato sulla prima risposta (numero totale dei risultati filtrati).
+  * Semplificato `handleExportCsv` per esportare in modo sincrono le righe di `visualRows` mantenendo intatto l'ordinamento attivo.
+  * Aggiunta la gestione corretta dell'ordinamento per le colonne `numeroRegistrazione` e `rigaNumero` per via numerica.
+- [`src/modules/contabilita/application/consultazioneOperations/exportConsultazioneResults.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/exportConsultazioneResults.js)
+  * Aggiunto il campo `N. Prima Nota` (`row.numeroRegistrazione`) alle intestazioni e ai dati sia in modalità compatta che completa.
+- [`tests/consultazioneOperationsHardening.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/consultazioneOperationsHardening.test.js)
+  * Aggiunti test 9 (verifica dell'ordinamento iniziale e numerico per data, numero prima nota e numero riga senza problemi lessicografici) e 10 (presenza del campo `N. Prima Nota` negli header e nei dati dell'export CSV).
+
+### 4. File Creati
+- Nessuno.
+
+### 5. Test Eseguiti
+- Comando:
+  `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js`
+- Esito: **62 / 62 test passati con successo (100% SUCCESS)**. 🟢
+
+### 6. Esito della Build
+- Comando: `npm run build`
+- Esito: **Compilazione completata correttamente** (382 moduli trasformati in 5.28s, zero errori). 🟢
+
+### 7. Rischi Residui & TODO
+- **Nessuno**: Il limite tecnico di sicurezza a 10.000 righe impedisce il sovraccarico del browser e del server anche con grandi moli di dati. L'export rispecchia fedelmente i dati e l'ordinamento correnti in tabella.
+
+### 8. Prossimo Step Consigliato
+- Procedere con il piano approvato o raccogliere feedback dall'utente sulla nuova UX a visualizzazione unica.
+
+## 2026-06-02 — FIX-CONSULTAZIONE-FILTRO-CONTO-PIANO-DEI-CONTI-SALDO-PROGRESSIVO
+
+### 1. Obiettivo
+Correggere e connettere il filtro "Conto" nella Consultazione Prima Nota affinché si agganci realmente al Piano dei Conti tramite un componente Autocomplete guidato da tastiera (frecce, Invio, Escape, ✕ pulizia), impostando un filtraggio strutturato prioritario (id -> codice -> testo) e calcolando il saldo progressivo e precedente esclusivamente se un conto è selezionato. Se non è selezionato alcun conto, la colonna saldo mostra `—` e viene esposto un messaggio chiaro per invitare l'utente alla selezione. Il filtro "Soggetto" resta indipendente e invariato.
+
+### 2. Punti di Intervento
+1. **Filtro Strutturato**: Introduzione dei campi strutturati `contoId`, `contoCodice`, `contoDescrizione` nei filtri di consultazione, normalizzati e mappati nei parametri della query server/client.
+2. **Uso Colonne Reali**: Modificati i filtri della query in `contabilitaRepo.js` per puntare alle colonne effettive `conto_id` e `conto_codice` del database.
+3. **Autocomplete Avanzato**: Creazione di `ContoAutocomplete.jsx` con supporto completo per eventi tastiera (`ArrowUp`/`ArrowDown`/`Enter`/`Escape`), chiusura con clic esterno, pulsante di pulizia rapida `✕` e limite visivo di 50 righe per ottimizzazione performance.
+4. **Logica di Priorità del Filtro**:
+   * Conto strutturato tramite `contoId` (se selezionato);
+   * Fallback su `contoCodice` (se non c'è `contoId`);
+   * Fallback testuale descrittivo (se nessun conto è selezionato).
+5. **Calcolo Saldo Condizionale**: Se nessun conto è selezionato, la colonna saldo mostra `—` e nella riga delle note compare: "Seleziona un conto per visualizzare il saldo progressivo". La query `getContoSaldoPrecedente` viene invocata solo se vi è un conto reale selezionato.
+6. **Invariabilità Soggetto**: Il filtro Soggetto (anagrafica cliente/fornitore) è tenuto completamente indipendente e non influisce sul calcolo del saldo progressivo del conto (mastrino).
+
+### 3. File Modificati / Creati
+- [ContoAutocomplete.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ContoAutocomplete.jsx) `[NEW]`
+- [ConsultazioneFiltersPanel.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneFiltersPanel.jsx) `[MODIFY]`
+- [ConsultazioneResultsTable.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx) `[MODIFY]`
+- [ConsultazionePrimaNotaView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx) `[MODIFY]`
+- [contabilitaRepo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js) `[MODIFY]`
+- [consultazioneDefaults.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/consultazione/consultazioneDefaults.js) `[MODIFY]`
+- [normalizeConsultazioneFilters.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/normalizeConsultazioneFilters.js) `[MODIFY]`
+- [buildConsultazioneQueryParams.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/buildConsultazioneQueryParams.js) `[MODIFY]`
+- [filterConsultazioneRows.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/filterConsultazioneRows.js) `[MODIFY]`
+- [consultazioneOperationsHardening.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/consultazioneOperationsHardening.test.js) `[MODIFY]`
+- [REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md) `[MODIFY]`
+
+### 4. Piano di Test Manuale Obbligatorio
+Per convalidare visivamente ed a livello funzionale le modifiche, eseguire i seguenti passaggi nella UI:
+- **Digitazione per codice conto**: Digitare le prime cifre di un codice (es: `12`) nell'input del Conto e verificare che compaiano nel dropdown i conti corrispondenti.
+- **Digitazione per descrizione conto**: Cancellare e digitare parte di una descrizione (es: `cassa`) e verificare che la lista si filtri visualizzando le corrispondenze testuali.
+- **Navigazione con frecce**: Usare `ArrowDown` e `ArrowUp` per scorrere tra gli elementi della lista evidenziando gli elementi uno ad uno in arancione.
+- **Selezione con Invio**: Posizionarsi su un conto ed premere `Enter` per confermare la selezione, popolando il filtro con la stringa `Codice - Descrizione` e chiudendo la lista.
+- **Pulizia con ✕**: Cliccare sul pulsante `✕` a destra dell'input e verificare che il filtro venga azzerato, svuotando i campi di ricerca.
+- **Verifica filtro righe**: Selezionare un conto specifico e cliccare su "Cerca". Verificare che in tabella rimangano solo righe appartenenti a quel conto.
+- **Verifica saldo precedente**: Con il conto selezionato, accertarsi che il "Saldo iniziale" nel sommario mostri il saldo corretto prima del range di date attive.
+- **Verifica saldo progressivo**: Verificare che la colonna "Saldo progressivo" in tabella sia popolata con cifre progressive corrette. Se si deseleziona il conto, la colonna deve mostrare `—`.
+
+### 5. Test Automatizzati
+- Comando:
+  `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js`
+- Esito: **68 / 68 test passati con successo (100% SUCCESS)**. 🟢
+
+### 6. Esito della Build
+- Comando: `npm run build`
+- Esito: **Compilazione completata correttamente** (383 moduli trasformati in 5.32s, zero errori). 🟢

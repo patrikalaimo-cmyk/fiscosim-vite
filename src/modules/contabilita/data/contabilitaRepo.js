@@ -1,4 +1,4 @@
-import { sb } from '../../../lib/supabase'
+import { sb } from '../../../lib/supabase.js'
 import {
   createPrimaNota,
   insertPrimaNotaRighe as insertPrimaNotaRigheService,
@@ -1159,6 +1159,8 @@ export async function getPrimaNotaConsultazioneRowsAdvanced(
     dateFrom = null,
     dateTo = null,
     contoLike = '',
+    contoId = '',
+    contoCodice = '',
     soggettoLike = '',
     numeroDocumentoLike = '',
     causaleContabile = '',
@@ -1187,23 +1189,21 @@ export async function getPrimaNotaConsultazioneRowsAdvanced(
     const storn = tipoScrittureStornate === true
     const sim = tipoScrittureSimulate === true
 
-    if (ord && !storn && !sim) {
-      q = q.not('prima_nota.stato', 'in', '("stornata","storno","annullata","simulata")')
-    } else if (!ord && storn && !sim) {
-      q = q.in('prima_nota.stato', ['stornata', 'storno', 'annullata'])
-    } else if (!ord && !storn && sim) {
-      q = q.eq('prima_nota.stato', 'simulata')
-    } else if (ord && storn && !sim) {
-      q = q.not('prima_nota.stato', 'eq', 'simulata')
-    } else if (ord && !storn && sim) {
-      q = q.not('prima_nota.stato', 'in', '("stornata","storno","annullata")')
-    } else if (!ord && storn && sim) {
-      q = q.in('prima_nota.stato', ['stornata', 'storno', 'annullata', 'simulata'])
-    } else if (ord && storn && sim) {
-      // no state filter, include all
+    const activeStates = []
+    if (ord) {
+      activeStates.push('confermata', 'definitiva')
+    }
+    if (storn) {
+      activeStates.push('stornata', 'storno')
+    }
+    if (sim) {
+      activeStates.push('simulata')
+    }
+
+    if (activeStates.length > 0) {
+      q = q.in('prima_nota.stato', activeStates)
     } else {
-      // all false fallback: default to ordinarie only
-      q = q.not('prima_nota.stato', 'in', '("stornata","storno","annullata","simulata")')
+      q = q.in('prima_nota.stato', ['confermata', 'definitiva'])
     }
 
     if (dateFrom) {
@@ -1212,7 +1212,11 @@ export async function getPrimaNotaConsultazioneRowsAdvanced(
     if (dateTo) {
       q = q.lte('prima_nota.data_registrazione', dateTo)
     }
-    if (contoLike) {
+    if (contoId) {
+      q = q.eq('conto_id', contoId)
+    } else if (contoCodice) {
+      q = q.eq('conto_codice', contoCodice)
+    } else if (contoLike) {
       q = q.or(`conto_codice.ilike.%${contoLike}%,conto_descrizione.ilike.%${contoLike}%,descrizione_riga.ilike.%${contoLike}%`)
     }
     if (soggettoLike) {
@@ -1294,14 +1298,46 @@ export async function getPrimaNotaConsultazioneRowsAdvanced(
   }
 }
 
-export async function getContoSaldoPrecedente(societaId, contoId, dateBefore) {
+export async function getContoSaldoPrecedente(
+  societaId,
+  contoId,
+  dateBefore,
+  {
+    tipoScrittureOrdinarie = true,
+    tipoScrittureStornate = false,
+    tipoScrittureSimulate = false,
+  } = {}
+) {
   try {
-    const { data, error } = await sb
+    let q = sb
       .from('prima_nota_righe')
-      .select('importo_dare, importo_avere, prima_nota!inner(data_registrazione, societa_id)')
+      .select('importo_dare, importo_avere, prima_nota!inner(data_registrazione, societa_id, stato)')
       .eq('prima_nota.societa_id', societaId)
       .eq('conto_id', contoId)
       .lt('prima_nota.data_registrazione', dateBefore)
+
+    const ord = tipoScrittureOrdinarie !== false
+    const storn = tipoScrittureStornate === true
+    const sim = tipoScrittureSimulate === true
+
+    const activeStates = []
+    if (ord) {
+      activeStates.push('confermata', 'definitiva')
+    }
+    if (storn) {
+      activeStates.push('stornata', 'storno')
+    }
+    if (sim) {
+      activeStates.push('simulata')
+    }
+
+    if (activeStates.length > 0) {
+      q = q.in('prima_nota.stato', activeStates)
+    } else {
+      q = q.in('prima_nota.stato', ['confermata', 'definitiva'])
+    }
+
+    const { data, error } = await q
 
     if (error) throw error
 

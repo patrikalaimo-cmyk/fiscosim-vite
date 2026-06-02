@@ -68,11 +68,9 @@ export function ConsultazioneResultsTable({
   onRowDoubleClick = null,
   compact = true,
   loading = false,
-  pagination = null,
   note = '',
   compactMode = 'compact',
   onToggleCompact,
-  onPageSizeChange,
   onDetail,
   onEdit,
   onReverse,
@@ -152,7 +150,6 @@ export function ConsultazioneResultsTable({
     )
   }
 
-  const pageItems = pagination ? buildPageItems(pagination.page, pagination.totalPages, 5) : []
   const isCompact = compactMode === 'compact' || compact
 
   function renderStatoBadge(row) {
@@ -259,6 +256,7 @@ export function ConsultazioneResultsTable({
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
             <tr style={{ background: 'transparent' }}>
               {renderHeader('Data reg.', 'dataRegistrazione')}
+              {renderHeader('N. Prima Nota', 'numeroRegistrazione')}
               {isCompact ? null : renderHeader('Data doc.', 'dataDocumento')}
               {renderHeader(isCompact ? 'Documento' : 'Numero documento', 'numeroDocumento')}
               {renderHeader('Conto', 'contoCodice')}
@@ -320,6 +318,9 @@ export function ConsultazioneResultsTable({
                 >
                   <td style={tdStyle(true, false)}>
                     <div style={{ fontSize: '.78rem', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{row.dataRegistrazione || '-'}</div>
+                  </td>
+                  <td style={tdStyle(false, false)}>
+                    <span style={{ fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{row.numeroRegistrazione || '-'}</span>
                   </td>
                   {isCompact ? null : (
                     <td style={tdStyle(false, false)}>
@@ -389,57 +390,6 @@ export function ConsultazioneResultsTable({
         </table>
       </div>
 
-      {pagination ? (
-        <div
-          className="card-hdr"
-          style={{
-            borderTop: '1px solid rgba(96,165,250,.1)',
-            alignItems: 'center',
-            gap: '.5rem',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-            padding: '.55rem .85rem .72rem',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '.35rem', fontSize: '.78rem', color: 'var(--mu)' }}>
-              Righe/pagina
-              <select value={pagination.pageSize} onChange={(e) => onPageSizeChange?.(e.target.value)}>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-            <div className="card-subtitle">
-              {pagination.rangeLabel || `Pagina ${pagination.page} di ${pagination.totalPages}`}
-              {pagination.totalRows ? ` | ${pagination.totalRows} risultati` : ''}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn-sec" type="button" onClick={() => pagination.onPageChange?.(pagination.page - 1)} disabled={!pagination.canPrevious}>
-              Precedente
-            </button>
-            {pageItems.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className="btn-sec"
-                onClick={() => pagination.onPageChange?.(item)}
-                style={{
-                  minWidth: 36,
-                  paddingInline: '.65rem',
-                  background: item === pagination.page ? 'rgba(255,255,255,.14)' : undefined,
-                  boxShadow: item === pagination.page ? 'inset 0 0 0 1px rgba(255,255,255,.12)' : undefined,
-                }}
-              >
-                {item}
-              </button>
-            ))}
-            <button className="btn-sec" type="button" onClick={() => pagination.onPageChange?.(pagination.page + 1)} disabled={!pagination.canNext}>
-              Successiva
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

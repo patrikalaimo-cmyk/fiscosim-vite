@@ -50,6 +50,8 @@ export function buildConsultazioneRowViewModel(row = {}, index = 0) {
     saldoRiga: Math.round((dare - avere) * 100) / 100,
     saldoProgressivo: 0,
     soggetto,
+    stato: String(pn.stato ?? row.stato ?? ''),
+    stornoCollegatoId: String(pn.storno_id || pn.storno_of_id || row.storno_id || row.storno_of_id || pn.storno_collegato_id || row.storno_collegato_id || ''),
     statoQuadratura: quadrata ? 'quadrata' : 'non_quadrata',
     registroIva: String(pn.registro_iva_codice ?? row.registro_iva_codice ?? ''),
     protocolloIva: String(pn.protocollo_iva ?? row.protocollo_iva ?? ''),
@@ -71,4 +73,5 @@ export function buildConsultazioneRowViewModel(row = {}, index = 0) {
       .toLowerCase(),
     raw: row,
   }
+
 }

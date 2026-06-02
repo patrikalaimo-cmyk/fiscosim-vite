@@ -10,7 +10,6 @@ import { filterConsultazioneRows } from '../application/consultazioneOperations/
 import { calculateConsultazioneSaldoProgressivo } from '../application/consultazioneOperations/calculateConsultazioneSaldoProgressivo.js'
 import { buildConsultazioneSummary } from '../application/consultazioneOperations/buildConsultazioneSummary.js'
 import { exportConsultazioneResults } from '../application/consultazioneOperations/exportConsultazioneResults.js'
-import { fetchConsultazioneExportRows } from '../application/consultazioneOperations/fetchConsultazioneExportRows.js'
 import { ConsultazioneFiltersPanel } from '../components/consultazione/ConsultazioneFiltersPanel.jsx'
 import { ConsultazioneSaldoSummary } from '../components/consultazione/ConsultazioneSaldoSummary.jsx'
 import { ConsultazioneResultsTable } from '../components/consultazione/ConsultazioneResultsTable.jsx'
@@ -49,15 +48,14 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
   const [error, setError] = useState('')
   const [rawRows, setRawRows] = useState([])
   const [totalRows, setTotalRows] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [limitWarning, setLimitWarning] = useState(false)
   const [stubNotice, setStubNotice] = useState('')
   const [refreshToken, setRefreshToken] = useState(0)
   const [gotoTarget, setGotoTarget] = useState('')
   const [showDemoRows, setShowDemoRows] = useState(() => Boolean(import.meta.env.DEV))
 
   const normalizedFilters = useMemo(() => normalizeConsultazioneFilters(filters), [filters])
-  const queryParams = useMemo(() => buildConsultazioneQueryParams(normalizedFilters, { page, pageSize }), [normalizedFilters, page, pageSize])
+  const queryParams = useMemo(() => buildConsultazioneQueryParams(normalizedFilters), [normalizedFilters])
   const querySignature = useMemo(() => `${JSON.stringify(queryParams.server)}|${refreshToken}`, [queryParams.server, refreshToken])
   const demoRows = useMemo(() => buildConsultazioneDemoRows(), [])
 
@@ -66,27 +64,86 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
     let alive = true
     setLoading(true)
     setError('')
-    contabilitaRepo
-      .getPrimaNotaConsultazioneRowsAdvanced(societaAttiva.id, queryParams.server)
-      .then(({ data, error: qErr, totalRows: nextTotalRows }) => {
-        if (!alive) return
-        if (qErr) throw qErr
-        setTotalRows(Number(nextTotalRows || 0))
-        setRawRows(Array.isArray(data) ? data : [])
-      })
-      .catch((e) => {
-        if (!alive) return
-        setError(e?.message || String(e))
-        setTotalRows(0)
-        setRawRows([])
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
+    setLimitWarning(false)
+
+    async function loadAllChunks() {
+      let accumulated = []
+      let p = 1
+      const CHUNK_SIZE = 1000
+      const MAX_ROWS = 10000
+
+      try {
+        while (true) {
+          if (!alive) break
+          
+          const params = {
+            ...queryParams.server,
+            page: p,
+            pageSize: CHUNK_SIZE,
+          }
+          
+          const { data, error: qErr, totalRows: nextTotalRows } = await contabilitaRepo.getPrimaNotaConsultazioneRowsAdvanced(
+            societaAttiva.id,
+            params
+          )
+          
+          if (!alive) break
+          if (qErr) throw qErr
+
+          const fetchedRows = Array.isArray(data) ? data : []
+          
+          if (p === 1) {
+            const total = Number(nextTotalRows || 0)
+            setTotalRows(total)
+            if (total > MAX_ROWS) {
+              setLimitWarning(true)
+            }
+          }
+
+          if (fetchedRows.length === 0) {
+            break
+          }
+
+          accumulated = [...accumulated, ...fetchedRows]
+
+          if (accumulated.length >= MAX_ROWS) {
+            accumulated = accumulated.slice(0, MAX_ROWS)
+            break
+          }
+
+          if (fetchedRows.length < CHUNK_SIZE) {
+            break
+          }
+
+          if (p >= (MAX_ROWS / CHUNK_SIZE)) {
+            break
+          }
+
+          p += 1
+        }
+
+        if (alive) {
+          setRawRows(accumulated)
+        }
+      } catch (e) {
+        if (alive) {
+          setError(e?.message || String(e))
+          setTotalRows(0)
+          setRawRows([])
+        }
+      } finally {
+        if (alive) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadAllChunks()
+
     return () => {
       alive = false
     }
-  }, [societaAttiva?.id, querySignature, queryParams.server])
+  }, [societaAttiva?.id, querySignature])
 
   const rowViewModels = useMemo(
     () => rawRows.map((row, index) => buildConsultazioneRowViewModel(row, index)),
@@ -101,6 +158,9 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
   const [openingBalance, setOpeningBalance] = useState(0)
 
   const selectedContoObject = useMemo(() => {
+    if (filters.contoId) {
+      return pianoConti.find(c => String(c.id) === String(filters.contoId)) || null
+    }
     const query = String(filters.conto || '').trim().toLowerCase()
     if (!query) return null
     return pianoConti.find(
@@ -109,7 +169,7 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
         String(c.codice).toLowerCase() === query ||
         String(c.descrizione || '').toLowerCase() === query
     )
-  }, [pianoConti, filters.conto])
+  }, [pianoConti, filters.contoId, filters.conto])
 
   useEffect(() => {
     if (!societaAttiva?.id || !selectedContoObject?.id || !filters.dataRegistrazioneDa) {
@@ -118,7 +178,16 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
     }
     let alive = true
     contabilitaRepo
-      .getContoSaldoPrecedente(societaAttiva.id, selectedContoObject.id, filters.dataRegistrazioneDa)
+      .getContoSaldoPrecedente(
+        societaAttiva.id,
+        selectedContoObject.id,
+        filters.dataRegistrazioneDa,
+        {
+          tipoScrittureOrdinarie: filters.tipoScrittureOrdinarie,
+          tipoScrittureStornate: filters.tipoScrittureStornate,
+          tipoScrittureSimulate: filters.tipoScrittureSimulate,
+        }
+      )
       .then(({ data, error }) => {
         if (!alive) return
         if (error) {
@@ -134,37 +203,36 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
     return () => {
       alive = false
     }
-  }, [societaAttiva?.id, selectedContoObject?.id, filters.dataRegistrazioneDa])
+  }, [
+    societaAttiva?.id,
+    selectedContoObject?.id,
+    filters.dataRegistrazioneDa,
+    filters.tipoScrittureOrdinarie,
+    filters.tipoScrittureStornate,
+    filters.tipoScrittureSimulate,
+  ])
 
-  const orderedRows = useMemo(
-    () => calculateConsultazioneSaldoProgressivo(filteredRows, { openingBalance }),
-    [filteredRows, openingBalance]
-  )
+  const orderedRows = useMemo(() => {
+    if (!selectedContoObject) {
+      return filteredRows.map(r => ({ ...r, saldoProgressivo: undefined }))
+    }
+    return calculateConsultazioneSaldoProgressivo(filteredRows, { openingBalance })
+  }, [filteredRows, openingBalance, selectedContoObject])
 
   const summary = useMemo(
     () => buildConsultazioneSummary(orderedRows),
     [orderedRows]
   )
 
-  const totalPages = useMemo(() => {
-    if (!totalRows) return 1
-    return Math.max(1, Math.ceil(totalRows / Math.max(1, pageSize)))
-  }, [totalRows, pageSize])
-
   const rangeLabel = useMemo(() => {
     if (!totalRows) return 'Nessun risultato filtrato'
-    const start = (page - 1) * pageSize + 1
-    const end = Math.min(page * pageSize, totalRows)
-    return `Risultati ${start}-${end} di ${totalRows}`
-  }, [page, pageSize, totalRows])
-
-  useEffect(() => {
-    if (!totalRows) return
-    if (page > totalPages) setPage(totalPages)
-  }, [page, totalPages, totalRows])
+    if (totalRows > 10000) {
+      return `Caricate 10.000 righe su ${totalRows} totali filtrate (invito a raffinare i filtri)`
+    }
+    return `Mostrate tutte le ${totalRows} righe filtrate`
+  }, [totalRows])
 
   const handleFilterChange = (field, value) => {
-    setPage(1)
     setFilters((prev) => {
       const next = { ...prev, [field]: value }
       if (!next.tipoScrittureOrdinarie && !next.tipoScrittureStornate && !next.tipoScrittureSimulate) {
@@ -175,8 +243,6 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
   }
 
   const handleReset = () => {
-    setPage(1)
-    setPageSize(DEFAULT_PAGE_SIZE)
     setRefreshToken((v) => v + 1)
     setShowDemoRows(false)
     setFilters({
@@ -188,56 +254,20 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
     setAdvancedOpen(false)
   }
 
-  const handleExportCsv = async () => {
-    if (showDemoRows) {
-      const { csv, filename } = exportConsultazioneResults(demoRows, {
-        mode: compactMode,
-        meta: {
-          societa: societaAttiva?.denominazione || 'Demo',
-          esercizio: normalizedFilters.esercizio || '',
-        },
-      })
-      downloadCsv(filename, csv)
-      return
-    }
-    if (!societaAttiva?.id || exporting) return
-    setExporting(true)
-    try {
-      const exportRows = await fetchConsultazioneExportRows({
-        societaId: societaAttiva.id,
-        serverFilters: queryParams.server,
-        clientFilters: queryParams.client,
-      })
-      if (!exportRows.length) return
-      const { csv, filename } = exportConsultazioneResults(exportRows, {
-        mode: compactMode,
-        meta: {
-          societa: societaAttiva?.denominazione || '',
-          esercizio: normalizedFilters.esercizio || '',
-        },
-      })
-      downloadCsv(filename, csv)
-    } catch (e) {
-      setError(e?.message || String(e))
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const handlePageChange = (nextPage) => {
-    const safePage = Math.min(Math.max(1, Number(nextPage) || 1), totalPages)
-    setPage(safePage)
+  const handleExportCsv = () => {
+    if (!visualRows.length) return
+    const { csv, filename } = exportConsultazioneResults(visualRows, {
+      mode: compactMode,
+      meta: {
+        societa: societaAttiva?.denominazione || 'Demo',
+        esercizio: normalizedFilters.esercizio || '',
+      },
+    })
+    downloadCsv(filename, csv)
   }
 
   const handleSearch = () => {
-    setPage(1)
     setRefreshToken((v) => v + 1)
-  }
-
-  const handlePageSizeChange = (value) => {
-    const nextSize = Math.max(1, Number(value) || DEFAULT_PAGE_SIZE)
-    setPageSize(nextSize)
-    setPage(1)
   }
 
   const handleStub = (label) => {
@@ -261,18 +291,6 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
       document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     window.setTimeout(() => setGotoTarget(''), 100)
-  }
-
-  const pagination = {
-    page,
-    pageSize,
-    totalRows,
-    totalPages,
-    rangeLabel,
-    canPrevious: page > 1,
-    canNext: page < totalPages,
-    onPageChange: handlePageChange,
-    onPageSizeChange: handlePageSizeChange,
   }
 
   const [selectedRowId, setSelectedRowId] = useState(null)
@@ -307,6 +325,27 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
         return sortDirection === 'asc' ? numA - numB : numB - numA
       }
 
+      if (sortField === 'numeroRegistrazione' || sortField === 'rigaNumero') {
+        const sa = String(valA ?? '').trim()
+        const sb = String(valB ?? '').trim()
+        const numA = sa === '' ? NaN : Number(sa)
+        const numB = sb === '' ? NaN : Number(sb)
+        const aIsNum = !isNaN(numA) && Number.isFinite(numA)
+        const bIsNum = !isNaN(numB) && Number.isFinite(numB)
+
+        let res = 0
+        if (aIsNum && bIsNum) {
+          res = numA - numB
+        } else if (aIsNum) {
+          res = -1
+        } else if (bIsNum) {
+          res = 1
+        } else {
+          res = sa.localeCompare(sb, 'it')
+        }
+        return sortDirection === 'asc' ? res : -res
+      }
+
       const strA = String(valA ?? '').toLowerCase()
       const strB = String(valB ?? '').toLowerCase()
 
@@ -335,21 +374,6 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
       daVerificare: uniqueUnbalancedPnIds.size,
     }
   }, [visualRows, visualTotalRows])
-
-  const visualPagination = useMemo(() => {
-    if (!showDemoRows) return pagination
-    return {
-      page: 1,
-      pageSize,
-      totalRows: demoRows.length,
-      totalPages: 1,
-      rangeLabel: `Demo locale | 1-${demoRows.length} di ${demoRows.length}`,
-      canPrevious: false,
-      canNext: false,
-      onPageChange: () => {},
-      onPageSizeChange: handlePageSizeChange,
-    }
-  }, [showDemoRows, pageSize, demoRows.length, pagination])
 
   // Keyboard navigation
   useEffect(() => {
@@ -459,6 +483,12 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
 
       {stubNotice ? <div className="alert alert-info" style={{ marginBottom: '.9rem' }}>{stubNotice}</div> : null}
       {error ? <div className="alert alert-warn" style={{ marginBottom: '.9rem' }}>{error}</div> : null}
+      {limitWarning ? (
+        <div className="alert alert-warn" style={{ marginBottom: '.9rem' }}>
+          ⚠️ <strong>Limite tecnico superato:</strong> Il risultato filtrato ({totalRows} righe) supera il limite massimo di 10.000 righe.
+          Vengono visualizzate solo le prime 10.000 righe. Ti invitiamo a raffinare i filtri per visualizzare il dataset completo.
+        </div>
+      ) : null}
 
       {/* CONTENITORE DOUBLE COLUMN SPLIT SCREEN */}
       <div style={{ display: 'flex', gap: '1rem', padding: '0 1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -475,6 +505,7 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
               esercizi={currentYearOptions(currentYear)}
               causaliContabili={causaliContabili}
               causaliIva={causaliIva}
+              pianoConti={pianoConti}
             />
           </div>
 
@@ -482,7 +513,7 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
             <ConsultazioneSaldoSummary
               summary={visualSummary}
               compact={compactMode === CONSULTAZIONE_TABLE_MODE.COMPACT}
-              note={`Saldo progressivo calcolato sulla pagina corrente | ${showDemoRows ? 'Demo locale' : rangeLabel}`}
+              note={`Saldo progressivo calcolato sull'intero dataset filtrato | ${showDemoRows ? 'Demo locale' : rangeLabel}`}
             />
           </div>
 
@@ -500,9 +531,10 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
               }}
               compact={compactMode === CONSULTAZIONE_TABLE_MODE.COMPACT}
               loading={loading}
-              pagination={visualPagination}
-              onPageSizeChange={handlePageSizeChange}
-              note={`Saldo progressivo calcolato sulla pagina corrente | ${showDemoRows ? 'Demo locale' : rangeLabel}`}
+              note={selectedContoObject
+                ? `Saldo progressivo calcolato sull'intero dataset filtrato | ${showDemoRows ? 'Demo locale' : rangeLabel}`
+                : `Seleziona un conto per visualizzare il saldo progressivo | ${showDemoRows ? 'Demo locale' : rangeLabel}`
+              }
               compactMode={compactMode}
               onToggleCompact={(nextMode) => {
                 if (nextMode === 'compact' || nextMode === 'full') {

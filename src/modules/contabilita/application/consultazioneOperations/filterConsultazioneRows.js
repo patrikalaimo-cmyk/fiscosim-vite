@@ -20,6 +20,8 @@ export function filterConsultazioneRows(rows = [], filters = {}) {
   const dateDocDa = normalizeDate(filters.dataDocumentoDa)
   const dateDocA = normalizeDate(filters.dataDocumentoA)
   const conto = String(filters.conto || '').trim().toLowerCase()
+  const contoId = String(filters.contoId || '').trim().toLowerCase()
+  const contoCodice = String(filters.contoCodice || '').trim().toLowerCase()
   const soggetto = String(filters.soggetto || '').trim().toLowerCase()
   const numDoc = String(filters.numeroDocumento || '').trim().toLowerCase()
   const causaleContabile = String(filters.causaleContabile || '').trim().toLowerCase()
@@ -45,7 +47,13 @@ export function filterConsultazioneRows(rows = [], filters = {}) {
     if (dateRegA && rowDateReg && rowDateReg > dateRegA) return false
     if (dateDocDa && rowDateDoc && rowDateDoc < dateDocDa) return false
     if (dateDocA && rowDateDoc && rowDateDoc > dateDocA) return false
-    if (conto && !contains(`${row.contoId} ${row.contoCodice} ${row.contoDescrizione}`, conto)) return false
+
+    if (contoId) {
+      if (String(row.contoId || '').trim().toLowerCase() !== contoId) return false
+    } else if (contoCodice) {
+      if (String(row.contoCodice || '').trim().toLowerCase() !== contoCodice) return false
+    } else if (conto && !contains(`${row.contoId} ${row.contoCodice} ${row.contoDescrizione}`, conto)) return false
+
     if (soggetto && !contains(row.soggetto, soggetto)) return false
     if (numDoc && !contains(row.numeroDocumento, numDoc)) return false
     if (causaleContabile && !contains(row.causaleContabile, causaleContabile)) return false

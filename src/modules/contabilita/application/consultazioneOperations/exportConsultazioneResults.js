@@ -9,6 +9,7 @@ function escapeCsv(value) {
 export function exportConsultazioneResults(rows = [], { mode = 'compact', meta = {} } = {}) {
   const compactHeaders = [
     'Data registrazione',
+    'N. Prima Nota',
     'Documento',
     'Conto',
     'Descrizione',
@@ -18,6 +19,7 @@ export function exportConsultazioneResults(rows = [], { mode = 'compact', meta =
   ]
   const fullHeaders = [
     'Data registrazione',
+    'N. Prima Nota',
     'Data documento',
     'Numero documento',
     'Conto',
@@ -48,6 +50,7 @@ export function exportConsultazioneResults(rows = [], { mode = 'compact', meta =
     const cells = mode === 'full'
       ? [
           row.dataRegistrazione,
+          row.numeroRegistrazione,
           row.dataDocumento,
           row.numeroDocumento,
           `${row.contoCodice || ''}`.trim(),
@@ -65,6 +68,7 @@ export function exportConsultazioneResults(rows = [], { mode = 'compact', meta =
         ]
       : [
           row.dataRegistrazione,
+          row.numeroRegistrazione,
           row.numeroDocumento,
           `${row.contoCodice || ''}`.trim(),
           row.descrizione,

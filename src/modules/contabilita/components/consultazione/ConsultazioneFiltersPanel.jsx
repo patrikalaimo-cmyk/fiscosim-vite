@@ -1,4 +1,5 @@
 import { CONSULTAZIONE_FILTER_DEFAULTS } from '../../domain/consultazione/consultazioneDefaults.js'
+import { ContoAutocomplete } from './ContoAutocomplete.jsx'
 
 const ADVANCED_KEYS = [
   'dataDocumentoDa',
@@ -80,6 +81,7 @@ export function ConsultazioneFiltersPanel({
   esercizi = [],
   causaliContabili = [],
   causaliIva = [],
+  pianoConti = [],
 }) {
   const advancedCount = countAdvanced(filters)
   const hasAdvancedActive = advancedCount > 0
@@ -141,7 +143,17 @@ export function ConsultazioneFiltersPanel({
           <input type="date" value={filters.dataRegistrazioneA} onChange={setField('dataRegistrazioneA')} onKeyDown={handleEnter} style={controlStyle} />
         </Field>
         <Field label="Conto" span={2}>
-          <input value={filters.conto} onChange={setField('conto')} onKeyDown={handleEnter} placeholder="Codice, descrizione o id" style={controlStyle} />
+          <ContoAutocomplete
+            pianoConti={pianoConti}
+            selectedContoId={filters.contoId}
+            onChange={(values) => {
+              onChange('contoId', values.contoId)
+              onChange('contoCodice', values.contoCodice)
+              onChange('contoDescrizione', values.contoDescrizione)
+              onChange('conto', values.conto)
+            }}
+            style={controlStyle}
+          />
         </Field>
         <Field label="Soggetto" span={2}>
           <input value={filters.soggetto} onChange={setField('soggetto')} onKeyDown={handleEnter} placeholder="Cliente, fornitore o soggetto" style={controlStyle} />

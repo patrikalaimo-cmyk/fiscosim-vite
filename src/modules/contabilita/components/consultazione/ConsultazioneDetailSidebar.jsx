@@ -52,7 +52,12 @@ export function ConsultazioneDetailSidebar({
     caricaDettaglio(primaNotaId)
   }, [primaNotaId, societaId])
 
-  const isNeutralized = scrittura?.stato === 'annullata' || scrittura?.stato === 'stornata' || scrittura?.stato === 'storno'
+  // Stati canonici attivi FASE 3: simulata, confermata, stornata, storno
+  // annullata mantenuto come fallback difensivo per compatibilità con record legacy
+  const isNeutralized = scrittura?.stato === 'stornata' || scrittura?.stato === 'storno' || scrittura?.stato === 'annullata'
+  const isSimulata = scrittura?.stato === 'simulata'
+  const isConfermata = scrittura?.stato === 'confermata'
+  const stornoCollegatoId = scrittura?.storno_id || scrittura?.storno_of_id || scrittura?.storno_collegato_id || null
 
   return (
     <div
@@ -142,7 +147,7 @@ export function ConsultazioneDetailSidebar({
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem', fontSize: '.75rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem', fontSize: '.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--mu)' }}>Descrizione</span>
                   <span style={{ fontWeight: 700 }}>{scrittura?.descrizione || '—'}</span>
@@ -176,13 +181,69 @@ export function ConsultazioneDetailSidebar({
                 {scrittura?.stato && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--mu)' }}>Stato</span>
-                    <span style={{ fontWeight: 700, textTransform: 'uppercase', color: isNeutralized ? '#ff8f8f' : '#8be28e' }}>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        color: isNeutralized ? '#ff8f8f' : isSimulata ? '#ffb054' : '#8be28e',
+                      }}
+                    >
                       {scrittura.stato}
+                    </span>
+                  </div>
+                )}
+                {stornoCollegatoId && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span style={{ color: 'var(--mu)', fontSize: '.7rem' }}>Storno collegato</span>
+                    <span style={{ fontWeight: 600, fontSize: '.7rem', color: '#ff8f8f', fontFamily: 'monospace' }}>
+                      {String(stornoCollegatoId).slice(0, 8)}…
                     </span>
                   </div>
                 )}
               </div>
             </div>
+
+
+            {/* Collegamenti Fiscali */}
+            {(scrittura?.causale_iva_codice || scrittura?.cliente_fornitore_id) && (
+              <div className="card" style={{ padding: '.8rem', background: 'rgba(255,255,255,.015)', border: '1px solid rgba(255,255,255,.035)', borderRadius: 10 }}>
+                <div style={{ fontWeight: 800, fontSize: '.8rem', color: '#ffb054', marginBottom: '.6rem' }}>Collegamenti Fiscali</div>
+                <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+                  {scrittura?.causale_iva_codice && (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '.3rem',
+                      padding: '.25rem .5rem',
+                      borderRadius: '6px',
+                      background: 'rgba(26, 168, 191, 0.15)',
+                      color: '#1AA8BF',
+                      fontSize: '.7rem',
+                      fontWeight: 600,
+                      border: '1px solid rgba(26, 168, 191, 0.3)'
+                    }}>
+                      🏷️ IVA: {scrittura.causale_iva_codice}
+                    </span>
+                  )}
+                  {scrittura?.cliente_fornitore_id && (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '.3rem',
+                      padding: '.25rem .5rem',
+                      borderRadius: '6px',
+                      background: 'rgba(232, 146, 42, 0.15)',
+                      color: '#ffb054',
+                      fontSize: '.7rem',
+                      fontWeight: 600,
+                      border: '1px solid rgba(232, 146, 42, 0.3)'
+                    }}>
+                      👤 Partitario: {scrittura.cliente_fornitore_nome || 'Soggetto'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Righe Contabili detail */}
             <div className="card" style={{ padding: '.8rem', background: 'rgba(255,255,255,.015)', border: '1px solid rgba(255,255,255,.035)', borderRadius: 10 }}>
@@ -254,7 +315,7 @@ export function ConsultazioneDetailSidebar({
                   <div style={{ fontSize: '.72rem', color: '#ff8f8f', lineHeight: 1.35 }}>
                     Questa registrazione è stata stornata o neutralizzata (stato di sola lettura). Non sono consentite ulteriori modifiche o storni.
                   </div>
-                                ) : (scrittura?.stato === 'confermata' || scrittura?.stato === 'definitiva') ? (
+                                ) : isConfermata ? (
                   <>
                     <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
                       Questa scrittura è confermata e auditata. Scegli un'operazione per aprirla in Inserimento Manuale:
@@ -274,10 +335,10 @@ export function ConsultazioneDetailSidebar({
                       Storno Contabile
                     </button>
                   </>
-                ) : scrittura?.stato === 'simulata' ? (
+                ) : isSimulata ? (
                   <>
                     <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
-                      Questa scrittura è una Prima Nota simulata (scrittura provvisoria freely editable/deletable):
+                      Questa scrittura è una Prima Nota simulata (scrittura provvisoria):
                     </div>
                     <button
                       className="btn"
@@ -290,7 +351,7 @@ export function ConsultazioneDetailSidebar({
                       className="btn"
                       style={{ width: '100%', fontSize: '.75rem', padding: '.45rem', background: 'rgba(255, 143, 143, 0.15)', color: '#ff8f8f', border: '1px solid rgba(255, 143, 143, 0.3)', borderRadius: 6 }}
                       onClick={async () => {
-                        if (window.confirm("Sei sicuro di voler eliminare definitivamente questa simulazione?")) {
+                        if (window.confirm('Sei sicuro di voler eliminare definitivamente questa simulazione?')) {
                           try {
                             setLoading(true)
                             const res = await contabilitaRepo.deleteScritturaControllata(primaNotaId, societaId)
@@ -298,7 +359,7 @@ export function ConsultazioneDetailSidebar({
                             onRefreshList?.()
                             onClose?.()
                           } catch (err) {
-                            setError("Errore eliminazione simulata: " + (err.message || String(err)))
+                            setError('Errore eliminazione simulata: ' + (err.message || String(err)))
                           } finally {
                             setLoading(false)
                           }
@@ -311,7 +372,7 @@ export function ConsultazioneDetailSidebar({
                 ) : (
                   <>
                     <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
-                      Questa scrittura è in stato bozza o provvisoria. Puoi modificarla direttamente:
+                      Stato scrittura non riconosciuto come operativo. Puoi aprirla in Inserimento Manuale per ispezione:
                     </div>
                     <button
                       className="btn"

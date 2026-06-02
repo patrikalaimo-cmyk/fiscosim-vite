@@ -15,6 +15,8 @@ export function buildConsultazioneQueryParams(filters = {}, { page = 1, pageSize
       dateFrom: normalized.dataRegistrazioneDa || bounds.from || null,
       dateTo: normalized.dataRegistrazioneA || bounds.to || null,
       contoLike: normalized.conto || '',
+      contoId: normalized.contoId || '',
+      contoCodice: normalized.contoCodice || '',
       soggettoLike: normalized.soggetto || '',
       numeroDocumentoLike: normalized.numeroDocumento || '',
       causaleContabile: normalized.causaleContabile || '',
