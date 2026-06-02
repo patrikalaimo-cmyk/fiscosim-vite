@@ -1,5 +1,19 @@
+import { useState, useEffect } from 'react'
 import { CONSULTAZIONE_FILTER_DEFAULTS } from '../../domain/consultazione/consultazioneDefaults.js'
 import { ContoAutocomplete } from './ContoAutocomplete.jsx'
+
+const DEBUNCED_FIELDS = [
+  'soggetto',
+  'numeroDocumento',
+  'testoLibero',
+  'descrizioneRiga',
+  'registroIva',
+  'protocolloIva',
+  'importoPreciso',
+  'tolleranzaImporto',
+  'importoDa',
+  'importoA',
+]
 
 const ADVANCED_KEYS = [
   'dataDocumentoDa',
@@ -83,17 +97,82 @@ export function ConsultazioneFiltersPanel({
   causaliIva = [],
   pianoConti = [],
 }) {
+  const [localTextValues, setLocalTextValues] = useState(() => {
+    const initial = {}
+    DEBUNCED_FIELDS.forEach((key) => {
+      initial[key] = filters[key] ?? ''
+    })
+    return initial
+  })
+
+  // Sync local text values when parent filters change from outside (e.g. Reset)
+  useEffect(() => {
+    setLocalTextValues((prev) => {
+      const next = { ...prev }
+      let changed = false
+      DEBUNCED_FIELDS.forEach((key) => {
+        const val = filters[key] ?? ''
+        if (val !== prev[key]) {
+          next[key] = val
+          changed = true
+        }
+      })
+      return changed ? next : prev
+    })
+  }, [filters])
+
+  // Debounced propagation to parent filters
+  useEffect(() => {
+    const changedKeys = DEBUNCED_FIELDS.filter((key) => {
+      const parentVal = filters[key] ?? ''
+      const localVal = localTextValues[key] ?? ''
+      return parentVal !== localVal
+    })
+
+    if (changedKeys.length === 0) return
+
+    const timer = window.setTimeout(() => {
+      changedKeys.forEach((key) => {
+        onChange(key, localTextValues[key])
+      })
+    }, 350)
+
+    return () => window.clearTimeout(timer)
+  }, [localTextValues, filters, onChange])
+
   const advancedCount = countAdvanced(filters)
   const hasAdvancedActive = advancedCount > 0
   const contabiliOptions = Array.isArray(causaliContabili) ? causaliContabili : []
   const ivaOptions = Array.isArray(causaliIva) ? causaliIva : []
   const controlStyle = { fontSize: '.76rem', padding: '.34rem .45rem', minHeight: 32 }
   const setField = (field) => (event) => onChange(field, event?.target?.value ?? '')
+
+  const setDebouncedField = (field) => (event) => {
+    const value = event?.target?.value ?? ''
+    setLocalTextValues((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const flushDebouncedFields = () => {
+    DEBUNCED_FIELDS.forEach((key) => {
+      const parentVal = filters[key] ?? ''
+      const localVal = localTextValues[key] ?? ''
+      if (parentVal !== localVal) {
+        onChange(key, localVal)
+      }
+    })
+  }
+
   const handleEnter = (event) => {
     if (event?.key === 'Enter') {
       event.preventDefault()
+      flushDebouncedFields()
       onSearch?.()
     }
+  }
+
+  const handleSearchClick = () => {
+    flushDebouncedFields()
+    onSearch?.()
   }
 
   return (
@@ -156,19 +235,19 @@ export function ConsultazioneFiltersPanel({
           />
         </Field>
         <Field label="Soggetto" span={2}>
-          <input value={filters.soggetto} onChange={setField('soggetto')} onKeyDown={handleEnter} placeholder="Cliente, fornitore o soggetto" style={controlStyle} />
+          <input value={localTextValues.soggetto} onChange={setDebouncedField('soggetto')} onKeyDown={handleEnter} placeholder="Cliente, fornitore o soggetto" style={controlStyle} />
         </Field>
         <Field label="Numero documento" span={2}>
-          <input value={filters.numeroDocumento} onChange={setField('numeroDocumento')} onKeyDown={handleEnter} style={controlStyle} />
+          <input value={localTextValues.numeroDocumento} onChange={setDebouncedField('numeroDocumento')} onKeyDown={handleEnter} style={controlStyle} />
         </Field>
         <Field label="Cerca" span={1}>
-          <input value={filters.testoLibero} onChange={setField('testoLibero')} onKeyDown={handleEnter} placeholder="Testo libero..." style={controlStyle} />
+          <input value={localTextValues.testoLibero} onChange={setDebouncedField('testoLibero')} onKeyDown={handleEnter} placeholder="Testo libero..." style={controlStyle} />
         </Field>
         <div style={{ gridColumn: 'span 1', display: 'flex', alignItems: 'end' }}>
           <button
             className="btn"
             type="button"
-            onClick={onSearch || onReset}
+            onClick={handleSearchClick}
             style={{
               width: '100%',
               justifyContent: 'center',
@@ -387,36 +466,36 @@ export function ConsultazioneFiltersPanel({
               <div style={{ gridColumn: 'span 3' }}>
                 <AdvancedGroup title="B. Importo" subtitle="Filtri numerici sulla base imponibile.">
                   <Field label="Importo preciso" span={12}>
-                    <input type="number" step="0.01" value={filters.importoPreciso} onChange={setField('importoPreciso')} style={controlStyle} />
+                    <input type="number" step="0.01" value={localTextValues.importoPreciso} onChange={setDebouncedField('importoPreciso')} style={controlStyle} />
                   </Field>
                   <Field label="Tolleranza +/-" span={12}>
-                    <input type="number" step="0.01" value={filters.tolleranzaImporto} onChange={setField('tolleranzaImporto')} style={controlStyle} />
+                    <input type="number" step="0.01" value={localTextValues.tolleranzaImporto} onChange={setDebouncedField('tolleranzaImporto')} style={controlStyle} />
                   </Field>
                   <Field label="Importo da" span={12}>
-                    <input type="number" step="0.01" value={filters.importoDa} onChange={setField('importoDa')} style={controlStyle} />
+                    <input type="number" step="0.01" value={localTextValues.importoDa} onChange={setDebouncedField('importoDa')} style={controlStyle} />
                   </Field>
                   <Field label="Importo a" span={12}>
-                    <input type="number" step="0.01" value={filters.importoA} onChange={setField('importoA')} style={controlStyle} />
+                    <input type="number" step="0.01" value={localTextValues.importoA} onChange={setDebouncedField('importoA')} style={controlStyle} />
                   </Field>
                 </AdvancedGroup>
               </div>
               <div style={{ gridColumn: 'span 3' }}>
                 <AdvancedGroup title="C. IVA" subtitle="Registro e protocollo IVA.">
                   <Field label="Registro IVA" span={12}>
-                    <input value={filters.registroIva} onChange={setField('registroIva')} placeholder="Registro" style={controlStyle} />
+                    <input value={localTextValues.registroIva} onChange={setDebouncedField('registroIva')} placeholder="Registro" style={controlStyle} />
                   </Field>
                   <Field label="Protocollo IVA" span={12}>
-                    <input value={filters.protocolloIva} onChange={setField('protocolloIva')} placeholder="Protocollo" style={controlStyle} />
+                    <input value={localTextValues.protocolloIva} onChange={setDebouncedField('protocolloIva')} placeholder="Protocollo" style={controlStyle} />
                   </Field>
                 </AdvancedGroup>
               </div>
               <div style={{ gridColumn: 'span 3' }}>
                 <AdvancedGroup title="D. Testo / Soggetto" subtitle="Ricerca libera su contenuto e descrizione.">
                   <Field label="Testo libero" span={12}>
-                    <input value={filters.testoLibero} onChange={setField('testoLibero')} placeholder="Testo libero / Descrizione..." style={controlStyle} />
+                    <input value={localTextValues.testoLibero} onChange={setDebouncedField('testoLibero')} placeholder="Testo libero / Descrizione..." style={controlStyle} />
                   </Field>
                   <Field label="Descrizione riga" span={12}>
-                    <input value={filters.descrizioneRiga} onChange={setField('descrizioneRiga')} placeholder="Descrizione riga" style={controlStyle} />
+                    <input value={localTextValues.descrizioneRiga} onChange={setDebouncedField('descrizioneRiga')} placeholder="Descrizione riga" style={controlStyle} />
                   </Field>
                 </AdvancedGroup>
               </div>

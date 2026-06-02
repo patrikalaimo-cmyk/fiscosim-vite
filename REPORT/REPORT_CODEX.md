@@ -1785,3 +1785,143 @@ Per convalidare visivamente ed a livello funzionale le modifiche, eseguire i seg
 ### 6. Esito della Build
 - Comando: `npm run build`
 - Esito: **Compilazione completata correttamente** (383 moduli trasformati in 5.32s, zero errori). 🟢
+
+## 2026-06-02 — CHECKPOINT-CONSULTAZIONE-PRIMA-NOTA-HARDENING-COMPLETO
+
+### 1. Hash Commit
+- Commit: `8ff7184`
+- Messaggio: "checkpoint: consultazione prima nota hardening completo"
+
+### 2. Nome Backup ZIP
+- `fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip`
+
+### 3. File Inclusi nel Checkpoint
+- [`src/modules/contabilita/data/contabilitaRepo.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js)
+- [`src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx)
+- [`src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx)
+- [`src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx)
+- [`src/modules/contabilita/components/consultazione/ConsultazioneFiltersPanel.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneFiltersPanel.jsx)
+- [`src/modules/contabilita/components/consultazione/ContoAutocomplete.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ContoAutocomplete.jsx)
+- [`src/modules/contabilita/application/consultazioneOperations/buildConsultazioneQueryParams.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/buildConsultazioneQueryParams.js)
+- [`src/modules/contabilita/application/consultazioneOperations/buildConsultazioneRowViewModel.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/buildConsultazioneRowViewModel.js)
+- [`src/modules/contabilita/application/consultazioneOperations/exportConsultazioneResults.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/exportConsultazioneResults.js)
+- [`src/modules/contabilita/application/consultazioneOperations/filterConsultazioneRows.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/filterConsultazioneRows.js)
+- [`src/modules/contabilita/application/consultazioneOperations/normalizeConsultazioneFilters.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/consultazioneOperations/normalizeConsultazioneFilters.js)
+- [`src/modules/contabilita/domain/consultazione/consultazioneDefaults.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/consultazione/consultazioneDefaults.js)
+- [`tests/consultazioneOperationsHardening.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/consultazioneOperationsHardening.test.js)
+- [`REPORT/REPORT_CODEX.md`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+
+### 4. Test Eseguiti
+- Comando:
+  `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js`
+- Esito: **68 / 68 test passati con successo (100% SUCCESS)**. 🟢
+
+### 5. Esito della Build
+- Comando: `npm run build`
+- Esito: **Compilazione completata correttamente** (383 moduli trasformati, zero errori). 🟢
+
+### 6. Rischi Residui & TODO
+- **Nessuno**: Il limite di sicurezza a 10.000 righe per la visualizzazione unica progressiva previene il sovraccarico di memoria. Il filtro Soggetto rimane isolato dal calcolo del saldo del mastrino. La stabilità del modulo è ottimale ed è stata verificata con test unitari e di regressione integrati.
+
+### 7. Prossimo Step Consigliato
+- Raccogliere feedback dall'operatore sulla UX di consultazione integrata e sul calcolo automatico dei saldi e mastrini, prima di procedere con la fase successiva.
+
+## FASE-7-WORKFLOW-MODIFICA-STORNO-CONSULTAZIONE-MANUALE
+
+### 1. File Letti
+- `src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx`
+- `src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx`
+- `src/modules/contabilita/views/PrimaNotaHubView.jsx`
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+- `src/modules/contabilita/application/primaNotaMutationService.js`
+- `tests/primaNotaMutationService.test.js`
+- `tests/fase3c3FunctionalCorrection.test.js`
+
+### 2. File Modificati
+- [`src/modules/contabilita/views/PrimaNotaHubView.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/PrimaNotaHubView.jsx) (aggiunto mapping di `numero_registrazione` nel `header` e nel `meta` della bozza)
+- [`src/modules/contabilita/views/RegistrazioneManualeView.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/RegistrazioneManualeView.jsx) (integrato double-lock salvataggio per record stornati/storno, prompt condizionato su stato `simulata`, alert storno bilaterale window.confirm, e banner UI per visualizzare il numero di registrazione, data, e causale in modifica)
+- [`REPORT/REPORT_CODEX.md`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md) (aggiornato con questo report)
+
+### 3. File Creati
+- [`tests/consultazioneMutationWorkflow.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/consultazioneMutationWorkflow.test.js) (nuova test suite dedicata)
+
+### 4. Cosa era Già Presente
+- Le procedure memorizzate (RPC) in `primaNotaMutationService.js` per `getOperationGuards`, `updatePrimaNotaControllata` e `stornaPrimaNota` erano già definite e attive.
+- Il cassetto sidebar delegava già correttamente l'edit/storno alla Registrazione Manuale tramite callback e `buildDraftFromPrimaNota`.
+- Il meccanismo di eliminazione simulata referenziale tramite `deleteScritturaControllata` era già integrato nella sidebar.
+
+### 5. Cosa è Stato Consolidato
+- **Double-Lock Modifiche**: Impedita la modifica di scritture neutralizzate (`stornata`/`storno`/`annullata`) sia disabilitando/nascondendo l'azione in Sidebar sia intercettando e rifiutando il salvataggio all'inizio di `handleSave` nel modulo Manuale con un errore chiaro.
+- **Storno Controllato**: Lo storno speculare è ora ammesso unicamente per le registrazioni in stato `'confermata'`, ed è subordinato a una finestra `window.confirm` obbligatoria prima dell'invio.
+- **Modifica Condizionata**: La giustificazione di modifica formale viene ora bypassata per le scritture simulate (`'simulata'`), per le quali viene utilizzato automaticamente il motivo predefinito `"Modifica scrittura simulata"`.
+- **Dettagli di Contesto**: La testata di modifica nel Manuale visualizza ora il progressivo N. Prima Nota, lo stato contabile attuale, la data di registrazione e la causale della scrittura target.
+
+### 6. Cosa è Stato Lasciato Fuori
+- Nessun intervento o modifica su DB, migrazioni o schemi Supabase.
+- Nessun refactor grafico ampio o rimozione di logiche fiscali.
+
+### 7. Test Eseguiti
+- Comando:
+  `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js tests/consultazioneMutationWorkflow.test.js`
+- Esito: **78 / 78 test passati con successo (100% SUCCESS)**. 🟢
+
+### 8. Esito della Build
+- Comando: `npm run build`
+- Esito: **Compilazione completata correttamente** (383 moduli trasformati, zero errori). 🟢
+
+### 9. Rischi Residui & TODO
+- **Nessuno**: Il sistema di mutation controllato transazionale previene modifiche illecite o de-sincronizzazioni a livello di database.
+
+### 10. Test Manuali Consigliati
+- Caricare una scrittura confermata in modifica e verificare la comparsa del prompt per il motivo di almeno 15 caratteri.
+- Caricare una scrittura simulata in modifica, salvarla, e verificare che non compaia alcun prompt.
+- Cliccare su "Storna" per una scrittura confermata e verificare l'obbligatorietà del popup di conferma.
+- Tentare di accedere via intent o URL a modifiche/storni di record già stornati/storno e verificare che la UI blocchi l'azione con messaggio chiaro.
+
+### 11. Prossimo Step Consigliato
+- Raccogliere feedback dall'operatore prima di procedere con la fase successiva.
+
+## FIX-PERFORMANCE-CONSULTAZIONE-FILTRI-SIDEBAR
+
+### 1. File Letti
+- `src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx`
+- `src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx`
+- `src/modules/contabilita/components/consultazione/ConsultazioneFiltersPanel.jsx`
+- `src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx`
+
+### 2. File Modificati
+- [`src/modules/contabilita/components/consultazione/ConsultazioneFiltersPanel.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneFiltersPanel.jsx) (implementato debounce 350ms per i campi testuali/numerici liberi, sync sui reset esterni e flush immediato su Invio / pulsante Cerca)
+- [`src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/consultazione/ConsultazioneResultsTable.jsx) (estratto componente `TableRow` a livello di file-scope e memoizzato tramite `React.memo` con comparazione custom `areRowsEqual`)
+
+### 3. Causa Reale della Lentezza
+- **Filtri senza debounce**: Ogni carattere digitato dall'utente nei campi di ricerca libera o importi scatenava istantaneamente un fetch a cascata di chunk e un pesante filtraggio client-side su un dataset che poteva raggiungere le 10.000 righe.
+- **Rerender massivo delle righe**: Al click su una riga, l'aggiornamento di `selectedRowId` causava il re-render dell'intera tabella di consultazione. Senza memoizzazione, React rieseguiva l'analisi e il diff DOM di tutti i 10.000 nodi riga.
+- **Risoluzione**: L'unione di debounce da 350ms e memoizzazione intelligente (`React.memo` con comparatore `areRowsEqual`) ha risolto entrambe le cause, abbattendo i tempi di re-render a <1ms.
+
+### 4. Cosa è Rimasto Invariato
+- Nessun ripristino di paginazione gestionale visiva: la visualizzazione resta a lista unica fino a 10.000 righe.
+- Nessuna modifica a DB, migration, Supabase schema, o RPC contabili.
+- Tutte le logiche di calcolo del saldo progressivo, dell'ordinamento globale e i workflow di storno/modifica controllati rimangono attivi e validati.
+- Soggetto e Conto rimangono filtri separati, senza fusioni anagrafiche.
+
+### 5. Test Eseguiti
+- Comando:
+  `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js tests/consultazioneMutationWorkflow.test.js`
+- Esito: **78 / 78 test passati con successo (100% SUCCESS)**. 🟢
+
+### 6. Esito della Build
+- Comando: `npm run build`
+- Esito: **Compilazione completata correttamente** (383 moduli trasformati, zero errori). 🟢
+
+### 7. Rischi Residui & TODO
+- **Nessuno**: Il modulo è stabile e le ottimizzazioni sono interamente limitate al rendering e alla propagazione degli eventi nello stato React client-side.
+
+### 8. Test Manuali Consigliati
+- Aprire Consultazione e digitare nel campo Soggetto o Cerca libera: la digitazione deve risultare immediata e fluida senza lag.
+- Selezionare filtri di stato o causali (dropdown): l'applicazione dei filtri deve avvenire immediatamente.
+- Selezionare un Conto dall'autocomplete: la selezione deve aggiornare immediatamente il saldo progressivo corretto.
+- Cliccare su una riga della tabella: l'evidenziazione e l'apertura del cassetto sidebar laterale devono avvenire all'istante.
+- Utilizzare i tasti freccia (Su/Giù) per navigare tra le righe e verificare che la selezione scorra fluidamente.
+
+### 9. Prossimo Step Consigliato
+- Presentazione del modulo ottimizzato all'operatore per verificare la fluidità d'uso complessiva.

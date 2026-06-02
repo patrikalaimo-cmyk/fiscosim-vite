@@ -17,6 +17,7 @@ function buildDraftFromPrimaNota(scrittura = {}, righe = []) {
       dataRegistrazione: formatIso(scrittura.data_registrazione),
       dataDocumento: formatIso(scrittura.data_documento || scrittura.data_registrazione),
       numeroDocumento: scrittura.numero_documento || '',
+      numeroRegistrazione: scrittura.numero_registrazione || '',
       causaleContabileId: scrittura.causale_codice || '',
       soggetto: scrittura.cliente_fornitore_nome || '',
       clienteFornitoreId: scrittura.cliente_fornitore_id || '',
@@ -139,6 +140,7 @@ function buildDraftFromPrimaNota(scrittura = {}, righe = []) {
       primaNotaId: scrittura.id,
       stato: scrittura.stato || 'bozza',
       versione: scrittura.versione || 1,
+      numeroRegistrazione: scrittura.numero_registrazione || '',
     }
   }
 }

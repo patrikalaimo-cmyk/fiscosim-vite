@@ -439,6 +439,15 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       setError('Identificativo prima nota mancante.')
       return
     }
+    const opMode = state.meta?.operationMode
+    if (opMode === 'storno' && state.meta?.stato !== 'confermata') {
+      setError("Storno non consentito: lo storno è ammesso unicamente per le registrazioni in stato 'confermata'.")
+      return
+    }
+    if (opMode === 'storno') {
+      const confirmed = window.confirm("Sei sicuro di voler generare la contro-scrittura speculare di storno per questa registrazione?")
+      if (!confirmed) return
+    }
     if (motivoOperazione.trim().length < 15) {
       setError('Il motivo dell\'operazione deve contenere almeno 15 caratteri per finalità di audit.')
       return
@@ -1388,6 +1397,10 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       setError('Seleziona una società attiva prima di salvare.')
       return
     }
+    if (isReadOnlyMode) {
+      setError("Modifica non consentita: questa registrazione è stata stornata o neutralizzata (stato di sola lettura).")
+      return
+    }
     if (draftModel.validation.status === 'blocked') {
       setError(draftModel.validation.blockers.join(' · '))
       return
@@ -1436,13 +1449,18 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         }
         
         // 4. Chiedere motivo obbligatorio di almeno 15 caratteri
-        const motivo = window.prompt("Fornisci il motivo obbligatorio della modifica (almeno 15 caratteri):", "Errata contabilizzazione")
-        if (motivo === null) {
-          setSaving(false)
-          return // User cancelled prompt
-        }
-        if (motivo.trim().length < 15) {
-          throw new Error("Il motivo della modifica deve contenere almeno 15 caratteri per finalità di audit.")
+        let motivo = ''
+        if (state.meta?.stato !== 'simulata') {
+          motivo = window.prompt("Fornisci il motivo obbligatorio della modifica (almeno 15 caratteri):", "Errata contabilizzazione")
+          if (motivo === null) {
+            setSaving(false)
+            return // User cancelled prompt
+          }
+          if (motivo.trim().length < 15) {
+            throw new Error("Il motivo della modifica deve contenere almeno 15 caratteri per finalità di audit.")
+          }
+        } else {
+          motivo = 'Modifica scrittura simulata'
         }
         
         // 5. Preparare payload mappati per la RPC
@@ -1625,18 +1643,21 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                     Modalità Modifica Attiva (Audit-Safe)
                   </div>
                   <div style={{ fontSize: '.85rem', color: '#fff', fontWeight: 700, marginTop: '2px' }}>
-                    Scrittura ID: <span style={{ fontFamily: 'monospace', color: '#ffb054' }}>{state.meta.primaNotaId}</span> | Versione: <span style={{ color: '#ffb054' }}>{state.meta.versione || 1}</span>
+                    Modifica registrazione N. {state.header.numeroRegistrazione || state.meta.numeroRegistrazione || '—'} | Stato: <span style={{ color: '#ffb054' }}>{state.meta.stato || 'confermata'}</span> | Data reg.: <span style={{ color: '#ffb054' }}>{state.header.dataRegistrazione}</span> | Causale: <span style={{ color: '#ffb054' }}>{state.header.causaleContabileId}</span>
+                  </div>
+                  <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginTop: '2px' }}>
+                    ID: <span style={{ fontFamily: 'monospace' }}>{state.meta.primaNotaId}</span> | Versione: {state.meta.versione || 1}
                   </div>
                 </div>
               </div>
               <div>
-                <span className={`bdg ${state.meta.stato === 'annullata' || state.meta.stato === 'stornata' ? 'bdg-red' : 'bdg-green'}`} style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '.7rem', padding: '.3rem .6rem' }}>
+                <span className={`bdg ${state.meta.stato === 'annullata' || state.meta.stato === 'stornata' || state.meta.stato === 'storno' ? 'bdg-red' : 'bdg-green'}`} style={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '.7rem', padding: '.3rem .6rem' }}>
                   Stato: {state.meta.stato || 'confermata'}
                 </span>
               </div>
             </div>
             
-            {(state.meta.stato === 'annullata' || state.meta.stato === 'stornata') && (
+            {(state.meta.stato === 'annullata' || state.meta.stato === 'stornata' || state.meta.stato === 'storno') && (
               <div
                 style={{
                   marginTop: '.6rem',
@@ -1653,7 +1674,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                 }}
               >
                 <span>⚠️</span>
-                <span>SCRITTURA BLOCCATA: questa scrittura è stata già ANNULLATA o STORNATA. Nessun salvataggio consentito.</span>
+                <span>SCRITTURA BLOCCATA: questa scrittura è stata già ANNULLATA, STORNATA o è uno STORNO. Nessun salvataggio consentito.</span>
               </div>
             )}
           </div>
