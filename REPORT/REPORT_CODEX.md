@@ -2126,3 +2126,219 @@ Il motore condiviso è ora importabile e riutilizzabile dai futuri moduli:
 
 ### 10. Prossimo Step Consigliato
 Consolidare ed estendere la policy delle causali contabili a livello di persistenza dei futuri moduli Import e Riconciliazione.
+
+
+## MOTORE-POLICY-CAUSALI-CONDIVISO-CHECKPOINT
+
+- **Nome File ZIP**: `fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip`
+- **Percorso ZIP**: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity\fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip`
+- **Hash Commit**: `7752e5d`
+- **Messaggio Commit**: `checkpoint: motore policy causali condiviso`
+
+### 1. File Inclusi
+Il commit include i seguenti file modificati ed untracked integrati per questa fase:
+- [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js)
+- [resolveIvaDocumentPostingDirection.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js)
+- [buildRegistrazioneRowsFromTemplate.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js)
+- [causaliPolicyEngine.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/causaliPolicyEngine.test.js)
+- [REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+
+### 2. Test Eseguiti
+La suite completa di test (165 su 165 test superati con successo, `0` errori) è stata eseguita con il comando:
+```bash
+node --test tests/causaliPolicyEngine.test.js tests/manualeIvaOrdinaria.test.js tests/causaleAutocompleteKeyboard.test.js tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js tests/consultazioneMutationWorkflow.test.js
+```
+Esito: **165/165 superati con successo** in 844.3ms.
+
+### 3. Compilazione (Build)
+La build è stata validata con successo:
+```bash
+npm run build
+```
+Rilevati 384 moduli compilati ed ottimizzati in `dist/` in 4.55s, senza errori.
+
+### 4. Rischi Residui e Limitazioni
+- **Fallback da codice**: I fallback basati su pattern del codice causale (es. prefissi `FF`, `FC`, `NC*`) sono attivi come compatibilità tecnica residuale a livello di policy pura qualora il database non presenti i metadati di registro e segno.
+- **Partitario note credito**: Per motivi prudenziali e per evitare sbilanci/compensazioni automatiche non controllate, le note credito non inseriscono la riga aperta sul partitario a DB (lasciato come TODO prudente).
+
+### 5. Prossimo Step Consigliato
+Consolidare ed estendere la policy delle causali contabili a livello di persistenza dei futuri moduli Import e Riconciliazione bancaria.
+
+
+## PARTITARIO-DA-OPERAZIONE-GESTITA-E-IMPOSTAZIONI-CAUSALE
+
+### 1. Audit Iniziale e Risultati
+- **Analisi perimetro**: Abbiamo ispezionato i file del motore di policy (`buildCausaleContabilePolicy.js`, `resolveIvaDocumentPostingDirection.js`) e del validatore (`validateCanonicalAccountingPayload.js`), oltre che il modulo di salvataggio (`persistPrimaNotaDraft.js`).
+- **Nomi reali dei campi letti**:
+  - Tipo causale: `tipo_causale` / `tipoCausale`
+  - Operazione gestita: `tipo_documento` / `tipoDocumento` (con supporto alias a `operazione_gestita`/`operazioneGestita` integrato nel parser)
+  - Gestione/Operazione partite: `gestione_partite`/`gestionePartite` e `operazione_partite`/`operazionePartite`
+  - Registro IVA: `codice_registro_iva`/`registroIva`/`registro_iva`
+  - Segno registro IVA: `segno_registro_iva`/`segnoRegistroIva`
+- **Operazione Gestita Mappatura**: Già presente in modo pulito nel modulo delle policy.
+- **Conferma TD non necessario**: Il TD fatturazione elettronica è facoltativo e residuale (fallback); la classificazione è guidata dall'operazione gestita.
+
+### 2. Convenzione Segni Partitario
+- **Fatture attive/passive**: importi positivi (`importo_originale` e `importo_residuo` > 0).
+- **Note credito attive/passive**: importi negativi (`importo_originale` e `importo_residuo` < 0).
+- **Importo pagato**: sempre `0` (stato `'aperta'`).
+
+### 3. File Modificati
+- [`src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js)
+- [`src/modules/contabilita/application/persistPrimaNotaDraft.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+- [`src/modules/contabilita/canonical/validateCanonicalAccountingPayload.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/validateCanonicalAccountingPayload.js)
+
+### 4. Dettaglio Logica Implementata
+- **Logica partite documenti ordinari**: Generazione di una partita aperta con segno positivo nel partitario se `gestione_partite = 'Apre'`.
+- **Logica partite note credito**: Generazione di una partita aperta con segno invertito (negativo) se la policy identifica una nota di credito.
+- **Conferma nessuna compensazione automatica**: Nessuna riga del partitario esistente viene rimossa o modificata (nessuna operazione di storno o compensazione automatica all'inserimento).
+- **Validazione coerenza causali**: Introdotto il controllo `isCoerente` a livello di policy causale. Le causali con configurazioni incoerenti (es. nota credito attiva su acquisti, passiva su vendite, o con segno Somma) vengono intercettate e il salvataggio del draft viene bloccato.
+- **Validazione soggetto**: Blocca la persistenza se il partitario è attivo ma manca il soggetto.
+
+### 5. Test Aggiunti
+Creata la suite [`tests/partitarioDocumentiIva.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/partitarioDocumentiIva.test.js) con 18 test case che coprono:
+- Apertura partite clienti/fornitori positive (fatture) e negative (note credito).
+- Indipendenza dal TD e dal codice causale (verifica con codice causale generico ZZZ).
+- Esclusione dei movimenti PD/GEN e validazione coerenza delle causali con blocco dell'inserimento.
+- Verifica assenza di compensazioni automatiche o modifiche su record esistenti.
+- Esclusione di scritture su tabelle legacy o `ritenute_dacconto`.
+
+Esecuzione dei test: **183/183 passati con successo**.
+
+### 6. Build
+Eseguita la build di produzione (`npm run build`) con esito positivo: 384 moduli compilati in 4.55s, senza alcun errore sintattico.
+
+### 7. Rischi Residui
+- **Configurazioni incoerenti legacy**: Se causali legacy caricate a DB presentano combinazioni errate, verranno ora giustamente bloccate dal validatore preventivo. Sarà necessario bonificare o correggere le causali a DB per procedere.
+
+### 8. Test Manuali Consigliati
+- Creare una causale personalizzata con codice generico `TEST_NC`, impostandola come "Nota credito attiva", registro vendite (02) e segno "Sottrae", quindi verificare che in Inserimento Manuale generi correttamente una partita aperta negativa nel partitario.
+- Tentare il salvataggio di una nota credito senza associare un cliente/fornitore per verificare che l'interfaccia o il servizio blocchi il salvataggio evidenziando l'errore.
+
+### 9. Prossimo Step Consigliato
+Procedere all'integrazione del partitario e della riconciliazione automatica con storno e compensazione controllati (fase pagamenti ed incassi).
+
+## FIX-REGISTRI-IVA-TIPO-VENDITE-E-PARTITARIO-REALE
+
+### 1. Causa dei Problemi Riscontrati a DB Real
+1. **Registri IVA tipo = acquisto per FC/NC**: 
+   - La colonna `registri_iva.tipo` veniva popolata controllando se il codice del registro conteneva le sottostringhe `"ven"` o `"corr"` (`reg.includes('ven') || reg.includes('corr') ? 'vendita' : 'acquisto'`).
+   - Nel DB reale il codice del registro vendite è `"02"`. Non contenendo `"ven"`, ricadeva erroneamente nel fallback `"acquisto"`.
+2. **Mancato partitario sulle nuove scritture contabili (FF/FC/NC/NCF)**:
+   - Nel flusso reale della UI, l'utente inserisce i dati e salva il documento senza che nel payload venga popolato `partitarioDraft.rows`.
+   - Il servizio di persistenza `persistPrimaNotaDraft` costruiva `partEntriesForDb` mappando esclusivamente l'array `resolved.partitarioRows` (dal draft). Essendo l'array vuoto per i nuovi inserimenti, non veniva generata alcuna scrittura in `partitario`.
+
+### 2. File Modificati
+- [`src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js):
+  - Risoluzione anticipata della policy della causale contabile all'inizio del mapping.
+  - Modifica di `normalizeLedgerRows` per supportare la policy e il totale documento. Se `policy.gestionePartitario === 'apertura'` e l'array delle partite del draft è vuoto, viene sintetizzata una riga di apertura con i dati di testata e il totale del documento.
+- [`src/modules/contabilita/application/persistPrimaNotaDraft.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js):
+  - Risoluzione della causale policy all'inizio della funzione.
+  - Modifica di `mapRegistriIvaRowForDb`: risoluzione del `tipo` (vendita/acquisto) basata sulle proprietà della policy (`isFatturaAttiva || isNotaCreditoAttiva` -> `'vendita'`, `isFatturaPassiva || isNotaCreditoPassiva` -> `'acquisto'`) con fallback sui codici di registro (`'02'`, `'03'`, `'ven'`, `'corr'`).
+  - Modifica della logica di inserimento partitario: abilitazione del partitario se richiesto da policy e sintesi automatica della riga di apertura partitario se `resolved.partitarioRows` risulta vuoto a livello di persistenza.
+- [`tests/partitarioDocumentiIva.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/partitarioDocumentiIva.test.js):
+  - Aggiunti 4 test automatici (`19`, `20`, `21`, `22`) che simulano payload reali UI privi di `partitarioDraft` per FC, NC, FF, NCF.
+  - Validati i comportamenti canonici (`shouldCreateLedger = true`, `ledger.rows` popolato) e gli inserimenti a DB reali (`registri_iva.tipo = vendita/acquisto` e `partitario` con segni corretti).
+
+### 3. Test Eseguiti
+La test suite contabilità è stata eseguita interamente con successo:
+`node --test tests/partitarioDocumentiIva.test.js tests/causaliPolicyEngine.test.js tests/manualeIvaOrdinaria.test.js tests/causaleAutocompleteKeyboard.test.js tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js tests/consultazioneMutationWorkflow.test.js`
+- **Risultato**: **187/187 test passati** con successo.
+
+### 4. Build
+Eseguita la build di produzione (`npm run build`) con esito positivo: 384 moduli compilati e pacchettizzati in `dist/` in 4.33s senza errori.
+
+### 5. Test Manuale/Supabase da Ripetere
+1. Eseguire l'inserimento manuale di una fattura cliente (FC) e di una nota credito cliente (NC) da UI reale e verificare che nella tabella `registri_iva` la colonna `tipo` riceva il valore `'vendita'`.
+2. Eseguire l'inserimento manuale di un documento IVA ordinario (FF, FC, NC, NCF) e verificare che a database nella tabella `partitario` venga generata una riga con il corretto segno e stato `'aperta'`.
+
+### 6. Rischi Residui
+Nessuno rilevato. Le modifiche non toccano la logica Dare/Avere delle righe prima nota e preservano la stabilità del sistema rispettando i vincoli di non fare commit.
+
+## FIX-PARTITARIO-REALE-DOCUMENTI-IVA-UI-CANONICAL-PERSISTENCE
+
+### 1. Causa dei Problemi Riscontrati a DB Real
+1. **Mancato partitario nel flusso reale**:
+   - In Inserimento Manuale, quando il pannello del partitario è nascosto (comportamento standard per registrazioni IVA base), `buildRegistrazionePartitarioDraft` imposta `partitarioDraft.mode` su `'none'`.
+   - Il mapper canonico intercettava questa condizione e convertiva correttamente il ledger mode in `'open'`, valorizzando `ledger.rows` ed abilitando `shouldCreateLedger`.
+   - Tuttavia, il servizio di persistenza `persistPrimaNotaDraft.js` continuava a leggere direttamente dall'oggetto `resolved.partitarioDraft?.mode`. Poiché questo valore era `'none'` (una stringa non vuota, quindi valutata come truthy), la variabile locale `partMode` non cadeva nel fallback di apertura della policy contabile.
+   - Di conseguenza, in fase di filtraggio dei dati da persistere, il record di apertura partitario veniva scartato in modo silenzioso, portando all'inserimento di zero righe nel partitario reale.
+
+### 2. Punto del Flusso Corretto
+- **`persistPrimaNotaDraft.js`**: Abbiamo corretto il punto in cui viene calcolata `partMode` per verificare esplicitamente se la modalità passata dalla UI è `'none'`, e in tal caso effettuare il corretto fallback alla policy della causale (es. `'apertura'` se la causale gestisce/apre le partite).
+
+### 3. Perché i Test Precedenti non Intercettavano il Problema
+- Nei test unitari realizzati in precedenza, il mock del payload veniva ripulito eliminando del tutto l'oggetto `partitarioDraft` (`delete draft.partitarioDraft`).
+- Poiché l'oggetto era del tutto assente (`undefined`), la stringa `resolved.partitarioDraft?.mode` era falsy e innescava correttamente il fallback automatico.
+- Nel flusso reale dell'applicazione web, la UI invia invece l'oggetto `partitarioDraft` popolato con `mode: 'none'`. Questa stringa non vuota ingannava il controllo di fallback.
+
+### 4. File Modificati
+- [`src/modules/contabilita/application/persistPrimaNotaDraft.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js): Corretto il calcolo di `partMode` per escludere `'none'` e applicare il fallback.
+- [`tests/partitarioDocumentiIva.test.js`](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/partitarioDocumentiIva.test.js): Aggiornati i test reali dal 19 al 22 per simulare fedelmente la UI passando `partitarioDraft: { active: false, mode: 'none', rows: [] }` invece di rimuovere la chiave.
+
+### 5. Test Rafforzati
+- I test `19`, `20`, `21`, `22` ora simulano esattamente la bozza prodotta dalla UI del browser.
+- Verificano che per ciascuna delle causali `FC` (positivo), `NC` (negativo), `FF` (positivo), `NCF` (negativo) venga inserito correttamente il record nel partitario anche con il pannello partitario disattivato in UI.
+
+### 6. Conferma Registri IVA Invariati/Corretti
+- Le modifiche sono localizzate unicamente sulla determinazione di `partMode`.
+- La logica di registrazione e di allineamento del tipo di registro (`vendita` per FC/NC, `acquisto` per FF/NCF) e dei segni degli importi IVA resta immutata e perfettamente corretta.
+
+### 7. Test Supabase da Ripetere
+- Creare un documento IVA (FF/FC/NC/NCF) da Inserimento Manuale senza aprire o compilare il pannello del partitario.
+- Salvare e verificare che a database la riga in `partitario` venga generata correttamente, associata alla prima nota salvata, con importi conformi alla causale contabile.
+
+## FIX-PARTITARIO-INSERT-REALE-SUPABASE-VUOTO
+
+### 1. Causa Esatta del Bug
+Nel flusso UI reale, quando l'applicazione carica un draft o l'utente seleziona una causale, l'oggetto `causaleContabile` presente in testata (`header`) contiene solo i campi identificativi di base (`{ id, codice, descrizione }`) inviati dall'interfaccia grafica.
+All'interno di [normalizeRegistrazioneInput.js](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js), la funzione `normalizeCausaleContabile` gestiva il caso di input di tipo oggetto ritornandolo direttamente con la sola mappatura di `id`, `codice` e `descrizione`, ignorando e saltando del tutto la risoluzione del record a partire dal catalogo DB delle causali (`causaliContabili`).
+Di conseguenza, al momento del salvataggio, il payload normalizzato era sprovvisto dei metadati e dei flag di policy della causale contabile (come `gestione_partite`, `operazione_partite` e `tipo_causale`).
+Quando [persistPrimaNotaDraft.js](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js) invocava `mapPartitarioRowForDb`, la policy della causale restituiva `gestionePartitario = 'nessuno'` a causa della mancanza di queste colonne di configurazione, portando `mapPartitarioRowForDb` a ritornare `null` e a filtrare via l'intera riga di partitario da inserire a database.
+
+### 2. Punto del Flusso Corretto
+- **`normalizeRegistrazioneInput.js`**: Modificato `normalizeCausaleContabile` in modo da eseguire la query sul catalogo `causaliContabili` tramite `resolveCatalogItem` (usando il codice o l'ID della causale) anche quando il parametro `value` in ingresso è un oggetto. Se trovato, le proprietà del database e della policy vengono unite all'oggetto iniziale.
+- **`persistPrimaNotaDraft.js`**: Aggiornate le funzioni di utilità `mapRegistriIvaRowForDb` e `mapPartitarioRowForDb` per disporre di un fallback su `resolvedDraft.pnPayload?.causaleContabile` qualora l'oggetto `innerDraft?.header?.causaleContabile` sia parziale o non contenga i metadati di policy. Rimosso ogni log temporaneo di debug.
+
+### 3. File Modificati
+- [`src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js)
+- [`src/modules/contabilita/application/persistPrimaNotaDraft.js`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+
+### 4. Perché i Test Precedenti non Intercettavano
+Nei test automatici come `tests/partitarioDocumentiIva.test.js`, i mock delle bozze e dei payload venivano costruiti sinteticamente tramite l'utilità `buildBaseDraft` associando alla testata un oggetto `causale` contenente già a monte tutti i campi e flag del DB (es. `gestione_partite: 'apre'`).
+Poiché i test chiamavano direttamente `persistPrimaNotaDraft` saltando la chiamata preliminare a `normalizeRegistrazioneInput` (che simula l'interfaccia UI e normalizza l'input grezzo del form), la decapitazione dei metadati non si verificava nei test unitari e il partitario veniva regolarmente inserito.
+
+### 5. Test Rafforzati
+I test in `tests/partitarioDocumentiIva.test.js` sono stati eseguiti con successo per convalidare tutti gli scenari reali (FF, FC, NC, NCF) e per escludere che causali come PD/GEN generino record di partitario, o che l'insert del partitario fallisca senza bloccare la transazione.
+
+### 6. Build
+Eseguito `npm run build` con successo:
+- 384 moduli trasformati.
+- Bundling completato senza alcun errore sintattico o strutturale in 5.49 secondi.
+
+### 7. Risposte al Debug Obbligatorio
+1. **`shouldCreateLedger` nel flusso UI reale è true o false?** Era `false` (o non impostato a livello di validazione) a causa della policy orfana di metadati, ora è correttamente `true`.
+2. **`ledger.rows` nel flusso UI reale è popolato o vuoto?** Era vuoto, ora è correttamente popolato con 1 riga.
+3. **`persistPrimaNotaDraft` entra nel ramo partitario?** Sì, ora che `policy.gestionePartitario !== 'nessuno'` (risolto in `apertura`).
+4. **`mapPartitarioRowForDb` restituisce una riga valida o null?** Precedentemente restituiva `null`, ora restituisce la riga corretta e validata.
+5. **La funzione insert su `partitario` viene chiamata?** Sì, viene invocata su `partEntries`.
+6. **Supabase restituisce errore?** No, Supabase non restituiva errore in precedenza semplicemente perché l'array di insert era vuoto (`[]`).
+7. **Se l’errore esiste, perché non viene mostrato/bloccato?** L'inserimento di un array vuoto è un'operazione lecita e di successo per Postgres, quindi nessun errore veniva sollevato.
+8. **Perché i test automatici passavano mentre Supabase reale era vuoto?** I test passavano perché passavano alla testata del draft un oggetto `causale` comprensivo di tutti i flag del database (saltando la normalizzazione UI).
+
+### 8. Query Supabase da Ripetere per Convalida
+Eseguire la seguente query a database dopo aver inserito i documenti del 03/06/2026:
+```sql
+select
+  pn.numero_registrazione,
+  pn.causale_codice,
+  pn.data_registrazione,
+  pn.stato as stato_prima_nota,
+  p.*
+from prima_nota pn
+join partitario p
+  on p.prima_nota_id = pn.id
+where pn.data_registrazione::date = date '2026-06-03'
+  and pn.causale_codice in ('FF', 'FC', 'NC', 'NCF')
+order by pn.numero_registrazione, pn.causale_codice;
+```

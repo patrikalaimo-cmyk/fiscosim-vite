@@ -173,6 +173,17 @@ export function buildPersistenceValidation(resolved = {}) {
 
   if (!pnPayload) blockers.push('draft canonico mancante')
 
+  const headerCausale = innerDraft?.header?.causaleContabile || pnPayload?.causaleContabile
+  const causaleObj = {
+    ...headerCausale,
+    codice: pnPayload?.causale_codice || headerCausale?.codice
+  }
+  const policy = buildCausaleContabilePolicy(causaleObj)
+
+  if (!policy.isCoerente) {
+    blockers.push(...policy.erroriCoerenza)
+  }
+
   const societaId = normalizeText(pnPayload?.societa_id)
   const esercizioText = normalizeText(pnPayload?.esercizio ?? innerDraft?.header?.esercizioContabile ?? pnPayload?.esercizio_contabile)
   const esercizio = Number.parseInt(esercizioText, 10)
@@ -180,13 +191,17 @@ export function buildPersistenceValidation(resolved = {}) {
   const causaleId = normalizeText(pnPayload?.causale_id || pnPayload?.causale_codice)
   const controparteId = normalizeText(pnPayload?.cliente_fornitore_id)
   const controparteNome = normalizeText(pnPayload?.cliente_fornitore_nome)
-  const controparteRequired = requiresControparteForPersistence({ innerDraft, pnPayload, readiness, validation })
+  const controparteRequired =
+    requiresControparteForPersistence({ innerDraft, pnPayload, readiness, validation }) ||
+    (policy.gestionePartitario !== 'nessuno' && policy.gestionePartitario !== '')
 
   if (!societaId) blockers.push('societa_id mancante')
   if (!Number.isFinite(esercizio)) blockers.push('esercizio contabile mancante o non determinabile')
   if (!dataRegistrazione) blockers.push('data registrazione mancante')
   if (!causaleId) blockers.push('causale contabile mancante')
-  if (controparteRequired && !controparteId && !controparteNome) blockers.push('controparte mancante')
+  if (controparteRequired && !controparteId && !controparteNome) {
+    blockers.push('controparte mancante')
+  }
 
   if (!rows.length) blockers.push('righe prima nota assenti')
 
@@ -230,7 +245,7 @@ function buildPersistError(validation) {
 }
 
 function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = {}, resolvedDraft = {}) {
-  const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile
+  const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile || resolvedDraft.pnPayload?.causaleContabile
   const causaleObj = {
     ...headerCausale,
     codice: pnPayload.causale_codice || headerCausale?.codice
@@ -254,8 +269,19 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
     ? normalizeDbAmount(row.ivaIndetraibile)
     : round2(Math.abs(ivaAmount) - Math.abs(iva_detraibile))) * mult
 
-  const reg = String(row.registroIva || row.registerType || ivaDraft?.registroIva || '').toLowerCase()
-  const tipo = reg.includes('ven') || reg.includes('corr') ? 'vendita' : 'acquisto'
+  let tipo = 'acquisto'
+  if (policy.isFatturaAttiva || policy.isNotaCreditoAttiva) {
+    tipo = 'vendita'
+  } else if (policy.isFatturaPassiva || policy.isNotaCreditoPassiva) {
+    tipo = 'acquisto'
+  } else {
+    const reg = String(row.registroIva || row.registerType || ivaDraft?.registroIva || policy.registroIva || '').toLowerCase().trim()
+    if (reg === '02' || reg === '03' || reg.includes('ven') || reg.includes('corr')) {
+      tipo = 'vendita'
+    } else {
+      tipo = 'acquisto'
+    }
+  }
 
   return {
     documento_id: pnPayload.numero_documento || 'manual-reg-doc',
@@ -278,30 +304,45 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
 }
 
 function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
-  const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile
+  const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile || resolvedDraft.pnPayload?.causaleContabile
   const causaleObj = {
     ...headerCausale,
     codice: pnPayload.causale_codice || headerCausale?.codice
   }
   const policy = buildCausaleContabilePolicy(causaleObj)
   
-  if (policy.notaCredito === true) {
-    // TODO: FASE 8 - Gestione partitario per note di credito (compensazioni o segno opposto).
-    // Per prudenza e per evitare sbilanci/compensazioni automatiche impreviste, per ora non creiamo la partita aperta.
+  if (policy.gestionePartitario === 'nessuno' || policy.gestionePartitario === '') {
     return null
   }
 
+  let subjectTipo = row.soggettoTipo
+  if (!subjectTipo) {
+    if (policy.isFatturaPassiva || policy.isNotaCreditoPassiva) {
+      subjectTipo = 'fornitore'
+    } else if (policy.isFatturaAttiva || policy.isNotaCreditoAttiva) {
+      subjectTipo = 'cliente'
+    } else {
+      const isAcquistiReg = ['acquisti', '01'].includes(String(policy.registroIva).trim().toLowerCase())
+      subjectTipo = isAcquistiReg ? 'fornitore' : 'cliente'
+    }
+  }
+
   const imp = normalizeDbAmount(row.importoAperto || row.importoOriginario || 0)
+  const isNC = policy.notaCredito || policy.isNotaCreditoAttiva || policy.isNotaCreditoPassiva || String(policy.segnoRegistroIva).trim() === '-' || String(policy.segnoRegistroIva).trim().toLowerCase() === 'sottrae'
+  const sign = isNC ? -1 : 1
+  const baseAmount = Math.abs(imp)
+  const finalAmount = baseAmount * sign
+
   return {
     societa_id: pnPayload.societa_id || null,
-    tipo: row.soggettoTipo || (pnPayload.causale_codice === 'FF' ? 'fornitore' : 'cliente'),
+    tipo: subjectTipo,
     conto_id: row.soggettoId || pnPayload.cliente_fornitore_id || null,
     numero_documento: row.numeroDocumento || pnPayload.numero_registrazione || null,
     data_documento: row.dataDocumento || pnPayload.data_documento || null,
     data_scadenza: row.dataScadenza || row.dataDocumento || pnPayload.data_documento || null,
-    importo_originale: imp,
+    importo_originale: finalAmount,
     importo_pagato: 0,
-    importo_residuo: imp,
+    importo_residuo: finalAmount,
     stato: 'aperta',
     tipo_movimento: 'apertura'
   }
@@ -355,6 +396,12 @@ export async function persistPrimaNotaDraft({
   righeSelect = '*',
 } = {}) {
   const resolved = resolveDraftBundle(draft)
+  const headerCausale = resolved.innerDraft?.header?.causaleContabile || resolved.pnPayload?.causaleContabile
+  const causaleObj = {
+    ...headerCausale,
+    codice: resolved.pnPayload?.causale_codice || headerCausale?.codice
+  }
+  const policy = buildCausaleContabilePolicy(causaleObj)
   const validation = buildPersistenceValidation(resolved)
 
   // FASE 2: Esecuzione della validazione canonica prima del write
@@ -410,12 +457,40 @@ export async function persistPrimaNotaDraft({
     ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
     : []
 
-  const partitarioEnabled = Boolean(resolved.partitarioDraft?.active || resolved.innerDraft?.meta?.behavior?.showPartitario)
-  const partEntriesForDb = partitarioEnabled && Array.isArray(resolved.partitarioRows)
-    ? resolved.partitarioRows
-        .filter(row => resolved.partitarioDraft?.mode === 'apertura' || (resolved.partitarioDraft?.mode === 'chiusura' && row.selected && row.importoChiusura > 0))
+  const partitarioEnabled = Boolean(
+    resolved.partitarioDraft?.active ||
+    resolved.innerDraft?.meta?.behavior?.showPartitario ||
+    (policy.gestionePartitario !== 'nessuno' && policy.gestionePartitario !== '')
+  )
+  let partRows = Array.isArray(resolved.partitarioRows) ? resolved.partitarioRows : []
+  const draftMode = resolved.partitarioDraft?.mode
+  const partMode = (draftMode && draftMode !== 'none') ? draftMode : (policy.gestionePartitario === 'apertura' ? 'apertura' : 'nessuno')
+
+  if (partitarioEnabled && partRows.length === 0 && policy.gestionePartitario === 'apertura') {
+    const isPassiva = policy.isFatturaPassiva || policy.isNotaCreditoPassiva
+    const subjectTipo = isPassiva ? 'fornitore' : 'cliente'
+    const subjectId = resolved.innerDraft?.header?.clienteFornitoreId || resolved.pnPayload?.cliente_fornitore_id || ''
+    const subjectNome = resolved.innerDraft?.header?.clienteFornitoreNome || resolved.pnPayload?.cliente_fornitore_nome || ''
+    const docNum = resolved.innerDraft?.header?.numeroDocumento || resolved.pnPayload?.numero_documento || resolved.pnPayload?.numero_registrazione || ''
+    const docDate = resolved.pnPayload?.data_documento || resolved.pnPayload?.data_registrazione || resolved.innerDraft?.header?.dataDocumento || resolved.innerDraft?.header?.dataRegistrazione || ''
+    const amount = validation.totals.dare || resolved.pnPayload?.totale_dare || 0
+
+    partRows = [{
+      soggettoId: subjectId,
+      soggettoNome: subjectNome,
+      soggettoTipo: subjectTipo,
+      numeroDocumento: docNum,
+      dataDocumento: docDate,
+      importoAperto: amount,
+      importoOriginario: amount,
+    }]
+  }
+
+  const partEntriesForDb = partitarioEnabled
+    ? partRows
+        .filter(row => partMode === 'apertura' || (partMode === 'chiusura' && row.selected && row.importoChiusura > 0))
         .map(row => {
-          if (resolved.partitarioDraft?.mode === 'apertura') {
+          if (partMode === 'apertura') {
             return mapPartitarioRowForDb(row, pnPayloadForDb, resolved)
           } else {
             return mapPartitarioClosureForDb(row, pnPayloadForDb)

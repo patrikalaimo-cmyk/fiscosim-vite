@@ -353,18 +353,43 @@ function resolveLedgerMode(partitarioDraft = {}) {
   return 'none'
 }
 
-function normalizeLedgerRows(draft = {}) {
+function normalizeLedgerRows(draft = {}, policy = {}, totalDocument = 0) {
   const partitarioDraft = isPlainObject(draft?.partitarioDraft) ? draft.partitarioDraft : {}
-  const rows = Array.isArray(partitarioDraft.rows) ? partitarioDraft.rows : []
+  let rows = Array.isArray(partitarioDraft.rows) ? partitarioDraft.rows : []
   const mode = resolveLedgerMode(partitarioDraft)
 
+  if (rows.length === 0 && policy.gestionePartitario === 'apertura') {
+    const isPassiva = policy.isFatturaPassiva || policy.isNotaCreditoPassiva
+    const subjectTipo = isPassiva ? 'fornitore' : 'cliente'
+    const subjectId = draft.header?.clienteFornitoreId || draft.pnPayload?.cliente_fornitore_id || ''
+    const subjectNome = draft.header?.clienteFornitoreNome || draft.pnPayload?.cliente_fornitore_nome || ''
+    const docNum = draft.header?.numeroDocumento || draft.pnPayload?.numero_documento || draft.pnPayload?.numero_registrazione || ''
+    const docDate = draft.header?.dataDocumento || draft.pnPayload?.data_documento || draft.pnPayload?.data_registrazione || ''
+    const amount = totalDocument || numberOrZero(draft?.totals?.totaleDare)
+
+    rows = [{
+      soggettoId: subjectId,
+      soggettoNome: subjectNome,
+      soggettoTipo: subjectTipo,
+      numeroDocumento: docNum,
+      dataDocumento: docDate,
+      tipoDocumento: draft.documentDraft?.tipoDocumento || (isPassiva ? 'FF' : 'FC'),
+      importoAperto: amount,
+      importoOriginario: amount,
+      action: 'open'
+    }]
+  }
+
+  const enabled = Boolean(partitarioDraft.enabled || partitarioDraft.active || rows.length || policy.gestionePartitario === 'apertura')
+  const resolvedMode = mode === 'none' && policy.gestionePartitario === 'apertura' ? 'open' : mode
+
   return {
-    enabled: Boolean(partitarioDraft.enabled || partitarioDraft.active || rows.length),
-    mode,
+    enabled,
+    mode: resolvedMode,
     accountId: text(partitarioDraft.accountId || partitarioDraft.contoId || partitarioDraft.selectedPartitaId),
-    subjectId: text(partitarioDraft.subjectId || partitarioDraft.soggettoId || partitarioDraft.selectedControparteId),
+    subjectId: text(partitarioDraft.subjectId || partitarioDraft.soggettoId || partitarioDraft.selectedControparteId || draft.header?.clienteFornitoreId || draft.pnPayload?.cliente_fornitore_id),
     rows: rows.map((row, index) => {
-      const action = text(row?.action || (mode === 'close' ? 'close' : mode === 'open' ? 'open' : ''))
+      const action = text(row?.action || (resolvedMode === 'close' ? 'close' : resolvedMode === 'open' ? 'open' : ''))
       return {
         ...row,
         rowNumber: Number.isFinite(Number(row?.riga)) ? Number(row.riga) : index + 1,
@@ -512,6 +537,7 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.fiscalContext.ritenutaPresente = Boolean(ritenutaDraft.enabled || ritenutaDraft.rows?.length)
 
   payload.header.causaleContabile = isPlainObject(draft?.header?.causaleContabile) ? { ...draft.header.causaleContabile } : null
+  const policy = buildCausaleContabilePolicy(payload.header.causaleContabile)
   payload.header.descrizione = firstText(draft?.header?.descrizioneGenerale, draft?.pnPayload?.descrizione, documentDraft.note)
   payload.header.protocollo = firstText(ivaDraft.protocolloDefinitivo, ivaDraft.protocolloProvvisorio, draft?.pnPayload?.protocollo)
   payload.header.numeroRegistrazione = firstText(options?.numeroRegistrazione, draft?.pnPayload?.numero_documento, draft?.header?.numeroDocumento)
@@ -614,7 +640,7 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.vat.autofattura = Boolean(vatNormalized.autofattura)
   payload.vat.integrazioneEstero = Boolean(vatNormalized.integrazioneEstero)
 
-  const ledgerNormalized = normalizeLedgerRows(draft)
+  const ledgerNormalized = normalizeLedgerRows(draft, policy, totalDocument)
   payload.ledger.enabled = Boolean(ledgerNormalized.enabled)
   payload.ledger.mode = ledgerNormalized.mode
   payload.ledger.accountId = ledgerNormalized.accountId
@@ -652,8 +678,7 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.audit.overrides = Array.isArray(options?.overrides) ? [...options.overrides] : []
   payload.audit.reasons = Array.isArray(draft?.meta?.templateRows?.reasons) ? [...draft.meta.templateRows.reasons] : []
 
-  // Risoluzione policy causale contabile per FASE 2
-  const policy = buildCausaleContabilePolicy(payload.header.causaleContabile)
+  // Risoluzione policy causale contabile per FASE 2 (gia' eseguita sopra)
 
   const hasRealVatRows = (Array.isArray(ivaDraft?.rows) && ivaDraft.rows.length > 0 && ivaDraft.rows.some(r => toNumber(r.imponibile) > 0 || toNumber(r.imposta) > 0 || (text(r.causaleIvaId) && !String(r.causaleIvaId).startsWith('iva-row-')))) ||
     toNumber(ivaDraft?.imponibile) > 0 || toNumber(ivaDraft?.totaleImponibile) > 0 || toNumber(ivaDraft?.totaleIva) > 0 || toNumber(ivaDraft?.totaleImposta) > 0

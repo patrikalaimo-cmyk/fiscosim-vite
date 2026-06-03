@@ -40,7 +40,7 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const operazionePartite = pickPolicyText(item, ['operazione_partite', 'operazionePartite'])
   const gestionePartite = pickPolicyText(item, ['gestione_partite', 'gestionePartite'])
   const opRitenute = pickPolicyText(item, ['op_ritenute', 'opRitenute', 'operazioneRitenute', 'operazione_ritenute'])
-  const tipoDocumento = pickPolicyText(item, ['tipo_documento', 'tipoDocumento'])
+  const tipoDocumento = pickPolicyText(item, ['tipo_documento', 'tipoDocumento', 'operazione_gestita', 'operazioneGestita'])
   const dataDocumento = pickPolicyText(item, ['data_documento', 'dataDocumento'])
   const numeroDocumento = pickPolicyText(item, ['numero_documento', 'numeroDocumento'])
   const segnoRegistroIva = normalizeText(item?.segno_registro_iva || item?.segnoRegistroIva || '')
@@ -77,14 +77,22 @@ export function buildCausaleContabilePolicy(causale = {}) {
       'pagamentoincassivaesigibilitadifferita',
     ]) || operazionePolicy.isPagamentoIncasso
 
-  const notaCredito =
-    isPolicyOneOf(typeCausale, ['notacredito', 'nota credito']) ||
-    isPolicyOneOf(tipoDocumento, ['notacredito', 'nota credito']) ||
-    operazionePolicy.isNotaCreditoAttiva ||
-    operazionePolicy.isNotaCreditoPassiva ||
-    segnoRegistroIva === '-' ||
-    // [Technical Fallback Residual] Inferiamo notaCredito da codice causale se mancano metadati
-    ((!typeCausale && !tipoDocumento && !segnoRegistroIva) && (code.startsWith('NC') || code === 'NCA'))
+  const hasExplicitOperazioneGestita = Boolean(operazioneGestita && operazioneGestita !== '-- Non specificato --')
+  const isExplicitNotaCredito = operazionePolicy.isNotaCreditoAttiva || operazionePolicy.isNotaCreditoPassiva
+  const isExplicitFattura = operazionePolicy.isFatturaAttiva || operazionePolicy.isFatturaPassiva
+
+  let notaCredito = false
+  if (hasExplicitOperazioneGestita) {
+    notaCredito = isExplicitNotaCredito
+  } else {
+    notaCredito =
+      isPolicyOneOf(typeCausale, ['notacredito', 'nota credito']) ||
+      isPolicyOneOf(tipoDocumento, ['notacredito', 'nota credito']) ||
+      segnoRegistroIva === '-' ||
+      segnoRegistroIva === 'sottrae' ||
+      // [Technical Fallback Residual] Inferiamo notaCredito da codice causale se mancano metadati
+      ((!typeCausale && !tipoDocumento && !segnoRegistroIva) && (code.startsWith('NC') || code === 'NCA'))
+  }
 
   const isDocumentoIva =
     isPolicyOneOf(typeCausale, [
@@ -176,7 +184,29 @@ export function buildCausaleContabilePolicy(causale = {}) {
   }
   // --- END OF TECHNICAL FALLBACKS ---
 
+  // Verifica coerenza impostazioni causale
+  const erroriCoerenza = []
+  const isAcquistiReg = registroIva === 'acquisti' || registroIva === '01'
+  const isVenditeReg = registroIva === 'vendite' || registroIva === '02'
+
+  if (isExplicitFattura && (segnoRegistroIva === '-' || segnoRegistroIva === 'sottrae')) {
+    erroriCoerenza.push('Operazione gestita di tipo fattura con segno registro Sottrae incoerente')
+  }
+  if (notaCredito && (segnoRegistroIva === '+' || segnoRegistroIva === 'somma')) {
+    erroriCoerenza.push('Nota credito configurata con segno registro Somma incoerente')
+  }
+  if (isNotaCreditoAttiva && isAcquistiReg) {
+    erroriCoerenza.push('Nota credito attiva configurata su registro acquisti incoerente')
+  }
+  if (isNotaCreditoPassiva && isVenditeReg) {
+    erroriCoerenza.push('Nota credito passiva configurata su registro vendite incoerente')
+  }
+
+  const isCoerente = erroriCoerenza.length === 0
+
   return {
+    isCoerente,
+    erroriCoerenza,
     code,
     typeCausale,
     operazionePartite: operazionePartite || gestionePartite,
