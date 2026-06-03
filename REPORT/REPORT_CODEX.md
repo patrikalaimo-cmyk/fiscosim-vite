@@ -2002,3 +2002,127 @@ La logica definita tramite la policy causale e il risolutore di posting directio
 
 ### 9. Conferma Operativa
 Nessun codice applicativo, anagrafica DB, migration o file di configurazione è stato modificato in questa sessione di audit. È stato unicamente aggiornato il report `REPORT/REPORT_CODEX.md`.
+
+
+## FASE-8-CHECKPOINT-VALIDATO
+
+- **Nome File ZIP**: `fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip`
+- **Percorso ZIP**: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity\fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip`
+- **Hash Commit**: `7bf9da8`
+- **Messaggio Commit**: `checkpoint: fase 8 manuale iva ordinaria`
+
+### 1. File Inclusi
+Il commit include i seguenti file modificati ed untracked integrati per la FASE 8:
+- [validateCanonicalAccountingPayload.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/validateCanonicalAccountingPayload.js)
+- [mapRegistrazioneManualeToCanonical.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js)
+- [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+- [validateRegistrazioneDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js)
+- [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js)
+- [resolveIvaDocumentPostingDirection.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js)
+- [buildRegistrazioneRowsFromTemplate.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js)
+- [RegistrazioneHeaderForm.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/registrazione/RegistrazioneHeaderForm.jsx)
+- [resolveRegistrazioneCausali.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneCausali.js)
+- [manualeIvaOrdinaria.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/manualeIvaOrdinaria.test.js)
+- [causaleAutocompleteKeyboard.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/causaleAutocompleteKeyboard.test.js)
+- [REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+
+### 2. Test Eseguiti
+La suite completa di test (156 su 156 test superati con successo, `0` errori) è stata eseguita con il comando:
+```bash
+node --test tests/manualeIvaOrdinaria.test.js tests/causaleAutocompleteKeyboard.test.js tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js tests/consultazioneMutationWorkflow.test.js
+```
+Esito: **156/156 superati con successo** in 399.6ms.
+
+### 3. Compilazione (Build)
+La build è stata validata con successo:
+```bash
+npm run build
+```
+Rilevati 384 moduli compilati ed ottimizzati in `dist/` in 5.15s, senza errori.
+
+### 4. Conferma Test Manuali e Audit
+- **Test manuali FF/FC/NC/NCF**: Verificati con successo a livello logico e di tracciamento DB. I comportamenti Dare/Avere invertono correttamente le righe contabili per le note di credito (`NCF` e `NC`), mentre per fatture ordinarie (`FF` e `FC`) seguono i flussi standard.
+- **Audit read-only motore causali**: Il comportamento contabile e fiscale in Inserimento Manuale è basato sulle impostazioni della causale del DB (tramite il modulo `buildCausaleContabilePolicy` e `resolveIvaDocumentPostingDirection`) anziché su euristiche hardcoded.
+
+### 5. Rischi Residui e Limitazioni
+- **Fallback da codice causale**: Le regole su string matching basate su prefisso causale (`FF`, `FC`, `NCF`, `NC`, `NCC`) sono ancora attive a livello di policy come compatibilità tecnica residuale qualora il database non presenti i metadati di registro e segno.
+- **Partitario note credito**: Per motivi prudenziali e per evitare sbilanci/compensazioni automatiche non controllate, le note credito non inseriscono la riga aperta sul partitario a DB (lasciato come TODO prudente).
+
+### 6. Prossimo Step Consigliato
+Si raccomanda di pianificare la fase **"Motore policy causali condiviso"** per consolidare le policy e la posting direction all'interno di una libreria core condivisa, prima di estenderle ai moduli di **Import Contabilità** e **Riconciliazione Bancaria**.
+
+
+## MOTORE-POLICY-CAUSALI-CONDIVISO
+
+**Data:** 2026-06-03
+**Stato:** OK Riuscito, Test passati, Build OK. Nessun commit.
+
+### 1. File Letti
+Durante questa attività sono stati analizzati i seguenti file:
+- `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+- `src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js`
+- `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`
+- `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneCausali.js`
+- `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`
+- `src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`
+- `src/modules/contabilita/canonical/validateCanonicalAccountingPayload.js`
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- `tests/manualeIvaOrdinaria.test.js`
+
+### 2. File Modificati
+Sono stati modificati in modo focalizzato e non distruttivo i seguenti file:
+- [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js): Consolidamento della policy delle causali con isolamento dei fallback tecnici residuali per determinare nota credito/fattura attiva/passiva.
+- [resolveIvaDocumentPostingDirection.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js): Rimozione dei controlli su pattern del codice duplicati e adozione esclusiva dei flag risolti dalla policy, con isolamento commentato dei fallback residuali.
+- [buildRegistrazioneRowsFromTemplate.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js): Eliminazione della logica locale duplicata per determinare se una nota di credito è attiva o passiva, consumando direttamente i flag forniti da `causalePolicy`.
+- [causaliPolicyEngine.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/causaliPolicyEngine.test.js) [NEW]: File di test unitari dedicato al motore delle policy delle causali contabili e delle posting directions.
+
+### 3. Funzioni Centralizzate
+- `buildCausaleContabilePolicy`: Centralizza ora tutte le inferenze per la classificazione della causale (ruolo, tipo di documento, IVA, partite, e flag).
+- `resolveIvaDocumentPostingDirection`: Centralizza e documenta la matrice di direzione contabile Dare/Avere in base alla policy risolta (registro e segno).
+
+### 4. Fallback Residui
+I fallback basati su pattern del codice causale (es. `code.startsWith('FF')` o `code.startsWith('NC')`) sono confinati ed evidenziati con la dicitura `// [Technical Fallback Residual]` esclusivamente all'interno delle funzioni core di dominio:
+1. In `buildCausaleContabilePolicy`: per inferire `notaCredito`, `isNotaCreditoPassiva`/`isNotaCreditoAttiva` e `isFatturaPassiva`/`isFatturaAttiva` in caso di assenza totale di metadati a DB.
+2. In `resolveIvaDocumentPostingDirection`: come ulteriore paracadute se non è stato possibile ricavare il tipo registro o il segno registro dalla policy o dai metadati del DB.
+
+### 5. Test Aggiunti
+È stata creata la suite di test [causaliPolicyEngine.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/causaliPolicyEngine.test.js) che valida 9 scenari critici:
+- **Matrice Direzioni**:
+  - Vendite + Somma $\rightarrow$ Soggetto Dare, IVA Avere, Imputazione Avere.
+  - Vendite + Sottrae $\rightarrow$ Soggetto Avere, IVA Dare, Imputazione Dare.
+  - Acquisti + Somma $\rightarrow$ Soggetto Avere, IVA Dare, Imputazione Dare.
+  - Acquisti + Sottrae $\rightarrow$ Soggetto Dare, IVA Avere, Imputazione Avere.
+- **Causali Generiche**:
+  - Codice generico (`ZZZ`) con registro vendite e segno Sottrae $\rightarrow$ si comporta correttamente come nota credito attiva.
+  - Codice generico (`YYY`) con registro acquisti e segno Sottrae $\rightarrow$ si comporta correttamente come nota credito passiva.
+- **Fallbacks & Regressions**:
+  - Verifica dell'intervento corretto dei fallback tecnici residuali basati su codice se mancano i metadati.
+  - Verifica che causali generali `PD`/`GEN` non abilitino IVA o partitari se la policy non lo richiede.
+  - Verifica della stabilità di causali reali come `FF`, `FC`, `NC` e `NCF`.
+
+### 6. Test Eseguiti
+La suite completa di unit test (ora **165 test su 165 passati con successo**, `0` falliti) è stata eseguita:
+```bash
+node --test tests/causaliPolicyEngine.test.js tests/manualeIvaOrdinaria.test.js tests/causaleAutocompleteKeyboard.test.js tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneOperationsHardening.test.js tests/consultazioneMutationWorkflow.test.js
+```
+Esito: **165/165 superati con successo** in 689.3ms.
+
+### 7. Compilazione (Build)
+La build è stata validata con successo:
+```bash
+npm run build
+```
+Generati tutti i pacchetti distribuiti in `dist/` in 5.52s, senza errori.
+
+### 8. Rischi Residui e Limitazioni
+- **Fallback da codice**: Rimangono attivi come ultima compatibilità tecnica residuale se mancano i metadati delle tabelle.
+- **Partitario note credito**: Per motivi prudenziali e per evitare sbilanci/compensazioni automatiche non controllate, le note credito non inseriscono la riga aperta sul partitario a DB (lasciato come TODO prudente).
+
+### 9. Istruzioni per Riuso Futuro
+Il motore condiviso è ora importabile e riutilizzabile dai futuri moduli:
+- **Import Contabilità**: Può importare ed invocare `buildCausaleContabilePolicy(causaleDb)` per classificare ogni scrittura proveniente dall'importatore XML/CSV e determinare i postCommitTargets.
+- **Riconciliazione Bancaria**: Utilizza la policy causale per validare l'abbinamento sul partitario (attraverso `gestionePartitario` e `resolveIvaDocumentPostingDirection`).
+- **Motore Storico Suggerimenti**: Consente di ricavare le direzioni Dare/Avere attese e verificare la conformità formale delle imputazioni contabili.
+
+### 10. Prossimo Step Consigliato
+Consolidare ed estendere la policy delle causali contabili a livello di persistenza dei futuri moduli Import e Riconciliazione.

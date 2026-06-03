@@ -82,7 +82,9 @@ export function buildCausaleContabilePolicy(causale = {}) {
     isPolicyOneOf(tipoDocumento, ['notacredito', 'nota credito']) ||
     operazionePolicy.isNotaCreditoAttiva ||
     operazionePolicy.isNotaCreditoPassiva ||
-    segnoRegistroIva === '-'
+    segnoRegistroIva === '-' ||
+    // [Technical Fallback Residual] Inferiamo notaCredito da codice causale se mancano metadati
+    ((!typeCausale && !tipoDocumento && !segnoRegistroIva) && (code.startsWith('NC') || code === 'NCA'))
 
   const isDocumentoIva =
     isPolicyOneOf(typeCausale, [
@@ -128,14 +130,26 @@ export function buildCausaleContabilePolicy(causale = {}) {
       segnoRegistroIva
   )
 
+  // --- CENTRALIZED TECHNICAL COMPATIBILITY FALLBACKS ---
+  // If the database configuration lacks explicit classification, we infer the role
+  // residually using patterns in the causale code or description.
   let isNotaCreditoPassiva = operazionePolicy.isNotaCreditoPassiva
   let isNotaCreditoAttiva = operazionePolicy.isNotaCreditoAttiva
   if (notaCredito) {
     if (!isNotaCreditoPassiva && !isNotaCreditoAttiva) {
-      if (registroIva === 'acquisti' || code.startsWith('NCF') || code === 'NCA') {
+      const isAcquistiReg = registroIva === 'acquisti' || registroIva === '01'
+      const isVenditeReg = registroIva === 'vendite' || registroIva === '02'
+      if (isAcquistiReg) {
         isNotaCreditoPassiva = true
-      } else if (registroIva === 'vendite' || code.startsWith('NC') || code.startsWith('NCC') || /cliente/i.test(item?.descrizione || '')) {
+      } else if (isVenditeReg) {
         isNotaCreditoAttiva = true
+      } else {
+        // [Technical Fallback Residual] Fallback basato su codice/nome se manca registro a DB
+        if (code.startsWith('NCF') || code === 'NCA') {
+          isNotaCreditoPassiva = true
+        } else if (code.startsWith('NC') || code.startsWith('NCC') || /cliente/i.test(item?.descrizione || '')) {
+          isNotaCreditoAttiva = true
+        }
       }
     }
   }
@@ -144,13 +158,23 @@ export function buildCausaleContabilePolicy(causale = {}) {
   let isFatturaAttiva = operazionePolicy.isFatturaAttiva
   if (isDocumentoIva && !notaCredito) {
     if (!isFatturaPassiva && !isFatturaAttiva) {
-      if (registroIva === 'acquisti' || code.startsWith('FF') || /acquisto/i.test(item?.descrizione || '')) {
+      const isAcquistiReg = registroIva === 'acquisti' || registroIva === '01'
+      const isVenditeReg = registroIva === 'vendite' || registroIva === '02'
+      if (isAcquistiReg) {
         isFatturaPassiva = true
-      } else if (registroIva === 'vendite' || code.startsWith('FC') || /vendita/i.test(item?.descrizione || '')) {
+      } else if (isVenditeReg) {
         isFatturaAttiva = true
+      } else {
+        // [Technical Fallback Residual] Fallback basato su codice/nome se manca registro a DB
+        if (code.startsWith('FF') || /acquisto/i.test(item?.descrizione || '')) {
+          isFatturaPassiva = true
+        } else if (code.startsWith('FC') || /vendita/i.test(item?.descrizione || '')) {
+          isFatturaAttiva = true
+        }
       }
     }
   }
+  // --- END OF TECHNICAL FALLBACKS ---
 
   return {
     code,

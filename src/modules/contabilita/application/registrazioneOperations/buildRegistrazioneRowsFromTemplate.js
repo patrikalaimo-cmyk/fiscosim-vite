@@ -576,32 +576,14 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
   const causaleRegistroIva = normalizeText(causaleObj?.registroIva || causaleObj?.registro_iva || causalePolicy?.registroIva || ivaDraft?.registroIva || '').toLowerCase()
   const causaleSegno = normalizeText(causaleObj?.segnoRegistroIva || causaleObj?.segno_registro_iva || '').toLowerCase()
 
-  // Rileva nota credito generica: tipoCausale='notacredito' o segnoRegistroIva='-'
-  const isAnyNotaCredito =
-    causalePolicy.notaCredito === true ||
-    causalePolicy.isNotaCreditoAttiva ||
-    causalePolicy.isNotaCreditoPassiva ||
-    causaleSegno === '-'
-
-  // Distinzione attiva/passiva per nota credito:
-  //   1. da operazioneGestita della policy (quando configurato correttamente con 'nota credito attiva/passiva')
-  //   2. da registroIva: acquisti → passiva, vendite → attiva
-  //   3. da codice causale: NCF/NCFPC/... → passiva, NC/NCC/NCA → attiva
-  let isNotaCreditoPassiva =
-    causalePolicy.isNotaCreditoPassiva ||
-    (isAnyNotaCredito && (causaleRegistroIva === 'acquisti' || causaleCode.startsWith('NCF') || causaleCode === 'NCA'))
-  let isNotaCreditoAttiva =
-    causalePolicy.isNotaCreditoAttiva ||
-    (isAnyNotaCredito && !isNotaCreditoPassiva && (causaleRegistroIva === 'vendite' || causaleCode === 'NC' || causaleCode.startsWith('NCC')))
-
   const postingDirections = resolveIvaDocumentPostingDirection(causalePolicy)
 
   const documentBehavior = {
     ...resolvedCausaleBehavior,
     isFatturaAttiva:      Boolean(resolvedCausaleBehavior?.isFatturaAttiva)  || causalePolicy.isFatturaAttiva || /attiv/.test(causaleTypeText),
     isFatturaPassiva:     Boolean(resolvedCausaleBehavior?.isFatturaPassiva) || causalePolicy.isFatturaPassiva || /passiv/.test(causaleTypeText),
-    isNotaCreditoAttiva:  Boolean(resolvedCausaleBehavior?.isNotaCreditoAttiva)  || causalePolicy.isNotaCreditoAttiva || isNotaCreditoAttiva,
-    isNotaCreditoPassiva: Boolean(resolvedCausaleBehavior?.isNotaCreditoPassiva) || causalePolicy.isNotaCreditoPassiva || isNotaCreditoPassiva,
+    isNotaCreditoAttiva:  Boolean(resolvedCausaleBehavior?.isNotaCreditoAttiva)  || causalePolicy.isNotaCreditoAttiva || (causalePolicy.notaCredito && !causalePolicy.isNotaCreditoPassiva),
+    isNotaCreditoPassiva: Boolean(resolvedCausaleBehavior?.isNotaCreditoPassiva) || causalePolicy.isNotaCreditoPassiva,
     postingDirections,
   }
   const resolvedTemplate =

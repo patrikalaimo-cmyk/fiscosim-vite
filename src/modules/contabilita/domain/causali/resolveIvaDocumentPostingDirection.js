@@ -9,16 +9,28 @@ import { normalizeText } from '../../application/canonical_mapper/utils.js'
  * @returns {Object} 
  */
 export function resolveIvaDocumentPostingDirection(causalePolicy) {
-  const code = String(causalePolicy?.code || '').trim().toUpperCase()
+  // Verifichiamo se la policy ha già categorizzato in modo pulito il tipo di documento
+  // tramite buildCausaleContabilePolicy
+  let isAcquisti = causalePolicy?.isFatturaPassiva === true || causalePolicy?.isNotaCreditoPassiva === true
+  let isVendite = causalePolicy?.isFatturaAttiva === true || causalePolicy?.isNotaCreditoAttiva === true
+
   const reg = String(causalePolicy?.registroIva || '').trim().toLowerCase()
   const segno = String(causalePolicy?.segnoRegistroIva || '').trim().toLowerCase()
 
-  // 1. Identificazione registro (Acquisti vs Vendite)
-  let isAcquisti = reg === 'acquisti' || reg === '01' || reg.includes('acq') || reg.includes('acquisto')
-  let isVendite = reg === 'vendite' || reg === '02' || reg.includes('ven') || reg.includes('vendita')
-
-  // Fallback residuale registro da codice causale
+  // Se non è stato possibile classificarlo tramite i flag espliciti della policy,
+  // interpretiamo i metadati di registro
   if (!isAcquisti && !isVendite) {
+    if (reg === 'acquisti' || reg === '01' || reg.includes('acq') || reg.includes('acquisto')) {
+      isAcquisti = true
+    } else if (reg === 'vendite' || reg === '02' || reg.includes('ven') || reg.includes('vendita')) {
+      isVendite = true
+    }
+  }
+
+  // Se mancano ancora i metadati a DB, facciamo un fallback tecnico basato su codice causale
+  if (!isAcquisti && !isVendite) {
+    const code = String(causalePolicy?.code || '').trim().toUpperCase()
+    // [Technical Fallback Residual]
     if (code.startsWith('FF') || code.includes('ACQ') || code.startsWith('NCF')) {
       isAcquisti = true
     } else if (code.startsWith('FC') || code.includes('VEN') || code.startsWith('NC') || code.startsWith('NCC')) {
@@ -26,11 +38,13 @@ export function resolveIvaDocumentPostingDirection(causalePolicy) {
     }
   }
 
-  // 2. Identificazione segno registro (Sottrae vs Somma)
-  let isSottrae = segno === 'sottrae' || segno === '-' || segno === 'sottrazione'
+  // Identificazione segno registro (Sottrae vs Somma)
+  let isSottrae = segno === 'sottrae' || segno === '-' || segno === 'sottrazione' || causalePolicy?.notaCredito === true
 
-  // Fallback residuale segno da codice causale (es. NC, NCC, NCF)
-  if (segno === '') {
+  // Fallback residuale segno basato su codice se non impostato
+  if (segno === '' && !causalePolicy?.notaCredito) {
+    const code = String(causalePolicy?.code || '').trim().toUpperCase()
+    // [Technical Fallback Residual]
     if (code.startsWith('NC') || code.startsWith('NCC') || code.startsWith('NCF') || code === 'NCA') {
       isSottrae = true
     }
