@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { REG_INPUT_STYLE, REG_LABEL_STYLE, REG_SECTION_TITLE_STYLE, formatMoney, resolveContoLabel } from './registrazioneUi.js'
-import { findRegistrazioneCausaleExactMatch, resolveRegistrazioneCausaleLabel } from '../../application/registrazioneOperations/resolveRegistrazioneCausali.js'
+import {
+  findRegistrazioneCausaleExactMatch,
+  findRegistrazioneCausalePrefixMatches,
+  causaleHasLongerSiblings,
+  resolveRegistrazioneCausaleLabel,
+} from '../../application/registrazioneOperations/resolveRegistrazioneCausali.js'
 import { buildRegistrazioneContropartiList } from '../../application/registrazioneOperations/resolveRegistrazioneControparti.js'
 import { resolveRegistrazioneHeaderCounterpartyDraft } from '../../application/registrazioneOperations/normalizeRegistrazioneInput.js'
 
@@ -17,6 +22,225 @@ function Field({ label, hint = '', span = 1, children, required = false }) {
   )
 }
 
+/**
+ * CausaleAutocomplete — input keyboard-oriented che NON conferma automaticamente
+ * quando il codice digitato è prefisso di codici più lunghi.
+ *
+ * Regola chiave:
+ *  - Durante la digitazione: aggiorna solo inputText + highlighted, NON confirmed.
+ *  - Enter/Tab/click: conferma il match evidenziato.
+ *  - Blur: conferma solo se il testo corrisponde esattamente e univocamente (senza sibling).
+ *  - Escape: chiude la lista senza cambiare la causale confermata.
+ */
+function CausaleAutocomplete({ causali = [], value: externalValue, onChange, disabled, placeholder, inputProps = {} }) {
+  const [inputText, setInputText] = useState('')
+  const [open, setOpen] = useState(false)
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const inputRef = useRef(null)
+  const listRef = useRef(null)
+
+  // Sincronizza il testo quando il valore esterno cambia (es. reset, navigazione)
+  useEffect(() => {
+    const label = externalValue && typeof externalValue === 'object'
+      ? resolveRegistrazioneCausaleLabel(externalValue)
+      : String(externalValue || '')
+    setInputText(label)
+  }, [externalValue])
+
+  // Calcola i match prefix in base al testo corrente
+  const matches = useMemo(() => {
+    const text = inputText.trim()
+    if (!text) return causali.slice(0, 40)
+    return findRegistrazioneCausalePrefixMatches(causali, text)
+  }, [causali, inputText])
+
+  const confirmByItem = useCallback((item) => {
+    const label = resolveRegistrazioneCausaleLabel(item)
+    setInputText(label)
+    setOpen(false)
+    onChange?.(item)
+  }, [onChange])
+
+  const confirmByText = useCallback((text) => {
+    const t = String(text || '').trim()
+    setInputText(t)
+    setOpen(false)
+    if (!t) { onChange?.(null); return }
+    const exact = findRegistrazioneCausaleExactMatch(causali, t)
+    onChange?.(exact || t)
+  }, [causali, onChange])
+
+  const handleInputChange = (e) => {
+    const text = e.target.value
+    setInputText(text)
+    setHighlightIdx(0)
+    setOpen(true)
+    // NON chiamare onChange qui — la conferma avviene solo su Enter/Tab/click/blur
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!open) { setOpen(true); return }
+      setHighlightIdx((i) => Math.min(i + 1, matches.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!open) { setOpen(true); return }
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      // Legge il valore DOM reale (evita stale closure React).
+      // Regola di priorità su Enter:
+      //   1. Match esatto sul testo digitato → garantisce che NCF selezioni NCF e non NC
+      //   2. Match evidenziato (safeIdx) se coerente con la lista ricalcolata
+      //   3. Primo match come fallback
+      //   4. confirmByText se nessun match
+      const domText = e.target.value
+      const currentMatches = domText.trim()
+        ? findRegistrazioneCausalePrefixMatches(causali, domText)
+        : causali.slice(0, 40)
+      const exactMatch = domText.trim() ? findRegistrazioneCausaleExactMatch(causali, domText) : null
+      const safeIdx = highlightIdx < currentMatches.length ? highlightIdx : 0
+      const target = exactMatch || currentMatches[safeIdx] || currentMatches[0] || null
+      if (target) {
+        confirmByItem(target)
+      } else {
+        confirmByText(domText)
+      }
+    } else if (e.key === 'Tab') {
+      const domText = e.target.value
+      const currentMatches = domText.trim()
+        ? findRegistrazioneCausalePrefixMatches(causali, domText)
+        : causali.slice(0, 40)
+      const exactMatch = domText.trim() ? findRegistrazioneCausaleExactMatch(causali, domText) : null
+      const safeIdx = highlightIdx < currentMatches.length ? highlightIdx : 0
+      const target = exactMatch || currentMatches[safeIdx] || currentMatches[0] || null
+      if (target) {
+        confirmByItem(target)
+      } else {
+        confirmByText(domText)
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      // Ripristina testo al valore confermato corrente senza cambiare la selezione
+      const label = externalValue && typeof externalValue === 'object'
+        ? resolveRegistrazioneCausaleLabel(externalValue)
+        : String(externalValue || '')
+      setInputText(label)
+    }
+  }
+
+  const handleBlur = (e) => {
+    // onMouseDown sul container del dropdown fa preventDefault() → il blur non scatta
+    // mai durante un click sulle opzioni. Questo handler gestisce solo il blur reale
+    // (es. Tab o click fuori dal dropdown).
+    setOpen(false)
+    // Si usa e.target.value (DOM) per evitare stale closure su inputText
+    const t = (e?.target?.value ?? inputText).trim()
+    if (!t) { onChange?.(null); return }
+    // Conferma su blur solo se il testo è un match esatto e senza sibling più lunghi
+    const exact = findRegistrazioneCausaleExactMatch(causali, t)
+    if (exact && !causaleHasLongerSiblings(causali, t)) {
+      confirmByItem(exact)
+    } else {
+      // Altrimenti torna al valore esterno confermato (nessuna conferma automatica)
+      const label = externalValue && typeof externalValue === 'object'
+        ? resolveRegistrazioneCausaleLabel(externalValue)
+        : String(externalValue || '')
+      setInputText(label)
+    }
+  }
+
+  const handleFocus = (e) => {
+    e.target.select?.()
+    setOpen(true)
+  }
+
+  // Click semplice sull'opzione — blur non scatta grazie al preventDefault sul container
+  const handleOptionClick = (item) => {
+    confirmByItem(item)
+    inputRef.current?.focus()
+  }
+
+  // Scroll automatico dell'elemento evidenziato nella lista
+  useEffect(() => {
+    if (!open || !listRef.current) return
+    const el = listRef.current.querySelector('[data-highlighted="true"]')
+    if (el) el.scrollIntoView({ block: 'nearest' })
+  }, [highlightIdx, open])
+
+  const dropdownStyle = {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    background: '#1a2235',
+    border: '1px solid #2e4060',
+    borderRadius: '4px',
+    maxHeight: '220px',
+    overflowY: 'auto',
+    boxShadow: '0 4px 16px rgba(0,0,0,.55)',
+    marginTop: '2px',
+  }
+  const optionStyle = (isHighlighted) => ({
+    padding: '.38rem .62rem',
+    cursor: 'pointer',
+    fontSize: '.8rem',
+    color: isHighlighted ? '#fff' : '#a8bfd4',
+    background: isHighlighted ? '#2253a0' : 'transparent',
+    borderBottom: '1px solid rgba(46,64,96,.35)',
+    userSelect: 'none',
+  })
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        ref={inputRef}
+        value={inputText}
+        onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        onFocus={handleFocus}
+        disabled={disabled}
+        placeholder={placeholder}
+        style={REG_INPUT_STYLE}
+        autoComplete="off"
+        data-has-suggestions="true"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        {...inputProps}
+      />
+      {open && matches.length > 0 && !disabled && (
+        <div
+          style={dropdownStyle}
+          ref={listRef}
+          role="listbox"
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {matches.map((item, idx) => {
+            const label = resolveRegistrazioneCausaleLabel(item)
+            const isHighlighted = idx === highlightIdx
+            return (
+              <div
+                key={String(item?.id || item?.codice || item?.code || label)}
+                role="option"
+                aria-selected={isHighlighted}
+                data-highlighted={isHighlighted ? 'true' : undefined}
+                style={optionStyle(isHighlighted)}
+                onMouseDown={() => handleOptionClick(item)}
+                onMouseEnter={() => setHighlightIdx(idx)}
+              >
+                {label}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function RegistrazioneHeaderForm({
   header,
   onChange,
@@ -27,7 +251,6 @@ export function RegistrazioneHeaderForm({
   focusOrder = null,
   disabled = false,
 }) {
-  const [draftCausale, setDraftCausale] = useState('')
   const [draftSoggetto, setDraftSoggetto] = useState(header.cliente_fornitore_nome || header.soggetto || '')
   const setField = (field) => (event) => onChange?.(field, event?.target?.value ?? '')
 
@@ -44,41 +267,40 @@ export function RegistrazioneHeaderForm({
         .filter((item) => item.id && item.label),
     [pianoConti]
   )
-  const causaleOptions = useMemo(
-    () =>
-      causali
-        .map((item) => {
-          const value = resolveRegistrazioneCausaleLabel(item)
-          return value ? { value, key: String(item?.id || item?.codice || item?.code || value) } : null
-        })
-        .filter(Boolean),
-    [causali]
-  )
+
+  // La causale confermata deriva dallo stato esterno (header)
   const selectedCausale = useMemo(() => {
     const current = header.causaleContabile
     if (current && typeof current === 'object') return current
     return findRegistrazioneCausaleExactMatch(causali, header.causaleContabileId || header.causaleContabile || '')
   }, [causali, header.causaleContabile, header.causaleContabileId])
-  const causaleDisplayValue = useMemo(() => {
-    if (selectedCausale) return resolveRegistrazioneCausaleLabel(selectedCausale)
-    return String(header.causaleContabileId || header.causaleContabile || '')
-  }, [header.causaleContabile, header.causaleContabileId, selectedCausale])
 
-  useEffect(() => {
-    setDraftCausale(causaleDisplayValue)
-  }, [causaleDisplayValue])
+  // Valore passato a CausaleAutocomplete come "valore confermato corrente"
+  const causaleConfirmedValue = useMemo(() => {
+    return selectedCausale || String(header.causaleContabileId || header.causaleContabile || '')
+  }, [selectedCausale, header.causaleContabile, header.causaleContabileId])
+
+  const handleCausaleConfirm = useCallback((itemOrText) => {
+    if (!itemOrText) {
+      onChange?.('causaleContabile', '')
+      onChange?.('causaleContabileId', '')
+      return
+    }
+    if (typeof itemOrText === 'object') {
+      const id = String(itemOrText.id || itemOrText.codice || itemOrText.code || '').trim()
+      onChange?.('causaleContabile', itemOrText)
+      onChange?.('causaleContabileId', id)
+    } else {
+      const text = String(itemOrText).trim()
+      const exact = findRegistrazioneCausaleExactMatch(causali, text)
+      onChange?.('causaleContabile', exact || text)
+      onChange?.('causaleContabileId', exact ? String(exact.id || exact.codice || exact.code || text).trim() : text)
+    }
+  }, [causali, onChange])
 
   useEffect(() => {
     setDraftSoggetto(header.cliente_fornitore_nome || header.soggetto || '')
   }, [header.cliente_fornitore_nome, header.soggetto])
-
-  const commitCausale = (value) => {
-    const text = String(value ?? '').trim()
-    setDraftCausale(text)
-    const exact = findRegistrazioneCausaleExactMatch(causali, text)
-    onChange?.('causaleContabile', exact || text)
-    onChange?.('causaleContabileId', exact ? String(exact.id || exact.codice || exact.code || text).trim() : text)
-  }
 
   const commitSoggetto = (value) => {
     const text = String(value ?? '').trim()
@@ -186,17 +408,17 @@ export function RegistrazioneHeaderForm({
         </Field>
 
         <Field label="Causale contabile" required>
-          <input
-            value={draftCausale}
-            onChange={(event) => commitCausale(event?.target?.value ?? '')}
-            onFocus={(event) => event?.target?.select?.()}
+          <CausaleAutocomplete
+            causali={causali}
+            value={causaleConfirmedValue}
+            onChange={handleCausaleConfirm}
             disabled={disabled}
             placeholder="Codice o descrizione causale"
-            style={REG_INPUT_STYLE}
-            list="registrazione-causali"
-            data-reg-focusable="true"
-            data-reg-key="causaleContabile"
-            data-reg-next={focusOrder?.nextByKey?.causaleContabile || (showDocumentPanel ? 'dataDocumento' : requiresSoggetto ? 'soggetto' : 'rowsConto')}
+            inputProps={{
+              'data-reg-focusable': 'true',
+              'data-reg-key': 'causaleContabile',
+              'data-reg-next': focusOrder?.nextByKey?.causaleContabile || (showDocumentPanel ? 'dataDocumento' : requiresSoggetto ? 'soggetto' : 'rowsConto'),
+            }}
           />
         </Field>
 
@@ -247,14 +469,6 @@ export function RegistrazioneHeaderForm({
           </Field>
         ) : null}
       </div>
-
-      <datalist id="registrazione-causali">
-        {causaleOptions.map((item) => (
-          <option key={item.key} value={item.value}>
-            {item.value}
-          </option>
-        ))}
-      </datalist>
     </div>
   )
 }

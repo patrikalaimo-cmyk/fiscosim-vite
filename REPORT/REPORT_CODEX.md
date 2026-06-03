@@ -1925,3 +1925,80 @@ Per convalidare visivamente ed a livello funzionale le modifiche, eseguire i seg
 
 ### 9. Prossimo Step Consigliato
 - Presentazione del modulo ottimizzato all'operatore per verificare la fluidità d'uso complessiva.
+
+
+## AUDIT-READONLY-MOTORE-CAUSALI-CONTABILI-FASE-8
+
+### 1. File Letti
+Durante l'attività di audit sono stati analizzati i seguenti file chiave:
+- [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js): Funzione core che traduce i metadati delle causali del database (come `tipo_causale`, `tipo_documento`, `operazione_partite`, ecc.) in policy booleane e flag standard di comportamento.
+- [resolveIvaDocumentPostingDirection.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js): Risolutore che determina la direzione Dare/Avere delle righe del documento contabile basandosi su registro IVA e segno della causale.
+- [buildRegistrazioneRowsFromTemplate.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js): Modulo di generazione automatica delle righe contabili partendo dai template associati alla causale contabile.
+- [buildRegistrazioneDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js): Costruttore centrale del draft di registrazione manuale.
+- [validateRegistrazioneDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js): Validatore del draft manuale (verifica campi obbligatori, IVA, sbilancio, partitario, ritenute).
+- [mapRegistrazioneManualeToCanonical.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js): Mapper dal draft manuale al payload conforme al contratto canonico.
+- [validateCanonicalAccountingPayload.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/validateCanonicalAccountingPayload.js): Validatore formale del contratto canonico.
+- [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js): Logica di persistenza a database (che esegue prima la validazione canonica e poi la scrittura atomica su `prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`).
+- [RegistrazioneManualeView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/RegistrazioneManualeView.jsx): Vista principale di inserimento manuale.
+- [RegistrazioneHeaderForm.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/registrazione/RegistrazioneHeaderForm.jsx): Componente React per i campi di testata (Causale contabile, data, soggetto, totale).
+- [manualeIvaOrdinaria.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/manualeIvaOrdinaria.test.js): Suite di unit test e test di persistenza per l'IVA ordinaria.
+
+### 2. Funzioni Centrali Individuate
+Le funzioni centrali del motore causali sono:
+1. `buildCausaleContabilePolicy(causale)`: Estrae le proprietà e compila l'oggetto policy unificando la lettura dei campi del database.
+2. `resolveIvaDocumentPostingDirection(causalePolicy)`: Calcola le direzioni Dare/Avere delle tre tipologie di righe (soggetto, IVA, imputazione) basandosi sui parametri di registro e segno.
+3. `buildRegistrazioneRowsFromTemplateResolved(...)`: Genera e posiziona in Dare o Avere le righe contabili basate sulla policy e sui template.
+4. `resolveRegisterType(draft)`: Identifica univocamente il registro IVA del documento.
+5. `validateCanonicalAccountingPayload(payload)`: Forza e controlla i vincoli di completezza in base al flag `shouldCreateIva`, `shouldCreateLedger`, e `shouldCreateWithholding`.
+6. `persistPrimaNotaDraft(...)`: Gestisce il salvataggio nel database delle varie tabelle collegate in base alle destinazioni stabilite dal contratto canonico.
+
+### 3. Tabella Riepilogativa delle Decisioni
+La seguente tabella riassume per ciascuna area funzionale come viene determinata la logica contabile e fiscale, le impostazioni lette ed eventuali fallback residui:
+
+| Area Funzionale | Fonte Decisione | Impostazioni Lette | Eventuali Fallback |
+| :--- | :--- | :--- | :--- |
+| **1. Attivazione pannello Documento** | Causale Contabile Policy | `tipo_causale`, `tipo_documento` (`isDocumentoIva`) | Nessuno (gestito da `resolveRegistrazioneCausaleBehavior`) |
+| **2. Attivazione pannello IVA** | Causale Contabile Policy | `tipo_causale` o `tipo_documento` | Nessuno (se `isDocumentoIva` è attivo) |
+| **3. Attivazione partitario** | Causale Contabile Policy | `gestione_partite`, `operazione_partite` (`gestionePartitario`) | Nessuno (se assenti, disattivato) |
+| **4. Obbligo cliente/fornitore** | Validatore del Draft & Canonico | `behavior.requiresSoggetto` (derivato da IVA/Partitario/Ritenute) | Bloccante se manca e il pannello IVA o partitario è attivo |
+| **5. Obbligo data/numero documento** | Validatore del Draft & Canonico | `richiedeDataDocumento`, `richiedeNumeroDocumento` | Bloccante se `isDocumentoIva` o `isAutofattura` sono veri |
+| **6. Registro IVA acquisti/vendite** | Mapper Canonico & Policy | `codice_registro_iva`, `registro_iva` | Fallback su codice causale (es. `FF`/`NCF` $\rightarrow$ acquisti, `FC`/`NCC` $\rightarrow$ vendite) |
+| **7. Segno registro IVA Somma/Sottrae** | Mapper Canonico & Policy | `segno_registro_iva` (`'+'` o `'-'`) | Fallback su codice causale (es. `NC*`/`NCC*`/`NCF*` $\rightarrow$ Sottrae) |
+| **8. Conto IVA a credito/debito** | Template Righe Causale | Conto preimpostato in `righe_prima_nota_template` | Se non presente, conto vuoto da selezionare o anagrafica di default |
+| **9. Direzione Dare/Avere riga soggetto** | Posting Direction Helper | `registroIva`, `segnoRegistroIva` | Fallback su codice causale (es. `FF`, `FC`, `NCF`, `NC`) |
+| **10. Direzione Dare/Avere riga IVA** | Posting Direction Helper | `registroIva`, `segnoRegistroIva` | Fallback su codice causale (es. `FF`, `FC`, `NCF`, `NC`) |
+| **11. Direzione Dare/Avere riga imputazione** | Posting Direction Helper | `registroIva`, `segnoRegistroIva` | Fallback su codice causale (es. `FF`, `FC`, `NCF`, `NC`) |
+| **12. Mapping `registri_iva`** | Persistenza a Database | `segno_registro_iva` (se Sottrae/`-` moltiplica imponibile e iva per `-1`) | Rilevamento di segno `-` da `ivaDraft` se assente su causale |
+| **13. Mapping `partitario`** | Persistenza a Database | `gestione_partite`, `operazione_partite` e flag `notaCredito` | Note di credito saltate a database per prudenza (ritorna `null`) |
+| **14. Validazioni canoniche** | Validatore Canonico | `postCommitTargets` (`shouldCreateIva`, `shouldCreateLedger`, ecc.) | Blocco transazione se non coerente |
+| **15. Eventuali fallback da codice causale** | Policy & Helper di direzione | String matching sul prefisso (`FF`, `FC`, `NCF`, `NC`, `NCC`) | Applicati solo in assenza di metadati nel DB |
+| **16. Logiche duplicate** | Criterio note credito attive/passive | Controlli di pattern su `causaleCode.startsWith(...)` | Duplicato localmente in `buildRegistrazioneRowsFromTemplateResolved` |
+
+### 4. Coerenza del Modello
+**Conferma**: La logica principale in FASE 8 **deriva direttamente dalle impostazioni della causale contabile**. La direzione contabile e le regole fiscali sono guidate dalle proprietà strutturali (`registro_iva`, `segno_registro_iva`, `gestione_partite`) configurate a livello anagrafico della causale e lette tramite la policy centralizzata.
+
+### 5. Punti con Fallback Residui da Codice/Nome
+I fallback residuali su string matching del codice causale si trovano nei seguenti punti (attivi solo se i campi del DB sono nulli o vuoti):
+1. **`buildCausaleContabilePolicy`**: Identificazione di `isNotaCreditoPassiva` / `isNotaCreditoAttiva` e `isFatturaPassiva` / `isFatturaAttiva` tramite prefisso se non specificato dal record.
+2. **`resolveIvaDocumentPostingDirection`**: Assegnazione di `isAcquisti` o `isVendite` basata su prefisso (`FF`, `FC`, `NCF`, `NC`, `NCC`) se il campo registro è vuoto; assegnazione di `isSottrae` se il campo segno è vuoto.
+3. **`resolveRegisterType` (in mapper canonico)**: Fallback di registro basato su prefisso (`FF`/`NCF` $\rightarrow$ acquisti, `FC`/`NCC` $\rightarrow$ vendite) se né la policy né il record lo definiscono.
+4. **`buildRegistrazioneRowsFromTemplateResolved`**: Rilevamento locale di `isNotaCreditoPassiva` / `isNotaCreditoAttiva` tramite prefisso causale locale (`NCF` o `NC`/`NCC`).
+
+### 6. Valutazione Rischio
+Il rischio architetturale attuale è classificato come **BASSO**.
+La logica è quasi interamente disaccoppiata e basata su dati. I fallback da codice sono confinati come tutele tecniche conservative per garantire la continuità operativa in assenza di metadati precisi a DB (evitando crash a runtime).
+
+### 7. Raccomandazione
+Si raccomanda di **chiudere la FASE 8** in quanto soddisfa pienamente l'obiettivo di determinare il comportamento fiscale e contabile in base alle impostazioni delle causali anziché da codice hardcoded, garantendo la correttezza contabile per fatture e note di credito.
+Tuttavia, si raccomanda di pianificare una fase successiva chiamata **"Motore policy causali condiviso"** per:
+1. Rimuovere completamente le poche duplicazioni residue sui controlli di prefisso.
+2. Unificare l'Helper `resolveIvaDocumentPostingDirection` e la policy in una libreria condivisa a livello di core applicativo.
+
+### 8. Riuso Futuro della Logica
+La logica definita tramite la policy causale e il risolutore di posting direction (`resolveIvaDocumentPostingDirection`) è stata progettata in modo disaccoppiato da React o dallo stato locale di inserimento manuale, consentendo il **riuso diretto** per i seguenti moduli:
+- **Import Contabilità**: I file di importazione o i tracciati XML (es. fattura elettronica) possono invocare direttamente la policy della causale contabile mappata per determinare la direzione dare/avere e la necessità di generare righe IVA o partite, garantendo che le importazioni seguano le stesse ferree regole contabili.
+- **Riconciliazione Bancaria**: Il motore può utilizzare la policy delle causali di incasso/pagamento configurate per decidere se aprire, chiudere o ignorare le partite, riducendo le euristiche ad-hoc.
+- **Motore Storico Suggerimenti**: L'analisi predittiva basata sullo storico delle registrazioni tratterà le causali in base ai metadati strutturali, consentendo al motore predittivo di proporre mastrini coerenti con il comportamento reale del registro e del segno contabile della causale.
+
+### 9. Conferma Operativa
+Nessun codice applicativo, anagrafica DB, migration o file di configurazione è stato modificato in questa sessione di audit. È stato unicamente aggiornato il report `REPORT/REPORT_CODEX.md`.

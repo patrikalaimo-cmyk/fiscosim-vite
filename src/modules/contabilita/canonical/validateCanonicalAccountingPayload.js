@@ -97,6 +97,7 @@ function validateSubjects(payload, mode, targets, errors, warnings, blocking) {
 
   // Verifichiamo se il flusso coinvolge effettivamente dei soggetti
   const coinvolgeSoggetti = Boolean(
+    targets?.shouldCreateIva ||
     targets?.shouldCreateLedger || 
     targets?.shouldCreateWithholding || 
     payload?.fiscalContext?.tipoRegistro
@@ -228,6 +229,95 @@ function validatePrimaNota(payload, mode, targets, errors, blocking) {
       if (mode === 'commit') addIssue(blocking, message)
     }
   })
+
+  // Documento IVA checks
+  if (targets.shouldCreateIva) {
+    const dataDoc = text(payload?.document?.dataDocumento || payload?.fiscalContext?.dataDocumento || payload?.header?.dataDocumento)
+    const numDoc = text(payload?.document?.numeroDocumento || payload?.header?.numeroRegistrazione)
+    if (!dataDoc) {
+      const message = 'documento IVA senza data documento'
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+    if (!numDoc) {
+      const message = 'documento IVA senza numero documento'
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+
+    const vatRows = asArray(payload?.vat?.rows)
+    if (vatRows.length === 0) {
+      const message = 'documento IVA senza riga IVA'
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+
+    const counterpartyAccountIds = new Set(
+      asArray(payload?.subjects)
+        .filter((s) => text(s.role) === 'counterparty' || text(s.role) === 'primary')
+        .map((s) => text(s.pianoContiIdPatrimoniale || s.id))
+        .filter(Boolean)
+    )
+
+    const hasVatDocumentImputationRow = rows.some((row) => {
+      const tipo = String(row.tipo || row.tipoConto || row.tipo_conto || '').toLowerCase()
+      const code = String(row.accountCode || row.conto_codice || '').trim().replace(/\s+/g, '')
+      const desc = String(row.accountDescription || row.conto_descrizione || '').toLowerCase()
+      
+      // priority 1: metadata tipoConto / role
+      if (tipo === 'costo' || tipo === 'ricavo' || tipo === 'conto_costo' || tipo === 'conto_ricavo' || tipo === 'conto_imputazione') {
+        return true
+      }
+      if (tipo === 'cliente' || tipo === 'fornitore' || tipo === 'iva' || tipo === 'controparte') {
+        return false
+      }
+
+      // priority 2: exclude IVA accounts
+      const isIva = tipo === 'iva' ||
+                    code.startsWith('22') ||
+                    desc.includes('erario c/iva') ||
+                    desc.includes('iva credito') ||
+                    desc.includes('iva debito') ||
+                    desc.includes('iva a credito') ||
+                    desc.includes('iva a debito') ||
+                    desc.includes('iva acquisti') ||
+                    desc.includes('iva vendite')
+      if (isIva) return false
+
+      // priority 3: exclude customer/vendor / patrimoniale
+      const isClientVendor = tipo === 'cliente' ||
+                             tipo === 'fornitore' ||
+                             tipo === 'controparte' ||
+                             (row.accountId && counterpartyAccountIds.has(String(row.accountId))) ||
+                             (code.startsWith('4') && (
+                               code.startsWith('4001') ||
+                               code.startsWith('4501') ||
+                               code.startsWith('4010') ||
+                               code.startsWith('4510') ||
+                               desc.includes('crediti v/') ||
+                               desc.includes('debiti v/') ||
+                               desc.includes('crediti verso') ||
+                               desc.includes('debiti verso') ||
+                               desc.includes('cliente') ||
+                               desc.includes('fornitore')
+                             ))
+      if (isClientVendor) return false
+
+      // priority 4: any valid row with non-zero amount
+      const dare = Number(row.dare ?? 0)
+      const avere = Number(row.avere ?? 0)
+      const hasAmount = dare > 0 || avere > 0
+      const hasAccount = Boolean(row.accountId || row.accountCode || row.conto_codice)
+
+      return hasAccount && hasAmount
+    })
+
+    if (!hasVatDocumentImputationRow) {
+      const message = 'riga di imputazione documento IVA mancante'
+      addIssue(errors, message)
+      if (mode === 'commit') addIssue(blocking, message)
+    }
+  }
 
   // Causale contabile policy check (shouldCreateIva, shouldCreateLedger)
   if (isPlainObject(header.causaleContabile)) {

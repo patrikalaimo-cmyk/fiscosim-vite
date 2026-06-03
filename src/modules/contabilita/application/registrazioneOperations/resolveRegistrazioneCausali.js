@@ -61,3 +61,35 @@ export function findRegistrazioneCausaleExactMatch(causali = [], input = '') {
     return q === exactId || q === exactCode || q === exactDescr || q === exactLabel || (qCode && qCode === exactCode)
   }) || null
 }
+
+/**
+ * Restituisce tutte le causali il cui codice inizia con il prefisso digitato.
+ * Usato dal CausaleAutocomplete per mostrare il dropdown senza confermare automaticamente.
+ */
+export function findRegistrazioneCausalePrefixMatches(causali = [], input = '') {
+  const q = normalizeCausaleKey(input)
+  if (!q) return []
+  const list = Array.isArray(causali) ? causali : []
+  return list.filter((item) => {
+    const code = normalizeCausaleKey(item?.codice || item?.code || item?.sigla)
+    const label = normalizeCausaleKey(resolveRegistrazioneCausaleLabel(item))
+    return code.startsWith(q) || label.startsWith(q)
+  })
+}
+
+/**
+ * Dato un input e la lista causali, controlla se esiste almeno un'altra causale
+ * con codice più lungo che inizia con lo stesso prefisso.
+ * Se true, l'autocomplete NON deve confermare automaticamente il match esatto —
+ * l'utente potrebbe star digitando un codice più lungo (es. NC → NCF).
+ */
+export function causaleHasLongerSiblings(causali = [], input = '') {
+  const q = normalizeCausaleKey(input)
+  if (!q) return false
+  const list = Array.isArray(causali) ? causali : []
+  // Conta tutte le causali con codice normalizzato che inizia per q ma è più lungo
+  return list.some((item) => {
+    const code = normalizeCausaleKey(item?.codice || item?.code || item?.sigla)
+    return code.startsWith(q) && code.length > q.length
+  })
+}

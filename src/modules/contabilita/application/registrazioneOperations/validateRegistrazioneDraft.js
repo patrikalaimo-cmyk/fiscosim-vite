@@ -82,6 +82,87 @@ export function validateRegistrazioneDraft(draft = {}, options = {}) {
   if (behavior?.requiresDocumentNumber && !String(header.numeroDocumento || '').trim()) blockers.push('numero documento mancante')
   if (behavior?.requiresDocumentTotal && !String(header.totaleDocumento || '').trim()) blockers.push('totale documento mancante')
   if (behavior?.requiresSoggetto && !String(header.soggetto || '').trim()) blockers.push('soggetto mancante')
+
+  const isDocumentoIva = Boolean(behavior?.showIvaPanel || behavior?.isDocumentoIva)
+  if (isDocumentoIva) {
+    if (!clienteFornitoreId) {
+      blockers.push('soggetto mancante')
+    }
+    if (!String(header.dataDocumento || '').trim()) {
+      blockers.push('data documento mancante')
+    }
+    if (!String(header.numeroDocumento || '').trim()) {
+      blockers.push('numero documento mancante')
+    }
+
+    const ivaDraft = options?.ivaDraft || options?.ivaData || draft?.ivaData || ivaData || {}
+    const ivaRows = Array.isArray(ivaDraft?.rows) ? ivaDraft.rows : []
+    const hasValidIvaRow = ivaRows.some((row) => {
+      const imp = Number(String(row?.imponibile || 0).replace(',', '.')) || 0
+      const tax = Number(String(row?.imposta || row?.iva || 0).replace(',', '.')) || 0
+      const cIva = String(row?.causaleIvaId || row?.causale_iva_id || '').trim()
+      return imp > 0 || tax > 0 || (cIva && cIva.toLowerCase() !== 'da selezionare')
+    })
+    if (!hasValidIvaRow) {
+      blockers.push('riga IVA mancante')
+    }
+
+    const hasVatDocumentImputationRow = rows.some((row) => {
+      const tipo = String(row.tipo || row.tipoConto || row.tipo_conto || '').toLowerCase()
+      const code = String(row.conto_codice || row.accountId || row.conto_id || '').trim().replace(/\s+/g, '')
+      const desc = String(row.conto_descrizione || row.accountDescription || '').toLowerCase()
+      
+      // priority 1: metadata tipoConto / role
+      if (tipo === 'costo' || tipo === 'ricavo' || tipo === 'conto_costo' || tipo === 'conto_ricavo' || tipo === 'conto_imputazione') {
+        return true
+      }
+      if (tipo === 'cliente' || tipo === 'fornitore' || tipo === 'iva' || tipo === 'controparte') {
+        return false
+      }
+
+      // priority 2: exclude IVA accounts
+      const isIva = tipo === 'iva' ||
+                    code.startsWith('22') ||
+                    desc.includes('erario c/iva') ||
+                    desc.includes('iva credito') ||
+                    desc.includes('iva debito') ||
+                    desc.includes('iva a credito') ||
+                    desc.includes('iva a debito') ||
+                    desc.includes('iva acquisti') ||
+                    desc.includes('iva vendite')
+      if (isIva) return false
+
+      // priority 3: exclude customer/vendor / patrimoniale
+      const isClientVendor = tipo === 'cliente' ||
+                             tipo === 'fornitore' ||
+                             tipo === 'controparte' ||
+                             (clienteFornitoreId && (row.conto_id === clienteFornitoreId || row.accountId === clienteFornitoreId || row.contoId === clienteFornitoreId)) ||
+                             (code.startsWith('4') && (
+                               code.startsWith('4001') ||
+                               code.startsWith('4501') ||
+                               code.startsWith('4010') ||
+                               code.startsWith('4510') ||
+                               desc.includes('crediti v/') ||
+                               desc.includes('debiti v/') ||
+                               desc.includes('crediti verso') ||
+                               desc.includes('debiti verso') ||
+                               desc.includes('cliente') ||
+                               desc.includes('fornitore')
+                             ))
+      if (isClientVendor) return false
+
+      // priority 4: any valid row with non-zero amount
+      const dare = Number(String(row.dare || 0).replace(',', '.')) || 0
+      const avere = Number(String(row.avere || 0).replace(',', '.')) || 0
+      const hasAmount = dare > 0 || avere > 0
+      const hasAccount = Boolean(row.conto_id || row.accountId || row.conto_codice)
+
+      return hasAccount && hasAmount
+    })
+    if (!hasVatDocumentImputationRow) {
+      blockers.push('riga di imputazione documento IVA mancante')
+    }
+  }
   if (behavior?.requiresRitenuteData) {
     const hasRitenuteAnchor = Boolean(String(header.soggetto || '').trim() || String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim())
     if (!hasRitenuteAnchor) warnings.push('dati ritenute da completare')

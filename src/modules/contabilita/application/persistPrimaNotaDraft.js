@@ -2,6 +2,7 @@ import { createPrimaNotaCompleta } from '../../../../services/primaNotaService.j
 import { calculatePrimaNotaDraftTotals } from './canonical_mapper/calculatePrimaNotaDraftTotals.js'
 import { normalizeText, round2 } from './canonical_mapper/utils.js'
 import { mapRegistrazioneManualeToCanonical } from '../canonical/mappers/mapRegistrazioneManualeToCanonical.js'
+import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleContabilePolicy.js'
 
 
 function normalizeDbText(value) {
@@ -228,18 +229,30 @@ function buildPersistError(validation) {
   return error
 }
 
-function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = {}) {
-  const imponibile = normalizeDbAmount(row.imponibile)
-  const ivaAmount = normalizeDbAmount(row.ivaTotale ?? row.ivaDetraibile ?? row.iva ?? row.imposta ?? 0)
+function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = {}, resolvedDraft = {}) {
+  const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile
+  const causaleObj = {
+    ...headerCausale,
+    codice: pnPayload.causale_codice || headerCausale?.codice
+  }
+  const policy = buildCausaleContabilePolicy(causaleObj)
+  const isSottrae = policy.notaCredito === true || 
+                    policy.segnoRegistroIva === '-' || 
+                    String(policy.segnoRegistroIva).toLowerCase() === 'sottrae' ||
+                    String(row.segnoRegistro || ivaDraft?.segnoRegistro || '').trim() === '-'
+  const mult = isSottrae ? -1 : 1
+
+  const imponibile = normalizeDbAmount(row.imponibile) * mult
+  const ivaAmount = normalizeDbAmount(row.ivaTotale ?? row.ivaDetraibile ?? row.iva ?? row.imposta ?? 0) * mult
   const pct = Number.isFinite(Number(row.percentualeDetraibilita ?? row.detraibilitaPercent))
     ? Number(row.percentualeDetraibilita ?? row.detraibilitaPercent)
     : 100
-  const iva_detraibile = Number.isFinite(Number(row.ivaDetraibile ?? row.ivaDetraibile))
+  const iva_detraibile = (Number.isFinite(Number(row.ivaDetraibile ?? row.ivaDetraibile))
     ? normalizeDbAmount(row.ivaDetraibile)
-    : round2(ivaAmount * (pct / 100))
-  const iva_indetraibile = Number.isFinite(Number(row.ivaIndetraibile))
+    : round2(Math.abs(ivaAmount) * (pct / 100))) * mult
+  const iva_indetraibile = (Number.isFinite(Number(row.ivaIndetraibile))
     ? normalizeDbAmount(row.ivaIndetraibile)
-    : round2(ivaAmount - iva_detraibile)
+    : round2(Math.abs(ivaAmount) - Math.abs(iva_detraibile))) * mult
 
   const reg = String(row.registroIva || row.registerType || ivaDraft?.registroIva || '').toLowerCase()
   const tipo = reg.includes('ven') || reg.includes('corr') ? 'vendita' : 'acquisto'
@@ -264,14 +277,25 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
   }
 }
 
-function mapPartitarioRowForDb(row = {}, pnPayload = {}) {
+function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
+  const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile
+  const causaleObj = {
+    ...headerCausale,
+    codice: pnPayload.causale_codice || headerCausale?.codice
+  }
+  const policy = buildCausaleContabilePolicy(causaleObj)
+  
+  if (policy.notaCredito === true) {
+    // TODO: FASE 8 - Gestione partitario per note di credito (compensazioni o segno opposto).
+    // Per prudenza e per evitare sbilanci/compensazioni automatiche impreviste, per ora non creiamo la partita aperta.
+    return null
+  }
+
   const imp = normalizeDbAmount(row.importoAperto || row.importoOriginario || 0)
   return {
     societa_id: pnPayload.societa_id || null,
     tipo: row.soggettoTipo || (pnPayload.causale_codice === 'FF' ? 'fornitore' : 'cliente'),
     conto_id: row.soggettoId || pnPayload.cliente_fornitore_id || null,
-    conto_codice: null,
-    conto_descrizione: row.soggettoNome || pnPayload.cliente_fornitore_nome || '',
     numero_documento: row.numeroDocumento || pnPayload.numero_registrazione || null,
     data_documento: row.dataDocumento || pnPayload.data_documento || null,
     data_scadenza: row.dataScadenza || row.dataDocumento || pnPayload.data_documento || null,
@@ -383,7 +407,7 @@ export async function persistPrimaNotaDraft({
 
   const ivaEnabled = Boolean(resolved.ivaDraft?.active || resolved.innerDraft?.meta?.behavior?.showIvaPanel)
   const vatEntriesForDb = ivaEnabled && Array.isArray(resolved.ivaRows)
-    ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft))
+    ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
     : []
 
   const partitarioEnabled = Boolean(resolved.partitarioDraft?.active || resolved.innerDraft?.meta?.behavior?.showPartitario)
@@ -392,11 +416,12 @@ export async function persistPrimaNotaDraft({
         .filter(row => resolved.partitarioDraft?.mode === 'apertura' || (resolved.partitarioDraft?.mode === 'chiusura' && row.selected && row.importoChiusura > 0))
         .map(row => {
           if (resolved.partitarioDraft?.mode === 'apertura') {
-            return mapPartitarioRowForDb(row, pnPayloadForDb)
+            return mapPartitarioRowForDb(row, pnPayloadForDb, resolved)
           } else {
             return mapPartitarioClosureForDb(row, pnPayloadForDb)
           }
         })
+        .filter(Boolean)
     : []
 
   const ritenuteDraft = resolved.innerDraft?.ritenutaDraft || resolved.bundle?.ritenutaDraft || resolved.innerDraft?.ritenutaData || null

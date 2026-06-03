@@ -1,6 +1,7 @@
 import { createEmptyCanonicalAccountingPayload } from '../canonicalAccountingPayload.defaults.js'
 import { validateCanonicalAccountingPayload } from '../validateCanonicalAccountingPayload.js'
 import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
+import { CANONICAL_ACCOUNTING_VAT_REGISTER_TYPES } from '../canonicalAccountingPayload.schema.js'
 
 
 function isPlainObject(value) {
@@ -219,10 +220,77 @@ function normalizeAccountingRows(draft = {}) {
   })
 }
 
+function resolveRegisterType(draft) {
+  const header = isPlainObject(draft?.header) ? draft.header : {}
+  const causale = isPlainObject(header?.causaleContabile) ? header.causaleContabile : {}
+  const policy = buildCausaleContabilePolicy(causale)
+  const ivaDraft = isPlainObject(draft?.ivaDraft) ? draft.ivaDraft : {}
+  
+  // 1. policy causale contabile / tipo causale / tipo documento / codice registro IVA
+  let reg = ''
+  
+  if (policy.isNotaCreditoPassiva || policy.isFatturaPassiva || String(policy.typeCausale || '').toLowerCase().includes('passiv') || String(policy.tipoDocumento || '').toLowerCase().includes('passiv')) {
+    reg = 'acquisti'
+  } else if (policy.isNotaCreditoAttiva || policy.isFatturaAttiva || String(policy.typeCausale || '').toLowerCase().includes('attiv') || String(policy.tipoDocumento || '').toLowerCase().includes('attiv')) {
+    reg = 'vendite'
+  } else if (policy.isCorrispettivo) {
+    reg = 'corrispettivi'
+  }
+  
+  if (!reg && policy.registroIva) {
+    const r = String(policy.registroIva).toLowerCase()
+    if (r.includes('acq') || r === '01' || r === 'acquisti') {
+      reg = 'acquisti'
+    } else if (r.includes('ven') || r === '02' || r === 'vendite') {
+      reg = 'vendite'
+    } else if (r.includes('corr') || r === '03' || r === 'corrispettivi') {
+      reg = 'corrispettivi'
+    }
+  }
+
+  // 2. registro IVA esplicito presente nel draft/pannello IVA
+  if (!reg && (ivaDraft.registroIva || ivaDraft.registerType)) {
+    const r = String(ivaDraft.registroIva || ivaDraft.registerType).toLowerCase()
+    if (r.includes('acq') || r === '01' || r === 'acquisti') {
+      reg = 'acquisti'
+    } else if (r.includes('ven') || r === '02' || r === 'vendite') {
+      reg = 'vendite'
+    } else if (r.includes('corr') || r === '03' || r === 'corrispettivi') {
+      reg = 'corrispettivi'
+    } else if (CANONICAL_ACCOUNTING_VAT_REGISTER_TYPES.includes(r)) {
+      reg = r
+    }
+  }
+
+  // 3. mapping tecnico da codice registro, se già presente
+  if (!reg && causale.codice_registro_iva) {
+    const r = String(causale.codice_registro_iva).toLowerCase()
+    if (r === '01') {
+      reg = 'acquisti'
+    } else if (r === '02') {
+      reg = 'vendite'
+    } else if (r === '03') {
+      reg = 'corrispettivi'
+    }
+  }
+
+  // 4. fallback da codice causale (FF, FC, NCF, NCC, ecc.)
+  if (!reg && (causale.codice || draft?.pnPayload?.causale_codice)) {
+    const code = String(causale.codice || draft?.pnPayload?.causale_codice || '').toUpperCase()
+    if (code === 'FF' || code === 'NCF') {
+      reg = 'acquisti'
+    } else if (code === 'FC' || code === 'NCC') {
+      reg = 'vendite'
+    }
+  }
+
+  return reg
+}
+
 function normalizeVatRows(draft = {}) {
   const ivaDraft = isPlainObject(draft?.ivaDraft) ? draft.ivaDraft : {}
   const rows = Array.isArray(ivaDraft.rows) ? ivaDraft.rows : []
-  const registerType = text(ivaDraft.registroIva || ivaDraft.registerType)
+  const registerType = resolveRegisterType(draft) || text(ivaDraft.registroIva || ivaDraft.registerType)
   const sezionale = text(ivaDraft.sezionale)
   const protocolNumber = text(ivaDraft.protocolloDefinitivo || ivaDraft.protocolloProvvisorio || ivaDraft.protocolNumber)
   const competencePeriod = text(ivaDraft.competencePeriod || derivePeriod(ivaDraft.dataCompetenza))
@@ -435,7 +503,7 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   payload.fiscalContext.competenza = text(ivaDraft.dataCompetenza || payload.fiscalContext.dataDocumento)
   payload.fiscalContext.periodoIva = text(ivaDraft.competencePeriod || derivePeriod(ivaDraft.dataCompetenza) || payload.company.periodoIva)
   payload.fiscalContext.tipoOperazione = text(draft?.meta?.behavior?.family || draft?.meta?.behavior?.code)
-  payload.fiscalContext.tipoRegistro = text(ivaDraft.registerType || ivaDraft.registroIva)
+  payload.fiscalContext.tipoRegistro = resolveRegisterType(draft) || text(ivaDraft.registerType || ivaDraft.registroIva)
   payload.fiscalContext.regimeIva = text(options?.regimeIva || '')
   payload.fiscalContext.reverseCharge = Boolean(ivaDraft.reverseCharge)
   payload.fiscalContext.splitPayment = Boolean(ivaDraft.splitPayment)

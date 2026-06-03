@@ -49,7 +49,7 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const operazioneGestita = normalizeCausaleOperazioneGestita(typeCausale, partiteMode, tipoDocumento, item)
   const operazionePolicy = buildCausaleOperazioneGestitaPolicy(typeCausale, partiteMode, operazioneGestita, item)
   const tipoDocumentoNormalized = normalizePolicyKey(tipoDocumento)
-  const registroIva = normalizeText(item?.codice_registro_iva || '')
+  const registroIva = normalizeText(item?.codice_registro_iva || item?.registroIva || item?.registro_iva || '')
 
   const partiteOpen = isPolicyOneOf(operazionePartite, ['apre', 'apertura', 'aperti']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['apre', 'apertura']))
   const partiteClose = isPolicyOneOf(operazionePartite, ['chiude', 'chiusura']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['chiude', 'chiusura']))
@@ -77,6 +77,13 @@ export function buildCausaleContabilePolicy(causale = {}) {
       'pagamentoincassivaesigibilitadifferita',
     ]) || operazionePolicy.isPagamentoIncasso
 
+  const notaCredito =
+    isPolicyOneOf(typeCausale, ['notacredito', 'nota credito']) ||
+    isPolicyOneOf(tipoDocumento, ['notacredito', 'nota credito']) ||
+    operazionePolicy.isNotaCreditoAttiva ||
+    operazionePolicy.isNotaCreditoPassiva ||
+    segnoRegistroIva === '-'
+
   const isDocumentoIva =
     isPolicyOneOf(typeCausale, [
       'docivanormale',
@@ -93,6 +100,7 @@ export function buildCausaleContabilePolicy(causale = {}) {
     ]) ||
     isCorrispettivo ||
     isCee ||
+    notaCredito ||
     operazionePolicy.isDocumentoIva ||
     (ivaPerCassa && !isPagamentoIncasso)
 
@@ -120,12 +128,29 @@ export function buildCausaleContabilePolicy(causale = {}) {
       segnoRegistroIva
   )
 
-  const notaCredito =
-    isPolicyOneOf(typeCausale, ['notacredito', 'nota credito']) ||
-    isPolicyOneOf(tipoDocumento, ['notacredito', 'nota credito']) ||
-    operazionePolicy.isNotaCreditoAttiva ||
-    operazionePolicy.isNotaCreditoPassiva ||
-    segnoRegistroIva === '-'
+  let isNotaCreditoPassiva = operazionePolicy.isNotaCreditoPassiva
+  let isNotaCreditoAttiva = operazionePolicy.isNotaCreditoAttiva
+  if (notaCredito) {
+    if (!isNotaCreditoPassiva && !isNotaCreditoAttiva) {
+      if (registroIva === 'acquisti' || code.startsWith('NCF') || code === 'NCA') {
+        isNotaCreditoPassiva = true
+      } else if (registroIva === 'vendite' || code.startsWith('NC') || code.startsWith('NCC') || /cliente/i.test(item?.descrizione || '')) {
+        isNotaCreditoAttiva = true
+      }
+    }
+  }
+
+  let isFatturaPassiva = operazionePolicy.isFatturaPassiva
+  let isFatturaAttiva = operazionePolicy.isFatturaAttiva
+  if (isDocumentoIva && !notaCredito) {
+    if (!isFatturaPassiva && !isFatturaAttiva) {
+      if (registroIva === 'acquisti' || code.startsWith('FF') || /acquisto/i.test(item?.descrizione || '')) {
+        isFatturaPassiva = true
+      } else if (registroIva === 'vendite' || code.startsWith('FC') || /vendita/i.test(item?.descrizione || '')) {
+        isFatturaAttiva = true
+      }
+    }
+  }
 
   return {
     code,
@@ -148,10 +173,10 @@ export function buildCausaleContabilePolicy(causale = {}) {
     isSolaIva,
     isCee,
     operazioneGestitaGroup: operazionePolicy.operazioneGestitaGroup,
-    isFatturaAttiva: operazionePolicy.isFatturaAttiva,
-    isFatturaPassiva: operazionePolicy.isFatturaPassiva,
-    isNotaCreditoAttiva: operazionePolicy.isNotaCreditoAttiva,
-    isNotaCreditoPassiva: operazionePolicy.isNotaCreditoPassiva,
+    isFatturaAttiva,
+    isFatturaPassiva,
+    isNotaCreditoAttiva,
+    isNotaCreditoPassiva,
     isIncasso: operazionePolicy.isIncasso,
     isPagamento: operazionePolicy.isPagamento,
     isReverseCharge: operazionePolicy.isReverseCharge,

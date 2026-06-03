@@ -5,6 +5,8 @@ import { normalizeRegistrazioneRigheTemplate } from '../../domain/registrazione/
 import { resolveRegistrazioneTemplateRowAccount } from './resolveRegistrazioneTemplateRowAccount.js'
 import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/resolveRegistrazioneRigheTemplate.js'
 import { resolveRegistrazioneCausaleBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
+import { resolveIvaDocumentPostingDirection } from '../../domain/causali/resolveIvaDocumentPostingDirection.js'
 
 function toAmountNumber(value) {
   const text = normalizeText(value).replace(',', '.')
@@ -166,29 +168,121 @@ function resolveGeneratedRowAccount(row = {}, context = {}) {
   }
 }
 
-function resolveSubjectRowSide(row = {}, selection = null) {
+function resolveSubjectRowSide(row = {}, selection = null, behavior = {}) {
+  if (behavior?.postingDirections?.subjectSide) {
+    return behavior.postingDirections.subjectSide
+  }
+
   const selected = selection && typeof selection === 'object' ? selection : {}
-  if (selected?.is_fornitore || normalizeText(selected?.subjectRole) === 'fornitore') return 'avere'
-  if (selected?.is_cliente || normalizeText(selected?.subjectRole) === 'cliente') return 'dare'
+  const isFornitore = selected?.is_fornitore || normalizeText(selected?.subjectRole) === 'fornitore'
+  const isCliente = selected?.is_cliente || normalizeText(selected?.subjectRole) === 'cliente'
+  const isNotaCreditoPassiva = Boolean(behavior?.isNotaCreditoPassiva)
+  const isNotaCreditoAttiva = Boolean(behavior?.isNotaCreditoAttiva)
+
+  // Matrice Dare/Avere soggetto:
+  //   FF (fattura passiva):  fornitore → Avere
+  //   NCF (nota credito passiva): fornitore → Dare  (inversione rispetto a FF)
+  //   FC (fattura attiva):   cliente → Dare
+  //   NC (nota credito attiva):  cliente → Avere  (inversione rispetto a FC)
+  if (isFornitore) return isNotaCreditoPassiva ? 'dare' : 'avere'
+  if (isCliente)   return isNotaCreditoAttiva  ? 'avere' : 'dare'
+
   const explicitSide = normalizeText(row?.lato)
   if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
   return 'avere'
 }
 
 function resolveIvaRowSide(row = {}, behavior = {}) {
-  if (behavior?.isFatturaAttiva) return 'avere'
-  if (behavior?.isFatturaPassiva) return 'dare'
+  if (behavior?.postingDirections?.vatSide) {
+    return behavior.postingDirections.vatSide
+  }
+
+  const isNotaCreditoPassiva = Boolean(behavior?.isNotaCreditoPassiva)
+  const isNotaCreditoAttiva = Boolean(behavior?.isNotaCreditoAttiva)
+
+  // Matrice Dare/Avere IVA:
+  //   FF (fattura passiva):   IVA credito → Dare
+  //   NCF (nota credito passiva): IVA credito → Avere  (inversione rispetto a FF)
+  //   FC (fattura attiva):    IVA debito  → Avere
+  //   NC (nota credito attiva):   IVA debito  → Dare   (inversione rispetto a FC)
+  if (behavior?.isFatturaPassiva && !isNotaCreditoPassiva) return 'dare'
+  if (isNotaCreditoPassiva) return 'avere'
+  if (behavior?.isFatturaAttiva && !isNotaCreditoAttiva) return 'avere'
+  if (isNotaCreditoAttiva) return 'dare'
+
   const explicitSide = normalizeText(row?.lato)
   if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
   return 'dare'
 }
 
 function buildManualDocumentEconomicRow(index = 0, behavior = {}) {
+  const directions = behavior?.postingDirections
+  if (directions) {
+    const isAcquisti = directions.registroKind === 'acquisti'
+    const isSottrae = directions.segnoRegistro === 'sottrae'
+    let label = 'Costo'
+    if (isAcquisti) {
+      label = isSottrae ? 'Storno costo' : 'Costo'
+    } else {
+      label = isSottrae ? 'Storno ricavo' : 'Ricavo'
+    }
+    const side = directions.imputationSide
+
+    return {
+      id: `template-row-${index + 1}`,
+      riga_numero: index + 1,
+      templateGenerated: true,
+      templateKey: '',
+      manualEdited: false,
+      templateScope: false,
+      contoQuery: '',
+      conto_id: '',
+      conto_codice: '',
+      conto_descrizione: '',
+      hierarchyType: 'sottoconto',
+      isTemplateScope: false,
+      lato: side,
+      formula_importo: 'manuale',
+      descrizione: '',
+      descrizione_riga: label,
+      mastrino_hint: '',
+      templateFormula: 'manuale',
+      templateSide: side,
+      templateSource: 'manual_required',
+      templateConfidence: 0,
+      templateReasons: ['Conto economico da selezionare'],
+      dare: '',
+      avere: '',
+      obbligatoria: true,
+      modificabile: true,
+      attiva: true,
+      conto_resolved_finale: false,
+      contoQueryHint: 'Conto da selezionare',
+      autoResidualApplied: false,
+      manualAmountOverride: false,
+      lastAmountSide: side,
+      templateWarnings: ['Conto economico da selezionare'],
+      manualSelectionOnly: true,
+    }
+  }
+
   const isAttiva = Boolean(behavior?.isFatturaAttiva)
   const isPassiva = Boolean(behavior?.isFatturaPassiva)
-  if (!behavior?.showDocumentPanel || !behavior?.showIvaPanel || (!isAttiva && !isPassiva)) return null
+  const isNotaCreditoAttiva = Boolean(behavior?.isNotaCreditoAttiva)
+  const isNotaCreditoPassiva = Boolean(behavior?.isNotaCreditoPassiva)
+  if (!behavior?.showDocumentPanel || !behavior?.showIvaPanel || (!isAttiva && !isPassiva && !isNotaCreditoAttiva && !isNotaCreditoPassiva)) return null
 
-  const side = isAttiva ? 'avere' : 'dare'
+  // Matrice Dare/Avere riga economica (costo/ricavo/storno):
+  //   FF: costo → Dare
+  //   NCF: storno costo → Avere  (inversione rispetto a FF)
+  //   FC: ricavo → Avere
+  //   NC: storno ricavo → Dare   (inversione rispetto a FC)
+  let side
+  let label
+  if (isNotaCreditoPassiva) { side = 'avere'; label = 'Storno costo' }
+  else if (isNotaCreditoAttiva) { side = 'dare'; label = 'Storno ricavo' }
+  else if (isAttiva) { side = 'avere'; label = 'Ricavo' }
+  else { side = 'dare'; label = 'Costo' }
 
   return {
     id: `template-row-${index + 1}`,
@@ -206,7 +300,7 @@ function buildManualDocumentEconomicRow(index = 0, behavior = {}) {
     lato: side,
     formula_importo: 'manuale',
     descrizione: '',
-    descrizione_riga: isAttiva ? 'Ricavo' : 'Costo',
+    descrizione_riga: label,
     mastrino_hint: '',
     templateFormula: 'manuale',
     templateSide: side,
@@ -284,7 +378,7 @@ function buildGeneratedRow(templateRow = {}, index = 0, context = {}, runningTot
         subjectRole: normalizeText(subjectContext.clienteFornitoreTipo || subjectContext.cliente_fornitore_tipo || selection?.subjectRole),
         is_cliente: selection?.is_cliente || normalizeText(subjectContext.clienteFornitoreTipo || subjectContext.cliente_fornitore_tipo) === 'cliente',
         is_fornitore: selection?.is_fornitore || normalizeText(subjectContext.clienteFornitoreTipo || subjectContext.cliente_fornitore_tipo) === 'fornitore',
-      })
+      }, context?.causaleBehavior || {})
     : normalizeText(row?.ruolo) === 'iva'
       ? resolveIvaRowSide(row, context?.causaleBehavior || {})
     : normalizeText(row.lato) === 'avere'
@@ -347,8 +441,17 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   const source = input && typeof input === 'object' ? input : {}
   const templateSource = source.templateRows || source.templateRowsTemplate || source.rows || []
   const normalizedTemplate = normalizeRegistrazioneRigheTemplate(templateSource)
+  
+  const causaleObj = source.causale || source.selectedCausale || {}
+  const causalePolicy = buildCausaleContabilePolicy(causaleObj)
+  const postingDirections = resolveIvaDocumentPostingDirection(causalePolicy)
   const behavior = options?.behavior || options?.causaleBehavior || source?.causaleBehavior || {}
-  const templateRows = appendManualDocumentEconomicRow(Array.isArray(normalizedTemplate.rows) ? normalizedTemplate.rows : [], behavior)
+  const resolvedBehavior = {
+    ...behavior,
+    postingDirections,
+  }
+
+  const templateRows = appendManualDocumentEconomicRow(Array.isArray(normalizedTemplate.rows) ? normalizedTemplate.rows : [], resolvedBehavior)
   const documentData = source.documentData && typeof source.documentData === 'object' ? source.documentData : {}
   const ivaDraft = source.ivaDraft && typeof source.ivaDraft === 'object' ? source.ivaDraft : {}
   const soggetto = source.soggetto && typeof source.soggetto === 'object' ? source.soggetto : {}
@@ -408,7 +511,7 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   let runningTotals = { dare: 0, avere: 0 }
 
   templateRows.forEach((templateRow, index) => {
-    const generated = buildGeneratedRow(templateRow, index, { documentData, ivaDraft, soggetto, templateKey }, runningTotals)
+    const generated = buildGeneratedRow(templateRow, index, { documentData, ivaDraft, soggetto, templateKey, causaleBehavior: resolvedBehavior }, runningTotals)
     const { _runningTotals, ...cleanRow } = generated
     generatedRows.push(cleanRow)
     runningTotals = _runningTotals
@@ -467,10 +570,39 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
       resolvedCausaleBehavior?.tipoDocumento ||
       ''
   )
+  const causaleObj = source.causale || source.selectedCausale || {}
+  const causalePolicy = buildCausaleContabilePolicy(causaleObj)
+  const causaleCode = normalizeText(causaleObj?.codice || causaleObj?.code || causaleObj?.sigla || causaleObj?.id || '').toUpperCase()
+  const causaleRegistroIva = normalizeText(causaleObj?.registroIva || causaleObj?.registro_iva || causalePolicy?.registroIva || ivaDraft?.registroIva || '').toLowerCase()
+  const causaleSegno = normalizeText(causaleObj?.segnoRegistroIva || causaleObj?.segno_registro_iva || '').toLowerCase()
+
+  // Rileva nota credito generica: tipoCausale='notacredito' o segnoRegistroIva='-'
+  const isAnyNotaCredito =
+    causalePolicy.notaCredito === true ||
+    causalePolicy.isNotaCreditoAttiva ||
+    causalePolicy.isNotaCreditoPassiva ||
+    causaleSegno === '-'
+
+  // Distinzione attiva/passiva per nota credito:
+  //   1. da operazioneGestita della policy (quando configurato correttamente con 'nota credito attiva/passiva')
+  //   2. da registroIva: acquisti → passiva, vendite → attiva
+  //   3. da codice causale: NCF/NCFPC/... → passiva, NC/NCC/NCA → attiva
+  let isNotaCreditoPassiva =
+    causalePolicy.isNotaCreditoPassiva ||
+    (isAnyNotaCredito && (causaleRegistroIva === 'acquisti' || causaleCode.startsWith('NCF') || causaleCode === 'NCA'))
+  let isNotaCreditoAttiva =
+    causalePolicy.isNotaCreditoAttiva ||
+    (isAnyNotaCredito && !isNotaCreditoPassiva && (causaleRegistroIva === 'vendite' || causaleCode === 'NC' || causaleCode.startsWith('NCC')))
+
+  const postingDirections = resolveIvaDocumentPostingDirection(causalePolicy)
+
   const documentBehavior = {
     ...resolvedCausaleBehavior,
-    isFatturaAttiva: Boolean(resolvedCausaleBehavior?.isFatturaAttiva) || /attiv/.test(causaleTypeText),
-    isFatturaPassiva: Boolean(resolvedCausaleBehavior?.isFatturaPassiva) || /passiv/.test(causaleTypeText),
+    isFatturaAttiva:      Boolean(resolvedCausaleBehavior?.isFatturaAttiva)  || causalePolicy.isFatturaAttiva || /attiv/.test(causaleTypeText),
+    isFatturaPassiva:     Boolean(resolvedCausaleBehavior?.isFatturaPassiva) || causalePolicy.isFatturaPassiva || /passiv/.test(causaleTypeText),
+    isNotaCreditoAttiva:  Boolean(resolvedCausaleBehavior?.isNotaCreditoAttiva)  || causalePolicy.isNotaCreditoAttiva || isNotaCreditoAttiva,
+    isNotaCreditoPassiva: Boolean(resolvedCausaleBehavior?.isNotaCreditoPassiva) || causalePolicy.isNotaCreditoPassiva || isNotaCreditoPassiva,
+    postingDirections,
   }
   const resolvedTemplate =
     source.resolvedTemplate && typeof source.resolvedTemplate === 'object'
