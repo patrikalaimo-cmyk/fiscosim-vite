@@ -1,5 +1,8 @@
 import { fmtCurrency } from '../../ui/formatters.js'
 import { REG_CARD_STYLE, REG_SECTION_TITLE_STYLE, REG_INLINE_BADGE_STYLE, resolveCausaleLabel, formatShortDate } from './registrazioneUi.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
+import { resolveChiusuraPartiteBehavior } from '../../domain/causali/resolveChiusuraPartiteBehavior.js'
+
 
 function PreviewRow({ label, value, tone = 'neutral' }) {
   const color = tone === 'positive' ? '#8be28e' : tone === 'negative' ? '#ff8f8f' : 'var(--tx)'
@@ -27,6 +30,28 @@ function DraftBlock({ title, note, rows = [] }) {
   )
 }
 
+const MagicIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+  </svg>
+)
+
+const CloseIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
+const CalcIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+    <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+    <line x1="9" y1="22" x2="9" y2="16" />
+    <line x1="15" y1="22" x2="15" y2="16" />
+    <line x1="9" y1="16" x2="15" y2="16" />
+  </svg>
+)
+
 export function RegistrazionePreviewPanel({
   header,
   selectedCausale,
@@ -43,7 +68,225 @@ export function RegistrazionePreviewPanel({
   ivaDraft = null,
   partitarioDraft = null,
   ritenutaDraft = null,
+  checkedPartiteIds = [],
+  onToggleCheckedPartita = null,
+  onApplyCheckedPartite = null,
+  pnRows = []
 }) {
+  const isPartitarioMode = Boolean(showPartite)
+
+  if (isPartitarioMode) {
+    const isIncasso = String(selectedCausale?.codice || '').trim().toUpperCase().startsWith('I')
+    const subTitle = isIncasso ? 'Partitario cliente' : 'Partitario fornitore'
+    const soggettoNome = partitarioDraft?.selectedControparteNome || header?.clienteFornitoreNome || header?.soggetto || '—'
+
+    // Compute totals — same logic as RegistrazionePartitarioPanel
+    const resolvedCheckedIds = Array.from(new Set([
+      ...(checkedPartiteIds || []).map(id => String(id || '').trim()),
+      ...(partitarioDraft?.selectedPartitaIds || []).map(id => String(id || '').trim()),
+      ...([partitarioDraft?.selectedPartitaId].filter(Boolean).map(id => String(id || '').trim()))
+    ])).filter(Boolean)
+
+    const normalizedCheckedIds = new Set(resolvedCheckedIds)
+    const importiChiusura = partitarioDraft?.importiChiusura || {}
+
+    // Use draft rows if populated; fall back to raw partite (same as RegistrazionePartitarioPanel)
+    const effectiveRows = (Array.isArray(partitarioDraft?.rows) && partitarioDraft.rows.length > 0)
+      ? partitarioDraft.rows
+      : (Array.isArray(partite) ? partite : [])
+
+    let positive = 0
+    let negative = 0
+    let net = 0
+    effectiveRows.forEach(r => {
+      const rowIdStr = String(r.id || '').trim()
+      const isSelected = r.selected === true || normalizedCheckedIds.has(rowIdStr)
+      if (isSelected) {
+        // For raw partite rows, importoChiusura may be in importiChiusura map or residuo
+        let val = r.importoChiusura
+        if (val === undefined || val === null) {
+          const fromMap = importiChiusura[rowIdStr]
+          if (fromMap !== undefined && fromMap !== null && fromMap !== '') {
+            val = Number.parseFloat(String(fromMap).replace(',', '.')) || 0
+          } else {
+            val = r.saldo_residuo ?? r.saldoResiduo ?? r.residuo ?? 0
+          }
+        }
+        val = Number(val) || 0
+        if (val > 0) positive += val
+        else negative += val
+        net += val
+      }
+    })
+
+    const nettoChiusura = net
+
+    const pnSubjectAmount = (() => {
+      if (!Array.isArray(pnRows)) return 0
+      const policy = buildCausaleContabilePolicy(selectedCausale)
+      const chiusuraBehavior = resolveChiusuraPartiteBehavior(policy, header, partitarioDraft?.rows || [], [])
+      const isIncassoCliente = chiusuraBehavior.soggettoTipo === 'cliente'
+      const isPagamentoFornitore = chiusuraBehavior.soggettoTipo === 'fornitore'
+
+      const subjectRow = pnRows.find(row => {
+        const role = String(row.ruolo || '').toLowerCase()
+        const desc = String(row.descrizione_riga || '').toLowerCase()
+        return role === 'soggetto' || desc.includes('cliente') || desc.includes('fornitore')
+      })
+      if (!subjectRow) return 0
+
+      if (isIncassoCliente) {
+        return Number.parseFloat(String(subjectRow.avere || 0)) || 0
+      } else if (isPagamentoFornitore) {
+        return Number.parseFloat(String(subjectRow.dare || 0)) || 0
+      }
+
+      const d = Number.parseFloat(String(subjectRow.dare || 0)) || 0
+      const a = Number.parseFloat(String(subjectRow.avere || 0)) || 0
+      return Math.max(d, a)
+    })()
+
+
+    const diffPartitarioPn = Math.abs(Math.abs(nettoChiusura) - Math.abs(pnSubjectAmount))
+    const isDiffPartitarioPnQuadrato = diffPartitarioPn < 0.01
+
+    const quadraturaPn = Math.abs(totals?.differenza || 0)
+    const isQuadraturaPnQuadrato = quadraturaPn < 0.01
+
+    return (
+      <div className="erp-flat-panel" style={{ padding: '.85rem', display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%' }}>
+        {/* SECTION 1: DETTAGLIO CHIUSURA */}
+        <div>
+          <div style={{ ...REG_SECTION_TITLE_STYLE, color: 'rgba(188,204,226,.92)', marginBottom: '.4rem' }}>DETTAGLIO CHIUSURA</div>
+          <div style={{ display: 'grid', gap: '.1rem' }}>
+            <div style={{ fontSize: '.6rem', textTransform: 'uppercase', letterSpacing: '.08em', color: 'rgba(188,204,226,.72)' }}>Soggetto</div>
+            <div style={{ fontWeight: 800, color: 'var(--tx)', fontSize: '.9rem', lineHeight: 1.2 }}>{soggettoNome}</div>
+            <div style={{ fontSize: '.68rem', color: 'rgba(188,204,226,.55)' }}>{subTitle}</div>
+          </div>
+        </div>
+
+        <hr style={{ border: 'none', borderTop: '1px solid rgba(136,169,204,.08)', margin: '0' }} />
+
+        {/* SECTION 2: RIEPILOGO SELEZIONI */}
+        <div>
+          <div style={{ ...REG_SECTION_TITLE_STYLE, color: 'rgba(188,204,226,.92)', marginBottom: '.6rem' }}>RIEPILOGO SELEZIONI</div>
+          <div style={{ display: 'grid', gap: '.65rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '.72rem', color: 'rgba(188,204,226,.85)' }}>Positivi selezionati</span>
+              <span style={{ fontWeight: 700, color: '#8be28e', fontSize: '.76rem' }}>{fmtCurrency(positive)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '.72rem', color: 'rgba(188,204,226,.85)' }}>Negativi selezionati</span>
+              <span style={{ fontWeight: 700, color: '#ff8f8f', fontSize: '.76rem' }}>{fmtCurrency(negative)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '.72rem', color: 'rgba(188,204,226,.85)', fontWeight: 'bold' }}>Netto chiusura</span>
+              <span style={{ fontWeight: 800, color: '#ffd05c', fontSize: '.8rem' }}>{fmtCurrency(nettoChiusura)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '.72rem', color: 'rgba(188,204,226,.85)' }}>Differenza partitario/PN</span>
+              <span style={{ fontWeight: 700, color: isDiffPartitarioPnQuadrato ? '#8be28e' : '#ff8f8f', fontSize: '.76rem' }}>{fmtCurrency(diffPartitarioPn)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '.72rem', color: 'rgba(188,204,226,.85)' }}>Quadratura PN</span>
+              <span style={{ fontWeight: 700, color: isQuadraturaPnQuadrato ? '#8be28e' : '#ff8f8f', fontSize: '.76rem' }}>{fmtCurrency(quadraturaPn)}</span>
+            </div>
+          </div>
+        </div>
+
+        <hr style={{ border: 'none', borderTop: '1px solid rgba(136,169,204,.08)', margin: '0' }} />
+
+        {/* SECTION 3: AZIONI RAPIDE */}
+        <div>
+          <div style={{ ...REG_SECTION_TITLE_STYLE, color: 'rgba(188,204,226,.92)', marginBottom: '.6rem' }}>AZIONI RAPIDE</div>
+          <div style={{ display: 'grid', gap: '.4rem' }}>
+            <button
+              type="button"
+              className="btn-sec"
+              disabled
+              style={{
+                opacity: 0.5,
+                cursor: 'not-allowed',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.4rem',
+                justifyContent: 'flex-start',
+                padding: '.35rem .65rem',
+                fontSize: '.72rem'
+              }}
+            >
+              <MagicIcon />
+              <span>Seleziona suggerite</span>
+            </button>
+            <button
+              type="button"
+              className="btn-sec"
+              disabled
+              style={{
+                opacity: 0.5,
+                cursor: 'not-allowed',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.4rem',
+                justifyContent: 'flex-start',
+                padding: '.35rem .65rem',
+                fontSize: '.72rem'
+              }}
+            >
+              <CloseIcon />
+              <span>Deseleziona tutte</span>
+            </button>
+            <button
+              type="button"
+              className="btn-sec"
+              disabled
+              style={{
+                opacity: 0.5,
+                cursor: 'not-allowed',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '.35rem .65rem',
+                fontSize: '.72rem'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+                <CalcIcon />
+                <span>Ricalcola residui</span>
+              </div>
+              <span style={{ fontSize: '.58rem', padding: '2px 4px', background: 'rgba(255,255,255,.1)', borderRadius: 3 }}>F8</span>
+            </button>
+          </div>
+        </div>
+
+        {/* SECTION 4: INFO CARD SUGGERITE */}
+        <div
+          style={{
+            marginTop: 'auto',
+            background: 'rgba(59, 130, 246, 0.04)',
+            border: '1px solid rgba(59, 130, 246, 0.15)',
+            borderRadius: 8,
+            padding: '.55rem .65rem',
+            display: 'flex',
+            gap: '.45rem',
+            alignItems: 'flex-start'
+          }}
+        >
+          <span style={{ fontSize: '.85rem', lineHeight: 1, color: '#3b82f6', marginTop: '2px' }}>ⓘ</span>
+          <div style={{ display: 'grid', gap: '2px' }}>
+            <span style={{ fontSize: '.72rem', fontWeight: 'bold', color: 'rgba(188,204,226,.95)' }}>Suggerite</span>
+            <span style={{ fontSize: '.64rem', color: 'rgba(188,204,226,.65)', lineHeight: 1.3 }}>
+              Le partite suggerite sono proposte in base a data e importo. Verifica e modifica se necessario.
+            </span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const balanced = Boolean(totals?.isBalanced)
   const causaleLabel = resolveCausaleLabel(selectedCausale)
   const partiteColumns = '20px minmax(160px, 1.55fr) 100px 62px 110px 104px 46px'
@@ -138,9 +381,9 @@ export function RegistrazionePreviewPanel({
             note="Partitario predisposto, chiusura reale non eseguita in questa fase"
             rows={[
               { label: 'Soggetto', value: partitarioDraft?.selectedControparteNome || '—' },
-              { label: 'Partita', value: partitarioDraft?.selectedPartitaNumeroDocumento || '—' },
-              { label: 'Saldo residuo', value: fmtCurrency(partitarioDraft?.selectedPartitaSaldoResiduo || 0), tone: 'negative' },
-              { label: 'Chiusura', value: fmtCurrency(partitarioDraft?.importoChiusura || 0), tone: 'positive' },
+              { label: 'Partite aperte', value: String(partitarioDraft?.rows?.filter(r => r.selected)?.length || 0) },
+              { label: 'Saldo residuo netto', value: fmtCurrency(partitarioDraft?.totals?.saldoResiduo || 0), tone: 'negative' },
+              { label: 'Chiusura netta', value: fmtCurrency(partitarioDraft?.totals?.importoChiusura || 0), tone: 'positive' },
             ]}
           />
         ) : null}
@@ -181,34 +424,47 @@ export function RegistrazionePreviewPanel({
                 <span>Data</span>
                 <span>Tipo</span>
                 <span>Saldo residuo</span>
-                <span>Imp. chiusura</span>
+                <span>Imp. chiusura Proposed</span>
                 <span>Segno</span>
               </div>
               {demoPartite.length ? (
-                demoPartite.map((row, idx) => (
-                  <label
-                    key={row.id || idx}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: partiteColumns,
-                      gap: '.35rem',
-                      alignItems: 'center',
-                      fontSize: '.74rem',
-                      padding: '.28rem .25rem',
-                      borderRadius: 12,
-                      border: '1px solid rgba(136,169,204,.1)',
-                      background: idx === 0 ? 'rgba(61,211,110,.08)' : 'rgba(255,255,255,.012)',
-                    }}
-                  >
-                    <input type="radio" name="registrazione-partita" defaultChecked={idx === 0} />
-                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.numeroFattura || row.numero_documento}</span>
-                    <span style={{ whiteSpace: 'nowrap' }}>{formatShortDate(row.data || row.data_documento)}</span>
-                    <span style={{ whiteSpace: 'nowrap' }}>{row.tipo || row.tipo_documento}</span>
-                    <span style={{ color: row.saldoResiduo < 0 ? '#ff8f8f' : '#d7f5e3', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmtCurrency(row.saldoResiduo || row.importo_residuo || 0)}</span>
-                    <span style={{ whiteSpace: 'nowrap' }}>{fmtCurrency(row.importoChiusura || 0)}</span>
-                    <span style={{ color: row.segno === 'D' ? '#ff8f8f' : '#8be28e', fontWeight: 800, whiteSpace: 'nowrap' }}>{row.segno || 'A'}</span>
-                  </label>
-                ))
+                demoPartite.map((row, idx) => {
+                  const rowId = String(row.id || '').trim()
+                  const isChecked = checkedPartiteIds.includes(rowId)
+                  return (
+                    <label
+                      key={row.id || idx}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: partiteColumns,
+                        gap: '.35rem',
+                        alignItems: 'center',
+                        fontSize: '.74rem',
+                        padding: '.28rem .25rem',
+                        borderRadius: 12,
+                        border: isChecked ? '1px solid rgba(255,208,92,.35)' : '1px solid rgba(136,169,204,.1)',
+                        background: isChecked ? 'rgba(255,208,92,.08)' : 'rgba(255,255,255,.012)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked} 
+                        onChange={() => onToggleCheckedPartita?.(rowId)}
+                      />
+                      <span style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.numero_documento || row.numeroFattura || '—'}</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>{formatShortDate(row.data_documento || row.data)}</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>{row.tipo_documento || row.tipo || '—'}</span>
+                      <span style={{ color: (row.saldo_residuo ?? row.saldoResiduo ?? 0) < 0 ? '#ff8f8f' : '#d7f5e3', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {(row.saldo_residuo ?? row.saldoResiduo) !== undefined && (row.saldo_residuo ?? row.saldoResiduo) !== null ? fmtCurrency(row.saldo_residuo ?? row.saldoResiduo) : '—'}
+                      </span>
+                      <span style={{ whiteSpace: 'nowrap' }}>
+                        {(row.saldo_residuo ?? row.saldoResiduo) !== undefined && (row.saldo_residuo ?? row.saldoResiduo) !== null ? fmtCurrency(row.saldo_residuo ?? row.saldoResiduo) : '—'}
+                      </span>
+                      <span style={{ color: row.segno === 'D' ? '#ff8f8f' : '#8be28e', fontWeight: 800, whiteSpace: 'nowrap' }}>{row.segno || 'A'}</span>
+                    </label>
+                  )
+                })
               ) : (
                 <div style={{ padding: '.7rem .4rem', color: 'rgba(188,204,226,.76)', fontSize: '.68rem' }}>
                   Partite aperte non ancora collegate al read model reale.
@@ -221,7 +477,7 @@ export function RegistrazionePreviewPanel({
               type="button"
               className="btn-sec"
               style={{ width: '100%', marginTop: '.55rem', padding: '.42rem .7rem' }}
-              onClick={() => onSelectPartita?.(demoPartite[0] || null)}
+              onClick={() => onApplyCheckedPartite?.()}
             >
               Applica selezionata (F9)
             </button>

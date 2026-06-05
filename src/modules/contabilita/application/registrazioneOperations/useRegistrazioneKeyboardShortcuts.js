@@ -143,7 +143,7 @@ export function useRegistrazioneKeyboardShortcuts({
       const section = String(sectionHost?.dataset?.regSection || '').trim()
       const typingTarget = isTypingElement(event.target)
       const rowShortcutTarget = Boolean(rowHost && String(rowHost.dataset?.regRowId || '').trim())
-      const shouldIgnoreGlobalShortcut = typingTarget && ['F12', 'F8', 'F9'].includes(key)
+      const shouldIgnoreGlobalShortcut = typingTarget && ['F8', 'F9'].includes(key)
 
       if (shouldIgnoreGlobalShortcut) return
 
@@ -212,7 +212,7 @@ export function useRegistrazioneKeyboardShortcuts({
         return
       }
 
-      if (key === 'F12') {
+      if (key === 'F10') {
         stopEvent(event)
         onSave?.()
         return

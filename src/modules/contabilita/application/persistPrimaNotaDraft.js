@@ -349,9 +349,14 @@ function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
 }
 
 function mapPartitarioClosureForDb(row = {}, pnPayload = {}) {
+  let amount = Math.abs(normalizeDbAmount(row.importoChiusura || row.importo_chiuso || 0))
+  const isNC = (row.importoOriginario < 0 || row.residuo < 0 || row.importo_originale < 0 || row.saldo_residuo < 0 || row.importo_residuo < 0)
+  if (isNC) {
+    amount = -amount
+  }
   return {
     documento_id: row.id,
-    importo_chiuso: normalizeDbAmount(row.importoChiusura),
+    importo_chiuso: amount,
     tipo_movimento: 'chiusura'
   }
 }
@@ -464,7 +469,7 @@ export async function persistPrimaNotaDraft({
   )
   let partRows = Array.isArray(resolved.partitarioRows) ? resolved.partitarioRows : []
   const draftMode = resolved.partitarioDraft?.mode
-  const partMode = (draftMode && draftMode !== 'none') ? draftMode : (policy.gestionePartitario === 'apertura' ? 'apertura' : 'nessuno')
+  const partMode = (draftMode && draftMode !== 'none') ? draftMode : (policy.gestionePartitario === 'apertura' ? 'apertura' : (policy.gestionePartitario === 'chiusura' ? 'chiusura' : 'nessuno'))
 
   if (partitarioEnabled && partRows.length === 0 && policy.gestionePartitario === 'apertura') {
     const isPassiva = policy.isFatturaPassiva || policy.isNotaCreditoPassiva
@@ -488,7 +493,7 @@ export async function persistPrimaNotaDraft({
 
   const partEntriesForDb = partitarioEnabled
     ? partRows
-        .filter(row => partMode === 'apertura' || (partMode === 'chiusura' && row.selected && row.importoChiusura > 0))
+        .filter(row => partMode === 'apertura' || (partMode === 'chiusura' && row.selected && Math.abs(normalizeDbAmount(row.importoChiusura || row.importo_chiuso || 0)) > 0.001))
         .map(row => {
           if (partMode === 'apertura') {
             return mapPartitarioRowForDb(row, pnPayloadForDb, resolved)

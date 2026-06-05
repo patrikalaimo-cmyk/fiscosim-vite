@@ -125,11 +125,23 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     };
   });
   const filteredRows = cleanedEffectiveRows.filter(row => {
-    const query = String(row.contoQuery ?? row.conto ?? row.conto_id ?? row.conto_codice ?? row.conto_descrizione ?? '').trim();
+    const contoId = String(row.conto_id ?? row.contoId ?? '').trim();
+    const query = String(row.contoQuery ?? row.conto ?? row.conto_codice ?? row.conto_descrizione ?? '').trim();
+    const hasConto = Boolean(contoId || query);
     const dare = Number(row.dare ?? row.importo_dare ?? 0);
     const avere = Number(row.avere ?? row.importo_avere ?? 0);
+    const hasAmount = dare !== 0 || avere !== 0;
+    // A row without a conto AND without amounts is useless for validation — drop it
+    // regardless of description (catches phantom "IVA a debito" rows with 0/0 from old templates)
+    if (!hasConto && !hasAmount) {
+      return false;
+    }
     const desc = String(row.descrizione ?? row.descrizione_riga ?? '').trim();
-    return query || dare > 0 || avere > 0 || desc;
+    const isPlaceholderDesc = !desc || /^riga\s+\d+$/i.test(desc) || desc.toLowerCase() === 'riga contabile' || desc.toLowerCase() === 'riga contabile vuota' || desc.toLowerCase() === 'riga';
+    if (!hasConto && !hasAmount && isPlaceholderDesc) {
+      return false;
+    }
+    return hasConto || hasAmount || (!isPlaceholderDesc && desc);
   });
   const normalizedForDraft = {
     ...normalized,

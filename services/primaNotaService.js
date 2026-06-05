@@ -223,29 +223,49 @@ async function applyPartitarioClosures(db, { primaNotaId, partEntries }) {
   }
 
   for (const [partitaId, inc] of grouped.entries()) {
-    if (!inc || inc <= 0) continue
+    if (!inc && inc !== 0) continue
     const { data: p, error } = await db
       .from('partitario')
-      .select('id, importo_originale, importo_pagato')
+      .select('id, importo_originale, importo_pagato, stato')
       .eq('id', partitaId)
       .maybeSingle()
-    if (error || !p?.id) continue
+    if (error || !p?.id) {
+      throw new Error(`Partita non trovata con ID ${partitaId}`)
+    }
+
+    if (p.stato === 'chiusa') {
+      throw new Error(`La partita '${partitaId}' è già chiusa`)
+    }
 
     const original = Number(p.importo_originale || 0)
-    const pagato = Number(p.importo_pagato || 0) + inc
+    const pagatoBefore = Number(p.importo_pagato || 0)
+    const residualBefore = Math.round((original - pagatoBefore) * 100) / 100
+
+    if (Math.abs(inc) > Math.abs(residualBefore) + 0.01) {
+      throw new Error(`Importo di chiusura/compensazione ${inc} eccede il residuo di ${residualBefore} per la partita '${partitaId}'`)
+    }
+
+    const pagato = pagatoBefore + inc
     const residuo = Math.round((original - pagato) * 100) / 100
-    const chiusa = residuo <= 0.01
-    const stato = chiusa ? 'chiusa' : 'parziale'
+    const chiusa = Math.abs(residuo) <= 0.01
+
+    const finalResiduo = chiusa ? 0 : residuo
+    const finalPagato = chiusa ? original : pagato
+
+    const stato = chiusa ? 'chiusa' : 'aperta'
 
     const updates = {
-      importo_pagato: Math.round(pagato * 100) / 100,
-      importo_residuo: Math.max(0, residuo),
+      importo_pagato: Math.round(finalPagato * 100) / 100,
+      importo_residuo: Math.round(finalResiduo * 100) / 100,
       stato,
       chiusa_da_prima_nota_id: chiusa ? primaNotaId : null,
       data_chiusura: chiusa ? new Date().toISOString().slice(0, 10) : null,
       updated_at: new Date().toISOString(),
     }
 
-    await db.from('partitario').update(updates).eq('id', partitaId)
+    const { error: updErr } = await db.from('partitario').update(updates).eq('id', partitaId)
+    if (updErr) {
+      throw new Error(`Errore durante l'aggiornamento della partita ${partitaId}: ${updErr.message}`)
+    }
   }
 }

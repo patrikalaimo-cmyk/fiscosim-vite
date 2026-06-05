@@ -9,12 +9,14 @@ import { applyRegistrazioneAutoResidualToRow } from '../application/registrazion
 import { applyRegistrazioneAutoResidualChainToRows } from '../application/registrazioneOperations/applyRegistrazioneAutoResidualChainToRows.js'
 import { normalizeRegistrazioneAmountInput } from '../application/registrazioneOperations/normalizeRegistrazioneAmountInput.js'
 import { normalizeRegistrazioneRowPatch } from '../application/registrazioneOperations/normalizeRegistrazioneRowPatch.js'
-import { buildRegistrazioneContoSelection, resolveRegistrazioneContoDescrizione, resolveRegistrazioneContoLabel, resolveContoHierarchyView } from '../application/registrazioneOperations/resolveRegistrazioneConti.js'
+import { buildRegistrazioneContoSelection, resolveRegistrazioneContoDescrizione, resolveRegistrazioneContoLabel, resolveContoHierarchyView, resolveSubjectAccount } from '../application/registrazioneOperations/resolveRegistrazioneConti.js'
 import { buildRegistrazioneContropartiList } from '../application/registrazioneOperations/resolveRegistrazioneControparti.js'
 import { resolveRegistrazioneEsercizio } from '../application/registrazioneOperations/resolveRegistrazioneEsercizio.js'
 import { resolveRegistrazioneFocusOrder } from '../application/registrazioneOperations/resolveRegistrazioneFocusOrder.js'
 import { useRegistrazioneKeyboardShortcuts } from '../application/registrazioneOperations/useRegistrazioneKeyboardShortcuts.js'
 import { buildCausaleStructureHistory } from '../application/registrazioneOperations/buildCausaleStructureHistory.js'
+import { resolvePartitaSoggettoId } from '../application/registrazioneOperations/resolvePartitaSoggettoId.js'
+
 import { resolveRegistrazioneCausaleBehavior } from '../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
 import { buildRegistrazioneManualeUiPolicy } from '../domain/registrazione/buildRegistrazioneManualeUiPolicy.js'
 import {
@@ -37,6 +39,9 @@ import { RegistrazioneTotalsBar } from '../components/registrazione/Registrazion
 import { RegistrazioneShortcutFooter } from '../components/registrazione/RegistrazioneShortcutFooter.jsx'
 import { RegistrazioneAccountPickerModal } from '../components/registrazione/RegistrazioneAccountPickerModal.jsx'
 import { RegistrazioneAccountSearchModal } from '../components/registrazione/RegistrazioneAccountSearchModal.jsx'
+import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleContabilePolicy.js'
+import { resolveChiusuraPartiteBehavior } from '../domain/causali/resolveChiusuraPartiteBehavior.js'
+
 
 const REAL_SAVE_TEMPORARILY_BLOCKED = false
 
@@ -52,9 +57,15 @@ function canUseRealSaveForSimplePrimaNota(draftModel = {}, selectedCausaleConfig
   )
 }
 
+function isValidSocietaId(id) {
+  if (!id) return false
+  const str = String(id).trim().toLowerCase()
+  return str !== '' && str !== 'undefined' && str !== 'null'
+}
+
 async function loadPianoContiFromLocalApi(societaId) {
-  const id = String(societaId || '').trim()
-  if (!id) return []
+  if (!isValidSocietaId(societaId)) return []
+  const id = String(societaId).trim()
   const response = await fetch(`/api/contabilita/piano-conti?societaId=${encodeURIComponent(id)}`, {
     method: 'GET',
     credentials: 'same-origin',
@@ -153,6 +164,9 @@ function resolveCounterpartySide(conto = {}, fallback = '') {
   if (conto?.is_cliente) return 'dare'
   return fallback === 'avere' || fallback === 'dare' ? fallback : ''
 }
+
+
+
 
 function hasManualRegistrazioneRowContent(row = {}) {
   if (!row || typeof row !== 'object') return false
@@ -282,6 +296,9 @@ function makeInitialState(exercise = String(new Date().getFullYear())) {
       manualImportoChiusuraOverride: false,
       segnoChiusura: 'A',
       stato: 'predisposto',
+      selectedPartitaIds: [],
+      importiChiusura: {},
+      checkedPartiteIds: [],
     },
     ritenutaData: {
       mode: '',
@@ -521,6 +538,16 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     }
   }, [initialDraft])
   const [activeTab, setActiveTab] = useState('rows')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (activeTab === 'partitario') {
+      setSidebarCollapsed(true)
+    } else {
+      setSidebarCollapsed(false)
+    }
+  }, [activeTab])
+
   const [previewMode, setPreviewMode] = useState('overview')
   const [modalState, setModalState] = useState(null)
   const [activeCell, setActiveCell] = useState(null)
@@ -579,15 +606,111 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   )
   const rowsWithCounterpartySync = useMemo(
     () => syncCounterpartySubjectRow(state.rows, state.header),
-    [state.rows, state.header]
+    [state.rows, state.header, effectivePianoConti]
   )
+
+  // ── FIX: calcolo righe PN sincrono per draftModel ────────────────────────
+  // Il useEffect che aggiorna state.rows (importi dare/avere dal partitario) è
+  // asincrono: scrive DOPO che draftModel è già stato costruito con le righe
+  // vecchie. Questo useMemo replica la stessa logica in modo sincrono, nello
+  // stesso render, così draftModel vede sempre gli importi aggiornati.
+  // NON tocca state.rows: il useEffect continua a fare quello.
+  const rowsForDraftModel = useMemo(() => {
+    const mode = selectedCausaleConfig?.partitarioMode || selectedCausale?.gestione_partite || ''
+    if (mode !== 'chiusura' && mode !== 'chiude') return rowsWithCounterpartySync
+
+    const selectedPartitaIdsStr = (state.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+    if (!selectedPartitaIdsStr.length) return rowsWithCounterpartySync
+
+    const selectedGames = (selectedContropartePartite || []).filter(p => selectedPartitaIdsStr.includes(String(p.id).trim()))
+    const policy = buildCausaleContabilePolicy(selectedCausale)
+    const chiusuraBehavior = resolveChiusuraPartiteBehavior(policy, state.header, selectedGames, effectivePianoConti)
+    if (!chiusuraBehavior.isChiusura) return rowsWithCounterpartySync
+
+    const isIncassoCliente = chiusuraBehavior.soggettoTipo === 'cliente'
+    const isPagamentoFornitore = chiusuraBehavior.soggettoTipo === 'fornitore'
+    if (!isIncassoCliente && !isPagamentoFornitore) return rowsWithCounterpartySync
+
+    // Calcola netto (identico al useEffect)
+    let netChiusura = 0
+    selectedPartitaIdsStr.forEach(id => {
+      const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === id)
+      if (partita) {
+        const residuo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+        const enteredVal = state.partitarioData?.importiChiusura?.[id]
+        let rowVal = 0
+        if (enteredVal !== undefined && enteredVal !== null && enteredVal !== '') {
+          rowVal = Number.parseFloat(String(enteredVal).replace(',', '.')) || 0
+          rowVal = residuo < 0 ? -Math.abs(rowVal) : Math.abs(rowVal)
+        } else {
+          rowVal = residuo
+        }
+        netChiusura += rowVal
+      }
+    })
+
+    const headerAmountVal = Number.parseFloat(String(state.header.importo || '').replace(',', '.')) || 0
+    const finalAmount = selectedPartitaIdsStr.length > 0 ? Math.abs(netChiusura) : headerAmountVal
+    const absNet = Number.isFinite(finalAmount) && finalAmount > 0 ? finalAmount : 0
+
+    // Risolvi conti (identico al useEffect)
+    const matchingHeaderConto = resolveSubjectAccount(state.header, effectivePianoConti)
+    const subjectContoId = matchingHeaderConto ? String(matchingHeaderConto.id || '').trim() : ''
+    const subjectContoCodice = String(matchingHeaderConto?.codice || state.header.clienteFornitoreCodice || state.header.cliente_fornitore_codice || '').trim()
+    const subjectContoDescrizione = String(matchingHeaderConto?.descrizione || matchingHeaderConto?.nome || state.header.clienteFornitoreNome || state.header.cliente_fornitore_nome || state.header.soggetto || '').trim()
+    const subjectContoQuery = (subjectContoCodice && subjectContoDescrizione) ? `${subjectContoCodice} - ${subjectContoDescrizione}` : (subjectContoDescrizione || subjectContoCodice)
+    const bankContoId = String(state.header.bancaCassaId || state.header.banca_cassa_id || '').trim()
+    const matchingBankConto = bankContoId ? (effectivePianoConti || []).find(c => String(c.id).trim() === bankContoId) : null
+    const bankContoCodice = String(matchingBankConto?.codice || matchingBankConto?.code || matchingBankConto?.sigla || state.header.bancaCassaCodice || state.header.banca_cassa_codice || '').trim()
+    const bankContoDescrizione = String(matchingBankConto?.nome || matchingBankConto?.descrizione || matchingBankConto?.description || matchingBankConto?.denominazione || state.header.bancaCassaNome || state.header.banca_cassa_nome || '').trim()
+    const bankContoQuery = (bankContoCodice && bankContoDescrizione) ? `${bankContoCodice} - ${bankContoDescrizione}` : (bankContoDescrizione || bankContoCodice)
+
+    // Aggiorna solo le prime 2 righe con gli importi corretti
+    return rowsWithCounterpartySync.map((row, idx) => {
+      if (idx >= 2) return row
+      const amtStr = absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : ''
+      const hasManualAmt = row.manualAmountOverride || row.manualEdited
+      if (isIncassoCliente) {
+        if (idx === 0) {
+          const finalDare = hasManualAmt ? row.dare : (absNet > 0 ? amtStr : '')
+          return { ...row, ruolo: 'altro', conto_id: bankContoId, conto_codice: bankContoCodice, conto_descrizione: bankContoDescrizione, contoQuery: bankContoQuery, lato: 'dare', dare: finalDare, avere: hasManualAmt ? row.avere : '', conto_resolved_finale: Boolean(bankContoId) }
+        }
+        if (idx === 1) {
+          const finalAvere = hasManualAmt ? row.avere : (absNet > 0 ? amtStr : '')
+          return { ...row, ruolo: 'soggetto', conto_id: subjectContoId, conto_codice: subjectContoCodice, conto_descrizione: subjectContoDescrizione, contoQuery: subjectContoQuery, lato: 'avere', avere: finalAvere, dare: hasManualAmt ? row.dare : '', conto_resolved_finale: Boolean(subjectContoId) }
+        }
+      }
+      if (isPagamentoFornitore) {
+        if (idx === 0) {
+          const finalDare = hasManualAmt ? row.dare : (absNet > 0 ? amtStr : '')
+          return { ...row, ruolo: 'soggetto', conto_id: subjectContoId, conto_codice: subjectContoCodice, conto_descrizione: subjectContoDescrizione, contoQuery: subjectContoQuery, lato: 'dare', dare: finalDare, avere: hasManualAmt ? row.avere : '', conto_resolved_finale: Boolean(subjectContoId) }
+        }
+        if (idx === 1) {
+          const finalAvere = hasManualAmt ? row.avere : (absNet > 0 ? amtStr : '')
+          return { ...row, ruolo: 'altro', conto_id: bankContoId, conto_codice: bankContoCodice, conto_descrizione: bankContoDescrizione, contoQuery: bankContoQuery, lato: 'avere', avere: finalAvere, dare: hasManualAmt ? row.dare : '', conto_resolved_finale: Boolean(bankContoId) }
+        }
+      }
+      return row
+    })
+  }, [
+    rowsWithCounterpartySync,
+    selectedCausaleConfig?.partitarioMode,
+    selectedCausale,
+    state.partitarioData?.selectedPartitaIds,
+    state.partitarioData?.importiChiusura,
+    selectedContropartePartite,
+    state.header,
+    effectivePianoConti,
+  ])
+  // ── FINE FIX sincrono ────────────────────────────────────────────────────
+
   const draftModel = useMemo(
     () =>
       buildRegistrazioneDraft(
         {
           societaId: societaAttiva?.id || '',
           header: state.header,
-          rows: rowsWithCounterpartySync,
+          rows: rowsForDraftModel,
           documentData: state.documentData,
           ivaData: state.ivaData,
           partitarioData: state.partitarioData,
@@ -607,7 +730,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           historicalEntries: historicalCausaleEntries,
         }
       ),
-    [causaliContabili, effectiveCausaliIva, effectivePianoConti, historicalCausaleEntries, percipientiCatalog, selectedCausale, selectedCausaleConfig, selectedContropartePartite, societaAttiva?.id, state.documentData, state.header, state.ivaData, state.partitarioData, state.ritenutaData, rowsWithCounterpartySync]
+    [causaliContabili, effectiveCausaliIva, effectivePianoConti, historicalCausaleEntries, percipientiCatalog, selectedCausale, selectedCausaleConfig, selectedContropartePartite, societaAttiva?.id, state.documentData, state.header, state.ivaData, state.partitarioData, state.ritenutaData, rowsForDraftModel]
   )
 
   const resolvedRows = draftModel.normalized.rows
@@ -625,12 +748,49 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       (draftStarted ? 'Bozza non ancora controllabile' : 'Avvia una nuova registrazione')
   ).trim()
 
+  // ── AUDIT LOG: verifica sorgenti stato nello stesso render ──────────────────
+  if (draftStarted) {
+    console.log('[STATE SOURCES AUDIT]', {
+      // Righe che alimentano la tabella visuale
+      stateRows: state.rows?.map(r => ({ id: r.id, dare: r.dare, avere: r.avere, conto_id: r.conto_id, desc: r.descrizione })),
+      rowsWithCounterpartySync: rowsWithCounterpartySync?.map(r => ({ id: r.id, dare: r.dare, avere: r.avere, conto_id: r.conto_id })),
+      // Righe che alimentano la validazione e i pannelli
+      resolvedRows: resolvedRows?.map(r => ({ id: r.id, dare: r.dare, avere: r.avere, conto_id: r.conto_id })),
+      draftModelRows: draftModel?.draft?.rows?.map(r => ({ id: r.id, dare: r.dare, avere: r.avere })),
+      // Errori banner
+      draftValidationBlockers: draftModel?.validation?.blockers,
+      draftValidationStatus: draftModel?.validation?.status,
+      // Partitario
+      partitarioDraftRows: draftModel?.draft?.partitarioDraft?.rows?.map(r => ({ id: r.id, selected: r.selected, importoChiusura: r.importoChiusura, residuo: r.residuo })),
+      partitarioDraftTotals: draftModel?.draft?.partitarioDraft?.totals,
+      partitarioDraftSelectedIds: draftModel?.draft?.partitarioDraft?.selectedPartitaIds,
+      // Stato partitario grezzo
+      checkedPartiteIds: state.partitarioData?.checkedPartiteIds,
+      selectedPartitaIds: state.partitarioData?.selectedPartitaIds,
+      importiChiusura: state.partitarioData?.importiChiusura,
+      // Props che vanno ai pannelli
+      previewProps: {
+        pnRowsCount: resolvedRows?.length,
+        pnRowsDareAvere: resolvedRows?.map(r => ({ id: r.id, dare: r.dare, avere: r.avere })),
+        partitarioDraftRowsCount: draftModel?.draft?.partitarioDraft?.rows?.length,
+        checkedPartiteIds: state.partitarioData?.checkedPartiteIds,
+        selectedPartitaIds: state.partitarioData?.selectedPartitaIds,
+      }
+    })
+  }
+  // ── FINE AUDIT LOG ──────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!draftStarted) return
     if (!templateRowsDraft?.applied) return
     if (!Array.isArray(templateRowsDraft.rows) || !templateRowsDraft.rows.length) return
     const templateKey = String(templateRowsDraft.templateKey || '')
     if (!templateKey) return
+
+    const policy = buildCausaleContabilePolicy(selectedCausale)
+    const isIcpf = policy.gestionePartitario === 'chiusura'
+    if (isIcpf) return
+
     const currentRowsMatchTemplate =
       Array.isArray(state.rows) &&
       state.rows.length === templateRowsDraft.rows.length &&
@@ -644,7 +804,309 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       if (areTemplateRowsInSync(prev.rows, templateRowsDraft.rows)) return prev
       return { ...prev, rows: templateRowsDraft.rows.map((row) => ({ ...row, templateGenerated: true, templateKey })) }
     })
-  }, [draftStarted, state.rows, templateRowsDraft])
+  }, [draftStarted, state.rows, templateRowsDraft, selectedCausale, selectedCausaleConfig])
+
+  // Effetto per aggiornare le righe contabili per IC/PF (Vincolo 3 & 4)
+  useEffect(() => {
+    if (!draftStarted) return
+    const mode = selectedCausaleConfig?.partitarioMode || selectedCausale?.gestione_partite || ''
+    if (mode !== 'chiusura' && mode !== 'chiude') return
+
+    const policy = buildCausaleContabilePolicy(selectedCausale)
+    const selectedPartitaIdsStr = (state.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+    const selectedGames = (selectedContropartePartite || []).filter(p => selectedPartitaIdsStr.includes(String(p.id).trim()))
+    const chiusuraBehavior = resolveChiusuraPartiteBehavior(policy, state.header, selectedGames, effectivePianoConti)
+    if (!chiusuraBehavior.isChiusura) return
+
+    const isIncassoCliente = chiusuraBehavior.soggettoTipo === 'cliente'
+    const isPagamentoFornitore = chiusuraBehavior.soggettoTipo === 'fornitore'
+    const isClearlyClassified = isIncassoCliente || isPagamentoFornitore
+
+    if (!isClearlyClassified) {
+      setError('Attenzione: La causale non è chiaramente classificata come incasso o pagamento. Inserisci gli importi Dare/Avere manualmente.')
+      return
+    }
+
+    // 1. Calcolo netto partitario
+    const currentSelected = (state.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+    let netChiusura = 0
+    currentSelected.forEach(id => {
+      const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === id)
+      if (partita) {
+        const residuo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+        const enteredVal = state.partitarioData?.importiChiusura?.[id]
+        let rowVal = 0
+        if (enteredVal !== undefined && enteredVal !== null && enteredVal !== '') {
+          rowVal = Number.parseFloat(String(enteredVal).replace(',', '.')) || 0
+          if (residuo < 0) {
+            rowVal = -Math.abs(rowVal)
+          } else {
+            rowVal = Math.abs(rowVal)
+          }
+        } else {
+          rowVal = residuo
+        }
+        netChiusura += rowVal
+      }
+    })
+
+    const headerAmountVal = Number.parseFloat(String(state.header.importo || '').replace(',', '.')) || 0
+    const finalAmount = currentSelected.length > 0 ? Math.abs(netChiusura) : headerAmountVal
+    const absNet = Number.isFinite(finalAmount) && finalAmount > 0 ? finalAmount : 0
+
+    console.log('[useEffect PN update - Start]', {
+      selectedPartitaIds: state.partitarioData?.selectedPartitaIds,
+      checkedPartiteIds: state.partitarioData?.checkedPartiteIds,
+      selectedPartitaId: state.partitarioData?.selectedPartitaId,
+      selectedPartitaRows: draftModel?.draft?.partitarioDraft?.rows?.filter(r => r.selected),
+      partitarioDraftTotals: draftModel?.draft?.partitarioDraft?.totals,
+      importo_movimento_testata: headerAmountVal,
+      netto_partitario: netChiusura,
+      righe_PN_prima: state.rows
+    })
+
+    // 2. Determiniamo i conti del soggetto e della banca
+    const matchingHeaderConto = resolveSubjectAccount(state.header, effectivePianoConti)
+    const subjectContoId = matchingHeaderConto ? String(matchingHeaderConto.id || '').trim() : ''
+
+    const subjectContoCodice = String(
+      matchingHeaderConto?.codice ||
+      state.header.clienteFornitoreCodice ||
+      state.header.cliente_fornitore_codice ||
+      ''
+    ).trim()
+
+    const subjectContoDescrizione = String(
+      matchingHeaderConto?.descrizione ||
+      matchingHeaderConto?.nome ||
+      state.header.clienteFornitoreNome ||
+      state.header.cliente_fornitore_nome ||
+      state.header.soggetto ||
+      ''
+    ).trim()
+
+    const subjectContoQuery = (subjectContoCodice && subjectContoDescrizione) 
+      ? `${subjectContoCodice} - ${subjectContoDescrizione}` 
+      : (subjectContoDescrizione || subjectContoCodice)
+
+    const bankContoId = String(
+      state.header.bancaCassaId ||
+      state.header.banca_cassa_id ||
+      ''
+    ).trim()
+
+    const matchingBankConto = bankContoId ? (effectivePianoConti || []).find(c => String(c.id).trim() === bankContoId) : null
+
+    const bankContoCodice = String(
+      matchingBankConto?.codice ||
+      matchingBankConto?.code ||
+      matchingBankConto?.sigla ||
+      state.header.bancaCassaCodice ||
+      state.header.banca_cassa_codice ||
+      ''
+    ).trim()
+
+    const bankContoDescrizione = String(
+      matchingBankConto?.nome ||
+      matchingBankConto?.descrizione ||
+      matchingBankConto?.description ||
+      matchingBankConto?.denominazione ||
+      state.header.bancaCassaNome ||
+      state.header.banca_cassa_nome ||
+      ''
+    ).trim()
+
+    const bankContoQuery = (bankContoCodice && bankContoDescrizione) 
+      ? `${bankContoCodice} - ${bankContoDescrizione}` 
+      : (bankContoDescrizione || bankContoCodice)
+
+    // 3. Aggiorna o genera le righe
+    setState((prev) => {
+      // Per IC: riga 1 = Banca, riga 2 = Cliente
+      // Per PF: riga 1 = Fornitore, riga 2 = Banca
+      const updatedRows = prev.rows.map((row, idx) => {
+        if (idx >= 2) return row
+
+        const isRow1 = idx === 0
+        const isRow2 = idx === 1
+        const hasManualAmt = row.manualAmountOverride || row.manualEdited
+
+        if (isIncassoCliente) {
+          if (isRow1) {
+            // Riga 1: Banca/Cassa (Dare)
+            return {
+              ...row,
+              ruolo: 'altro',
+              descrizione_riga: 'Banca/Cassa',
+              descrizione: 'Banca/Cassa',
+              conto_id: bankContoId,
+              conto_codice: bankContoCodice,
+              conto_descrizione: bankContoDescrizione,
+              contoQuery: bankContoQuery,
+              lato: 'dare',
+              dare: hasManualAmt ? row.dare : (absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : ''),
+              avere: hasManualAmt ? row.avere : '',
+              conto_resolved_finale: Boolean(bankContoId)
+            }
+          }
+          if (isRow2) {
+            // Riga 2: Cliente / chiusura partite (Avere)
+            return {
+              ...row,
+              ruolo: 'soggetto',
+              descrizione_riga: 'Cliente / chiusura partite',
+              descrizione: 'Cliente / chiusura partite',
+              conto_id: subjectContoId,
+              conto_codice: subjectContoCodice,
+              conto_descrizione: subjectContoDescrizione,
+              contoQuery: subjectContoQuery,
+              lato: 'avere',
+              avere: hasManualAmt ? row.avere : (absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : ''),
+              dare: hasManualAmt ? row.dare : '',
+              conto_resolved_finale: Boolean(subjectContoId)
+            }
+          }
+        }
+
+        if (isPagamentoFornitore) {
+          if (isRow1) {
+            // Riga 1: Fornitore / chiusura partite (Dare)
+            return {
+              ...row,
+              ruolo: 'soggetto',
+              descrizione_riga: 'Fornitore / chiusura partite',
+              descrizione: 'Fornitore / chiusura partite',
+              conto_id: subjectContoId,
+              conto_codice: subjectContoCodice,
+              conto_descrizione: subjectContoDescrizione,
+              contoQuery: subjectContoQuery,
+              lato: 'dare',
+              dare: hasManualAmt ? row.dare : (absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : ''),
+              avere: hasManualAmt ? row.avere : '',
+              conto_resolved_finale: Boolean(subjectContoId)
+            }
+          }
+          if (isRow2) {
+            // Riga 2: Banca/Cassa (Avere)
+            return {
+              ...row,
+              ruolo: 'altro',
+              descrizione_riga: 'Banca/Cassa',
+              descrizione: 'Banca/Cassa',
+              conto_id: bankContoId,
+              conto_codice: bankContoCodice,
+              conto_descrizione: bankContoDescrizione,
+              contoQuery: bankContoQuery,
+              lato: 'avere',
+              avere: hasManualAmt ? row.avere : (absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : ''),
+              dare: hasManualAmt ? row.dare : '',
+              conto_resolved_finale: Boolean(bankContoId)
+            }
+          }
+        }
+
+        return row
+      })
+
+      if (updatedRows.length < 2) {
+        const r1 = isIncassoCliente
+          ? {
+              id: 'row-1',
+              ruolo: 'altro',
+              descrizione_riga: 'Banca/Cassa',
+              descrizione: 'Banca/Cassa',
+              conto_id: bankContoId,
+              conto_codice: bankContoCodice,
+              conto_descrizione: bankContoDescrizione,
+              contoQuery: bankContoQuery,
+              lato: 'dare',
+              dare: absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : '',
+              avere: '',
+              conto_resolved_finale: Boolean(bankContoId),
+              templateGenerated: true
+            }
+          : {
+              id: 'row-1',
+              ruolo: 'soggetto',
+              descrizione_riga: 'Fornitore / chiusura partite',
+              descrizione: 'Fornitore / chiusura partite',
+              conto_id: subjectContoId,
+              conto_codice: subjectContoCodice,
+              conto_descrizione: subjectContoDescrizione,
+              contoQuery: subjectContoQuery,
+              lato: 'dare',
+              dare: absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : '',
+              avere: '',
+              conto_resolved_finale: Boolean(subjectContoId),
+              templateGenerated: true
+            }
+
+        const r2 = isIncassoCliente
+          ? {
+              id: 'row-2',
+              ruolo: 'soggetto',
+              descrizione_riga: 'Cliente / chiusura partite',
+              descrizione: 'Cliente / chiusura partite',
+              conto_id: subjectContoId,
+              conto_codice: subjectContoCodice,
+              conto_descrizione: subjectContoDescrizione,
+              contoQuery: subjectContoQuery,
+              lato: 'avere',
+              avere: absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : '',
+              dare: '',
+              conto_resolved_finale: Boolean(subjectContoId),
+              templateGenerated: true
+            }
+          : {
+              id: 'row-2',
+              ruolo: 'altro',
+              descrizione_riga: 'Banca/Cassa',
+              descrizione: 'Banca/Cassa',
+              conto_id: bankContoId,
+              conto_codice: bankContoCodice,
+              conto_descrizione: bankContoDescrizione,
+              contoQuery: bankContoQuery,
+              lato: 'avere',
+              avere: absNet > 0 ? normalizeRegistrazioneAmountInput(absNet) : '',
+              dare: '',
+              conto_resolved_finale: Boolean(bankContoId),
+              templateGenerated: true
+            }
+
+        console.log('[useEffect PN update - Enqueued updatedRows (length < 2)]', { r1, r2 })
+        return { ...prev, rows: [r1, r2, ...updatedRows.slice(2)] }
+      }
+
+      const hasChanged = JSON.stringify(prev.rows) !== JSON.stringify(updatedRows)
+      if (!hasChanged) return prev
+      console.log('[useEffect PN update - Enqueued updatedRows (length >= 2)]', { updatedRows })
+      return { ...prev, rows: updatedRows }
+    })
+  }, [
+    state.partitarioData?.selectedPartitaIds,
+    state.partitarioData?.importiChiusura,
+    selectedContropartePartite,
+    selectedCausale,
+    draftStarted,
+    state.header.clienteFornitoreId,
+    state.header.cliente_fornitore_id,
+    state.header.clienteFornitoreCodice,
+    state.header.cliente_fornitore_codice,
+    state.header.clienteFornitoreNome,
+    state.header.cliente_fornitore_nome,
+    state.header.soggettoId,
+    state.header.soggetto_id,
+    state.header.contoId,
+    state.header.accountId,
+    state.header.bancaCassaId,
+    state.header.banca_cassa_id,
+    state.header.bancaCassaCodice,
+    state.header.banca_cassa_codice,
+    state.header.bancaCassaNome,
+    state.header.banca_cassa_nome,
+    state.header.importo,
+    effectivePianoConti
+  ])
 
   const allowedTabs = useMemo(() => {
     const baseTabs = Array.isArray(selectedCausaleConfig?.activeTabs) ? selectedCausaleConfig.activeTabs : ['rows']
@@ -676,7 +1138,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   }, [activeTab, allowedTabs])
 
   useEffect(() => {
-    if (!societaAttiva?.id) {
+    if (!isValidSocietaId(societaAttiva?.id)) {
       setPartiteAperte([])
       return
     }
@@ -697,7 +1159,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   }, [societaAttiva?.id])
 
   useEffect(() => {
-    if (!societaAttiva?.id) {
+    if (!isValidSocietaId(societaAttiva?.id)) {
       setPercipientiCatalog([])
       return
     }
@@ -719,7 +1181,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   }, [societaAttiva?.id])
 
   useEffect(() => {
-    if (!societaAttiva?.id) {
+    if (!isValidSocietaId(societaAttiva?.id)) {
       setCausaliIvaCatalog([])
       return
     }
@@ -748,7 +1210,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     const societaId = String(societaAttiva?.id || '').trim()
     const hasPropPianoConti = Array.isArray(pianoConti) && pianoConti.length > 0
 
-    if (!societaId) {
+    if (!isValidSocietaId(societaId)) {
       setFallbackPianoConti([])
       setPianoContiLoadStatus('idle')
       setPianoContiLoadError('')
@@ -820,7 +1282,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   }, [pianoConti, societaAttiva?.id])
 
   useEffect(() => {
-    if (!societaAttiva?.id || !selectedCausale?.codice) {
+    if (!isValidSocietaId(societaAttiva?.id) || !selectedCausale?.codice) {
       setHistoricalCausaleEntries([])
       return
     }
@@ -976,10 +1438,21 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const applyPartitarioPatch = (field, value) => {
     setError('')
     setSuccess('')
-    setState((prev) => ({
-      ...prev,
-      partitarioData: { ...prev.partitarioData, [field]: value },
-    }))
+    setState((prev) => {
+      const selectedId = String(prev.partitarioData?.selectedPartitaId || '').trim()
+      const nextImporti = { ...(prev.partitarioData?.importiChiusura || {}) }
+      if (field === 'importoChiusura' && selectedId) {
+        nextImporti[selectedId] = value
+      }
+      return {
+        ...prev,
+        partitarioData: {
+          ...prev.partitarioData,
+          [field]: value,
+          importiChiusura: nextImporti,
+        },
+      }
+    })
   }
 
   const applyRitenutePatch = (field, value) => {
@@ -1116,10 +1589,16 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     if (role === 'soggetto') return true
     const hasTemplateMarkers = Boolean(row.templateGenerated || row.templateScope || row.isTemplateScope)
     if (!hasTemplateMarkers) return false
-    const rowText = [row.contoQuery, row.conto_descrizione, row.conto_codice, row.contoQueryHint, row.templateSource]
+    
+    const rowText = [row.contoQuery, row.conto_descrizione, row.conto_codice, row.contoQueryHint, row.templateSource, row.descrizione_riga, row.descrizione]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
+    if (/banca|cassa/.test(rowText)) return false
+
+    const hasAccountOrHint = Boolean(row.conto_codice || row.contoQuery || row.conto_descrizione || row.contoQueryHint)
+    if (!hasAccountOrHint) return false
+
     if (/fornitor|client|debiti v\/fornitori|crediti v\/clienti/.test(rowText)) return true
     const selection = buildRegistrazioneContoSelection(row, row.contoQuery || row.conto_descrizione || row.conto_codice || '')
     const hierarchy = resolveContoHierarchyView(selection)
@@ -1127,9 +1606,39 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   }
 
   function syncCounterpartySubjectRow(rows = [], selected = {}) {
+    const resolvedAccount = resolveSubjectAccount(selected, effectivePianoConti)
+    if (!resolvedAccount) return rows
+
+    const resolvedId = String(resolvedAccount.id || '').trim()
+    if (!resolvedId) return rows
+
+    const resolvedCodice = String(resolvedAccount.codice || '').trim()
+    const resolvedNome = String(resolvedAccount.descrizione || resolvedAccount.nome || '').trim()
+
+    const isCustomer = Boolean(
+      resolvedAccount.is_cliente || 
+      ['cliente', 'client'].includes(String(resolvedAccount.clienteFornitoreTipo || resolvedAccount.cliente_fornitore_tipo || resolvedAccount.tipoControparte || resolvedAccount.tipo_controparte || resolvedAccount.tipo || '').trim().toLowerCase())
+    )
+
+    const isSupplier = Boolean(
+      resolvedAccount.is_fornitore || 
+      resolvedAccount.is_professionista || 
+      ['fornitore', 'professionista', 'supplier'].includes(String(resolvedAccount.clienteFornitoreTipo || resolvedAccount.cliente_fornitore_tipo || resolvedAccount.tipoControparte || resolvedAccount.tipo_controparte || resolvedAccount.tipo || '').trim().toLowerCase())
+    )
+
+    const contoObject = {
+      ...resolvedAccount,
+      id: resolvedId,
+      codice: resolvedCodice,
+      nome: resolvedNome,
+      descrizione: resolvedNome,
+      is_cliente: isCustomer,
+      is_fornitore: isSupplier
+    }
+
     const subjectSelection = buildRegistrazioneContoSelection(
-      selected,
-      selected?.__label || selected?.conto_label || selected?.displayLabel || resolveRegistrazioneContoLabel(selected)
+      contoObject,
+      contoObject?.__label || contoObject?.conto_label || contoObject?.displayLabel || resolveRegistrazioneContoLabel(contoObject)
     )
     const hierarchy = resolveContoHierarchyView(subjectSelection)
     const contoDescrizione = subjectSelection.conto_descrizione || resolveRegistrazioneContoDescrizione(subjectSelection)
@@ -1140,7 +1649,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       if (updated || !isTemplateSubjectRowCandidate(row)) return row
       if (row.manualEdited || row.manualAmountOverride) return row
       updated = true
-      const role = resolveCounterpartyRole(selected)
+      const role = resolveCounterpartyRole(contoObject)
       return {
         ...row,
         templateRole: role || 'soggetto',
@@ -1149,17 +1658,17 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         templateScope: false,
         isTemplateScope: false,
         contoQuery,
-        conto_id: String(subjectSelection.id || subjectSelection.value || '').trim(),
-        conto_codice: String(subjectSelection.codice || subjectSelection.code || subjectSelection.sigla || subjectSelection.id || '').trim(),
-        conto_descrizione: contoDescrizione,
+        conto_id: resolvedId,
+        conto_codice: resolvedCodice,
+        conto_descrizione: resolvedNome,
         hierarchyType: String(hierarchy?.hierarchyType || subjectSelection.hierarchyType || row.hierarchyType || '').trim(),
-        conto_resolved_finale: Boolean(hierarchy?.isSelectableForRegistrazione),
+        conto_resolved_finale: Boolean(hierarchy?.isSelectableForRegistrazione || resolvedId),
         contoQueryHint: '',
         templateSource: 'subject_header_sync',
         templateConfidence: 1,
         templateReasons: ['Conto risolto dal soggetto selezionato in testata'],
         templateWarnings: [],
-        lato: resolveCounterpartySide(selected, row.lato),
+        lato: resolveCounterpartySide(contoObject, row.lato),
       }
     })
   }
@@ -1201,6 +1710,15 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         manualBaseOverride: false,
         manualRitenutaOverride: false,
         manualNettoOverride: false,
+      },
+      partitarioData: {
+        ...prev.partitarioData,
+        selectedPartitaId: '',
+        selectedPartitaIds: [],
+        importiChiusura: {},
+        checkedPartiteIds: [],
+        importoChiusura: '',
+        manualImportoChiusuraOverride: false,
       }
     }))
     setTimeout(() => {
@@ -1306,10 +1824,191 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     setModalState({ type: 'counterparty-search', rowId: payload?.rowId || null })
   }
 
+  const onToggleCheckedPartita = (id) => {
+    const idStr = String(id || '').trim()
+    const currentSelected = (state.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+    const isSelected = currentSelected.includes(idStr)
+    const clickedRow = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === idStr)
+
+    console.log('[Checkbox Click - Start]', {
+      clickedIdOriginal: id,
+      clickedIdNormalized: idStr,
+      clickedRow,
+      conto_id: clickedRow?.conto_id || clickedRow?.contoId,
+      contoId: clickedRow?.contoId || clickedRow?.conto_id,
+      soggettoId: clickedRow?.soggettoId || clickedRow?.soggetto_id,
+      selectedPartitaIds_BEFORE: currentSelected,
+      checkedPartiteIds_BEFORE: state.partitarioData?.checkedPartiteIds,
+    })
+
+    if (!isSelected) {
+      const partitaToSelect = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === idStr)
+      if (partitaToSelect) {
+        const newSoggettoId = resolvePartitaSoggettoId(partitaToSelect)
+        
+        const differentSubject = currentSelected.some(existingId => {
+          const existingPartita = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === existingId)
+          if (existingPartita) {
+            const existingSoggettoId = resolvePartitaSoggettoId(existingPartita)
+            return existingSoggettoId !== newSoggettoId
+          }
+          return false
+        })
+
+        if (differentSubject) {
+          console.warn('[Checkbox Click - Blocked for different subject]', {
+            newSoggettoId,
+            currentSelected
+          })
+          setError('Incassi/pagamenti multipli non ancora abilitati')
+          return
+        }
+      }
+    }
+
+    setState((prev) => {
+      const currentSelected = (prev.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+      const isSelected = currentSelected.includes(idStr)
+      const nextSelected = isSelected ? currentSelected.filter(c => c !== idStr) : [...currentSelected, idStr]
+      
+      const checked = (prev.partitarioData?.checkedPartiteIds || []).map(x => String(x || '').trim())
+      const nextChecked = isSelected ? checked.filter(c => c !== idStr) : Array.from(new Set([...checked, idStr]))
+
+      const nextImporti = { ...(prev.partitarioData?.importiChiusura || {}) }
+      
+      if (!isSelected) {
+        if (nextImporti[idStr] === undefined) {
+          const partita = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === idStr)
+          if (partita) {
+            const saldo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+            nextImporti[idStr] = saldo
+          }
+        }
+      }
+
+      const newSelectedPartitaId = nextSelected[0] || ''
+      const newImportoChiusura = newSelectedPartitaId ? nextImporti[newSelectedPartitaId] || '' : ''
+
+      console.log('[Checkbox Click - State Update Enqueued]', {
+        selectedPartitaIds_AFTER: nextSelected,
+        checkedPartiteIds_AFTER: nextChecked,
+        selectedPartitaId_focus: newSelectedPartitaId,
+        importoChiusura: newImportoChiusura
+      })
+
+      return {
+        ...prev,
+        partitarioData: {
+          ...prev.partitarioData,
+          selectedPartitaIds: nextSelected,
+          checkedPartiteIds: nextChecked,
+          importiChiusura: nextImporti,
+          selectedPartitaId: newSelectedPartitaId,
+          importoChiusura: newImportoChiusura,
+          tipoMovimento: 'chiusura'
+        }
+      }
+    })
+  }
+
+  const onUpdateRowImportoChiusura = (id, value) => {
+    setState((prev) => {
+      const nextImporti = { ...(prev.partitarioData?.importiChiusura || {}) }
+      nextImporti[id] = value
+      const isFocused = String(prev.partitarioData?.selectedPartitaId || '').trim() === String(id).trim()
+      return {
+        ...prev,
+        partitarioData: {
+          ...prev.partitarioData,
+          importiChiusura: nextImporti,
+          ...(isFocused ? { importoChiusura: value } : {})
+        }
+      }
+    })
+  }
+
+  const onBlurImportoChiusura = (id, value) => {
+    setState((prev) => {
+      const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === String(id).trim())
+      if (!partita) return prev
+
+      const residuo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+      let val = Number.parseFloat(String(value).replace(',', '.'))
+      if (Number.isNaN(val) || !Number.isFinite(val)) {
+        val = 0
+      }
+
+      if (residuo > 0) {
+        val = Math.max(0, val)
+        val = Math.min(residuo, val)
+      } else if (residuo < 0) {
+        val = -Math.abs(val)
+        val = Math.max(residuo, val)
+        val = Math.min(0, val)
+      } else {
+        val = 0
+      }
+
+      const formattedVal = val.toFixed(2)
+      const nextImporti = { ...(prev.partitarioData?.importiChiusura || {}) }
+      nextImporti[id] = formattedVal
+      const isFocused = String(prev.partitarioData?.selectedPartitaId || '').trim() === String(id).trim()
+
+      return {
+        ...prev,
+        partitarioData: {
+          ...prev.partitarioData,
+          importiChiusura: nextImporti,
+          ...(isFocused ? { importoChiusura: formattedVal } : {})
+        }
+      }
+    })
+  }
+
+  const onApplyCheckedPartite = () => {
+    setState((prev) => {
+      const checked = (prev.partitarioData?.checkedPartiteIds || []).map(x => String(x || '').trim())
+      const currentSelected = (prev.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+      const nextSelected = Array.from(new Set([...currentSelected, ...checked]))
+      const nextImporti = { ...(prev.partitarioData?.importiChiusura || {}) }
+      
+      nextSelected.forEach(id => {
+        if (nextImporti[id] === undefined) {
+          const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === id)
+          if (partita) {
+            const saldo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+            nextImporti[id] = saldo
+          }
+        }
+      })
+      
+      const newSelectedPartitaId = nextSelected[0] || ''
+      const newImportoChiusura = newSelectedPartitaId ? nextImporti[newSelectedPartitaId] || '' : ''
+
+      return {
+        ...prev,
+        partitarioData: {
+          ...prev.partitarioData,
+          selectedPartitaIds: nextSelected,
+          importiChiusura: nextImporti,
+          selectedPartitaId: newSelectedPartitaId,
+          importoChiusura: newImportoChiusura,
+          tipoMovimento: 'chiusura'
+        }
+      }
+    })
+    
+    setActiveTab('partitario')
+  }
+
   const openPartite = () => {
     if (!selectedCausaleConfig?.supportsPartitePanel) return
-    setPreviewMode('partite')
-    scrollToSection('preview')
+    if (previewMode === 'partite') {
+      onApplyCheckedPartite()
+    } else {
+      setPreviewMode('partite')
+      scrollToSection('preview')
+    }
   }
 
   const resolveTemplateRowsDraft = (force = false) =>
@@ -1513,6 +2212,24 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
             isSimulata: Boolean(state.header.isSimulata),
           }
         };
+
+        console.log('[handleSave - Saving draft]', {
+          activeDraft,
+          partEntriesForDb: activeDraft.partitarioDraft?.rows
+            ?.filter(row => row.selected)
+            .map(row => {
+              let amount = Math.abs(row.importoChiusura || 0)
+              const isNC = (row.importoOriginario < 0 || row.residuo < 0)
+              if (isNC) {
+                amount = -amount
+              }
+              return {
+                documento_id: row.id,
+                importo_chiuso: amount,
+                tipo_movimento: 'chiusura'
+              }
+            })
+        })
 
         const result = await persistPrimaNotaDraft({ db: sb, draft: activeDraft })
         if (result?.error) {
@@ -1958,17 +2675,34 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1.72fr) minmax(360px, .92fr)',
+                gridTemplateColumns: sidebarCollapsed ? '1fr' : 'minmax(0, 1.72fr) minmax(360px, .92fr)',
                 gap: '.75rem',
                 alignItems: 'start',
               }}
             >
               <div ref={rowsRef}>
-                <RegistrazioneTabs
-                  tabs={allowedTabs.map((id) => ({ id, label: tabLabel(id) }))}
-                  activeTab={activeTab}
-                  onChange={setActiveTab}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '.4rem', gap: '1rem' }}>
+                  <RegistrazioneTabs
+                    tabs={allowedTabs.map((id) => ({ id, label: tabLabel(id) }))}
+                    activeTab={activeTab}
+                    onChange={setActiveTab}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    style={{
+                      padding: '.25rem .5rem',
+                      fontSize: '.72rem',
+                      height: 'fit-content',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '.25rem'
+                    }}
+                  >
+                    <span>{sidebarCollapsed ? 'Espandi F9' : 'Collassa F9'}</span>
+                  </button>
+                </div>
 
                 {!draftStarted ? (
                   <div className="card" style={{ margin: 0, padding: '.95rem', borderRadius: 18, background: 'linear-gradient(180deg, rgba(19,45,70,.82), rgba(12,31,49,.9))', border: '1px solid rgba(96,165,250,.1)' }}>
@@ -2039,36 +2773,83 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                       partite={selectedContropartePartite}
                       selectedCausale={selectedCausale}
                       onChange={applyPartitarioPatch}
+                      pnRows={resolvedRows}
                       onApplySelected={(row) => {
                         if (!row) return
-                        const saldoRaw = row.saldoResiduo ?? row.importo_residuo ?? row.saldo ?? 0
+                        const saldoRaw = row.residuo ?? row.saldoResiduo ?? row.importo_residuo ?? row.saldo ?? 0
                         const saldo = Number.parseFloat(String(saldoRaw).replace(',', '.')) || 0
-                        setState((prev) => ({
-                          ...prev,
-                          partitarioData: {
-                            ...prev.partitarioData,
-                            selectedPartitaId: String(row.id || ''),
-                            selectedPartitaNumeroDocumento: String(row.numeroDocumento || row.numero_documento || ''),
-                            selectedPartitaDataDocumento: String(row.dataDocumento || row.data_documento || ''),
-                            selectedPartitaTipoDocumento: String(row.tipoDocumento || row.tipo_documento || ''),
-                            selectedPartitaImportoOrigine: String(row.importoOrigine || row.importo_originale || row.totale || 0),
-                            selectedPartitaSaldoResiduo: String(saldo),
-                            importoChiusura: String(Math.abs(saldo)),
-                            segnoChiusura: saldo < 0 ? 'D' : 'A',
-                            tipoMovimento: 'chiusura',
-                            manualImportoApertoOverride: false,
-                            manualImportoChiusuraOverride: false,
-                            stato: 'predisposto',
-                          },
-                        }))
-                        setPreviewMode('partite')
-                        scrollToSection('preview')
+                        const idStr = String(row.id || '').trim()
+
+                        // Subject validation block
+                        const currentSelected = (state.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+                        const isSelected = currentSelected.includes(idStr)
+
+                        if (!isSelected) {
+                          const partitaToSelect = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === idStr)
+                          if (partitaToSelect) {
+                            const newSoggettoId = resolvePartitaSoggettoId(partitaToSelect)
+                            
+                            const differentSubject = currentSelected.some(existingId => {
+                              const existingPartita = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === existingId)
+                              if (existingPartita) {
+                                const existingSoggettoId = resolvePartitaSoggettoId(existingPartita)
+                                return existingSoggettoId !== newSoggettoId
+                              }
+                              return false
+                            })
+
+                            if (differentSubject) {
+                              setError('Incassi/pagamenti multipli non ancora abilitati')
+                              return
+                            }
+                          }
+                        }
+
+                        setState((prev) => {
+                          const currentSelected = (prev.partitarioData?.selectedPartitaIds || []).map(x => String(x || '').trim())
+                          const isSelected = currentSelected.includes(idStr)
+                          const nextSelected = isSelected ? currentSelected : [...currentSelected, idStr]
+                          
+                          const checked = (prev.partitarioData?.checkedPartiteIds || []).map(x => String(x || '').trim())
+                          const nextChecked = isSelected ? checked : Array.from(new Set([...checked, idStr]))
+
+                          const nextImporti = { ...(prev.partitarioData?.importiChiusura || {}) }
+                          let currentChiusura = nextImporti[idStr]
+                          if (currentChiusura === undefined) {
+                            currentChiusura = String(saldo)
+                            nextImporti[idStr] = currentChiusura
+                          }
+                          return {
+                            ...prev,
+                            partitarioData: {
+                              ...prev.partitarioData,
+                              selectedPartitaIds: nextSelected,
+                              checkedPartiteIds: nextChecked,
+                              selectedPartitaId: idStr,
+                              selectedPartitaNumeroDocumento: String(row.numeroDocumento || row.numero_documento || ''),
+                              selectedPartitaDataDocumento: String(row.dataDocumento || row.data_documento || ''),
+                              selectedPartitaTipoDocumento: String(row.tipoDocumento || row.tipo_documento || ''),
+                              selectedPartitaImportoOrigine: String(row.importoOriginario || row.importo_originale || row.totale || 0),
+                              selectedPartitaSaldoResiduo: String(saldo),
+                              importoChiusura: String(currentChiusura),
+                              importiChiusura: nextImporti,
+                              segnoChiusura: saldo < 0 ? 'D' : 'A',
+                              tipoMovimento: 'chiusura',
+                              manualImportoApertoOverride: false,
+                              manualImportoChiusuraOverride: false,
+                              stato: 'predisposto',
+                            },
+                          }
+                        })
                       }}
                       focusOrder={focusOrder}
                       disabled={!draftStarted}
                       behavior={selectedCausaleConfig}
                       draft={draftModel.partitarioDraft}
                       validation={draftModel.partitarioDraft?.validation}
+                      onToggleCheckedPartita={onToggleCheckedPartita}
+                      onUpdateRowImportoChiusura={onUpdateRowImportoChiusura}
+                      onBlurImportoChiusura={onBlurImportoChiusura}
                     />
                   </div>
                 ) : activeTab === 'ritenute' ? (
@@ -2088,7 +2869,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                 ) : null}
               </div>
 
-              <div ref={previewRef} style={{ minHeight: 0 }}>
+              <div ref={previewRef} style={{ minHeight: 0, display: sidebarCollapsed ? 'none' : 'block' }}>
                 <RegistrazionePreviewPanel
                   header={state.header}
                   selectedCausale={selectedCausale}
@@ -2105,6 +2886,10 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                   ivaDraft={draftModel.ivaDraft}
                   partitarioDraft={draftModel.partitarioDraft}
                   ritenutaDraft={draftModel.ritenutaDraft}
+                  checkedPartiteIds={state.partitarioData?.checkedPartiteIds || []}
+                  onToggleCheckedPartita={onToggleCheckedPartita}
+                  onApplyCheckedPartite={onApplyCheckedPartite}
+                  pnRows={resolvedRows}
                 />
                 {previewMode === 'partite' && selectedCausaleConfig?.showPartitario ? (
                   <div style={{ marginTop: '.45rem', fontSize: '.62rem', color: 'rgba(188,204,226,.72)' }}>

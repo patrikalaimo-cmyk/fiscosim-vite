@@ -322,6 +322,12 @@ function validatePrimaNota(payload, mode, targets, errors, blocking) {
   // Causale contabile policy check (shouldCreateIva, shouldCreateLedger)
   if (isPlainObject(header.causaleContabile)) {
     const policy = buildCausaleContabilePolicy(header.causaleContabile)
+    if (!policy.isCoerente) {
+      policy.erroriCoerenza.forEach(err => {
+        addIssue(errors, err)
+        if (mode === 'commit') addIssue(blocking, err)
+      })
+    }
     if (policy.isDocumentoIva === true && targets.shouldCreateIva !== true) {
       const message = 'causale contabile richiede IVA ma modulo IVA non attivo'
       addIssue(errors, message)
@@ -404,7 +410,7 @@ function validateLedger(payload, mode, targets, errors, blocking) {
     addIssue(errors, message)
     if (mode === 'commit') addIssue(blocking, message)
   }
-  if (!rows.length) {
+  if (!rows.length && modeValue !== 'close') {
     const message = 'ledger.rows assenti'
     addIssue(errors, message)
     if (mode === 'commit') addIssue(blocking, message)

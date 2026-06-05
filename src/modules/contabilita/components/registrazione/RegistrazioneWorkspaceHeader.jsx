@@ -86,7 +86,7 @@ export function RegistrazioneWorkspaceHeader({
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '.45rem' }}>
               <span style={{ fontSize: '.92rem' }}>💾</span>
               {saveLabel}
-              <span className="bdg bdg-green" style={{ marginLeft: '.2rem' }}>F12</span>
+              <span className="bdg bdg-green" style={{ marginLeft: '.2rem' }}>F10</span>
             </span>
           </button>
 

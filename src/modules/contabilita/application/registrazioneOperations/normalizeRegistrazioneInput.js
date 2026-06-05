@@ -203,21 +203,35 @@ function normalizeRow(row = {}, index = 0, pianoConti = []) {
 }
 
 function normalizeCausaleContabile(value, causaliContabili = []) {
+  const catalog = Array.isArray(causaliContabili) ? causaliContabili : []
+
   if (value && typeof value === 'object') {
+    const codeQuery = normalizeText(value.codice ?? value.code ?? value.sigla ?? value.id)
+    const matched = codeQuery ? resolveCatalogItem(codeQuery, catalog) : null
+    const merged = matched ? { ...matched, ...value } : value
     return {
-      id: normalizeText(value.id),
-      codice: normalizeText(value.codice ?? value.code ?? value.sigla),
-      descrizione: normalizeText(value.descrizione ?? value.description ?? value.denominazione ?? value.nome),
+      ...merged,
+      id: normalizeText(merged.id),
+      codice: normalizeText(merged.codice ?? merged.code ?? merged.sigla),
+      descrizione: normalizeText(merged.descrizione ?? merged.description ?? merged.denominazione ?? merged.nome),
     }
   }
 
   const query = normalizeText(value)
   if (!query) return { id: '', codice: '', descrizione: '' }
-  const item = resolveCatalogItem(query, causaliContabili)
+  const item = resolveCatalogItem(query, catalog)
+  if (item) {
+    return {
+      ...item,
+      id: normalizeText(item.id),
+      codice: normalizeText(item.codice ?? item.code ?? item.sigla),
+      descrizione: normalizeText(item.descrizione ?? item.description ?? item.denominazione ?? item.nome),
+    }
+  }
   return {
-    id: normalizeText(item?.id || query),
-    codice: normalizeText(item?.codice ?? item?.code ?? item?.sigla ?? query),
-    descrizione: normalizeText(item?.descrizione ?? item?.description ?? item?.denominazione ?? item?.nome),
+    id: query,
+    codice: query,
+    descrizione: '',
   }
 }
 
@@ -282,8 +296,29 @@ function normalizeIvaData(source = {}, header = {}) {
 
 function normalizePartitarioData(source = {}) {
   const tipoMovimento = normalizePanelText(source.tipoMovimento || source.tipo_movimento || source.operazionePartite || source.operazione_partite)
+  
+  const rawIds = Array.isArray(source.selectedPartitaIds)
+    ? source.selectedPartitaIds
+    : source.selectedPartitaId
+      ? [source.selectedPartitaId]
+      : []
+  const selectedPartitaIds = rawIds.map(x => String(x || '').trim())
+
+  const rawChecked = Array.isArray(source.checkedPartiteIds) ? source.checkedPartiteIds : []
+  const checkedPartiteIds = rawChecked.map(x => String(x || '').trim())
+
+  const importiChiusuraRaw = source.importiChiusura && typeof source.importiChiusura === 'object' ? source.importiChiusura : {}
+  const importiChiusura = {}
+  Object.keys(importiChiusuraRaw).forEach(key => {
+    const val = importiChiusuraRaw[key]
+    importiChiusura[String(key).trim()] = val !== undefined && val !== null ? String(val).trim() : ''
+  })
+
   return {
     selectedPartitaId: normalizePanelText(source.selectedPartitaId || source.selected_partita_id),
+    selectedPartitaIds,
+    checkedPartiteIds,
+    importiChiusura,
     tipoMovimento,
     numeroDocumento: normalizePanelText(source.numeroDocumento || source.numero_documento || source.selectedPartitaNumeroDocumento || source.selected_partita_numero_documento),
     dataDocumento: normalizeDate(source.dataDocumento || source.data_documento || source.selectedPartitaDataDocumento || source.selected_partita_data_documento),

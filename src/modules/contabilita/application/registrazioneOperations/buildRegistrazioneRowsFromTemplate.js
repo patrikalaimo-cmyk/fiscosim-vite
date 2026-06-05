@@ -459,7 +459,19 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   const force = Boolean(options.force)
   const hasTemplate = templateRows.length > 0
   const pristineRows = canAutoApplyTemplateRows(currentRows)
-  const canApply = hasTemplate && (force || pristineRows)
+
+  const isChiusuraPartite =
+    causalePolicy?.gestionePartitario === 'chiusura' ||
+    causalePolicy?.operazionePartite === 'chiude' ||
+    causalePolicy?.operazione_partite === 'chiude'
+
+  const hasExistingAmounts = currentRows.some((row) => {
+    const dare = Number(String(row?.dare ?? row?.importo_dare ?? 0).replace(',', '.')) || 0
+    const avere = Number(String(row?.avere ?? row?.importo_avere ?? 0).replace(',', '.')) || 0
+    return Math.abs(dare) > 0.001 || Math.abs(avere) > 0.001
+  })
+
+  const canApply = hasTemplate && (force || (pristineRows && !(isChiusuraPartite && hasExistingAmounts)))
   const warnings = []
   const reasons = []
 
@@ -604,7 +616,19 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
   const force = Boolean(options.force || source.forceTemplateRows)
   const hasTemplate = templateRows.length > 0
   const pristineRows = canAutoApplyTemplateRows(currentRows)
-  const canApply = hasTemplate && (force || pristineRows)
+
+  const isChiusuraPartite =
+    causalePolicy?.gestionePartitario === 'chiusura' ||
+    causalePolicy?.operazionePartite === 'chiude' ||
+    causalePolicy?.operazione_partite === 'chiude'
+
+  const hasExistingAmounts = currentRows.some((row) => {
+    const dare = Number(String(row?.dare ?? row?.importo_dare ?? 0).replace(',', '.')) || 0
+    const avere = Number(String(row?.avere ?? row?.importo_avere ?? 0).replace(',', '.')) || 0
+    return Math.abs(dare) > 0.001 || Math.abs(avere) > 0.001
+  })
+
+  const canApply = hasTemplate && (force || (pristineRows && !(isChiusuraPartite && hasExistingAmounts)))
   const warnings = Array.isArray(resolvedTemplate?.warnings) ? [...resolvedTemplate.warnings] : []
   const reasons = Array.isArray(resolvedTemplate?.reasons) ? [...resolvedTemplate.reasons] : []
 

@@ -8,6 +8,9 @@ import {
 } from '../../application/registrazioneOperations/resolveRegistrazioneCausali.js'
 import { buildRegistrazioneContropartiList } from '../../application/registrazioneOperations/resolveRegistrazioneControparti.js'
 import { resolveRegistrazioneHeaderCounterpartyDraft } from '../../application/registrazioneOperations/normalizeRegistrazioneInput.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
+import { resolveChiusuraPartiteBehavior } from '../../domain/causali/resolveChiusuraPartiteBehavior.js'
+
 
 function Field({ label, hint = '', span = 1, children, required = false }) {
   return (
@@ -254,6 +257,42 @@ export function RegistrazioneHeaderForm({
   const [draftSoggetto, setDraftSoggetto] = useState(header.cliente_fornitore_nome || header.soggetto || '')
   const setField = (field) => (event) => onChange?.(field, event?.target?.value ?? '')
 
+  const liquidAccounts = useMemo(() => {
+    return (pianoConti || [])
+      .filter(row => row && (row.is_banca || row.is_cassa || String(row.codice || '').trim().startsWith('1.01.01') || /banca|cassa/i.test(row.descrizione || '')))
+      .map(row => ({
+        id: String(row.id || '').trim(),
+        codice: String(row.codice || '').trim(),
+        descrizione: String(row.descrizione || '').trim(),
+        label: resolveContoLabel(row)
+      }))
+  }, [pianoConti])
+
+  const commitBancaCassa = (value) => {
+    const text = String(value ?? '').trim()
+    if (!text) {
+      onChange?.('bancaCassaId', '')
+      onChange?.('bancaCassaNome', '')
+      onChange?.('bancaCassaCodice', '')
+      return
+    }
+
+    const match = (pianoConti || []).find(row => {
+      const label = resolveContoLabel(row)
+      return label === text || String(row.id).trim() === text || String(row.codice).trim() === text
+    })
+
+    if (match) {
+      onChange?.('bancaCassaId', String(match.id).trim())
+      onChange?.('bancaCassaNome', String(match.descrizione).trim())
+      onChange?.('bancaCassaCodice', String(match.codice).trim())
+    } else {
+      onChange?.('bancaCassaId', '')
+      onChange?.('bancaCassaNome', text)
+      onChange?.('bancaCassaCodice', '')
+    }
+  }
+
   const causali = Array.isArray(causaliContabili) ? causaliContabili : []
   const showDocumentPanel = Boolean(config?.showDocumentPanel)
   const requiresSoggetto = Boolean(config?.requiresSoggetto)
@@ -279,6 +318,12 @@ export function RegistrazioneHeaderForm({
   const causaleConfirmedValue = useMemo(() => {
     return selectedCausale || String(header.causaleContabileId || header.causaleContabile || '')
   }, [selectedCausale, header.causaleContabile, header.causaleContabileId])
+
+  const policy = useMemo(() => buildCausaleContabilePolicy(selectedCausale), [selectedCausale])
+  const chiusuraBehavior = useMemo(() => resolveChiusuraPartiteBehavior(policy, header, [], pianoConti), [policy, header, pianoConti])
+  const isChiusura = chiusuraBehavior.isChiusura
+  const isIcpf = chiusuraBehavior.isChiusura
+
 
   const handleCausaleConfirm = useCallback((itemOrText) => {
     if (!itemOrText) {
@@ -341,11 +386,11 @@ export function RegistrazioneHeaderForm({
   const showTotaleDocumento = Boolean(showDocumentPanel)
   const subjectNextKey = focusOrder?.nextByKey?.soggetto || (showTotaleDocumento ? 'totaleDocumento' : 'rowsConto')
 
-  const renderSoggettoField = ({ nextKey, standalone = false, span = 1 } = {}) => (
+  const renderSoggettoField = ({ nextKey, standalone = false, span = 1, required = true } = {}) => (
     <Field
       label={config?.showRitenute ? 'Professionista' : 'Cliente / Fornitore'}
       span={span}
-      required
+      required={required}
       hint="F2 selezione rapida, F3 ricerca libera"
     >
       <input
@@ -422,7 +467,7 @@ export function RegistrazioneHeaderForm({
           />
         </Field>
 
-        {showDocumentPanel ? (
+        {showDocumentPanel && !isIcpf ? (
           <Field label="Data documento" required>
             <input
               type="date"
@@ -437,7 +482,7 @@ export function RegistrazioneHeaderForm({
           </Field>
         ) : null}
 
-        {showDocumentPanel ? (
+        {showDocumentPanel && !isIcpf ? (
           <Field label="Numero documento" required>
             <input
               value={header.numeroDocumento || ''}
@@ -452,9 +497,48 @@ export function RegistrazioneHeaderForm({
           </Field>
         ) : null}
 
-        {showSoggettoField ? renderSoggettoField({ nextKey: subjectNextKey, standalone: !showDocumentPanel }) : null}
+        {showSoggettoField ? renderSoggettoField({ nextKey: isIcpf ? 'bancaCassa' : subjectNextKey, standalone: !showDocumentPanel, required: !isIcpf }) : null}
 
-        {showTotaleDocumento ? (
+        {isIcpf ? (
+          <Field label="Banca / Cassa" required={false}>
+            <input
+              value={header.bancaCassaNome || ''}
+              onChange={(e) => commitBancaCassa(e.target.value)}
+              onBlur={(e) => commitBancaCassa(e.target.value)}
+              disabled={disabled}
+              placeholder="Seleziona conto banca o cassa"
+              style={REG_INPUT_STYLE}
+              list="registrazione-bancacassa"
+              data-reg-focusable="true"
+              data-reg-key="bancaCassa"
+              data-reg-next="importo"
+            />
+            <datalist id="registrazione-bancacassa">
+              {liquidAccounts.map((item) => (
+                <option key={item.id} value={item.label}>
+                  {item.label}
+                </option>
+              ))}
+            </datalist>
+          </Field>
+        ) : null}
+
+        {isIcpf ? (
+          <Field label="Importo movimento" required={false}>
+            <input
+              value={header.importo || ''}
+              onChange={(e) => onChange?.('importo', e.target.value)}
+              disabled={disabled}
+              placeholder={formatMoney(0)}
+              style={REG_INPUT_STYLE}
+              data-reg-focusable="true"
+              data-reg-key="importo"
+              data-reg-next="rowsConto"
+            />
+          </Field>
+        ) : null}
+
+        {showTotaleDocumento && !isIcpf ? (
           <Field label="Totale documento" required>
             <input
               value={header.totaleDocumento || ''}

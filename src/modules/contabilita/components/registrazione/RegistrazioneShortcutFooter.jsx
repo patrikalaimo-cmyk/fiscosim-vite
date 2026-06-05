@@ -28,7 +28,7 @@ export function RegistrazioneShortcutFooter() {
           <Shortcut keyLabel="F3" label="Ricerca conto" />
           <Shortcut keyLabel="F8" label="Ricalcola residuo" />
           <Shortcut keyLabel="F9" label="Partite" />
-          <Shortcut keyLabel="F12" label="Salva registrazione" />
+          <Shortcut keyLabel="F10" label="Salva registrazione" />
           <Shortcut keyLabel="ESC" label="Annulla / Esci" />
         </div>
         <div style={{ marginTop: '.35rem', fontSize: '.62rem', color: 'rgba(188,204,226,.68)' }}>

@@ -287,4 +287,97 @@ export function findRegistrazioneContoExactMatch(conti = [], input = '') {
   }) || null
 }
 
+export function resolveSubjectAccount(selected, pianoConti = []) {
+  if (!selected || typeof selected !== 'object') return null
+
+  const getSafeId = (val) => {
+    if (val === undefined || val === null) return ''
+    const s = String(val).trim()
+    return s.toLowerCase() !== 'undefined' && s.toLowerCase() !== 'null' ? s : ''
+  }
+
+  // 1. Gather all potential IDs from different aliases
+  const potentialIds = [
+    getSafeId(selected.conto_id),
+    getSafeId(selected.contoId),
+    getSafeId(selected.clienteFornitoreId),
+    getSafeId(selected.cliente_fornitore_id),
+    getSafeId(selected.soggettoId),
+    getSafeId(selected.soggetto_id),
+    getSafeId(selected.accountId),
+    getSafeId(selected.contoPatrimonialeId),
+    getSafeId(selected.conto_patrimoniale_id),
+    getSafeId(selected.id),
+    getSafeId(selected.value),
+    // Nested objects
+    selected.clienteFornitore && typeof selected.clienteFornitore === 'object' ? getSafeId(selected.clienteFornitore.id || selected.clienteFornitore.value) : '',
+    selected.conto && typeof selected.conto === 'object' ? getSafeId(selected.conto.id || selected.conto.value) : '',
+    selected.account && typeof selected.account === 'object' ? getSafeId(selected.account.id || selected.account.value) : '',
+    selected.soggetto_conto && typeof selected.soggetto_conto === 'object' ? getSafeId(selected.soggetto_conto.id || selected.soggetto_conto.value) : '',
+    selected.contoPatrimoniale && typeof selected.contoPatrimoniale === 'object' ? getSafeId(selected.contoPatrimoniale.id || selected.contoPatrimoniale.value) : ''
+  ].filter(Boolean)
+
+  // 2. Try to find the account in pianoConti by ID
+  let matchedAccount = null
+  for (const id of potentialIds) {
+    matchedAccount = pianoConti.find(c => String(c.id).trim() === id)
+    if (matchedAccount) break
+  }
+
+  // 3. If not found by ID, check potential objects that might be resolved accounts themselves
+  if (!matchedAccount) {
+    const potentialObjects = [
+      selected.conto,
+      selected.account,
+      selected.clienteFornitore,
+      selected.soggetto_conto,
+      selected.contoPatrimoniale,
+      selected
+    ]
+    for (const obj of potentialObjects) {
+      if (obj && typeof obj === 'object') {
+        const code = String(obj.codice || obj.code || obj.sigla || '').trim()
+        const name = String(obj.nome || obj.descrizione || obj.description || obj.denominazione || '').trim()
+        if (code && name) {
+          const matchedByCode = pianoConti.find(c => String(c.codice).trim() === code)
+          if (matchedByCode) {
+            matchedAccount = matchedByCode
+            break
+          }
+          matchedAccount = {
+            id: getSafeId(obj.id || obj.value),
+            codice: code,
+            descrizione: name,
+            is_cliente: Boolean(obj.is_cliente || obj.isCliente),
+            is_fornitore: Boolean(obj.is_fornitore || obj.isFornitore || obj.is_professionista || obj.isProfessionista)
+          }
+          break
+        }
+      }
+    }
+  }
+
+  // 4. Fallback search by text/soggetto
+  if (!matchedAccount) {
+    const textQuery = String(
+      selected.soggetto ||
+      selected.clienteFornitoreNome ||
+      selected.cliente_fornitore_nome ||
+      ''
+    ).trim()
+
+    if (textQuery) {
+      matchedAccount = pianoConti.find(c => {
+        const label = String(c.descrizione || c.nome || '').trim().toLowerCase()
+        const code = String(c.codice || '').trim().toLowerCase()
+        const matchText = textQuery.toLowerCase()
+        return label === matchText || code === matchText
+      })
+    }
+  }
+
+  return matchedAccount
+}
+
 export { resolveContoHierarchyView } from '../../domain/piano_conti/resolveContoHierarchyView.js'
+
