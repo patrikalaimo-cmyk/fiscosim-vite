@@ -1,4 +1,5 @@
 import { normalizeText, round2 } from '../canonical_mapper/utils.js'
+import { resolvePartitaImportoResiduo } from './resolvePartitaImportoResiduo.js'
 
 function toAmount(value) {
   const text = normalizeText(value).replace(',', '.')
@@ -19,7 +20,7 @@ export function calculateRegistrazionePartitarioSelection({ partite = [], select
     }
   }
 
-  const saldoResiduo = toAmount(selected.saldoResiduo ?? selected.saldo_residuo ?? selected.importo_residuo ?? selected.residuo ?? selected.saldo ?? 0)
+  const saldoResiduo = toAmount(resolvePartitaImportoResiduo(selected, 0))
   const suggestedImportoChiusura = importoChiusura === '' || importoChiusura == null ? Math.abs(saldoResiduo) : toAmount(importoChiusura)
   const segnoChiusura = saldoResiduo < 0 ? 'D' : 'A'
 

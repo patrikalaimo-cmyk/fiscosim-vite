@@ -34,18 +34,28 @@ export function aggregateRegistriIvaRows(rows) {
   let iva_debito = 0
   let iva_credito = 0
   const list = Array.isArray(rows) ? rows : []
+  let righeConsiderateCount = 0
+
   for (const r of list) {
+    const esig = String(r?.esigibilita || '').trim().toLowerCase()
+    if (esig === 'differita') {
+      continue
+    }
+
     const tipo = String(r?.tipo || '').toLowerCase()
     if (tipo === 'vendita') {
       iva_debito += toNum(r?.iva)
+      righeConsiderateCount++
     } else if (tipo === 'acquisto') {
       iva_credito += toNum(r?.iva_detraibile)
+      righeConsiderateCount++
     }
   }
+
   iva_debito = round2(iva_debito)
   iva_credito = round2(iva_credito)
   const saldo = round2(iva_debito - iva_credito)
-  return { iva_debito, iva_credito, saldo, righe_considerate: list.length }
+  return { iva_debito, iva_credito, saldo, righe_considerate: righeConsiderateCount }
 }
 
 export function buildLiquidazionePayload({ periodicita, anno, mese = null, trimestre = null, agg, note }) {

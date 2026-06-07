@@ -2,6 +2,7 @@ import { normalizeText, round2 } from '../canonical_mapper/utils.js'
 import { normalizeRegistrazioneIvaRows } from './normalizeRegistrazioneIvaRows.js'
 import { calculateRegistrazioneIvaRow } from './calculateRegistrazioneIvaRow.js'
 import { resolveRegistrazioneCausaleIvaBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleIvaBehavior.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 
 function resolveMeaningfulText(value, fallback = '') {
   const normalized = normalizeText(value)
@@ -188,6 +189,7 @@ export function buildRegistrazioneIvaRows({
     const residualAfterRow = round2(Math.max(0, documentTotal - round2(runningTotal + calc.totale)))
     const label = buildCausaleLabel(fallbackCandidate) || row.causaleIvaLabel || row.causaleIvaQuery || 'da selezionare'
 
+    const policy = buildCausaleContabilePolicy(causaleContabile)
     const nextRow = {
       ...row,
       id: row.id || `iva-row-${index + 1}`,
@@ -234,6 +236,9 @@ export function buildRegistrazioneIvaRows({
       manualEdited: Boolean(row.manualEdited),
       lastEditedField: normalizeText(row.lastEditedField),
       attiva: row.attiva !== false,
+      esigibilita: row.esigibilita || (policy.ivaPerCassa ? 'differita' : 'immediata'),
+      origin_registro_iva_id: row.origin_registro_iva_id || row.originRegistroIvaId || null,
+      ivaPerCassa: Boolean(row.ivaPerCassa || policy.ivaPerCassa),
     }
 
     generatedRows.push(nextRow)

@@ -3,6 +3,7 @@ import { calculatePrimaNotaDraftTotals } from './canonical_mapper/calculatePrima
 import { normalizeText, round2 } from './canonical_mapper/utils.js'
 import { mapRegistrazioneManualeToCanonical } from '../canonical/mappers/mapRegistrazioneManualeToCanonical.js'
 import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleContabilePolicy.js'
+import { handleIvaPerCassaRelease } from './registrazioneOperations/ivaPerCassaRelease.js'
 
 
 function normalizeDbText(value) {
@@ -223,6 +224,16 @@ export function buildPersistenceValidation(resolved = {}) {
   }
   if (Array.isArray(validation?.warnings)) warnings.push(...validation.warnings)
 
+  const ivaPerCassaPreview = innerDraft?.partitarioDraft?.ivaPerCassaPreview
+  if (ivaPerCassaPreview?.active) {
+    const previewItems = Array.isArray(ivaPerCassaPreview.items) ? ivaPerCassaPreview.items : []
+    previewItems.forEach((item) => {
+      if (!item?.coerente) {
+        blockers.push(`partita ${item?.partitaId || 'IVA per cassa'}: rilascio IVA non coerente al centesimo`)
+      }
+    })
+  }
+
   return {
     status: blockers.length ? 'blocked' : (warnings.length ? 'warning' : 'ok'),
     blockers: Array.from(new Set(blockers)),
@@ -283,6 +294,12 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
     }
   }
 
+  const esigibilita = ['immediata', 'differita', 'rilascio'].includes(String(row.esigibilita || ivaDraft?.esigibilita || '').trim().toLowerCase())
+    ? String(row.esigibilita || ivaDraft.esigibilita).trim().toLowerCase()
+    : 'immediata'
+
+  const origin_registro_iva_id = normalizeDbText(row.origin_registro_iva_id || row.originRegistroIvaId) || null
+
   return {
     documento_id: pnPayload.numero_documento || 'manual-reg-doc',
     riga_idx: index,
@@ -300,6 +317,8 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
     numero_documento: pnPayload.numero_documento || null,
     data_documento: pnPayload.data_documento || null,
     soggetto_denominazione: pnPayload.cliente_fornitore_nome || null,
+    esigibilita,
+    origin_registro_iva_id,
   }
 }
 
@@ -333,10 +352,22 @@ function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
   const baseAmount = Math.abs(imp)
   const finalAmount = baseAmount * sign
 
+  const iva_per_cassa = Boolean(row.iva_per_cassa ?? row.ivaPerCassa ?? policy.ivaPerCassa ?? false)
+
+  // Resolve account details from pianoConti to populate missing DB columns
+  const pianoConti = resolvedDraft.innerDraft?.pianoConti || resolvedDraft.bundle?.pianoConti || []
+  const subjectId = row.soggettoId || pnPayload.cliente_fornitore_id || null
+  const subjectAccount = Array.isArray(pianoConti)
+    ? pianoConti.find(c => String(c.id).trim() === String(subjectId || '').trim())
+    : null
+
+  const contoCodice = subjectAccount?.codice || row.conto_codice || null
+  const contoDescrizione = subjectAccount?.descrizione || subjectAccount?.nome || row.conto_descrizione || pnPayload.cliente_fornitore_nome || row.soggettoNome || null
+
   return {
     societa_id: pnPayload.societa_id || null,
     tipo: subjectTipo,
-    conto_id: row.soggettoId || pnPayload.cliente_fornitore_id || null,
+    conto_id: subjectId,
     numero_documento: row.numeroDocumento || pnPayload.numero_registrazione || null,
     data_documento: row.dataDocumento || pnPayload.data_documento || null,
     data_scadenza: row.dataScadenza || row.dataDocumento || pnPayload.data_documento || null,
@@ -344,7 +375,13 @@ function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
     importo_pagato: 0,
     importo_residuo: finalAmount,
     stato: 'aperta',
-    tipo_movimento: 'apertura'
+    tipo_movimento: 'apertura',
+    iva_per_cassa,
+    controparte_id: subjectId,
+    controparte_nome: contoDescrizione,
+    conto_codice: contoCodice,
+    conto_descrizione: contoDescrizione,
+    causale_id: pnPayload.causale_id || null
   }
 }
 
@@ -458,7 +495,7 @@ export async function persistPrimaNotaDraft({
     : []
 
   const ivaEnabled = Boolean(resolved.ivaDraft?.active || resolved.innerDraft?.meta?.behavior?.showIvaPanel)
-  const vatEntriesForDb = ivaEnabled && Array.isArray(resolved.ivaRows)
+  let vatEntriesForDb = ivaEnabled && Array.isArray(resolved.ivaRows)
     ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
     : []
 
@@ -503,6 +540,21 @@ export async function persistPrimaNotaDraft({
         })
         .filter(Boolean)
     : []
+
+  const closures = partMode === 'chiusura'
+    ? partRows.filter(row => row.selected && Math.abs(normalizeDbAmount(row.importoChiusura || row.importo_chiuso || 0)) > 0.001)
+    : []
+
+  if (partMode === 'chiusura' && closures.length > 0) {
+    const releaseRows = await handleIvaPerCassaRelease(db, closures, pnPayloadForDb)
+    if (releaseRows && releaseRows.length > 0) {
+      const baseIdx = vatEntriesForDb.length
+      releaseRows.forEach((r, idx) => {
+        r.riga_idx = baseIdx + idx
+      })
+      vatEntriesForDb = [...vatEntriesForDb, ...releaseRows]
+    }
+  }
 
   const ritenuteDraft = resolved.innerDraft?.ritenutaDraft || resolved.bundle?.ritenutaDraft || resolved.innerDraft?.ritenutaData || null
   const ritenutaEnabled = Boolean(ritenuteDraft?.active && ritenuteDraft?.mode === 'pagamento')

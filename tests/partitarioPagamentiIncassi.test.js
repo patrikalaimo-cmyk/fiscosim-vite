@@ -828,6 +828,81 @@ test('17. Chiusura parziale modifica solo importo chiusura, non saldo originale'
   assert.equal(result.totals.importoChiusura, 500.00)
 })
 
+test('partita gia pagata usa importo_residuo DB come saldo e default chiusura', () => {
+  const openItems = [{
+    id: 'ffpc-1540',
+    numero_documento: 'FFPC-1',
+    importo_originale: 1540,
+    importo_pagato: 1000,
+    importo_residuo: 540,
+    saldo_residuo: 1540,
+    iva_per_cassa: true,
+  }]
+  const result = buildRegistrazionePartitarioDraft(
+    {
+      openItems,
+      partitarioData: {
+        selectedPartitaIds: ['ffpc-1540'],
+        importiChiusura: {},
+      },
+    },
+    { behavior: { showPartitario: true, partitarioMode: 'chiusura' } }
+  )
+
+  assert.equal(result.rows[0].importoOriginario, 1540)
+  assert.equal(result.rows[0].importoPagato, 1000)
+  assert.equal(result.rows[0].residuo, 540)
+  assert.equal(result.rows[0].importoChiusura, 540)
+  assert.equal(result.totals.saldoResiduo, 540)
+  assert.equal(result.totals.importoChiusura, 540)
+})
+
+test('partita ordinaria gia pagata usa importo_residuo senza dipendere da IVA per cassa', () => {
+  const result = buildRegistrazionePartitarioDraft(
+    {
+      openItems: [{
+        id: 'ff-1540',
+        importo_originale: 1540,
+        importo_pagato: 1000,
+        importo_residuo: 540,
+        saldo_residuo: 1540,
+        iva_per_cassa: false,
+      }],
+      partitarioData: {
+        selectedPartitaIds: ['ff-1540'],
+        importiChiusura: {},
+      },
+    },
+    { behavior: { showPartitario: true, partitarioMode: 'chiusura' } }
+  )
+
+  assert.equal(result.rows[0].residuo, 540)
+  assert.equal(result.rows[0].importoChiusura, 540)
+  assert.equal(result.rows[0].iva_per_cassa, false)
+})
+
+test('partita mai pagata mantiene residuo e default uguali all originario', () => {
+  const result = buildRegistrazionePartitarioDraft(
+    {
+      openItems: [{
+        id: 'ff-nuova',
+        importo_originale: 1540,
+        importo_pagato: 0,
+        importo_residuo: 1540,
+      }],
+      partitarioData: {
+        selectedPartitaIds: ['ff-nuova'],
+        importiChiusura: {},
+      },
+    },
+    { behavior: { showPartitario: true, partitarioMode: 'chiusura' } }
+  )
+
+  assert.equal(result.rows[0].importoOriginario, 1540)
+  assert.equal(result.rows[0].residuo, 1540)
+  assert.equal(result.rows[0].importoChiusura, 1540)
+})
+
 test('18. Blocco se nessuna partita selezionata per la chiusura', () => {
   const openItems = [
     { id: 'fc-1600', numero_documento: 'F-12', data_documento: '2026-06-03', tipo_documento: 'FT', saldo_residuo: 1600.00 }
@@ -1560,7 +1635,6 @@ test('51. KPI Differenza partitario/PN con modifica manuale dell operatore (scen
   const diff6 = Math.abs(Math.abs(nettoPartitario6) - Math.abs(subjectAmt6))
   assert.equal(diff6, 70, 'La differenza partitario/PN deve essere 70')
 })
-
 
 
 

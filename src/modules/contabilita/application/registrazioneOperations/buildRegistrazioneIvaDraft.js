@@ -3,6 +3,7 @@ import { validateRegistrazioneIvaDraft } from './validateRegistrazioneIvaDraft.j
 import { resolveRegistrazioneCausaleIvaBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleIvaBehavior.js'
 import { buildRegistrazioneIvaRows } from './buildRegistrazioneIvaRows.js'
 import { normalizeRegistrazioneIvaRows } from './normalizeRegistrazioneIvaRows.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 
 function resolveMeaningfulText(value, fallback = '') {
   const normalized = normalizeText(value)
@@ -186,6 +187,8 @@ export function buildRegistrazioneIvaDraft(input = {}, options = {}) {
   const natura = normalizeText(firstRow.natura || ivaData.naturaIva || ivaData.natura_iva || effectiveResolver.natura)
   const aliquota = Number.isFinite(Number(firstRow.aliquota)) && Number(firstRow.aliquota) > 0 ? Number(firstRow.aliquota) : effectiveResolver.aliquota
 
+  const ccSource = options?.causaleContabile || behavior || input?.causaleContabile || null
+  const policy = buildCausaleContabilePolicy(ccSource)
   const draft = {
     active,
     causaleIvaId: selectedCausaleIvaId,
@@ -228,6 +231,8 @@ export function buildRegistrazioneIvaDraft(input = {}, options = {}) {
     warningSource: rowsResult.source || effectiveResolver.source,
     warnings: Array.from(new Set([...(rowsResult.warnings || []), ...(effectiveResolver.warnings || [])])),
     reasons: Array.from(new Set([...(rowsResult.reasons || []), ...(effectiveResolver.reasons || [])])),
+    esigibilita: ivaData.esigibilita || (policy.ivaPerCassa ? 'differita' : 'immediata'),
+    ivaPerCassa: Boolean(ivaData.ivaPerCassa || policy.ivaPerCassa),
   }
 
   const validation = validateRegistrazioneIvaDraft({ header, ivaData: draft, behavior, documentData }, options)

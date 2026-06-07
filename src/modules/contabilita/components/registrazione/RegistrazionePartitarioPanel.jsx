@@ -289,15 +289,17 @@ export function RegistrazionePartitarioPanel({
   }, [partitarioData?.checkedPartiteIds, partitarioData?.selectedPartitaIds, draft?.selectedPartitaIds])
 
   const list = listRaw.map(row => {
-    const rowResiduo = row.residuo !== undefined && row.residuo !== null
-      ? row.residuo
-      : (row.saldoResiduo !== undefined && row.saldoResiduo !== null
-          ? row.saldoResiduo
-          : (row.saldo_residuo !== undefined && row.saldo_residuo !== null
-              ? row.saldo_residuo
-              : (row.importo_residuo !== undefined && row.importo_residuo !== null
-                  ? row.importo_residuo
-                  : (row.saldo !== undefined && row.saldo !== null ? row.saldo : null))))
+    const rowResiduo = row.importo_residuo !== undefined && row.importo_residuo !== null
+      ? row.importo_residuo
+      : (row.importoResiduo !== undefined && row.importoResiduo !== null
+          ? row.importoResiduo
+          : (row.residuo !== undefined && row.residuo !== null
+              ? row.residuo
+              : (row.saldoResiduo !== undefined && row.saldoResiduo !== null
+                  ? row.saldoResiduo
+                  : (row.saldo_residuo !== undefined && row.saldo_residuo !== null
+                      ? row.saldo_residuo
+                      : (row.saldo !== undefined && row.saldo !== null ? row.saldo : null)))))
     
     const importoOriginario = row.importoOriginario !== undefined && row.importoOriginario !== null
       ? row.importoOriginario

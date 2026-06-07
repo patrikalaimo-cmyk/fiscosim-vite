@@ -2,6 +2,9 @@ import { normalizeText, round2 } from '../canonical_mapper/utils.js'
 import { calculateRegistrazionePartitarioSelection } from './calculateRegistrazionePartitarioSelection.js'
 import { validateRegistrazionePartitarioDraft } from './validateRegistrazionePartitarioDraft.js'
 import { resolvePartitaSoggettoId } from './resolvePartitaSoggettoId.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
+import { calculateIvaPerCassaPreviewRelease } from './calculateIvaPerCassaPreviewRelease.js'
+import { resolvePartitaImportoResiduo } from './resolvePartitaImportoResiduo.js'
 
 
 function toAmount(value) {
@@ -65,6 +68,7 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
   const selectedControparteId = normalizeText(header.clienteFornitoreId || header.cliente_fornitore_id)
   const selectedControparteNome = normalizeText(header.clienteFornitoreNome || header.cliente_fornitore_nome || header.soggetto)
   const tipoMovimento = resolvePartitarioMode(behavior, currentPartitarioDraft)
+  const policy = buildCausaleContabilePolicy(input?.selectedCausale || options?.selectedCausale || behavior)
   const isApertura = tipoMovimento === 'apertura'
   const isChiusura = tipoMovimento === 'chiusura'
   const totaleDocumento = toAmount(documentData.totaleDocumento || header.totaleDocumento)
@@ -108,7 +112,7 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
   const openItemsMapped = isApertura
     ? []
     : openItems.map((item, index) => {
-        const rawResiduo = item?.saldoResiduo ?? item?.saldo_residuo ?? item?.importo_residuo ?? item?.residuo ?? item?.saldo
+        const rawResiduo = resolvePartitaImportoResiduo(item)
         const rowResiduo = rawResiduo !== undefined && rawResiduo !== null ? toAmount(rawResiduo) : null
         
         const rawOriginale = item?.importoOrigine ?? item?.importo_origine ?? item?.importo_originale ?? item?.totale
@@ -151,8 +155,9 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
         const itemAccount = Array.isArray(options?.pianoConti)
           ? options.pianoConti.find((pc) => String(pc?.id || '').trim() === String(itemSoggettoId || '').trim())
           : null
-        const itemSoggettoNome = itemAccount?.nome || item?.soggettoNome || item?.soggetto_nome || selectedControparteNome
-        const itemSoggettoTipo = itemAccount?.is_cliente ? 'cliente' : (itemAccount?.is_fornitore || itemAccount?.is_professionista) ? 'fornitore' : (item?.soggettoTipo || item?.soggetto_tipo || '')
+        const itemSoggettoNome = itemAccount?.descrizione || itemAccount?.nome || itemAccount?.denominazione || item?.controparte_nome || item?.soggettoNome || item?.soggetto_nome || selectedControparteNome || '—'
+        const itemSoggettoTipo = itemAccount?.is_cliente ? 'cliente' : (itemAccount?.is_fornitore || itemAccount?.is_professionista) ? 'fornitore' : (item?.soggettoTipo || item?.soggetto_tipo || item?.tipo || '')
+        const iva_per_cassa = Boolean(item?.iva_per_cassa || item?.ivaPerCassa)
 
         return {
           id: item?.id || `partita-${index + 1}`,
@@ -174,6 +179,9 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
           segno: item?.segno || inferSign('chiusura', rowResiduo || 0),
           stato: normalizeText(item?.stato || 'aperta'),
           selected: isSelected,
+          iva_per_cassa,
+          ivaPerCassa: iva_per_cassa,
+          prima_nota_id: item?.prima_nota_id || item?.primaNotaId || null,
         }
       })
 
@@ -260,11 +268,25 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
             segno: aperturaSegno,
             stato,
             source: 'document_data',
+            iva_per_cassa: Boolean(policy.ivaPerCassa),
           },
         ]
       : openItemsMapped,
     manualImportoApertoOverride: manualOpenOverride,
     manualImportoChiusuraOverride: manualCloseOverride,
+    iva_per_cassa: Boolean(policy.ivaPerCassa),
+  }
+
+  const ivaPerCassaPreviewActive = Boolean(policy.ivaPerCassa && policy.isPagamentoIncasso && isChiusura)
+  draft.ivaPerCassaPreview = {
+    active: ivaPerCassaPreviewActive,
+    items: ivaPerCassaPreviewActive
+      ? calculateIvaPerCassaPreviewRelease({
+          partitarioRows: draft.rows,
+          originalVatRows: options?.ivaPerCassaOriginalVatRows || [],
+          releasedVatRows: options?.ivaPerCassaReleasedVatRows || [],
+        })
+      : [],
   }
 
   const validation = validateRegistrazionePartitarioDraft({ header, documentData, partitarioData: draft, behavior }, { ...options, openItems })

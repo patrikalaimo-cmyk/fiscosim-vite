@@ -15,6 +15,7 @@ function resolveDefaultTabs(behavior = {}) {
 export function buildRegistrazioneManualeUiPolicy(behavior = {}) {
   const showDocumentPanel = Boolean(behavior?.showDocumentPanel)
   const showIvaPanel = Boolean(behavior?.showIvaPanel)
+  const showIvaPerCassaPreview = Boolean(behavior?.showIvaPerCassaPreview)
   const showPartitario = Boolean(behavior?.showPartitario)
   const showRitenute = Boolean(behavior?.showRitenute)
 
@@ -24,7 +25,11 @@ export function buildRegistrazioneManualeUiPolicy(behavior = {}) {
   const requiresDocumentTotal = Boolean(showDocumentPanel || behavior?.requiresDocumentTotal)
   const requiresRitenuteData = Boolean(showRitenute || behavior?.requiresRitenuteData)
 
-  const activeTabs = normalizeTabs(resolveDefaultTabs({ showIvaPanel, showPartitario, showRitenute }))
+  const activeTabs = normalizeTabs(
+    Array.isArray(behavior?.activeTabs)
+      ? behavior.activeTabs
+      : resolveDefaultTabs({ showIvaPanel, showPartitario, showRitenute })
+  )
 
   const requiredFields = Array.from(
     new Set([
@@ -39,6 +44,7 @@ export function buildRegistrazioneManualeUiPolicy(behavior = {}) {
     ...behavior,
     showDocumentPanel,
     showIvaPanel,
+    showIvaPerCassaPreview,
     showPartitario,
     showRitenute,
     requiresSoggetto,

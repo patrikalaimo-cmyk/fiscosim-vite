@@ -8,6 +8,7 @@ import { normalizeRegistrazioneRigheTemplate } from '../../domain/registrazione/
 import { buildRegistrazioneRowsFromTemplateResolved } from './buildRegistrazioneRowsFromTemplate.js'
 import { buildCausaleStructureHistory } from './buildCausaleStructureHistory.js'
 import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/resolveRegistrazioneRigheTemplate.js'
+import { buildIvaPerCassaGirocontoRows } from './buildIvaPerCassaGirocontoRows.js'
 
 function buildRegistrazioneDocumentDraft(normalized = {}, behavior = {}) {
   const documentData = normalized?.documentData || {}
@@ -143,22 +144,35 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     }
     return hasConto || hasAmount || (!isPlaceholderDesc && desc);
   });
-  const normalizedForDraft = {
+  const preliminaryNormalizedForDraft = {
     ...normalized,
     rows: filteredRows,
   };
-  const totals = calculateRegistrazioneTotals(normalizedForDraft.rows)
-  const documentDraft = buildRegistrazioneDocumentDraft(normalizedForDraft, behavior)
   const partitarioDraft = buildRegistrazionePartitarioDraft({
-    header: normalizedForDraft.header,
-    documentData: normalizedForDraft.documentData,
+    header: preliminaryNormalizedForDraft.header,
+    documentData: preliminaryNormalizedForDraft.documentData,
     partite: Array.isArray(options?.partite) ? options.partite : Array.isArray(options?.partiteAperte) ? options.partiteAperte : [],
     openItems: Array.isArray(options?.partite) ? options.partite : Array.isArray(options?.partiteAperte) ? options.partiteAperte : [],
-    partitarioData: normalizedForDraft.partitarioData,
-    currentPartitarioDraft: normalizedForDraft.partitarioData,
+    partitarioData: preliminaryNormalizedForDraft.partitarioData,
+    currentPartitarioDraft: preliminaryNormalizedForDraft.partitarioData,
     pianoConti: Array.isArray(options?.pianoConti) ? options.pianoConti : [],
     selectedCausale: templateSource,
   }, { behavior, ...options })
+  const ivaPerCassaGiroconto = buildIvaPerCassaGirocontoRows({
+    rows: preliminaryNormalizedForDraft.rows,
+    causale: templateSource,
+    behavior,
+    header: preliminaryNormalizedForDraft.header,
+    partitarioPreview: partitarioDraft.ivaPerCassaPreview,
+    causaliIva: Array.isArray(options?.causaliIva) ? options.causaliIva : [],
+    pianoConti: Array.isArray(options?.pianoConti) ? options.pianoConti : [],
+  })
+  const normalizedForDraft = {
+    ...preliminaryNormalizedForDraft,
+    rows: ivaPerCassaGiroconto.rows,
+  }
+  const totals = calculateRegistrazioneTotals(normalizedForDraft.rows)
+  const documentDraft = buildRegistrazioneDocumentDraft(normalizedForDraft, behavior)
   const ritenutaDraft = buildRegistrazioneRitenutaDraft(
     {
       header: normalizedForDraft.header,
@@ -172,7 +186,7 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     },
     { behavior, causaleRitenutaDefaults: options?.causaleRitenutaDefaults || {}, ...options }
   )
-  const validation = validateRegistrazioneDraft(
+  const baseValidation = validateRegistrazioneDraft(
     {
       header: normalizedForDraft.header,
       rows: normalizedForDraft.rows,
@@ -184,6 +198,14 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     },
     { ...options, behavior, documentDraft, ivaDraft, partitarioDraft, ritenutaDraft }
   )
+  const girocontoBlockers = Array.isArray(ivaPerCassaGiroconto.blockers) ? ivaPerCassaGiroconto.blockers : []
+  const validation = girocontoBlockers.length
+    ? {
+        ...baseValidation,
+        status: 'blocked',
+        blockers: Array.from(new Set([...(baseValidation.blockers || []), ...girocontoBlockers])),
+      }
+    : baseValidation
   const readiness = validation.status === 'ok' ? 'pronto_per_contabilita' : 'incompleto'
 
   const draft = {
@@ -224,6 +246,12 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
         warnings: Array.isArray(templateRowsDraft.warnings) ? templateRowsDraft.warnings : [],
         reasons: Array.isArray(templateRowsDraft.reasons) ? templateRowsDraft.reasons : [],
       },
+      ivaPerCassaGiroconto: {
+        active: Boolean(ivaPerCassaGiroconto.active),
+        direction: ivaPerCassaGiroconto.direction || '',
+        totalRelease: ivaPerCassaGiroconto.totalRelease || 0,
+        blockers: girocontoBlockers,
+      },
       panelStatus: {
         document: documentDraft.status || 'ok',
         iva: ivaDraft.status || 'idle',
@@ -249,5 +277,9 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     readiness,
     draft,
     templateRowsDraft,
+    documentDraft,
+    ivaDraft,
+    partitarioDraft,
+    ritenutaDraft,
   }
 }

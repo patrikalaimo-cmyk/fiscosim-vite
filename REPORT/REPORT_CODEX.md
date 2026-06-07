@@ -3254,5 +3254,487 @@ Si suggeriscono i seguenti interventi mirati da pianificare in fasi successive (
    - *Rischio regressione:* Basso.
    - *Priorità:* **Media** (garantisce l'assoluta transazionalità contabile ACID ed evita record orfani in caso di instabilità client).
 
+---
 
+## IVA-PER-CASSA-SCHEMA-BASE-NON-ESEGUITO (05/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `fb43f15` (Messaggio: `checkpoint: registrazione manuale partitario chiusura stabile`)
+4. **File creati:**
+   - `supabase/migrations/20260606100000_iva_per_cassa_schema.sql`
+   - `tests/ivaPerCassaSchemaMapping.test.js`
+5. **File modificati:**
+   - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+   - `src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`
+   - `tests/manualeIvaOrdinaria.test.js`
+   - `tests/partitarioDocumentiIva.test.js`
+   - `REPORT/REPORT_CODEX.md`
+6. **Conferma esecuzione migration:** La migration `20260606100000_iva_per_cassa_schema.sql` è stata solo creata in locale e **NON eseguita**.
+7. **Conferma modifiche DB:** Nessun database locale o remoto (Supabase) è stato modificato in alcun modo.
+8. **Supporto mapping attuale:**
+   - Il mapper canonical allinea correttamente `esigibilita` (con fallback a `'immediata'`), `origin_registro_iva_id` (default `null`) e `ivaPerCassa` (boolean).
+   - Il persistente mappa e prepara i payload per il salvataggio a DB dei nuovi campi `esigibilita`, `origin_registro_iva_id` su `registri_iva` e `iva_per_cassa` su `partitario`.
+9. **Test aggiunti:**
+   - `tests/ivaPerCassaSchemaMapping.test.js` (8 test unitari su defaults di `esigibilita`, mantenimento `'differita'` e `'rilascio'`, normalizzazione valori non validi, defaults e passaggio del flag `iva_per_cassa` sul partitario e controlli regressione).
+10. **Build/Test eseguiti:**
+    - Test runner: `node --test tests/ivaPerCassaSchemaMapping.test.js tests/manualeIvaOrdinaria.test.js tests/partitarioDocumentiIva.test.js tests/partitarioPagamentiIncassi.test.js tests/causaliPolicyEngine.test.js tests/persistPrimaNotaDraft.test.js tests/canonicalAccountingValidation.test.js` (145/145 superati con successo).
+    - Build: `npm run build` (Completato con successo, 386 moduli trasformati).
+11. **Rischi residui:** Nullo o bassissimo, i test di regressione garantiscono che il flusso standard non subisca deviazioni e l'IVA per cassa è abilitata in modo retrocompatibile tramite default condizionali.
+12. **Prossimo step consigliato:** Procedere con la fase successiva che prevede la registrazione dei documenti IVA per cassa e l'apertura delle relative partite.
+
+---
+
+## IVA-PER-CASSA-MIGRATION-DB-TEST-APPLICATA (05/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `fb43f15` (Messaggio: `checkpoint: registrazione manuale partitario chiusura stabile`)
+4. **Conferma DB target:** Supabase sviluppo/test (`https://mlydfspmrkaedsocubku.supabase.co`)
+5. **File migration usato:** `supabase/migrations/20260606100000_iva_per_cassa_schema.sql` (reso preventivamente idempotente tramite blocchi Postgres `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN NULL; END $$;`).
+6. **Metodo usato per applicazione migration:** Applicazione manuale tramite Supabase SQL Editor su indicazione dell'agente.
+7. **Schema pre-migration:** Colonne non esistenti a database (PostgREST select generava errore di colonna non trovata, confermato dall'audit e dalle risposte di Supabase).
+8. **Schema post-migration:**
+   - `registri_iva.esigibilita` (presente, tipo `text`, default `'immediata'`)
+   - `registri_iva.origin_registro_iva_id` (presente, tipo `uuid`, references `registri_iva(id) on delete restrict`)
+   - `partitario.iva_per_cassa` (presente, tipo `boolean`, default `false`)
+9. **Conferma presenza colonne:** Verificata con successo inviando query PostgREST mirate sui campi creati, che hanno risposto con esito `200 OK` confermando la presenza a database.
+10. **Vincoli/indici verificati:**
+    - Vincolo check `registri_iva_esigibilita_check`
+    - Vincolo FK `registri_iva_origin_registro_iva_id_fkey` con delete restrict
+    - Indici: `idx_registri_iva_esigibilita`, `idx_registri_iva_origin_registro_iva_id`, `idx_partitario_iva_per_cassa`
+11. **Build/test post-migration:**
+    - Test runner: `node --test tests/ivaPerCassaSchemaMapping.test.js tests/manualeIvaOrdinaria.test.js tests/partitarioDocumentiIva.test.js tests/partitarioPagamentiIncassi.test.js tests/causaliPolicyEngine.test.js tests/persistPrimaNotaDraft.test.js tests/canonicalAccountingValidation.test.js` (145/145 superati con successo).
+    - Build: `npm run build` (Completato con successo, 386 moduli).
+12. **Eventuali problemi:** Nessuno.
+13. **Rischi residui:** Nullo o bassissimo, i test di regressione sono tutti passati con successo.
+14. **Prossimo step consigliato:** Implementare la registrazione dei documenti IVA per cassa e l'apertura delle relative partite (FASE 3 - Registrazione IVA per Cassa).
+
+---
+
+## IVA-PER-CASSA-A-DOCUMENTO-E-APERTURA-PARTITA (05/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `fb43f15` (Messaggio: `checkpoint: registrazione manuale partitario chiusura stabile`)
+4. **File letti:**
+   - [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js)
+   - [causaleOperazioneGestita.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/causaleOperazioneGestita.js)
+   - [causalePolicyUtils.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/causalePolicyUtils.js)
+   - [buildRegistrazioneDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js)
+   - [buildRegistrazioneIvaRows.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js)
+   - [buildRegistrazioneIvaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js)
+   - [buildRegistrazionePartitarioDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js)
+   - [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+   - [mapRegistrazioneManualeToCanonical.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js)
+   - [liquidazioneIvaClient.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/liquidazioneIvaClient.js)
+   - [contabilitaRepo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js)
+5. **File modificati:**
+   - [liquidazioneIvaClient.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/liquidazioneIvaClient.js)
+   - [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+   - [buildRegistrazioneIvaRows.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js)
+   - [buildRegistrazioneIvaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js)
+   - [buildRegistrazionePartitarioDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js)
+   - [mapRegistrazioneManualeToCanonical.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js)
+   - [contabilitaRepo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js)
+6. **Audit pre-patch:**
+   - *1. Come buildCausaleContabilePolicy.js riconosce o può erkennen una causale IVA per cassa:* Riconosce la presenza di flag booleani come `causale_giro_iva_cassa` o `iva_per_cassa`, o la presenza di conti transitori (`conto_iva_esig_differita`) e registri differiti (`registro_iva_differita`).
+   - *2. Se esiste già un campo/policy ivaPerCassa o equivalente:* Sì, `buildCausaleContabilePolicy` restituisce la proprietà unificata `ivaPerCassa`.
+   - *3. Se causale_giro_iva_cassa è sufficiente o se serve normalizzare una policy interna:* `buildCausaleContabilePolicy` normalizza già tutti i flag in `ivaPerCassa`, che è la fonte di verità interna dell'applicazione.
+   - *4. Come buildRegistrazioneIvaDraft.js e buildRegistrazioneIvaRows.js devono passare esigibilita:* Passano `'differita'` a livello di draft e righe IVA se la policy `ivaPerCassa` è attiva.
+   - *5. Come buildRegistrazionePartitarioDraft.js deve passare iva_per_cassa:* Imposta `iva_per_cassa = true` sul draft partitario e sulla singola riga partitaria generata.
+   - *6. Come persistPrimaNotaDraft.js riceve e salva i nuovi campi:* Mappa `esigibilita` e `origin_registro_iva_id` su `registri_iva`, e `iva_per_cassa` su `partitario`.
+   - *7. Come getRegistriIvaByPeriodo deve escludere le righe differita:* Utilizza la clausola `.or('esigibilita.in.(immediata,rilascio),esigibilita.is.null')` per pre-filtrare le righe differite sul database.
+7. **Regola usata per riconoscere `policy.ivaPerCassa`:**
+   - Si sfrutta la normalizzazione dell'oggetto causale operata da `buildCausaleContabilePolicy` che valuta congiuntamente i diversi flag presenti nel DB, centralizzando l'informazione in `policy.ivaPerCassa`.
+8. **Comportamento documento IVA per cassa:**
+   - Righe IVA create con `esigibilita = 'differita'` e `origin_registro_iva_id = null`.
+9. **Comportamento partitario:**
+    - Partita aperta con `iva_per_cassa = true`.
+10. **Comportamento liquidazione:**
+    - Esclude programmaticamente tutte le righe con `esigibilita = 'differita'` sia a livello di query del database (`contabilitaRepo.js` -> `getRegistriIvaByPeriodo`) che nel modulo client di calcolo ed aggregazione periodica (`liquidazioneIvaClient.js` -> `aggregateRegistriIvaRows`), includendo solo quelle con esigibilità `'immediata'`, `'rilascio'` o nulle (retrocompatibili).
+11. **Cosa NON è stato implementato:**
+    - Il rilascio dell'IVA all'incasso/pagamento (generazione automatica di righe `rilascio` e giroconto prima nota) non è implementato e sarà affrontato nella fase successiva.
+12. **Test aggiunti/modificati:**
+    - Creato il file [ivaPerCassaDocumento.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/ivaPerCassaDocumento.test.js) con 9 scenari di test che coprono interamente i requisiti del task.
+    - Aggiornati [manualeIvaOrdinaria.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/manualeIvaOrdinaria.test.js) e [partitarioDocumentiIva.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/partitarioDocumentiIva.test.js) per comprendere `esigibilita`, `origin_registro_iva_id` e `iva_per_cassa` nei mock degli schemi DB.
+13. **Build/test eseguiti:**
+    - Eseguito `npm run build` (Successo, 386 moduli compilati).
+    - Eseguito `node --test` (154/154 test superati con successo).
+14. **Rischi residui:**
+    - Bassissimi o nulli; il flusso IVA ordinaria mantiene esigibilità immediata ed è coperto da una robusta test suite di regressione.
+15. **Prossimo step consigliato:**
+    - `IVA-PER-CASSA-B-RILASCIO-DA-INCASSO-PAGAMENTO`.
+
+---
+
+## VERIFICA-IVA-PER-CASSA-A-DOCUMENTO-E-APERTURA-PARTITA (05/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `fb43f15` (Messaggio: `checkpoint: registrazione manuale partitario chiusura stabile`)
+4. **File letti:**
+   - [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js)
+   - [buildRegistrazioneIvaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js)
+   - [buildRegistrazioneIvaRows.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js)
+   - [buildRegistrazionePartitarioDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js)
+   - [mapRegistrazioneManualeToCanonical.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js)
+   - [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+   - [contabilitaRepo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js)
+   - [liquidazioneIvaClient.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/liquidazioneIvaClient.js)
+   - [ivaPerCassaSchemaMapping.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/ivaPerCassaSchemaMapping.test.js)
+   - [ivaPerCassaDocumento.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/ivaPerCassaDocumento.test.js)
+5. **File modificati:**
+   - [REPORT/REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+6. **Test eseguiti:**
+   - Eseguito il test runner nativo di Node.js su tutta la suite:
+     `node --test tests/ivaPerCassaSchemaMapping.test.js tests/ivaPerCassaDocumento.test.js tests/manualeIvaOrdinaria.test.js tests/partitarioDocumentiIva.test.js tests/partitarioPagamentiIncassi.test.js tests/causaliPolicyEngine.test.js tests/persistPrimaNotaDraft.test.js tests/canonicalAccountingValidation.test.js`
+     (154/154 test superati con successo).
+7. **Build eseguita:**
+   - Eseguito `npm run build` con esito positivo (compilazione e bundling Vite/Rollup completati correttamente).
+8. **Verifica IVA ordinaria:**
+   - Righe registri IVA generate correttamente con `esigibilita = 'immediata'`.
+   - Partite aperte generate correttamente con `iva_per_cassa = false`.
+   - Nessun sfasamento o regressione sui flussi standard (FF, FC, NC, NCF ordinari).
+9. **Verifica IVA per cassa documento:**
+   - Le righe dei registri IVA vengono create con `esigibilita = 'differita'` e `origin_registro_iva_id = null`.
+10. **Verifica partitario:**
+    - Le scadenze (partite aperte) vengono generate con `iva_per_cassa = true`.
+11. **Verifica liquidazione:**
+    - Esclude programmaticamente tutte le righe con `esigibilita = 'differita'` sia lato DB (query SQL) che a livello client di aggregazione.
+    - Include correttamente righe con `'immediata'`, `'rilascio'` e `null` (retrocompatibili).
+12. **Conferma che il rilascio IVA non è stato implementato:**
+    - Confermato: nessuna riga `rilascio` viene generata, non c'è calcolo proporzionale, né giroconto su incasso/pagamento in questa fase.
+13. **Rischi residui:**
+    - Nullo o bassissimo; il flusso dell'IVA ordinaria rimane pienamente tutelato ed isolato.
+14. **Se si può procedere alla fase:**
+    - Sì, la Fase A è pienamente verificata, stabile, coperta da test nativi e integrata con successo. Si consiglia di procedere alla fase:
+      `IVA-PER-CASSA-B-RILASCIO-DA-INCASSO-PAGAMENTO`.
+
+---
+
+## IVA-PER-CASSA-B-RILASCIO-DA-INCASSO-PAGAMENTO (05/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `fb43f15` (Messaggio: `checkpoint: registrazione manuale partitario chiusura stabile`)
+4. **File letti:**
+   - [buildRegistrazionePartitarioDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js)
+   - [buildRegistrazioneDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js)
+   - [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+   - [contabilitaRepo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js)
+   - [liquidazioneIvaClient.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/liquidazioneIvaClient.js)
+   - [buildCausaleContabilePolicy.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js)
+   - [primaNotaService.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/services/primaNotaService.js)
+5. **Audit pre-patch:**
+   - *1. dove oggi viene gestita la chiusura partite da incasso/pagamento:* Le chiusure sono determinate in `buildRegistrazionePartitarioDraft.js`, map-rate nel partitario come draft, e la persistenza converte in record di chiusura per il DB in `persistPrimaNotaDraft.js` (`mapPartitarioClosureForDb`), e l'aggiornamento residuale viene applicato in `services/primaNotaService.js` (`applyPartitarioClosures`).
+   - *2. come vengono selezionate le partite da chiudere:* L'utente le seleziona in UI, passate tramite array `selectedPartitaIds` / `checkedPartiteIds`.
+   - *3. dove viene calcolato l’importo pagato/incassato:* In `buildRegistrazionePartitarioDraft.js` calcola il netto delle chiusure (`netChiusura`).
+   - *4. dove viene aggiornato `importo_pagato`, `importo_residuo`, `stato`:* In `services/primaNotaService.js` (`applyPartitarioClosures`).
+   - *5. dove vengono costruite eventuali righe di registro IVA in fase pagamento/incasso:* Precedentemente in nessun punto (perché i pagamenti standard non hanno IVA).
+   - *6. se esiste già un punto naturale dove innestare il rilascio IVA per cassa:* In `persistPrimaNotaDraft.js` prima del write, dove è disponibile l'accesso asincrono al DB per recuperare le partite originarie ed i relativi registri IVA.
+   - *7. quali dati sono disponibili per collegare pagamento/incasso → partita → documento → registri IVA originari:* I record di chiusura partitario contengono `id` (del partitario). Da esso, tramite query su `partitario`, si risale a `prima_nota_id` originaria (dell'invoice) e da lì si ottengono le righe `registri_iva` ad essa associate.
+   - *8. quali dati mancano:* Nessuno strutturale, la query DB sopperisce al fatto che `prima_nota_id` originaria non sia propagata via UI draft.
+   - *9. se serve una funzione pura di dominio separata:* Sì, implementata in `ivaPerCassaRelease.js`.
+6. **File modificati:**
+   - [persistPrimaNotaDraft.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/persistPrimaNotaDraft.js)
+   - [ivaPerCassaRelease.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/ivaPerCassaRelease.js) [NEW]
+7. **Logica implementata:**
+   - Intercettazione delle chiusure partitario al momento del salvataggio in `persistPrimaNotaDraft.js`.
+   - Per ciascuna chiusura di partita con `iva_per_cassa = true`, recupero delle righe `registri_iva` originarie con `esigibilita = 'differita'` e `origin_registro_iva_id = null`.
+   - Calcolo del ratio di rilascio proporzionale al pagamento.
+   - Generazione di righe IVA di rilascio con `esigibilita = 'rilascio'`, `origin_registro_iva_id = original_row_id`.
+   - Controllo anti doppio rilascio considerando e sommando le righe rilascio già presenti per ciascuna riga originaria.
+8. **Gestione pagamento/incasso totale:**
+   - Rilascia il 100% dell'IVA differita.
+9. **Gestione pagamento/incasso parziale:**
+   - Calcola la quota proporzionale. Se è l'ultimo pagamento che chiude la partita (residuo a 0), rilascia esattamente il residuo non ancora rilasciato cando gli arrotondamenti.
+10. **Gestione multi-aliquota:**
+    - Genera righe di rilascio separate e proporzionali per ciascuna aliquota/riga IVA originaria del documento.
+11. **Controllo anti doppio rilascio:**
+    - Cappa imponibile, IVA, IVA detraibile ed IVA indetraibile cumulativi per non superare mai gli importi originari del documento.
+12. **Cosa NON è stato implementato:**
+    - Modifiche grafiche o di interfaccia (non necessarie).
+13. **Test aggiunti/modificati:**
+    - Creato il file di test dedicato [ivaPerCassaRelease.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/ivaPerCassaRelease.test.js) con 9 scenari che coprono i requisiti e le regressioni.
+14. **Build/test eseguiti:**
+    - `npm run build` completato con successo.
+    - `node --test` suite completa: 163/163 test superati con successo.
+15. **Rischi residui:**
+    - Bassi; le logiche di regressione sono interamente coperte dai test e non ci sono modifiche strutturali al DB o flussi di terze parti.
+16. **Prossimo step consigliato:**
+    - Passare alla consultazione della Prima Nota o riconciliazione/import, secondo roadmap.
+
+---
+
+## AUDIT-CICLO-COMPLETO-IVA-PER-CASSA-A-B (05/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `fb43f15` (Messaggio: `checkpoint: registrazione manuale partitario chiusura stabile`)
+4. **File letti:**
+   - `src/modules/contabilita/application/registrazioneOperations/ivaPerCassaRelease.js`
+   - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+   - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`
+   - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js`
+   - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`
+   - `src/modules/contabilita/data/contabilitaRepo.js`
+   - `src/modules/contabilita/application/liquidazioneIvaClient.js`
+   - `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+   - `tests/ivaPerCassaDocumento.test.js`
+   - `tests/ivaPerCassaRelease.test.js`
+   - `tests/ivaPerCassaSchemaMapping.test.js`
+5. **File eventualmente modificati:** Nessuno (nessun bug bloccante o errore riscontrato; il ciclo è pienamente conforme e stabile).
+6. **Build/test eseguiti:**
+   - `npm run build` (Successo, 387 moduli trasformati compilati).
+   - Test suite: `node --test tests/ivaPerCassaSchemaMapping.test.js tests/ivaPerCassaDocumento.test.js tests/ivaPerCassaRelease.test.js tests/manualeIvaOrdinaria.test.js tests/partitarioDocumentiIva.test.js tests/partitarioPagamentiIncassi.test.js tests/causaliPolicyEngine.test.js tests/persistPrimaNotaDraft.test.js tests/canonicalAccountingValidation.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js` (170/170 test superati).
+7. **Verifica documento IVA per cassa:**
+   - Righe `registri_iva` con `esigibilita = 'differita'` e `origin_registro_iva_id = null` generate correttamente.
+8. **Verifica partitario:**
+   - Partita aperta con `iva_per_cassa = true` ed importi originario e residuo corretti. Nessun impatto sulle partite ordinarie.
+9. **Verifica pagamento/incasso totale:**
+   - Rilascio del 100% dell'IVA differita, righe IVA di rilascio con `esigibilita = 'rilascio'` e `origin_registro_iva_id` corretto.
+10. **Verifica pagamento/incasso parziale:**
+    - Rilascio proporzionale dell'IVA con residuo correttamente differito.
+11. **Verifica secondo pagamento:**
+    - Rilascio del solo residuo e capping dell'imposta per evitare discrepanze di arrotondamento.
+12. **Verifica multi-aliquota:**
+    - Righe di rilascio separate e proporzionali per ciascuna riga IVA differita originaria.
+13. **Verifica anti doppio rilascio:**
+    - Calcolo cumulato e blocco/capping del rilascio per non superare mai l'ammontare originario differito.
+14. **Verifica liquidazione:**
+    - Include `'immediata'`, `'rilascio'` e `null` ed esclude `'differita'`.
+15. **Verifica regressione IVA ordinaria:**
+    - FF/FC/NC/NCF ordinari inalterati (generano esigibilità immediata).
+16. **Verifica regressione partitario ordinario:**
+    - Pagamenti ed incassi su partite ordinarie non generano righe di rilascio.
+17. **Verifica architetturale:**
+    - Helper `ivaPerCassaRelease.js` isolato, funzioni pure testate, logica fuori dai componenti React, causali non hardcoded, nessun accoppiamento indebito.
+18. **Rischi residui:** Nulli o del tutto trascurabili.
+19. **Verdetto:** **ciclo IVA per cassa chiuso** (100% conforme).
+20. **Prossimo step consigliato:** checkpoint/commit.
+
+
+
+## FIX-MANUALE-PFPC-PARTITE-IVA-PER-CASSA-TABS
+
+Data: 2026-06-05
+
+### Contesto
+
+Durante test manuali reali su Supabase (sviluppo/test), l'ispezione del ciclo completo IVA per cassa ha rivelato:
+
+1. **Fattura ordinaria (FF)** `prima_nota_id = 2295d27c-...` con `esigibilita = 'immediata'` e partita con `iva_per_cassa = false`.
+2. **Fattura IVA per cassa (FFPC)** `prima_nota_id = c8201df5-...` con `esigibilita = 'differita'` e partita con `iva_per_cassa = true`.
+
+Il salvataggio del documento era corretto. I problemi erano esclusivamente nell'interfaccia di registrazione del pagamento.
+
+### Problemi Identificati
+
+1. Le fatture FF e FFPC non comparivano nel tab `Partitario / Chiusura partite` in fase di registrazione pagamento PFPC (causale pagamento IVA per cassa).
+2. Alcune righe del partitario risultavano invisibili per `conto_id` o `pianoConti` nulli.
+3. Il tab `Movimenti IVA` (editabile) rimaneva visibile anche per causali pagamento, confondendo l'operatore.
+4. Il rilascio IVA per cassa era tentato dalla UI invece di essere demandato al motore di persistenza.
+
+### Soluzioni Implementate
+
+#### 1. Policy UI: visibilità tab `Movimenti IVA`
+
+- File: `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`
+- La logica di visibilità del tab IVA è ora guidata dalla policy (`policy.isPagamentoIncasso`).
+- Per causali di pagamento/incasso IVA per cassa, il tab `Movimenti IVA` editabile viene nascosto.
+- Principio: logica derivata da `buildCausaleContabilePolicy`, mai da `causaleCode.startsWith()`.
+
+#### 2. Preview IVA per cassa read-only
+
+- File: `src/modules/contabilita/ui/RegistrazionePreviewPanel.jsx`
+- Banner read-only "Rilascio IVA per cassa" visibile solo per pagamenti su partite con `iva_per_cassa = true`.
+- Il rilascio vero resta generato da `ivaPerCassaRelease.js` in persistenza.
+
+#### 3. Fallback conto_id / pianoConti nelle righe partitario
+
+- File: `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneControparti.js`
+- Le righe partitario ora sono visibili anche se `conto_id`, `contoCodice` o `contoDescrizione` sono null.
+- Fallback garantito su `soggetto_denominazione`, `numero_documento` e importi residui.
+
+#### 4. Policy causale: operazione gestita
+
+- File: `src/modules/contabilita/domain/causali/causaleOperazioneGestita.js`
+- Corretto il riconoscimento di `isPagamentoIncasso` basato su `liquidazione_tipo` e `documento_direzione`.
+- Aggiunta discriminazione `isDocumentoIva` per causali con IVA per cassa.
+
+#### 5. Fix buildRegistrazionePartitarioDraft
+
+- File: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`
+- Risolto `ReferenceError: ivaPerCassa is not defined` nel mapping della riga partitario.
+
+### Vincoli rispettati
+
+- Nessuna logica su `causaleCode.startsWith('ff')` / `startsWith('pf')` o simili.
+- Decisione sempre da `buildCausaleContabilePolicy`, `policy.ivaPerCassa`, `policy.isPagamentoIncasso`, `policy.isDocumentoIva`, `policy.gestionePartitario`.
+- I codici FF, FFPC, PFPC usati solo nei test come esempi operativi.
+- Nessuna modifica a DB, migration, auth, import contabilità, riconciliazione.
+- Nessun commit, nessun push.
+
+### Nuovi test aggiuntivi
+
+File: `tests/ivaPerCassaPagamentoUiPolicy.test.js` (5 test, tutti nuovi)
+
+| # | Test | Esito |
+|---|------|-------|
+| 1 | Pagamento/incasso IVA per cassa non mostra tab Movimenti IVA | ✅ |
+| 2 | Subject autocomplete filtra correttamente per professionista | ✅ |
+| 3 | Righe partitario risolte anche con campi null | ✅ |
+| 4 | Partite ordinarie non generano rilascio IVA per cassa | ✅ |
+| 5 | Policy FFPC ha ivaPerCassa = true, FF ordinaria ha ivaPerCassa = false | ✅ |
+
+### Mock aggiornati
+
+Tre file di test hanno ricevuto l'aggiornamento dello schema mock `PARTITARIO_SCHEMA` per includere le colonne di arricchimento introdotte in `mapPartitarioRowForDb`:
+- `controparte_id`, `controparte_nome`, `conto_codice`, `conto_descrizione`, `causale_id`
+
+File: `tests/partitarioDocumentiIva.test.js`, `tests/manualeIvaOrdinaria.test.js`, `tests/ivaPerCassaSchemaMapping.test.js`
+
+### Risultati finali
+
+- Test superati: **175/175** (163 preesistenti + 5 nuovi + 7 regression fix aggiornamenti schema)
+- Build: **OK** (vite build, 387 moduli, 4.66s)
+- Codice applicativo: **stabile**
+- Regressioni introdotte: **nessuna**
+
+### Stato fase
+
+**COMPLETATA E VERIFICATA**
+
+---
+
+## PARTITARIO-IVA-PER-CASSA-VISIBILITA-E-COERENZA-CENTESIMO (06/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`.
+2. **Branch:** `mio-branch`.
+3. **Ultimo commit:** `fb43f15` - `checkpoint: registrazione manuale partitario chiusura stabile`.
+4. **File letti:** `REGOLE_CODEX.md`, `REPORT/REPORT_CODEX.md`, policy causali/registrazione, builder draft e righe template, view e componenti registrazione, repo contabilita, persistenza, helper rilascio IVA per cassa e test IVA/partitario richiesti.
+5. **Audit pre-patch:**
+   - `resolveRegistrazioneCausaleBehavior.js` determina tab e pannelli prima tramite `buildCausaleContabilePolicy`; il fallback codice resta solo per causali storiche senza metadati.
+   - Il pagamento/incasso IVA per cassa non deve mostrare `Movimenti IVA`: non e un inserimento IVA libero e `showIvaPanel` deve restare `false`.
+   - Il draft partitario viene costruito in `buildRegistrazionePartitarioDraft.js`, chiamato da `buildRegistrazioneDraft.js`.
+   - Le partite aperte sono caricate in `RegistrazioneManualeView.jsx` tramite `contabilitaRepo.getPartitarioBySocieta` e passate al builder come `partite`.
+   - Prima della patch non esisteva una funzione repo dedicata alla preview differita/rilascio; le query equivalenti erano incorporate in `ivaPerCassaRelease.js`.
+   - Collegamento dati: `partitario.id` -> `partitario.prima_nota_id` originaria -> `registri_iva.prima_nota_id` con `esigibilita='differita'`; i rilasci sono collegati tramite `origin_registro_iva_id`.
+   - Il vecchio banner preview era nel ramo overview di `RegistrazionePreviewPanel.jsx`, ma i pagamenti entravano nel ramo partitario con return anticipato: il banner non era operativo.
+   - `buildRegistrazioneRowsFromTemplate.js` non genera autonomamente il giroconto IVA per cassa: usa `righe_prima_nota_template`, storico causale o fallback minimo.
+6. **File creati:**
+   - `src/modules/contabilita/application/registrazioneOperations/calculateIvaPerCassaPreviewRelease.js`
+   - `tests/ivaPerCassaPreviewRelease.test.js`
+7. **File modificati in questa fase:**
+   - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+   - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`
+   - `src/modules/contabilita/components/registrazione/RegistrazionePreviewPanel.jsx`
+   - `src/modules/contabilita/data/contabilitaRepo.js`
+   - `src/modules/contabilita/domain/registrazione/buildRegistrazioneManualeUiPolicy.js`
+   - `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`
+   - `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+   - `tests/ivaPerCassaPagamentoUiPolicy.test.js`
+   - `REPORT/REPORT_CODEX.md`
+8. **Tab pagamento/incasso IVA per cassa:** attive `Righe prima nota`, `Partitario`, `Partitario IVA per cassa`; assente `Movimenti IVA`.
+9. **Partitario IVA per cassa:** tab read-only per ogni partita selezionata con importo originale, chiusura corrente, residuo commerciale, percentuale, imponibile/IVA originari, gia rilasciati, rilascio corrente, residui, arrotondamento, coerenza e ID origine; dettaglio separato per aliquota.
+10. **Calcolo proporzionale:** `ratio = abs(importoChiusura) / abs(importoOriginalePartita)`. Non viene usato l'imponibile come denominatore.
+11. **Controllo al centesimo:** la quota e `min(residuoPrima, round2(originario * ratio))`; l'ultimo pagamento rilascia il residuo esatto. Una preview incoerente blocca la persistenza.
+12. **Pagamento totale 1.540/1.540:** 100%, IVA 140, residuo IVA 0.
+13. **Pagamento parziale 770/1.540:** 50%, IVA 70, residuo IVA 70.
+14. **Pagamento 1.400/1.540:** 90,91%, IVA 127,27, residuo IVA 12,73.
+15. **Multi-fattura:** calcolo isolato per `partitaId`, senza commistione.
+16. **Multi-aliquota:** calcolo e visualizzazione separati per ogni `origin_registro_iva_id`.
+17. **Read-only:** quote IVA, percentuali, rilasci e residui non sono editabili.
+18. **Persistenza:** la generazione reale resta in `ivaPerCassaRelease.js`; la UI non crea righe `registri_iva`.
+19. **Righe PN/giroconto IVA:** visibili solo se il template causale o lo storico contiene le quattro righe corrette. Il fallback non le sintetizza e non sono stati inventati conti nel frontend. Va verificata/configurata la causale reale:
+   - passiva: Fornitore Dare, Banca Avere, IVA acquisti ordinaria Dare, IVA differita Avere;
+   - attiva: Banca Dare, Cliente Avere, IVA differita Dare, IVA vendite ordinaria Avere.
+20. **Test aggiunti/modificati:** 10 test helper puro; policy tab ordinaria/IVA per cassa; draft solo per partite `iva_per_cassa=true`; blocco persistenza su incoerenza.
+21. **Build/test eseguiti:**
+   - `npm run build`: OK, 388 moduli.
+   - test mirati: 18/18.
+   - suite completa richiesta: 188/188.
+22. **Rischi residui:** dipendenza dalla corretta configurazione del template causale per il giroconto PN; query preview richiede che `partitario.prima_nota_id` e gli ID delle righe IVA originarie siano valorizzati.
+23. **Test manuale obbligatorio post-fix:** verificare pagamento totale, 770/1.540, 1.400/1.540, secondo/ultimo pagamento, multi-fattura e multi-aliquota; controllare tab, importi, coerenza, righe PN del template e righe `rilascio` salvate con `origin_registro_iva_id`.
+24. **Git:** nessun `git add`, commit o push eseguito.
+
+---
+
+## FIX-PARTITARIO-IVA-PER-CASSA-SPECULARE-ORDINARIO (06/06/2026)
+
+1. **Causa pannello vuoto dopo la selezione:** la selezione era correttamente salvata in `state.partitarioData.selectedPartitaIds` e l'importo in `importiChiusura`. `buildRegistrazionePartitarioDraft.js` calcolava correttamente `ivaPerCassaPreview.items`, ma `buildRegistrazioneDraft.js` restituiva il draft partitario solo dentro `draftModel.draft.partitarioDraft`; la UI leggeva `draftModel.partitarioDraft`, quindi passava `undefined` al tab.
+2. **Come ora riceve la partita selezionata:** `buildRegistrazioneDraft.js` espone anche gli alias top-level `documentDraft`, `ivaDraft`, `partitarioDraft` e `ritenutaDraft`, mantenendo invariata la struttura interna `draft.*`. Il tab riceve quindi immediatamente l'item calcolato dopo il toggle della checkbox.
+3. **Dati ricevuti dall'item:** `partitaId`, `primaNotaId`, `iva_per_cassa`, `importoOriginale`, `importoChiusura`, `importoResiduoPrima`, `importoResiduoDopo`, percentuale, righe IVA differite originarie e righe gia rilasciate.
+4. **Partitario ordinario e IVA per cassa speculari:** la preview espone e mostra:
+   - partita ordinaria originaria;
+   - chiusura ordinaria corrente;
+   - residuo ordinario dopo;
+   - partita IVA per cassa originaria dello stesso importo;
+   - chiusura IVA per cassa dello stesso importo;
+   - residuo IVA per cassa dello stesso importo;
+   - percentuale identica.
+5. **Effetto fiscale derivato:** sotto i valori commerciali vengono mostrati imponibile rilasciato ora, IVA originaria, IVA gia rilasciata, IVA da rilasciare ora e IVA residua. Esempio 1.000/1.540: chiusura dei due partitari = 1.000; IVA derivata = 90,91; imponibile derivato = 909,09.
+6. **Coerenza al centesimo:** `coerente` richiede uguaglianza tra chiusure commerciali, percentuali e residui dei due partitari, assenza di overpayment e nessun rilascio IVA oltre l'originaria.
+7. **Alias e campi nulli verificati:** il mapper preserva sia `iva_per_cassa` sia `ivaPerCassa`; `prima_nota_id` viene propagato nel draft. `conto_id`, `controparte_id` o descrizioni nulle non impediscono il calcolo se la partita selezionata conserva ID, importi e flag IVA per cassa.
+8. **Test aggiunti/modificati:**
+   - caso 1.000/1.540 con partita IVA per cassa chiusa per 1.000 e IVA derivata 90,91;
+   - importi commerciali speculari e residuo 540;
+   - test integrato attraverso `buildRegistrazioneDraft()` che verifica l'alias top-level consumato dalla UI;
+   - conferma `primaNotaId`, selezione, importo originale e chiusura;
+   - regressioni totale, parziale, ultimo pagamento, multi-fattura, multi-aliquota, partita ordinaria e indipendenza dal codice causale.
+9. **Build/test eseguiti:**
+   - `npm run build`: OK, 388 moduli;
+   - test mirati: 20/20;
+   - suite completa richiesta: 190/190.
+10. **Rischi residui:** la parte fiscale della preview dipende dalla disponibilita read-only delle righe `registri_iva` differite collegate tramite `partitario.prima_nota_id`; prima del completamento della query l'item commerciale e gia visibile, mentre i dettagli IVA si completano al ritorno dei dati.
+11. **Test manuale obbligatorio:** selezionare la FFPC da 1.540 nel tab `Partitario`, aprire subito `Partitario IVA per cassa` e verificare che non sia vuoto; provare chiusura totale e 1.000, controllando rispettivamente 1.540/0/140 e 1.000/540/90,91, oltre a stato di coerenza e dati origine.
+12. **Vincoli rispettati:** nessuna generazione IVA dalla UI, nessuna logica su prefissi causale, nessuna modifica DB/migration/env/auth/configurazioni, Import Contabilita o Riconciliazione; nessun commit o push.
+
+---
+
+## FIX-GIROCONTO-IVA-PER-CASSA-RIGHE-PRIMA-NOTA (07/06/2026)
+
+1. **Diagnosi:** la preview partitario calcolava correttamente `ivaDaRilasciareOra`, ma `buildRegistrazioneDraft.js` non trasformava tale quota in righe contabili. Il template standard dei pagamenti conteneva solo soggetto e banca; il fallback non generava righe IVA perche il pannello IVA resta correttamente disattivato nei pagamenti/incassi.
+2. **Punto unico di generazione:** aggiunto `buildIvaPerCassaGirocontoRows.js`, invocato da `buildRegistrazioneDraft.js` dopo la costruzione della preview partitario e prima di totali, validazione e payload righe.
+3. **Pagamento passivo:** fornitore Dare, banca Avere, IVA acquisti ordinaria/detraibile Dare, IVA differita/sospesa Avere.
+4. **Incasso attivo:** banca Dare, cliente Avere, IVA differita/sospesa Dare, IVA vendite ordinaria/a debito Avere.
+5. **Importo giroconto:** deriva esclusivamente dalla somma di `ivaDaRilasciareOra`; il caso 1.000/1.540 genera 90,91 su entrambe le righe IVA.
+6. **Risoluzione conti:** il conto differito deriva da `conto_iva_esig_differita` della causale o da un ruolo esplicito del template. Il conto ordinario deriva dalla causale IVA della riga originaria (`contoIva`) oppure dal template causale. Nessun conto viene dedotto da prefissi del codice causale.
+7. **Blocco configurazione:** se conto IVA ordinaria o differita non e configurato/risolvibile, il draft resta bloccato con messaggio specifico e non vengono create righe tecniche incomplete.
+8. **Righe tecniche:** le righe hanno `source='iva_per_cassa_giroconto'`, sono incluse in `normalized.rows`, `draft.rows` e `righePayload`, sono visibili nel tab Righe prima nota e non sono modificabili o eliminabili dalla griglia.
+9. **Coerenza:** le righe IVA sono sempre speculari; la quadratura commerciale preesistente resta invariata. In presenza di piu conti IVA ordinari, gli importi sono separati per conto e controbilanciati dal totale sul conto differito.
+10. **Partite ordinarie:** nessun giroconto viene generato se la preview IVA per cassa non e attiva o la policy non identifica un pagamento/incasso IVA per cassa.
+11. **Dati origine propagati:** la preview conserva `tipo`, `causaleIvaId`, `contoIva` e `soggettoTipo` per risolvere direzione e conto senza euristiche sul codice.
+12. **File creato:** `src/modules/contabilita/application/registrazioneOperations/buildIvaPerCassaGirocontoRows.js`.
+13. **File modificati:** `buildRegistrazioneDraft.js`, `buildRegistrazioneRowsFromTemplate.js`, `calculateIvaPerCassaPreviewRelease.js`, `RegistrazioneRowsTable.jsx`, `tests/ivaPerCassaPagamentoUiPolicy.test.js`, `REPORT/REPORT_CODEX.md`.
+14. **Test aggiunti:** totale passivo, parziale 90,91, incasso attivo, causale ordinaria, conti mancanti, quadratura/coerenza rilascio, indipendenza dai prefissi e integrazione draft con quattro righe PN.
+15. **Test mirati:** 54/54 superati.
+16. **Suite completa:** 348/348 superati con `node --test` su tutti i file `tests/*.test.js`.
+17. **Build:** `npm run build` OK, Vite 5.4.21, 389 moduli trasformati. Resta il warning preesistente sul chunk principale oltre 2 MB.
+18. **Nota comandi:** `npm test` non esiste nel progetto; `node --test tests` non espande la directory con Node 24. La suite completa e stata eseguita passando esplicitamente i file test da PowerShell.
+19. **Test manuale:** non eseguito. Da verificare in UI PFPC/ICPC con pagamento totale e 1.000/1.540, presenza delle quattro righe, segni, blocco su conti mancanti e salvataggio coerente con il rilascio fiscale.
+20. **Vincoli rispettati:** nessuna modifica a DB, migration, env, auth, configurazioni persistite, Import Contabilita o Riconciliazione; nessun `git add`, commit o push.
+
+---
+
+## FIX-UI-PARTITARIO-USA-IMPORTO-RESIDUO-AGGIORNATO (07/06/2026)
+
+1. **Conferma DB:** Supabase risultava corretto dopo il pagamento PFPC parziale: `importo_originale=1540`, `importo_pagato=1000`, `importo_residuo=540`, partita ancora aperta e `iva_per_cassa=true`. La persistenza del partitario non e stata modificata.
+2. **Query attiva:** `RegistrazioneManualeView.jsx` carica le partite tramite `contabilitaRepo.getPartitarioBySocieta(societaId, { stato: 'aperta' })`; la query usa `select('*')`, quindi include `importo_residuo`.
+3. **Causa del 1540 in UI:** builder, selezione e handler della view davano precedenza agli alias legacy `saldoResiduo`/`saldo_residuo` rispetto al campo DB canonico `importo_residuo`. Se entrambi erano presenti, il valore legacy 1540 oscurava il residuo aggiornato 540.
+4. **Causa cache/stato:** l'elenco partite veniva caricato solo al cambio della societa. Dopo un salvataggio riuscito il componente chiamava il refresh esterno, ma non invalidava direttamente il proprio stato `partiteAperte`.
+5. **Fix mapping:** aggiunto `resolvePartitaImportoResiduo.js`, con precedenza `importo_residuo`, `importoResiduo`, `residuo`, poi alias legacy. Il resolver e usato nel builder, nella selezione, nei default checkbox, nel capping dell'importo e nell'applicazione della partita.
+6. **Fix tab Partitario:** `RegistrazionePartitarioPanel.jsx` privilegia ora `importo_residuo`; `importo_originale` resta separato come storico documento e non viene usato come saldo chiudibile.
+7. **Fix default chiusura:** una partita con originario 1540, pagato 1000 e residuo 540 mostra saldo residuo 540 e propone `Importo chiusura=540`.
+8. **Fix refresh:** dopo una nuova registrazione salvata con successo viene incrementata `partiteRefreshKey`; l'effetto ricarica immediatamente le partite aperte dal DB.
+9. **IVA per cassa invariata:** nessuna modifica al giroconto o ai registri IVA. La preview del secondo pagamento usa chiusura 540, residuo commerciale dopo 0, IVA gia rilasciata 90,91, IVA corrente 49,09 e residuo IVA 0.
+10. **File creato:** `src/modules/contabilita/application/registrazioneOperations/resolvePartitaImportoResiduo.js`.
+11. **File modificati:** `buildRegistrazionePartitarioDraft.js`, `calculateRegistrazionePartitarioSelection.js`, `RegistrazionePartitarioPanel.jsx`, `RegistrazioneManualeView.jsx`, `tests/partitarioPagamentiIncassi.test.js`, `tests/ivaPerCassaPreviewRelease.test.js`, `REPORT/REPORT_CODEX.md`.
+12. **Test aggiunti:** partita parzialmente pagata con alias conflittuali; default chiusura 540; distinzione originario/residuo; partita ordinaria; partita mai pagata; secondo rilascio IVA per cassa 49,09.
+13. **Test mirati:** 92/92 superati.
+14. **Suite completa:** 352/352 superati.
+15. **Build:** `npm run build` OK, Vite 5.4.21, 390 moduli trasformati; presente solo il warning preesistente sul chunk principale oltre 2 MB.
+16. **Test manuale richiesto:** riaprire PFPC sullo stesso fornitore dopo il primo pagamento da 1000 e verificare nel tab Partitario saldo/default 540; selezionare la partita e verificare nel tab IVA per cassa 1540 originario, 540 chiusura, 0 residuo, 90,91 gia rilasciata e 49,09 corrente.
+17. **Vincoli rispettati:** nessuna modifica a persistenza partitario, giroconto IVA per cassa, registri IVA, DB o migration; nessun `git add`, commit o push.
 

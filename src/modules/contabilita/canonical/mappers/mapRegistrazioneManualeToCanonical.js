@@ -319,6 +319,10 @@ function normalizeVatRows(draft = {}) {
         reverseCharge: Boolean(row?.reverseCharge || ivaDraft.reverseCharge),
         ivaPerCassa: Boolean(row?.ivaPerCassa || ivaDraft.ivaPerCassa),
         proRata: text(row?.proRata || ivaDraft.proRata),
+        esigibilita: ['immediata', 'differita', 'rilascio'].includes(String(row?.esigibilita || ivaDraft?.esigibilita || '').trim().toLowerCase())
+          ? String(row?.esigibilita || ivaDraft.esigibilita).trim().toLowerCase()
+          : 'immediata',
+        origin_registro_iva_id: text(row?.origin_registro_iva_id || row?.originRegistroIvaId) || null,
       };
     }),
     registerType,

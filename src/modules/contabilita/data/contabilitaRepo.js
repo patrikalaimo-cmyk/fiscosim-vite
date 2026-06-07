@@ -587,6 +587,64 @@ export function getPartitarioByPrimaNotaId(primaNotaId) {
   return sb.from('partitario').select('id').eq('prima_nota_id', primaNotaId).limit(1)
 }
 
+export async function getIvaPerCassaPreviewData(partitaIds = []) {
+  const ids = Array.from(new Set(
+    (Array.isArray(partitaIds) ? partitaIds : [])
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+  ))
+  if (!ids.length) return { data: { originalVatRows: [], releasedVatRows: [] }, error: null }
+
+  try {
+    const { data: partite, error: partiteError } = await sb
+      .from('partitario')
+      .select('id, prima_nota_id')
+      .in('id', ids)
+    if (partiteError) throw partiteError
+
+    const partitaByPrimaNotaId = new Map(
+      (partite || [])
+        .filter((row) => row?.prima_nota_id)
+        .map((row) => [String(row.prima_nota_id), String(row.id)])
+    )
+    const primaNotaIds = Array.from(partitaByPrimaNotaId.keys())
+    if (!primaNotaIds.length) return { data: { originalVatRows: [], releasedVatRows: [] }, error: null }
+
+    const { data: originalRows, error: originalError } = await sb
+      .from('registri_iva')
+      .select('*')
+      .in('prima_nota_id', primaNotaIds)
+      .eq('esigibilita', 'differita')
+      .is('origin_registro_iva_id', null)
+    if (originalError) throw originalError
+
+    const originalVatRows = (originalRows || []).map((row) => ({
+      ...row,
+      partita_id: partitaByPrimaNotaId.get(String(row.prima_nota_id)) || null,
+    }))
+    const originIds = originalVatRows.map((row) => row.id).filter(Boolean)
+    if (!originIds.length) return { data: { originalVatRows, releasedVatRows: [] }, error: null }
+
+    const { data: releasedVatRows, error: releasedError } = await sb
+      .from('registri_iva')
+      .select('*')
+      .in('origin_registro_iva_id', originIds)
+      .eq('esigibilita', 'rilascio')
+    if (releasedError) throw releasedError
+
+    return {
+      data: {
+        originalVatRows,
+        releasedVatRows: releasedVatRows || [],
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[getIvaPerCassaPreviewData] Error:', error)
+    return { data: { originalVatRows: [], releasedVatRows: [] }, error }
+  }
+}
+
 export function insertPartitario(payload) {
   return sb.from('partitario').insert([payload]).select().single()
 }
@@ -666,9 +724,10 @@ export async function upsertLiquidazioneIvaCanonica(row) {
 export function getRegistriIvaByPeriodo(periodo_inizio, periodo_fine) {
   return sb
     .from('registri_iva')
-    .select('tipo, iva, iva_detraibile, data')
+    .select('tipo, iva, iva_detraibile, data, esigibilita')
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
+    .or('esigibilita.in.(immediata,rilascio),esigibilita.is.null')
 }
 
 export function getCorrispettiviGiornalieri(societaId, inizioMese, fineMese) {

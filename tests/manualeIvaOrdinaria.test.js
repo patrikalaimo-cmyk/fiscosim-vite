@@ -26,7 +26,9 @@ const REGISTRI_IVA_SCHEMA = new Set([
   'soggetto_piva',
   'soggetto_denominazione',
   'documento_contabilita_id',
-  'societa_id'
+  'societa_id',
+  'esigibilita',
+  'origin_registro_iva_id'
 ])
 
 const PARTITARIO_SCHEMA = new Set([
@@ -52,7 +54,13 @@ const PARTITARIO_SCHEMA = new Set([
   'owner_user_id',
   'visibility',
   'locked_by',
-  'locked_at'
+  'locked_at',
+  'iva_per_cassa',
+  'controparte_id',
+  'controparte_nome',
+  'conto_codice',
+  'conto_descrizione',
+  'causale_id'
 ])
 
 class MockDbQuery {

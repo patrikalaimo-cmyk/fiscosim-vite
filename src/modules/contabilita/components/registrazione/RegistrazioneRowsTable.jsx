@@ -127,10 +127,15 @@ export function RegistrazioneRowsTable({
   const [ghostId, setGhostId] = useState(null)
   const tableRef = useRef(null)
 
-  // La lista effettiva di righe: righe reali + ghost se esiste
+  const rowIds = new Set((Array.isArray(rows) ? rows : []).map((row) => String(row?.id || '')))
+  const derivedRows = (Array.isArray(resolvedRows) ? resolvedRows : [])
+    .filter((row) => row?.technicalDerived && !rowIds.has(String(row?.id || '')))
+  const visibleRows = [...rows, ...derivedRows]
+
+  // La lista effettiva di righe: righe reali/derivate + ghost se esiste
   const effectiveRows = ghostId
-    ? [...rows, { id: ghostId, contoQuery: '', dare: '', avere: '', descrizione: '', riga_numero: rows.length + 1, _isGhost: true }]
-    : rows
+    ? [...visibleRows, { id: ghostId, contoQuery: '', dare: '', avere: '', descrizione: '', riga_numero: visibleRows.length + 1, _isGhost: true }]
+    : visibleRows
 
   const resolvedById = new Map(
     (Array.isArray(resolvedRows) ? resolvedRows : []).map((r) => [String(r?.id || ''), r])
@@ -242,7 +247,8 @@ export function RegistrazioneRowsTable({
 
     if (e.key === 'Delete' && e.ctrlKey) {
       e.preventDefault()
-      if (!isGhostRow({ id: rowId })) {
+      const targetRow = effectiveRows.find((row) => String(row?.id) === String(rowId))
+      if (!isGhostRow({ id: rowId }) && !targetRow?.technicalDerived) {
         onDeleteRow?.(rowId)
       }
     }
@@ -483,6 +489,7 @@ export function RegistrazioneRowsTable({
       <div ref={tableRef} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '.4rem .8rem' }}>
         {effectiveRows.map((row, index) => {
           const { canonicalRow, contoState, contoIsInvalid, rowState, isActiveRow, activeCellKey, isGhost, rowIssue } = getRowMeta(row, index)
+          const rowDisabled = disabled || Boolean(row?.technicalDerived)
           const isLastReal = !isGhost && index === rows.length - 1
           const displayConto = isGhost ? ghostData.contoQuery : (row.contoQuery || '')
           const displayDare = isGhost ? ghostData.dare : (row.dare ?? '')
@@ -578,7 +585,7 @@ export function RegistrazioneRowsTable({
                         : (isGhost ? 'Digita conto…' : 'Codice o descrizione')
                     }
                     list={datalistId}
-                    disabled={disabled}
+                    disabled={rowDisabled}
                     field="conto"
                     rowId={row.id}
                     activeCellKey={activeCellKey}
@@ -588,6 +595,7 @@ export function RegistrazioneRowsTable({
                     type="button"
                     title="Apri piano dei conti"
                     tabIndex={-1}
+                    disabled={rowDisabled}
                     onClick={() => onOpenAccountPicker?.({ rowId: row.id })}
                     style={{
                       width: 24, height: 24,
@@ -638,7 +646,7 @@ export function RegistrazioneRowsTable({
                 <RowInput
                   type="text"
                   inputMode="decimal"
-                  disabled={disabled}
+                  disabled={rowDisabled}
                   value={displayDare}
                   onChange={(e) => {
                     if (isGhost) setGhostData((p) => ({ ...p, dare: e.target.value, avere: '' }))
@@ -665,7 +673,7 @@ export function RegistrazioneRowsTable({
                 <RowInput
                   type="text"
                   inputMode="decimal"
-                  disabled={disabled}
+                  disabled={rowDisabled}
                   value={displayAvere}
                   onChange={(e) => {
                     if (isGhost) setGhostData((p) => ({ ...p, avere: e.target.value, dare: '' }))
@@ -699,7 +707,7 @@ export function RegistrazioneRowsTable({
               {/* Descrizione */}
               <RowInput
                 value={displayDesc}
-                disabled={disabled}
+                disabled={rowDisabled}
                 onChange={(e) => {
                   if (isGhost) setGhostData((p) => ({ ...p, descrizione: e.target.value }))
                   else onChangeRow?.(row.id, { descrizione: e.target.value }, { source: 'manual' })
@@ -727,7 +735,7 @@ export function RegistrazioneRowsTable({
                   tabIndex={-1}
                   title="Elimina riga (Ctrl+Canc)"
                   onClick={() => onDeleteRow?.(row.id)}
-                  disabled={disabled}
+                  disabled={rowDisabled}
                   style={DELETE_BTN_STYLE}
                 >✕</button>
               )}

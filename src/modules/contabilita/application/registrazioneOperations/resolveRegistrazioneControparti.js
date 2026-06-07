@@ -1,4 +1,5 @@
 import { resolveRegistrazioneContoLabel } from './resolveRegistrazioneConti.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 
 function normalizeControparteKey(value) {
   return String(value ?? '')
@@ -61,19 +62,18 @@ function resolveAllowedControparteTypes(header = {}, existingType = '') {
   })
   if (explicitType) return [explicitType]
 
-  const causaleCode = normalizeControparteKey(
-    header?.causaleContabile?.codice ??
-      header?.causaleContabile?.code ??
-      header?.causaleContabileId ??
-      header?.causaleContabile ??
-      header?.causale_codice ??
-      ''
-  )
+  const causale = header?.causaleContabile || header
+  const policy = buildCausaleContabilePolicy(causale)
 
-  if (causaleCode.startsWith('ff')) return ['fornitore']
-  if (causaleCode.startsWith('fc')) return ['cliente']
+  if (policy.isFatturaPassiva || policy.isNotaCreditoPassiva || policy.isPagamento) {
+    return ['fornitore', 'professionista']
+  }
+  if (policy.isFatturaAttiva || policy.isNotaCreditoAttiva || policy.isIncasso) {
+    return ['cliente']
+  }
 
-  return ['fornitore', 'cliente']
+  // Fallback temporaneo e non fiscale per causali non categorizzate
+  return ['fornitore', 'cliente', 'professionista']
 }
 
 function isAllowedControparteType(item, allowedTypes = []) {

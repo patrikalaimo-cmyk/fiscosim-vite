@@ -67,12 +67,72 @@ export function RegistrazionePreviewPanel({
   documentDraft = null,
   ivaDraft = null,
   partitarioDraft = null,
+  ivaPerCassaPreview = null,
   ritenutaDraft = null,
   checkedPartiteIds = [],
   onToggleCheckedPartita = null,
   onApplyCheckedPartite = null,
   pnRows = []
 }) {
+  if (mode === 'ivaPerCassaPreview') {
+    const items = Array.isArray(ivaPerCassaPreview?.items) ? ivaPerCassaPreview.items : []
+    return (
+      <div className="erp-flat-panel" style={{ padding: '.85rem', display: 'grid', gap: '.7rem' }}>
+        <div>
+          <div style={{ ...REG_SECTION_TITLE_STYLE, color: 'rgba(188,204,226,.92)' }}>Partitario IVA per cassa</div>
+          <div style={{ fontSize: '.68rem', color: 'rgba(188,204,226,.7)', marginTop: '.2rem' }}>
+            Preview read-only. Le righe di rilascio reali vengono generate esclusivamente durante la persistenza.
+          </div>
+        </div>
+        {!items.length ? (
+          <div className="alert alert-info" style={{ margin: 0 }}>
+            Seleziona una partita IVA per cassa per calcolare il rilascio proporzionale.
+          </div>
+        ) : items.map((item) => (
+          <div key={item.partitaId} className="erp-flat-panel" style={{ margin: 0, padding: '.7rem', background: 'rgba(245,158,11,.045)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', marginBottom: '.55rem' }}>
+              <div>
+                <div style={{ fontSize: '.78rem', fontWeight: 800 }}>{item.partitaNome || item.partitaId}</div>
+                <div style={{ fontSize: '.62rem', color: 'rgba(188,204,226,.65)' }}>Partita: {item.partitaId}</div>
+              </div>
+              <span className={`bdg ${item.coerente ? 'bdg-green' : 'bdg-red'}`}>
+                {item.coerente ? 'Coerente al centesimo' : 'Incoerente'}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '.55rem' }}>
+              <PreviewRow label="Partita ordinaria originaria" value={fmtCurrency(item.importoOriginale)} />
+              <PreviewRow label="Chiusura ordinaria ora" value={fmtCurrency(item.importoChiusura)} tone="positive" />
+              <PreviewRow label="Residuo ordinario dopo" value={fmtCurrency(item.importoResiduoDopo)} />
+              <PreviewRow label="Partita IVA per cassa originaria" value={fmtCurrency(item.importoOriginaleIvaPerCassa)} />
+              <PreviewRow label="Chiusura IVA per cassa ora" value={fmtCurrency(item.importoChiusuraIvaPerCassa)} tone="positive" />
+              <PreviewRow label="Residuo partita IVA per cassa dopo" value={fmtCurrency(item.residuoIvaPerCassaDopo)} />
+              <PreviewRow label="Percentuale chiusura" value={`${Number(item.percentualeChiusura || 0).toFixed(2)}%`} />
+              <PreviewRow label="Imponibile originario" value={fmtCurrency(item.imponibileOriginario)} />
+              <PreviewRow label="Imponibile rilasciato ora" value={fmtCurrency(item.imponibileDaRilasciare)} tone="positive" />
+              <PreviewRow label="IVA originaria" value={fmtCurrency(item.ivaOriginaria)} />
+              <PreviewRow label="IVA già rilasciata" value={fmtCurrency(item.ivaGiaRilasciata)} />
+              <PreviewRow label="IVA residua prima" value={fmtCurrency(item.ivaResiduaPrima)} />
+              <PreviewRow label="IVA da rilasciare ora" value={fmtCurrency(item.ivaDaRilasciareOra)} tone="positive" />
+              <PreviewRow label="IVA residua dopo" value={fmtCurrency(item.ivaResiduaDopo)} tone={item.ivaResiduaDopo ? 'negative' : 'positive'} />
+              <PreviewRow label="Arrotondamento" value={fmtCurrency(item.arrotondamento)} />
+              <PreviewRow label="Stato" value={item.stato} />
+              <PreviewRow label="Origin registro IVA" value={item.originRegistroIvaId || 'multi-riga'} />
+            </div>
+            {item.righeIvaOriginarie?.length > 1 ? (
+              <div style={{ marginTop: '.6rem', display: 'grid', gap: '.3rem' }}>
+                {item.righeIvaOriginarie.map((row) => (
+                  <div key={row.originRegistroIvaId} style={{ fontSize: '.65rem', color: 'rgba(188,204,226,.78)' }}>
+                    Aliquota {row.aliquota ?? '—'}%: IVA {fmtCurrency(row.ivaOriginaria)}, rilascio {fmtCurrency(row.ivaDaRilasciareOra)}, residuo {fmtCurrency(row.ivaResiduaDopo)} · origine {row.originRegistroIvaId}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const isPartitarioMode = Boolean(showPartite)
 
   if (isPartitarioMode) {
@@ -376,16 +436,31 @@ export function RegistrazionePreviewPanel({
           />
         ) : null}
         {partitarioDraft?.active ? (
-          <DraftBlock
-            title="Partitario"
-            note="Partitario predisposto, chiusura reale non eseguita in questa fase"
-            rows={[
-              { label: 'Soggetto', value: partitarioDraft?.selectedControparteNome || '—' },
-              { label: 'Partite aperte', value: String(partitarioDraft?.rows?.filter(r => r.selected)?.length || 0) },
-              { label: 'Saldo residuo netto', value: fmtCurrency(partitarioDraft?.totals?.saldoResiduo || 0), tone: 'negative' },
-              { label: 'Chiusura netta', value: fmtCurrency(partitarioDraft?.totals?.importoChiusura || 0), tone: 'positive' },
-            ]}
-          />
+          <>
+            <DraftBlock
+              title="Partitario"
+              note="Partitario predisposto, chiusura reale non eseguita in questa fase"
+              rows={[
+                { label: 'Soggetto', value: partitarioDraft?.selectedControparteNome || '—' },
+                { label: 'Partite aperte', value: String(partitarioDraft?.rows?.filter(r => r.selected)?.length || 0) },
+                { label: 'Saldo residuo netto', value: fmtCurrency(partitarioDraft?.totals?.saldoResiduo || 0), tone: 'negative' },
+                { label: 'Chiusura netta', value: fmtCurrency(partitarioDraft?.totals?.importoChiusura || 0), tone: 'positive' },
+              ]}
+            />
+            {partitarioDraft?.rows?.some(r => r.selected && r.iva_per_cassa) ? (
+              <div className="erp-flat-panel" style={{ margin: '0.45rem 0 0 0', padding: '.55rem .6rem', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 12 }}>
+                <div style={{ display: 'grid', gap: '.08rem' }}>
+                  <div style={{ fontSize: '.72rem', fontWeight: 800, color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
+                    <MagicIcon /> RILASCIO IVA PER CASSA (READ-ONLY)
+                  </div>
+                  <div style={{ fontSize: '.63rem', color: 'rgba(188,204,226,.8)', marginTop: '4px', lineHeight: '1.3' }}>
+                    Rilevato pagamento di partita IVA per cassa.
+                    Il motore di persistenza genererà automaticamente in DB le righe di rilascio IVA proporzionali all'importo chiuso ({fmtCurrency(partitarioDraft?.totals?.importoChiusura || 0)}).
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : null}
         {ritenutaDraft?.active ? (
           <DraftBlock

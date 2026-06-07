@@ -2,6 +2,7 @@ import { normalizeText, round2 } from '../canonical_mapper/utils.js'
 import { normalizeRegistrazioneIvaRows } from './normalizeRegistrazioneIvaRows.js'
 import { findRegistrazioneControparteExactMatch } from './resolveRegistrazioneControparti.js'
 import { buildRegistrazioneContoSelection, resolveRegistrazioneContoDescrizione, resolveRegistrazioneContoLabel } from './resolveRegistrazioneConti.js'
+import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 
 function normalizeDate(value) {
   const text = normalizeText(value)
@@ -56,18 +57,18 @@ function resolveAllowedCounterpartyTypes(sourceHeader = {}, existingType = '') {
   const explicitType = resolveHeaderCounterpartyType({ clienteFornitoreTipo: existingType, cliente_fornitore_tipo: existingType })
   if (explicitType) return [explicitType]
 
-  const causaleCode = normalizeText(
-    sourceHeader?.causaleContabile?.codice ??
-      sourceHeader?.causaleContabile?.code ??
-      sourceHeader?.causaleContabileId ??
-      sourceHeader?.causaleContabile ??
-      sourceHeader?.causale_codice ??
-      ''
-  ).toUpperCase()
+  const causale = sourceHeader?.causaleContabile || sourceHeader
+  const policy = buildCausaleContabilePolicy(causale)
 
-  if (causaleCode.startsWith('FF')) return ['fornitore']
-  if (causaleCode.startsWith('FC')) return ['cliente']
-  return ['fornitore', 'cliente']
+  if (policy.isFatturaPassiva || policy.isNotaCreditoPassiva || policy.isPagamento) {
+    return ['fornitore', 'professionista']
+  }
+  if (policy.isFatturaAttiva || policy.isNotaCreditoAttiva || policy.isIncasso) {
+    return ['cliente']
+  }
+
+  // Fallback temporaneo e non fiscale per causali non categorizzate
+  return ['fornitore', 'cliente', 'professionista']
 }
 
 export function resolveRegistrazioneHeaderCounterpartyDraft(header = {}, pianoConti = []) {

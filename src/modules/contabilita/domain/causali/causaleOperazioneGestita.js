@@ -225,8 +225,22 @@ export function buildCausaleOperazioneGestitaPolicy(tipoCausale = '', gestionePa
   const isFatturaPassiva = normalized === normalizePolicyKey('Fattura passiva')
   const isNotaCreditoAttiva = normalized === normalizePolicyKey('Nota credito attiva')
   const isNotaCreditoPassiva = normalized === normalizePolicyKey('Nota credito passiva')
-  const isIncasso = normalized === normalizePolicyKey('Incasso')
-  const isPagamento = normalized === normalizePolicyKey('Pagamento')
+  const liqTipo = String(source?.liquidazione_tipo || source?.liquidazioneTipo || '').trim().toLowerCase()
+  const docDirezione = String(source?.documento_direzione || source?.documentoDirezione || source?.direzione || '').trim().toLowerCase()
+
+  const isIncasso =
+    normalized === normalizePolicyKey('Incasso') ||
+    normalized === normalizePolicyKey('Incasso IVA per cassa') ||
+    liqTipo === 'incasso' ||
+    docDirezione === 'entrata' ||
+    docDirezione === 'attivo'
+
+  const isPagamento =
+    normalized === normalizePolicyKey('Pagamento') ||
+    normalized === normalizePolicyKey('Pagamento IVA per cassa') ||
+    liqTipo === 'pagamento' ||
+    docDirezione === 'uscita' ||
+    docDirezione === 'passivo'
   const isAutofattura = [
     'autofattura',
     'reversecharge',

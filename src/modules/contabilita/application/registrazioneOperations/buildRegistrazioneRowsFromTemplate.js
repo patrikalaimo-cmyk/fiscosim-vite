@@ -288,6 +288,7 @@ function buildManualDocumentEconomicRow(index = 0, behavior = {}) {
     id: `template-row-${index + 1}`,
     riga_numero: index + 1,
     templateGenerated: true,
+    ruolo: normalizeText(row.ruolo),
     templateKey: '',
     manualEdited: false,
     templateScope: false,

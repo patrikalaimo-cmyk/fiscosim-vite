@@ -8,6 +8,7 @@ import { buildRegistrazioneRowsFromTemplateResolved } from '../application/regis
 import { applyRegistrazioneAutoResidualToRow } from '../application/registrazioneOperations/applyRegistrazioneAutoResidualToRow.js'
 import { applyRegistrazioneAutoResidualChainToRows } from '../application/registrazioneOperations/applyRegistrazioneAutoResidualChainToRows.js'
 import { normalizeRegistrazioneAmountInput } from '../application/registrazioneOperations/normalizeRegistrazioneAmountInput.js'
+import { resolvePartitaImportoResiduo } from '../application/registrazioneOperations/resolvePartitaImportoResiduo.js'
 import { normalizeRegistrazioneRowPatch } from '../application/registrazioneOperations/normalizeRegistrazioneRowPatch.js'
 import { buildRegistrazioneContoSelection, resolveRegistrazioneContoDescrizione, resolveRegistrazioneContoLabel, resolveContoHierarchyView, resolveSubjectAccount } from '../application/registrazioneOperations/resolveRegistrazioneConti.js'
 import { buildRegistrazioneContropartiList } from '../application/registrazioneOperations/resolveRegistrazioneControparti.js'
@@ -363,7 +364,8 @@ function resolveSelectedCausale(causaliContabili, causaleValue) {
 
 function tabLabel(id) {
   if (id === 'iva') return 'Movimenti IVA'
-  if (id === 'partitario') return 'Movimenti partitario'
+  if (id === 'partitario') return 'Partitario'
+  if (id === 'ivaPerCassaPreview') return 'Partitario IVA per cassa'
   if (id === 'ritenute') return 'Ritenute'
   return 'Righe prima nota'
 }
@@ -396,6 +398,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const [lastExerciseUsed, setLastExerciseUsed] = useState(String(currentYear))
   const [state, setState] = useState(() => makeInitialState(String(currentYear)))
   const [draftStarted, setDraftStarted] = useState(false)
+  const [partiteRefreshKey, setPartiteRefreshKey] = useState(0)
 
   // Stati aggiuntivi per flussi di modifica/storno controllati
   const [operationGuards, setOperationGuards] = useState(null)
@@ -541,7 +544,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
-    if (activeTab === 'partitario') {
+    if (activeTab === 'partitario' || activeTab === 'ivaPerCassaPreview') {
       setSidebarCollapsed(true)
     } else {
       setSidebarCollapsed(false)
@@ -556,6 +559,10 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const [success, setSuccess] = useState('')
   const [gotoTarget, setGotoTarget] = useState('')
   const [partiteAperte, setPartiteAperte] = useState([])
+  const [ivaPerCassaPreviewData, setIvaPerCassaPreviewData] = useState({
+    originalVatRows: [],
+    releasedVatRows: [],
+  })
   const [percipientiCatalog, setPercipientiCatalog] = useState([])
   const [historicalCausaleEntries, setHistoricalCausaleEntries] = useState([])
   const [causaliIvaCatalog, setCausaliIvaCatalog] = useState([])
@@ -594,6 +601,16 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       return contoId === selectedControparteId
     })
   }, [partiteAperte, selectedControparteId])
+  const selectedIvaPerCassaPartitaIds = useMemo(() => {
+    const selectedIds = new Set(
+      (state.partitarioData?.selectedPartitaIds || [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    )
+    return selectedContropartePartite
+      .filter((row) => selectedIds.has(String(row?.id || '').trim()) && Boolean(row?.iva_per_cassa ?? row?.ivaPerCassa))
+      .map((row) => String(row.id))
+  }, [selectedContropartePartite, state.partitarioData?.selectedPartitaIds])
   const modalContoList = effectivePianoConti
   const modalControparteList = useMemo(() => buildRegistrazioneContropartiList(effectivePianoConti), [effectivePianoConti])
   const selectedCausaleBehavior = useMemo(
@@ -636,7 +653,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     selectedPartitaIdsStr.forEach(id => {
       const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === id)
       if (partita) {
-        const residuo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+        const residuo = resolvePartitaImportoResiduo(partita, 0)
         const enteredVal = state.partitarioData?.importiChiusura?.[id]
         let rowVal = 0
         if (enteredVal !== undefined && enteredVal !== null && enteredVal !== '') {
@@ -726,11 +743,13 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           percipienti: percipientiCatalog,
           config: selectedCausaleConfig,
           partite: selectedContropartePartite,
+          ivaPerCassaOriginalVatRows: ivaPerCassaPreviewData.originalVatRows,
+          ivaPerCassaReleasedVatRows: ivaPerCassaPreviewData.releasedVatRows,
           selectedCausale,
           historicalEntries: historicalCausaleEntries,
         }
       ),
-    [causaliContabili, effectiveCausaliIva, effectivePianoConti, historicalCausaleEntries, percipientiCatalog, selectedCausale, selectedCausaleConfig, selectedContropartePartite, societaAttiva?.id, state.documentData, state.header, state.ivaData, state.partitarioData, state.ritenutaData, rowsForDraftModel]
+    [causaliContabili, effectiveCausaliIva, effectivePianoConti, historicalCausaleEntries, ivaPerCassaPreviewData, percipientiCatalog, selectedCausale, selectedCausaleConfig, selectedContropartePartite, societaAttiva?.id, state.documentData, state.header, state.ivaData, state.partitarioData, state.ritenutaData, rowsForDraftModel]
   )
 
   const resolvedRows = draftModel.normalized.rows
@@ -833,7 +852,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     currentSelected.forEach(id => {
       const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === id)
       if (partita) {
-        const residuo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+        const residuo = resolvePartitaImportoResiduo(partita, 0)
         const enteredVal = state.partitarioData?.importiChiusura?.[id]
         let rowVal = 0
         if (enteredVal !== undefined && enteredVal !== null && enteredVal !== '') {
@@ -1138,6 +1157,30 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   }, [activeTab, allowedTabs])
 
   useEffect(() => {
+    if (!selectedCausaleConfig?.showIvaPerCassaPreview || selectedIvaPerCassaPartitaIds.length === 0) {
+      setIvaPerCassaPreviewData({ originalVatRows: [], releasedVatRows: [] })
+      return
+    }
+    let alive = true
+    contabilitaRepo.getIvaPerCassaPreviewData(selectedIvaPerCassaPartitaIds)
+      .then(({ data, error: queryError }) => {
+        if (!alive) return
+        if (queryError) throw queryError
+        setIvaPerCassaPreviewData({
+          originalVatRows: Array.isArray(data?.originalVatRows) ? data.originalVatRows : [],
+          releasedVatRows: Array.isArray(data?.releasedVatRows) ? data.releasedVatRows : [],
+        })
+      })
+      .catch(() => {
+        if (!alive) return
+        setIvaPerCassaPreviewData({ originalVatRows: [], releasedVatRows: [] })
+      })
+    return () => {
+      alive = false
+    }
+  }, [selectedCausaleConfig?.showIvaPerCassaPreview, selectedIvaPerCassaPartitaIds.join('|')])
+
+  useEffect(() => {
     if (!isValidSocietaId(societaAttiva?.id)) {
       setPartiteAperte([])
       return
@@ -1156,7 +1199,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     return () => {
       alive = false
     }
-  }, [societaAttiva?.id])
+  }, [societaAttiva?.id, partiteRefreshKey])
 
   useEffect(() => {
     if (!isValidSocietaId(societaAttiva?.id)) {
@@ -1880,7 +1923,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         if (nextImporti[idStr] === undefined) {
           const partita = (selectedContropartePartite || []).find(p => String(p.id || '').trim() === idStr)
           if (partita) {
-            const saldo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+            const saldo = resolvePartitaImportoResiduo(partita, 0)
             nextImporti[idStr] = saldo
           }
         }
@@ -1932,7 +1975,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === String(id).trim())
       if (!partita) return prev
 
-      const residuo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+      const residuo = resolvePartitaImportoResiduo(partita, 0)
       let val = Number.parseFloat(String(value).replace(',', '.'))
       if (Number.isNaN(val) || !Number.isFinite(val)) {
         val = 0
@@ -1976,7 +2019,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         if (nextImporti[id] === undefined) {
           const partita = (selectedContropartePartite || []).find(p => String(p.id).trim() === id)
           if (partita) {
-            const saldo = partita.saldo_residuo ?? partita.saldoResiduo ?? partita.importo_residuo ?? partita.saldo ?? 0
+            const saldo = resolvePartitaImportoResiduo(partita, 0)
             nextImporti[id] = saldo
           }
         }
@@ -2207,6 +2250,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         const activeDraft = {
           ...draftModel.draft,
           isSimulata: Boolean(state.header.isSimulata),
+          pianoConti: effectivePianoConti,
           meta: {
             ...(draftModel.draft?.meta || {}),
             isSimulata: Boolean(state.header.isSimulata),
@@ -2238,6 +2282,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         }
         setSuccess(`Registrazione salvata con ID ${result?.data?.prima_nota_id || 'n/d'}`)
         setLastExerciseUsed(state.header.esercizioContabile || lastExerciseUsed)
+        setPartiteRefreshKey((value) => value + 1)
         resetDraft(true, false, state.header.esercizioContabile, false)
         onRefresh?.()
       }
@@ -2776,7 +2821,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                       pnRows={resolvedRows}
                       onApplySelected={(row) => {
                         if (!row) return
-                        const saldoRaw = row.residuo ?? row.saldoResiduo ?? row.importo_residuo ?? row.saldo ?? 0
+                        const saldoRaw = resolvePartitaImportoResiduo(row, 0)
                         const saldo = Number.parseFloat(String(saldoRaw).replace(',', '.')) || 0
                         const idStr = String(row.id || '').trim()
 
@@ -2852,6 +2897,13 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                       onBlurImportoChiusura={onBlurImportoChiusura}
                     />
                   </div>
+                ) : activeTab === 'ivaPerCassaPreview' ? (
+                  <div data-reg-section="iva-per-cassa-preview">
+                    <RegistrazionePreviewPanel
+                      mode="ivaPerCassaPreview"
+                      ivaPerCassaPreview={draftModel.partitarioDraft?.ivaPerCassaPreview}
+                    />
+                  </div>
                 ) : activeTab === 'ritenute' ? (
                   <div data-reg-section="ritenute">
                     <RegistrazioneRitenutePanel
@@ -2885,6 +2937,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                   documentDraft={draftModel.documentDraft}
                   ivaDraft={draftModel.ivaDraft}
                   partitarioDraft={draftModel.partitarioDraft}
+                  ivaPerCassaPreview={draftModel.partitarioDraft?.ivaPerCassaPreview}
                   ritenutaDraft={draftModel.ritenutaDraft}
                   checkedPartiteIds={state.partitarioData?.checkedPartiteIds || []}
                   onToggleCheckedPartita={onToggleCheckedPartita}
