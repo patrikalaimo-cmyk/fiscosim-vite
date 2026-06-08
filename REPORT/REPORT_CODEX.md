@@ -4391,3 +4391,20 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - build eseguita: `npm run build`
 - rischi residui: il flusso resta dipendente da template causale coerenti e non estende alcun caso FF5 / UE / extra UE
 - conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`
+
+## FIX-A17X-Doppio-Registro-Iva
+- commit base: `b02ea2f fix: reverse A17X fornitore e partitario su imponibile`
+- bug manuale rilevato: nel DB `registri_iva` veniva persistita una sola riga `tipo = acquisto`; mancava la riga lato vendite/autofattura/reverse con stesso imponibile/IVA
+- causa tecnica: il draft IVA A17X generava un solo record logico e la persistenza non duplicava la controparte vendite/autofattura; il mapper IVA inoltre non riceveva un `tipo` esplicito per il secondo lato
+- file modificati:
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `tests/a17xAutofatturaBase.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- conferma PN e partitario non regressi: righe PN restano quadrate e il partitario resta aperto a 819,67
+- conferma doppia riga registri IVA: la persistenza emette due inserimenti `registri_iva`, uno `tipo = acquisto` e uno `tipo = vendita`, entrambi con imponibile 819,67 e IVA 180,33
+- test eseguiti:
+  - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
+- build eseguita: `npm run build`
+- rischi residui: il comportamento resta vincolato alla policy autofattura/reverse e non estende alcun caso FF5 / UE / extra UE
+- nota: il DB attuale non ha ancora campi registro/protocollo/segno, quindi per ora viene validato il doppio record acquisti/vendite senza persistenza del protocollo 3
+- conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`

@@ -282,17 +282,20 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
     ? normalizeDbAmount(row.ivaIndetraibile)
     : round2(Math.abs(ivaAmount) - Math.abs(iva_detraibile))) * mult
 
-  let tipo = 'acquisto'
-  if (policy.isFatturaAttiva || policy.isNotaCreditoAttiva) {
-    tipo = 'vendita'
-  } else if (policy.isFatturaPassiva || policy.isNotaCreditoPassiva) {
-    tipo = 'acquisto'
-  } else {
-    const reg = String(row.registroIva || row.registerType || ivaDraft?.registroIva || policy.registroIva || '').toLowerCase().trim()
-    if (reg === '02' || reg === '03' || reg.includes('ven') || reg.includes('corr')) {
+  const explicitTipo = normalizeDbText(row.tipo || row.tipoRegistro || row.registroTipo || row.tipo_riga)
+  let tipo = explicitTipo || 'acquisto'
+  if (!explicitTipo) {
+    if (policy.isFatturaAttiva || policy.isNotaCreditoAttiva) {
       tipo = 'vendita'
-    } else {
+    } else if (policy.isFatturaPassiva || policy.isNotaCreditoPassiva) {
       tipo = 'acquisto'
+    } else {
+      const reg = String(row.registroIva || row.registerType || ivaDraft?.registroIva || policy.registroIva || '').toLowerCase().trim()
+      if (reg === '02' || reg === '03' || reg.includes('ven') || reg.includes('corr')) {
+        tipo = 'vendita'
+      } else {
+        tipo = 'acquisto'
+      }
     }
   }
 
@@ -324,6 +327,28 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
   }
   if (row.splitPayment || row.split_payment || ivaDraft?.splitPayment) mapped.split_payment = true
   return mapped
+}
+
+function expandAutofatturaVatEntries(rows = [], resolvedDraft = {}) {
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : []
+  const header = resolvedDraft?.innerDraft?.header || {}
+  const policy = buildCausaleContabilePolicy(header?.causaleContabile || resolvedDraft?.pnPayload?.causaleContabile || {})
+  const needsDuplicate = Boolean(policy.isAutofattura && list.length === 1)
+
+  if (!needsDuplicate) return list
+
+  const baseRow = list[0]
+  const acquistoRow = {
+    ...baseRow,
+    tipo: baseRow?.tipo || 'acquisto',
+  }
+  const venditaRow = {
+    ...baseRow,
+    id: `${normalizeText(baseRow?.id || 'iva-row-1')}-vendita`,
+    tipo: 'vendita',
+  }
+
+  return [acquistoRow, venditaRow]
 }
 
 function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
@@ -502,6 +527,7 @@ export async function persistPrimaNotaDraft({
   let vatEntriesForDb = ivaEnabled && Array.isArray(resolved.ivaRows)
     ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
     : []
+  vatEntriesForDb = expandAutofatturaVatEntries(vatEntriesForDb, resolved)
 
   const partitarioEnabled = Boolean(
     resolved.partitarioDraft?.active ||
@@ -649,3 +675,4 @@ export async function persistPrimaNotaDraft({
     rollback: complete.rollback || null,
   }
 }
+
