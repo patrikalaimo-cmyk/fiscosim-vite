@@ -335,12 +335,27 @@ function appendManualDocumentEconomicRow(templateRows = [], behavior = {}) {
   return manualRow ? [...rows, manualRow] : rows
 }
 
-function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare: 0, avere: 0 }) {
+function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare: 0, avere: 0 }, row = {}) {
   const documentData = context?.documentData || {}
   const ivaDraft = context?.ivaDraft || {}
+  const causaleBehavior = context?.causaleBehavior || {}
+  const isAutofattura = Boolean(causaleBehavior?.documentMode === 'autofattura' || causaleBehavior?.ivaMode === 'autofattura')
+  const isSubjectRow = normalizeText(row?.ruolo) === 'soggetto'
   const value = normalizeText(formula)
 
   if (value === 'totale_documento') {
+    if (isAutofattura && isSubjectRow) {
+      return toAmountNumber(
+        documentData.imponibile ||
+          documentData.totaleImponibile ||
+          ivaDraft.imponibile ||
+          ivaDraft.totaleImponibile ||
+          documentData.totaleDocumento ||
+          documentData.totale_documento ||
+          ivaDraft.totaleDocumento ||
+          ivaDraft.totale_documento
+      )
+    }
     return toAmountNumber(documentData.totaleDocumento || documentData.totale_documento || ivaDraft.totaleDocumento || ivaDraft.totale_documento)
   }
 
@@ -373,7 +388,7 @@ function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare
 
 function buildGeneratedRow(templateRow = {}, index = 0, context = {}, runningTotals = { dare: 0, avere: 0 }) {
   const row = templateRow && typeof templateRow === 'object' ? templateRow : {}
-  const amount = resolveFormulaAmount(row.formula_importo, context, runningTotals)
+  const amount = resolveFormulaAmount(row.formula_importo, context, runningTotals, row)
   const accountResolution = resolveGeneratedRowAccount(row, context)
   const selection = accountResolution.selection
   const subjectContext = context?.soggetto && typeof context.soggetto === 'object' ? context.soggetto : {}

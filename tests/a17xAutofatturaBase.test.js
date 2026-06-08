@@ -91,10 +91,10 @@ test('A17X autofattura base apre il partitario solo per l imponibile', () => {
         clienteFornitoreTipo: 'fornitore',
       },
       documentData: {
-        totaleDocumento: 122,
-        totaleImponibile: 100,
-        totaleImposte: 22,
-        imponibile: 100,
+        totaleDocumento: 1000,
+        totaleImponibile: 819.67,
+        totaleImposte: 180.33,
+        imponibile: 819.67,
       },
       rows: [],
       ivaData: {
@@ -106,10 +106,10 @@ test('A17X autofattura base apre il partitario solo per l imponibile', () => {
             causaleIvaCodice: 'A17-AQ',
             causaleIvaDescrizione: 'Autofattura acquisti servizi',
             causaleIvaLabel: 'A17-AQ - Autofattura acquisti servizi',
-            imponibile: 100,
-            ivaDetratta: 22,
+            imponibile: 819.67,
+            ivaDetratta: 180.33,
             ivaIndetraibile: 0,
-            totale: 122,
+            totale: 1000,
             aliquota: 22,
             natura: '',
             competenzaIva: '2026-06-08',
@@ -144,12 +144,12 @@ test('A17X autofattura base apre il partitario solo per l imponibile', () => {
   assert.equal(result.validation.blockers.length, 0)
   assert.notEqual(result.validation.status, 'blocked')
   assert.equal(result.draft.rows.length, 4)
-  assert.equal(result.draft.rows[0].avere, '100.00')
-  assert.equal(result.draft.rows[1].dare, '100.00')
-  assert.equal(result.draft.rows[2].dare, '22.00')
-  assert.equal(result.draft.rows[3].avere, '22.00')
-  assert.equal(result.partitarioDraft.importoAperto, 100)
-  assert.equal(result.partitarioDraft.rows[0].importoAperto, 100)
+  assert.equal(result.draft.rows[0].avere, '819.67')
+  assert.equal(result.draft.rows[1].dare, '819.67')
+  assert.equal(result.draft.rows[2].dare, '180.33')
+  assert.equal(result.draft.rows[3].avere, '180.33')
+  assert.equal(result.partitarioDraft.importoAperto, 819.67)
+  assert.equal(result.partitarioDraft.rows[0].importoAperto, 819.67)
 
   const liquidazione = aggregateRegistriIvaRows([
     { tipo: 'acquisto', iva_detraibile: 22, esigibilita: 'rilascio' },

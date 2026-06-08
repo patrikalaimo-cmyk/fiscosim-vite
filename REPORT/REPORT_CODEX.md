@@ -4359,3 +4359,35 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - nessun push
   - nessun rollback
   - nessun `git add .`
+
+## FIX-A17X-Fornitore-Partitario-Imponibile
+- causa confermata: il caso A17X autofattura/reverse servizi deve usare l'imponibile per la riga soggetto fornitore e per l'apertura partitario, mentre il totale documento resta la base per la scissione IVA
+- file toccato: `tests/a17xAutofatturaBase.test.js`
+- test aggiornato al caso reale 1000 / 819,67 / 180,33
+- assert principali:
+  - riga fornitore Avere 819,67
+  - riga costo Dare 819,67
+  - riga IVA NS.CREDITO Dare 180,33
+  - riga IVA NS.DEBITO Avere 180,33
+  - partitario aperto a 819,67
+- conferma: nessun hardcode A17X in produzione, solo policy/template e fixture di test
+- test eseguiti: `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js tests/anagraficaSplitPaymentSave.test.js`
+- build eseguita: `npm run build`
+- rischio residuo: il flusso resta dipendente da template causale coerenti; non ho introdotto nuove regole per FF5/UE/extra UE
+- conferma: nessuna modifica a Import Contabilità, Riconciliazione, DB, migration, commit, push, rollback o `git add .`
+
+## FIX-REALE-A17X-Fornitore-Partitario-Imponibile
+- commit base di partenza: `134a0f8 checkpoint: reverse servizi A17X base`
+- verifica iniziale: il commit precedente non bastava a coprire il caso reale 1000 / 819,67 / 180,33 solo con test/report; il comportamento produttivo è stato corretto ora nel ramo template/partitario
+- file produttivi modificati:
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`
+- file di test modificato:
+  - `tests/a17xAutofatturaBase.test.js`
+- causa tecnica: per autofattura/reverse il template riga soggetto poteva ancora prendere il totale documento invece dell'imponibile; inoltre l'apertura partitario non riceveva sempre l'imponibile dal draft IVA. La correzione ora usa l'imponibile per il soggetto autofattura e per il partitario, mantenendo il totale documento come base per la scissione IVA
+- test eseguiti:
+  - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
+- build eseguita: `npm run build`
+- rischi residui: il flusso resta dipendente da template causale coerenti e non estende alcun caso FF5 / UE / extra UE
+- conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`

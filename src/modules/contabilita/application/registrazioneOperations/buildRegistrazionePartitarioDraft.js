@@ -104,6 +104,8 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
     documentData.imponibile ||
       documentData.totaleImponibile ||
       documentData.totale_imponibile ||
+      input?.ivaDraft?.imponibile ||
+      input?.ivaDraft?.totaleImponibile ||
       currentPartitarioDraft.imponibile ||
       currentPartitarioDraft.totaleImponibile ||
       currentPartitarioDraft.totale_imponibile

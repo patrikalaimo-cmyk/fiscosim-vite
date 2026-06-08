@@ -169,6 +169,7 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
   const partitarioDraft = buildRegistrazionePartitarioDraft({
     header: preliminaryNormalizedForDraft.header,
     documentData: preliminaryNormalizedForDraft.documentData,
+    ivaDraft,
     partite: Array.isArray(options?.partite) ? options.partite : Array.isArray(options?.partiteAperte) ? options.partiteAperte : [],
     openItems: Array.isArray(options?.partite) ? options.partite : Array.isArray(options?.partiteAperte) ? options.partiteAperte : [],
     partitarioData: preliminaryNormalizedForDraft.partitarioData,
