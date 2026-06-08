@@ -333,7 +333,7 @@ function expandAutofatturaVatEntries(rows = [], resolvedDraft = {}) {
   const list = Array.isArray(rows) ? rows.filter(Boolean) : []
   const header = resolvedDraft?.innerDraft?.header || {}
   const policy = buildCausaleContabilePolicy(header?.causaleContabile || resolvedDraft?.pnPayload?.causaleContabile || {})
-  const needsDuplicate = Boolean(policy.isAutofattura && list.length === 1)
+  const needsDuplicate = Boolean((policy.isAutofattura || policy.isCee) && list.length === 1)
 
   if (!needsDuplicate) return list
 

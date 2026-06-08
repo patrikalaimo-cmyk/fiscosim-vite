@@ -4504,3 +4504,17 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build: `npm run build`.
 - Rischi residui: non sono stati introdotti flussi nuovi per TD17/TD18/TD19, indetraibilità, Import o Riconciliazione.
 - Conferme operative: nessuna migration, nessun push, nessun rollback, nessun `git add .`.
+## FIX-CEE-Doppio-Registro-Iva-da-Impostazioni
+
+- Commit base: `ff37c58 fix: CEE fornitore e partitario su imponibile`.
+- Bug SQL rilevato: sulla causale CEE configurata da impostazioni il salvataggio produceva una sola riga `registri_iva` (`tipo = acquisto`) invece delle due righe attese; il debito CEE risultava quindi a zero e il credito CEE rimaneva a 288,52.
+- Causa tecnica: la pipeline IVA generava il draft corretto per la prima riga, ma la persistenza duplicava la seconda riga solo per `autofattura`; il ramo CEE non veniva espanso in `registri_iva`.
+- File modificati: `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `src/modules/contabilita/application/registrazioneOperations/shouldUseTaxableAmountForCounterparty.js`, `tests/ff5BeniEsteroBase.test.js`, `REPORT/REPORT_CODEX.md`.
+- Impostazioni causale usate come trigger: `tipo_causale = Doc. IVA Acq. CEE`, `operazione_partite = Apre`, `tipo_documento = Doc. IVA Acq. CEE`, `registro_iva = acquisti`, `registro_iva_cee = 02`, `protocollo_iva_cee = 3`, `segno_iva_registro_cee = Somma`.
+- Conferma hardcode: nessun `if codice === 'FF5'` o `if codice === 'A17X'` nel production path; il comportamento resta parametrico e guidato da policy/impostazioni causale.
+- Conferma PN/partitario: il fornitore e il partitario restano sull'imponibile (`1.311,48`) e non vengono regressi.
+- Conferma doppia riga registri IVA: ora vengono persistenziate due righe, una `tipo = acquisto` e una `tipo = vendita`, con stesso imponibile e stessa IVA; la liquidazione torna a effetto netto zero.
+- Test eseguiti: `node --test tests/ff5BeniEsteroBase.test.js tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`.
+- Build: `npm run build`.
+- Rischi residui: registro/protocollo/segno CEE non risultano ancora persistiti come colonne dedicate nel database; la liquidazione usa il tipo riga e l'importo, non quei metadati.
+- Conferme operative: nessuna Import Contabilità, nessuna Riconciliazione, nessuna migration, nessun push, nessun rollback, nessun `git add .`.

@@ -451,3 +451,97 @@ test('causale CEE configurata porta fornitore e partitario sull imponibile senza
   assert.equal(result.ivaDraft.causaleIvaCodice, 'B0IW')
   assert.equal(result.ivaDraft.rows[0].causaleIvaCodice, 'B0IW')
 })
+
+test('causale CEE persiste due righe registri IVA con acquisto e vendita equivalenti', async () => {
+  const db = new MockDbClient()
+  const behavior = resolveRegistrazioneCausaleBehavior(causaleCEE)
+
+  const draft = buildRegistrazioneDraft(
+    {
+      societaId: 'soc-1',
+      header: {
+        societaId: 'soc-1',
+        esercizioContabile: '2026',
+        dataRegistrazione: '2026-06-08',
+        dataDocumento: '2026-06-08',
+        numeroDocumento: 'CEE-1',
+        causaleContabile: causaleCEE,
+        descrizioneGenerale: 'Acquisto beni CEE base',
+        soggetto: 'Fornitore estero demo',
+        clienteFornitoreId: 'sup-1',
+        clienteFornitoreCodice: '2 03 08 0001',
+        clienteFornitoreNome: 'Fornitore estero demo',
+        clienteFornitoreTipo: 'fornitore',
+      },
+      documentData: {
+        totaleDocumento: 1500,
+        totaleImponibile: 1229.51,
+        totaleImposte: 270.49,
+        imponibile: 1229.51,
+      },
+      rows: [],
+      ivaData: {
+        rows: [
+          {
+            id: 'iva-acquisti',
+            riga: 1,
+            causaleIvaId: 'iva-b0iw',
+            causaleIvaCodice: 'B0IW',
+            causaleIvaDescrizione: 'Acquisti beni estero',
+            causaleIvaLabel: 'B0IW - Acquisti beni estero',
+            imponibile: 1229.51,
+            ivaDetratta: 270.49,
+            ivaIndetraibile: 0,
+            totale: 1500,
+            aliquota: 22,
+            natura: '',
+            competenzaIva: '2026-06-08',
+            dataOperazione: '2026-06-08',
+            registroIva: '01',
+            segnoRegistro: '+',
+            protocolloProvvisorio: '1',
+            protocolloDefinitivo: '3',
+            stato: 'predisposto',
+            attiva: true,
+          },
+        ],
+      },
+    },
+    {
+      forceTemplateRows: true,
+      behavior,
+      causaleContabile: causaleCEE,
+      selectedCausale: {
+        ...causaleCEE,
+        righe_prima_nota_template: templateRowsCEE,
+      },
+      pianoConti: [
+        { id: 'sup-1', codice: '2 03 08 0001', descrizione: 'Debiti v/fornitori', livello: 3, tipo: 'FINALE' },
+        { id: 'costo-1', codice: '6 01 01 0001', descrizione: 'Acquisto beni CEE', livello: 3, tipo: 'FINALE' },
+        { id: 'iva-acq-1', codice: '1 02 40 0001', descrizione: 'IVA NS.CREDITO', livello: 3, tipo: 'FINALE' },
+        { id: 'iva-ven-1', codice: '2 03 16 0001', descrizione: 'IVA NS.DEBITO', livello: 3, tipo: 'FINALE' },
+      ],
+    },
+  )
+
+  const result = await persistPrimaNotaDraft({ db, draft })
+  assert.equal(result.error, null)
+
+  const ivaInsert = db.log.find((entry) => entry.action === 'insert' && entry.table === 'registri_iva')
+  assert.ok(ivaInsert, 'Deve esserci un inserimento su registri_iva')
+  const ivaRows = Array.isArray(ivaInsert.data) ? ivaInsert.data : [ivaInsert.data]
+  assert.equal(ivaRows.length, 2)
+  assert.equal(ivaRows[0].tipo, 'acquisto')
+  assert.equal(ivaRows[1].tipo, 'vendita')
+  assert.equal(ivaRows[0].id, undefined)
+  assert.equal(ivaRows[1].id, undefined)
+  assert.equal(ivaRows[0].ui_id, undefined)
+  assert.equal(ivaRows[1].ui_id, undefined)
+  assert.equal(ivaRows[0].causale_iva_id, 'iva-acquisti')
+  assert.equal(ivaRows[1].causale_iva_id, 'iva-acquisti')
+  assert.equal(ivaRows[0].imponibile, 1229.51)
+  assert.equal(ivaRows[1].imponibile, 1229.51)
+  assert.equal(ivaRows[0].iva, 270.49)
+  assert.equal(ivaRows[1].iva, 270.49)
+  assert.equal(aggregateRegistriIvaRows(ivaRows).saldo, 0)
+})
