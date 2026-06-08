@@ -7,6 +7,7 @@ import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/re
 import { resolveRegistrazioneCausaleBehavior } from '../../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
 import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 import { resolveIvaDocumentPostingDirection } from '../../domain/causali/resolveIvaDocumentPostingDirection.js'
+import { shouldUseTaxableAmountForCounterparty } from './shouldUseTaxableAmountForCounterparty.js'
 
 function toAmountNumber(value) {
   const text = normalizeText(value).replace(',', '.')
@@ -193,15 +194,21 @@ function resolveSubjectRowSide(row = {}, selection = null, behavior = {}) {
 }
 
 function resolveIvaRowSide(row = {}, behavior = {}) {
-  if (behavior?.postingDirections?.vatSide) {
-    return behavior.postingDirections.vatSide
-  }
-
   const isNotaCreditoPassiva = Boolean(behavior?.isNotaCreditoPassiva)
   const isNotaCreditoAttiva = Boolean(behavior?.isNotaCreditoAttiva)
   const explicitSide = normalizeText(row?.lato)
+  const respectsExplicitSide = (
+    behavior?.documentMode === 'autofattura' ||
+    behavior?.ivaMode === 'autofattura' ||
+    behavior?.documentMode === 'documento_iva_cee' ||
+    behavior?.ivaMode === 'cee'
+  )
 
-  if (behavior?.documentMode === 'autofattura' || behavior?.ivaMode === 'autofattura') {
+  if (behavior?.postingDirections?.vatSide && !respectsExplicitSide) {
+    return behavior.postingDirections.vatSide
+  }
+
+  if (respectsExplicitSide) {
     if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
   }
 
@@ -339,12 +346,13 @@ function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare
   const documentData = context?.documentData || {}
   const ivaDraft = context?.ivaDraft || {}
   const causaleBehavior = context?.causaleBehavior || {}
-  const isAutofattura = Boolean(causaleBehavior?.documentMode === 'autofattura' || causaleBehavior?.ivaMode === 'autofattura')
+  const causalePolicy = context?.causalePolicy || {}
+  const useTaxableAmountForCounterparty = shouldUseTaxableAmountForCounterparty(causalePolicy, causaleBehavior)
   const isSubjectRow = normalizeText(row?.ruolo) === 'soggetto'
   const value = normalizeText(formula)
 
   if (value === 'totale_documento') {
-    if (isAutofattura && isSubjectRow) {
+    if (useTaxableAmountForCounterparty && isSubjectRow) {
       return toAmountNumber(
         documentData.imponibile ||
           documentData.totaleImponibile ||
@@ -543,7 +551,7 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   let runningTotals = { dare: 0, avere: 0 }
 
   templateRows.forEach((templateRow, index) => {
-    const generated = buildGeneratedRow(templateRow, index, { documentData, ivaDraft, soggetto, templateKey, causaleBehavior: resolvedBehavior }, runningTotals)
+    const generated = buildGeneratedRow(templateRow, index, { documentData, ivaDraft, soggetto, templateKey, causaleBehavior: resolvedBehavior, causalePolicy }, runningTotals)
     const { _runningTotals, ...cleanRow } = generated
     generatedRows.push(cleanRow)
     runningTotals = _runningTotals

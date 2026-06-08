@@ -5,6 +5,7 @@ import { resolvePartitaSoggettoId } from './resolvePartitaSoggettoId.js'
 import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
 import { calculateIvaPerCassaPreviewRelease } from './calculateIvaPerCassaPreviewRelease.js'
 import { resolvePartitaImportoResiduo } from './resolvePartitaImportoResiduo.js'
+import { shouldUseTaxableAmountForCounterparty } from './shouldUseTaxableAmountForCounterparty.js'
 
 
 function toAmount(value) {
@@ -110,10 +111,11 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
       currentPartitarioDraft.totaleImponibile ||
       currentPartitarioDraft.totale_imponibile
   )
+  const useTaxableAmountForCounterparty = shouldUseTaxableAmountForCounterparty(policy, behavior)
   const partitarioDocumentTotal = isApertura
     ? splitPayment.active
       ? splitImportoIncassabile
-      : policy.isAutofattura
+      : useTaxableAmountForCounterparty
         ? autofatturaImportoImponibile || documentTotal
         : documentTotal
     : documentTotal

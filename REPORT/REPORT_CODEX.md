@@ -4477,3 +4477,30 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - Riconciliazione
   - protocolli / registri IVA persistiti se lo schema non li supporta
 - conferma: nessun hardcode produttivo FF5, il caso e stato espresso tramite policy/fixture e test dedicato
+
+## AUDIT-FIX-CEE-Reverse-da-Impostazioni-Causale
+
+- Commit base di riferimento: `b3a30e5 checkpoint: FF5 beni estero base`.
+- Esito audit: il motore di Registrazione Manuale legge già il comportamento CEE/reverse/autofattura dalle impostazioni causale, non dal codice `FF5`.
+- Campi causale letti dal motore: `tipo_causale`, `operazione_partite` / `gestione_partite`, `tipo_documento`, `codice_registro_iva` / `registro_iva`, `segno_registro_iva`, `registro_iva_cee`, `protocollo_iva_cee`, `segno_iva_registro_cee`, `conto_iva_split_payment`, `integrazione_documento`, `causale_giro_iva_cassa`, `reverse_charge`, `split_payment`.
+- FF5 è presente nel catalogo legacy UI in `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, ma il comportamento contabile non dipende da quel codice: viene derivato da `buildCausaleContabilePolicy`, `buildCausaleIvaPolicy` e dalla normalizzazione causale.
+- Il test `tests/ff5BeniEsteroBase.test.js` usa una fixture semplificata per il caso FF5, ma la logica produttiva resta parametrica e non hardcoded.
+- Default B0IW: non risulta introdotto o necessario in produzione nel catalogo legacy; nel test è usato come causale IVA fixture per verificare la pipeline, non come hardcode del motore.
+- Esito finale: nessuna patch produttiva necessaria su `registrazioneCausaleConfig.js`; la modifica pendente nel worktree non aggiunge comportamento utile per FF5/CEE e resta fuori dal commit.
+- File analizzati: `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`, `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`, `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`, `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `tests/a17xAutofatturaBase.test.js`, `tests/ff5BeniEsteroBase.test.js`.
+- Cosa non è stato implementato: nessun hardcode su `FF5`/`A17X`, nessun TD17/TD18/TD19 avanzato, nessuna indetraibilità, nessun cambiamento Import/Riconciliazione.
+- Conferme: nessun commit, nessun push, nessun rollback, nessun `git add .`.
+## FIX-CEE-Fornitore-Partitario-Imponibile-da-Impostazioni
+
+- Commit base: `b3a30e5 checkpoint: FF5 beni estero base`.
+- Bug manuale rilevato: su causale CEE configurata da UI come `Doc. IVA Acq. CEE` / `Acq beni CEE`, il costo e le righe IVA erano corretti ma la riga fornitore e il partitario restavano sul totale documento invece che sull'imponibile.
+- Causa tecnica: il motore già gestiva il ramo CEE, ma il calcolo dell'importo del soggetto e del partitario riusava solo il ramo `autofattura`; inoltre la riga IVA vendite CEE veniva forzata dal posting direction invece di rispettare il lato esplicito del template.
+- File modificati: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/shouldUseTaxableAmountForCounterparty.js`, `tests/ff5BeniEsteroBase.test.js`, `REPORT/REPORT_CODEX.md`.
+- Impostazioni causale usate come trigger: `tipo_causale`, `operazione_partite`, `tipo_documento`, `registro_iva`, `registro_iva_cee`, `protocollo_iva_cee`, `segno_iva_registro_cee`.
+- Conferma hardcode: nessun `if codice === 'FF5'` o `if codice === 'A17X'` nel production path; il comportamento deriva da policy e impostazioni causale.
+- Conferma regressioni evitate: costo/merce e doppio conto IVA restano corretti, il netto liquidazione resta zero.
+- Conferma risultato: fornitore e partitario ora si aprono sull'imponibile (`1.229,51` nel caso test), non sul totale lordo (`1.500,00`).
+- Test eseguiti: `node --test tests/ff5BeniEsteroBase.test.js tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`.
+- Build: `npm run build`.
+- Rischi residui: non sono stati introdotti flussi nuovi per TD17/TD18/TD19, indetraibilità, Import o Riconciliazione.
+- Conferme operative: nessuna migration, nessun push, nessun rollback, nessun `git add .`.
