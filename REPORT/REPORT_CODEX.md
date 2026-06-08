@@ -4308,3 +4308,17 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - rischi residui: la vista continua a mantenere il vecchio flusso di input manuale liquidazione; il nuovo shape resta retrocompatibile
 - conferma: nessun cambiamento a Import Contabilità, nessun cambiamento a Riconciliazione, nessun push, nessun rollback, nessun `git add .`
 - pronto per commit: sì
+
+## NOTA-CREDITO-ATTIVA-SPLIT-DA-VALUTARE
+
+- commit base: `4dd2749`
+- esito test esplorativo: il caso "nota credito attiva cliente split" fallisce sul livello testato, mentre gli altri scenari split restano verdi
+- motivo del fallimento: il fixture esplorativo stava chiedendo a `buildSplitPaymentRows(...)` una semantica di inversione che quel helper non espone in modo autonomo
+- chiarimento: il problema non riguarda la FC split già validata né la liquidazione split già validata
+- livello troppo basso: `buildSplitPaymentRows` è un helper di trasformazione tecnica; la nota credito va valutata eventualmente su un livello di draft più alto, non forzata qui
+- decisione: caso sospeso, non implementare ora
+- motivo operativo NES: come indicato dall'utente, spesso la nota credito split non viene gestita operativamente perché la PA rifiuta l'errore o il documento non viene registrato
+- rischi di una patch adesso: segni PN, partitario, registri IVA, liquidazione e possibile regressione della fattura split ordinaria
+- test ripristinati/verdi: gli scenari già passanti di FC cliente split, FC cliente non split, FCPA cliente split, FCPA cliente non split, persistenza split sui registri e liquidazione split restano invariati
+- build: `npm run build` OK
+- conferma: nessun cambiamento a Import Contabilità, nessun cambiamento a Riconciliazione, nessun push, nessun rollback, nessun `git add .`
