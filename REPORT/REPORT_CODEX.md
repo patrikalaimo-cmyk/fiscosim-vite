@@ -4291,3 +4291,20 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Nessun push.
 - Nessun rollback.
 - Nessun `git add .`.
+
+## CHECKPOINT-Liquidazione-Iva-Split-Payment
+
+- commit base: `e14764f` (`checkpoint: split payment manuale validato`)
+- file residui iniziali: `src/modules/contabilita/application/liquidazioneIvaClient.js`, `tests/ivaPerCassaSchemaMapping.test.js`
+- consumer auditati: `src/modules/contabilita/views/TaxComplianceView.jsx`, `src/modules/ai_agent/index.jsx`, test liquidazione IVA e split payment
+- patch UI applicata a `TaxComplianceView.jsx`: la liquidazione mostra IVA vendite registrata, IVA split payment, IVA a credito e saldo/IVA dovuta
+- regola fiscale implementata: lo split resta nei registri IVA ma viene sottratto dal debito effettivo da versare
+- comportamento IVA debito registrata: esposto e leggibile come lordo
+- comportamento IVA split: mostrato separatamente quando presente
+- comportamento IVA debito effettiva: esposto tramite `iva_debito_effettiva` / `iva_debito`
+- comportamento IVA credito e saldo/dovuta: invariato sul vecchio shape, coerente con i consumer legacy
+- test eseguiti: `node --test tests/ivaPerCassaSchemaMapping.test.js`, `node --test tests/liquidazioneIvaSplitPayment.test.js`, `node --test tests/splitPaymentDocumentoAttivo.test.js`
+- build: `npm run build` OK
+- rischi residui: la vista continua a mantenere il vecchio flusso di input manuale liquidazione; il nuovo shape resta retrocompatibile
+- conferma: nessun cambiamento a Import Contabilità, nessun cambiamento a Riconciliazione, nessun push, nessun rollback, nessun `git add .`
+- pronto per commit: sì

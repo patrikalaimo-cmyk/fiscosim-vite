@@ -27,7 +27,8 @@ const REGISTRI_IVA_SCHEMA = new Set([
   'documento_contabilita_id',
   'societa_id',
   'esigibilita',
-  'origin_registro_iva_id'
+  'origin_registro_iva_id',
+  'split_payment'
 ])
 
 const PARTITARIO_SCHEMA = new Set([
@@ -381,4 +382,23 @@ test('8. Regressione: IVA ordinaria FF continua a passare e a salvare con esigib
   const ivaRow = Array.isArray(ivainsert.data) ? ivainsert.data[0] : ivainsert.data
   assert.equal(ivaRow.esigibilita, 'immediata', 'L\'esigibilita per IVA ordinaria deve essere immediata')
   assert.equal(ivaRow.origin_registro_iva_id, null)
+})
+
+test('9. Split payment viene persistito sul registro IVA', async () => {
+  const db = new MockDbClient()
+  const draft = buildBaseUiDraftInputFF()
+  draft.header.causaleContabile = {
+    ...draft.header.causaleContabile,
+    tipo_documento: 'fattura_attiva',
+    codice_registro_iva: '02',
+  }
+  draft.ivaDraft.splitPayment = true
+  draft.ivaDraft.rows[0].splitPayment = true
+
+  const result = await persistPrimaNotaDraft({ db, draft })
+  assert.equal(result.error, null)
+
+  const ivaInsert = db.log.find((entry) => entry.action === 'insert' && entry.table === 'registri_iva')
+  const ivaRow = Array.isArray(ivaInsert.data) ? ivaInsert.data[0] : ivaInsert.data
+  assert.equal(ivaRow.split_payment, true)
 })

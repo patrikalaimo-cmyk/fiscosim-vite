@@ -31,7 +31,8 @@ export function boundsTrimestrale(year, trimestre) {
 }
 
 export function aggregateRegistriIvaRows(rows) {
-  let iva_debito = 0
+  let iva_debito_registrata = 0
+  let iva_split_payment = 0
   let iva_credito = 0
   const list = Array.isArray(rows) ? rows : []
   let righeConsiderateCount = 0
@@ -44,7 +45,9 @@ export function aggregateRegistriIvaRows(rows) {
 
     const tipo = String(r?.tipo || '').toLowerCase()
     if (tipo === 'vendita') {
-      iva_debito += toNum(r?.iva)
+      const iva = toNum(r?.iva)
+      iva_debito_registrata += iva
+      if (r?.split_payment === true || r?.splitPayment === true) iva_split_payment += iva
       righeConsiderateCount++
     } else if (tipo === 'acquisto') {
       iva_credito += toNum(r?.iva_detraibile)
@@ -52,10 +55,21 @@ export function aggregateRegistriIvaRows(rows) {
     }
   }
 
-  iva_debito = round2(iva_debito)
+  iva_debito_registrata = round2(iva_debito_registrata)
+  iva_split_payment = round2(iva_split_payment)
+  const iva_debito = round2(iva_debito_registrata - iva_split_payment)
   iva_credito = round2(iva_credito)
   const saldo = round2(iva_debito - iva_credito)
-  return { iva_debito, iva_credito, saldo, righe_considerate: righeConsiderateCount }
+  return {
+    iva_debito,
+    iva_debito_registrata,
+    iva_split_payment,
+    iva_debito_effettiva: iva_debito,
+    iva_credito,
+    iva_dovuta: saldo,
+    saldo,
+    righe_considerate: righeConsiderateCount,
+  }
 }
 
 export function buildLiquidazionePayload({ periodicita, anno, mese = null, trimestre = null, agg, note }) {

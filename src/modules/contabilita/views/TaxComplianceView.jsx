@@ -82,6 +82,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
     periodo:Math.ceil((new Date().getMonth()+1)/3),
     iva_vendite:0,
     iva_acquisti:0,
+    iva_split_payment:0,
     note:''
   });
 
@@ -109,7 +110,12 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       return;
     }
     const agg = aggregateRegistriIvaRows(data || []);
-    setFormData(prev=>({...prev,iva_vendite:agg.iva_debito.toFixed(2),iva_acquisti:agg.iva_credito.toFixed(2)}));
+    setFormData(prev=>({
+      ...prev,
+      iva_vendite: (agg.iva_debito_registrata ?? agg.iva_debito ?? 0).toFixed(2),
+      iva_acquisti: agg.iva_credito.toFixed(2),
+      iva_split_payment: (agg.iva_split_payment ?? 0).toFixed(2),
+    }));
   };
 
   const salvaLiquidazione=async()=>{
@@ -257,13 +263,18 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
               {/* Riepilogo */}
               <div style={{marginTop:'1rem',padding:'1rem',background:'var(--s2)',borderRadius:8}}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
-                  <span>IVA a debito:</span><span style={{fontWeight:600}}>{fmt(formData.iva_vendite)}</span>
+                  <span>IVA vendite registrata:</span><span style={{fontWeight:600}}>{fmt(formData.iva_vendite)}</span>
                 </div>
+                {parseFloat(formData.iva_split_payment || 0) > 0 && (
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
+                    <span>IVA split payment:</span><span style={{fontWeight:600}}>- {fmt(formData.iva_split_payment)}</span>
+                  </div>
+                )}
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
                   <span>IVA a credito:</span><span style={{fontWeight:600}}>- {fmt(formData.iva_acquisti)}</span>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between',paddingTop:'.5rem',borderTop:'1px solid var(--bd)'}}>
-                  <span style={{fontWeight:700}}>SALDO:</span>
+                  <span style={{fontWeight:700}}>IVA dovuta:</span>
                   <span style={{fontWeight:700,color:(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0))>0?'var(--rd)':'var(--gr)'}}>
                     {fmt(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0))}
                   </span>
