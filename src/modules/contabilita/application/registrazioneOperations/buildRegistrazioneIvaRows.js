@@ -120,6 +120,7 @@ export function buildRegistrazioneIvaRows({
   causaleContabile = null,
   causaleBehavior = {},
   baseCausale = null,
+  splitPayment = false,
 } = {}) {
   const normalizedRows = normalizeRegistrazioneIvaRows(rows, baseCausale || {})
   const sourceRows = normalizedRows.length ? normalizedRows : [createDefaultRow(0, baseCausale || {})]
@@ -239,6 +240,7 @@ export function buildRegistrazioneIvaRows({
       esigibilita: row.esigibilita || (policy.ivaPerCassa ? 'differita' : 'immediata'),
       origin_registro_iva_id: row.origin_registro_iva_id || row.originRegistroIvaId || null,
       ivaPerCassa: Boolean(row.ivaPerCassa || policy.ivaPerCassa),
+      splitPayment: Boolean(splitPayment),
     }
 
     generatedRows.push(nextRow)

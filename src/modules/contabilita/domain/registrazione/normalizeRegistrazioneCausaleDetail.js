@@ -37,6 +37,9 @@ const CAUSALE_RIGHE_TEMPLATE_RUOLI = [
   'conto_fisso',
   'conto_da_storico_soggetto',
   'conto_manualizzato',
+  'iva_split',
+  'iva_split_payment',
+  'split_payment',
   'sbilancio',
 ]
 
@@ -230,6 +233,7 @@ export function hydrateRegistrazioneCausaleContabileForm(causale = {}, { isIva =
     tipo_doc_comunicaz_ft: normalizeText(source.tipo_doc_comunicaz_ft),
     tipo_doc_ft_elettroniche: normalizeText(source.tipo_doc_ft_elettroniche),
     conto_iva_esig_differita: normalizeText(source.conto_iva_esig_differita),
+    conto_iva_split_payment: normalizeText(source.conto_iva_split_payment || source.contoIvaSplitPayment),
     registro_iva_differita: normalizeText(source.registro_iva_differita),
     registro_iva_cee: normalizeText(source.registro_iva_cee),
     protocollo_iva_cee: toInteger(source.protocollo_iva_cee, 0),
@@ -332,6 +336,7 @@ export function buildRegistrazioneCausaleContabilePayload(form = {}, { isIva = f
     tipo_doc_comunicaz_ft: hydrated.tipo_doc_comunicaz_ft,
     tipo_doc_ft_elettroniche: hydrated.tipo_doc_ft_elettroniche,
     conto_iva_esig_differita: hydrated.conto_iva_esig_differita,
+    conto_iva_split_payment: hydrated.conto_iva_split_payment,
     registro_iva_differita: hydrated.registro_iva_differita,
     registro_iva_cee: hydrated.registro_iva_cee,
     protocollo_iva_cee: hydrated.protocollo_iva_cee,

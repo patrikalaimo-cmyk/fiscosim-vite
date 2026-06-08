@@ -1601,7 +1601,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     return focusField
   }
 
-  const buildCounterpartyHeader = (prevHeader, { contoId = '', contoCode = '', contoName = '', soggetto = '', contoTipo = '', codiceFiscale = '', partitaIva = '' }) => {
+  const buildCounterpartyHeader = (prevHeader, { contoId = '', contoCode = '', contoName = '', soggetto = '', contoTipo = '', codiceFiscale = '', partitaIva = '', splitPayment = false, split_payment = false }) => {
     const nextSoggetto = String(soggetto || contoName || '').trim()
     const nextId = String(contoId || '').trim()
     const nextCode = String(contoCode || '').trim()
@@ -1621,6 +1621,8 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       cliente_fornitore_nome: nextName,
       clienteFornitoreTipo: nextTipo,
       cliente_fornitore_tipo: nextTipo,
+      splitPayment: Boolean(splitPayment || split_payment),
+      split_payment: Boolean(splitPayment || split_payment),
       codiceFiscale: nextCf || nextPiva,
       clienteFornitoreCodiceFiscale: nextCf || nextPiva
     }
@@ -1741,6 +1743,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         contoTipo,
         codiceFiscale,
         partitaIva,
+        splitPayment: Boolean(conto?.split_payment || conto?.splitPayment || selected?.split_payment || selected?.splitPayment),
       }),
       rows: syncCounterpartySubjectRow(prev.rows, selected),
       ritenutaData: {

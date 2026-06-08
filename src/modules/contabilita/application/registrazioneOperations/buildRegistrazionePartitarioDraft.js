@@ -98,15 +98,18 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
   const isSupplier = Boolean(subjectAccount?.is_fornitore || subjectAccount?.is_professionista)
   const documentTotal =
     toAmount(documentData.totaleDocumento || documentData.totale_documento || header.totaleDocumento || header.totale_documento)
+  const splitPayment = options?.splitPayment && typeof options.splitPayment === 'object' ? options.splitPayment : {}
+  const splitImportoIncassabile = toAmount(options?.splitPaymentImportoIncassabile)
+  const partitarioDocumentTotal = isApertura && splitPayment.active ? splitImportoIncassabile : documentTotal
   const importoOrigine = isApertura
-    ? documentTotal
+    ? partitarioDocumentTotal
     : selectedPartita
       ? selectedPartita.importoOrigine ?? selectedPartita.importo_origine ?? selectedPartita.importo_originale ?? selectedPartita.totale ?? 0
       : 0
   const importoAperto = isApertura
     ? (manualOpenOverride
         ? toAmount(currentPartitarioDraft.importoAperto)
-        : documentTotal)
+        : partitarioDocumentTotal)
     : 0
 
   const openItemsMapped = isApertura
@@ -275,6 +278,9 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
     manualImportoApertoOverride: manualOpenOverride,
     manualImportoChiusuraOverride: manualCloseOverride,
     iva_per_cassa: Boolean(policy.ivaPerCassa),
+    splitPayment: Boolean(splitPayment.active),
+    totaleDocumento: documentTotal,
+    importoIncassabile: isApertura ? partitarioDocumentTotal : 0,
   }
 
   const ivaPerCassaPreviewActive = Boolean(policy.ivaPerCassa && policy.isPagamentoIncasso && isChiusura)

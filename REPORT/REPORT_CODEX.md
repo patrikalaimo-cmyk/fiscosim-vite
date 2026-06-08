@@ -3738,3 +3738,556 @@ File: `tests/partitarioDocumentiIva.test.js`, `tests/manualeIvaOrdinaria.test.js
 16. **Test manuale richiesto:** riaprire PFPC sullo stesso fornitore dopo il primo pagamento da 1000 e verificare nel tab Partitario saldo/default 540; selezionare la partita e verificare nel tab IVA per cassa 1540 originario, 540 chiusura, 0 residuo, 90,91 gia rilasciata e 49,09 corrente.
 17. **Vincoli rispettati:** nessuna modifica a persistenza partitario, giroconto IVA per cassa, registri IVA, DB o migration; nessun `git add`, commit o push.
 
+---
+
+## AUDIT-STRUTTURALE-POST-IVA-PER-CASSA (07/06/2026)
+
+1. **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch verificato:** `mio-branch`
+3. **Ultimo commit rilevato:** `c5d2893 checkpoint: iva per cassa ciclo completo validato`
+4. **Git status iniziale dell'audit:** worktree sporco con modifiche pregresse gia presenti; tra i file noti c'erano il report, il nuovo file di handoff `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md`, vari file del motore contabile gia modificati e gli untracked del blocco IVA per cassa e dei backup zip.
+5. **File analizzati:** `RegistrazioneManualeView.jsx`, `RegistrazionePartitarioPanel.jsx`, `RegistrazionePreviewPanel.jsx`, `buildRegistrazioneDraft.js`, `buildRegistrazionePartitarioDraft.js`, `calculateRegistrazionePartitarioSelection.js`, `calculateIvaPerCassaPreviewRelease.js`, `ivaPerCassaRelease.js`, `buildIvaPerCassaGirocontoRows.js`, `buildRegistrazioneIvaDraft.js`, `buildRegistrazioneIvaRows.js`, `buildRegistrazioneRowsFromTemplate.js`, `normalizeRegistrazioneInput.js`, `resolvePartitaImportoResiduo.js`, `resolveRegistrazioneControparti.js`, `mapRegistrazioneManualeToCanonical.js`, `persistPrimaNotaDraft.js`, `liquidazioneIvaClient.js`, `contabilitaRepo.js`, `causaleOperazioneGestita.js`, `buildRegistrazioneManualeUiPolicy.js`, `resolveRegistrazioneCausaleBehavior.js`, `RegistrazioneRowsTable.jsx`, `tests/ivaPerCassa*.test.js`, `tests/partitario*.test.js`, `tests/manualeIvaOrdinaria.test.js`, `tests/causaliPolicyEngine.test.js`, `tests/persistPrimaNotaDraft.test.js`, `tests/canonicalAccountingValidation.test.js`, `tests/fase3RegistrazioneManualeMovimentiGenerali.test.js`.
+6. **Catena dati completa verificata:** il flusso e lineare da UI a normalizzazione, draft, righe PN, movimenti IVA, partitario ordinario, gestione IVA per cassa, preview, validazione, mapping canonico e persistenza. La fonte canonica per saldi e rilascio e `importo_residuo` dal DB; `importo_originale` resta storico documento. I livelli derivati sono preview, importi di chiusura, righe tecniche PN e classificazioni fiscali calcolate. UI, preview, validazione e salvataggio leggono dalle stesse strutture `draft.*` e dagli stessi resolver, con un refresh dedicato sulle partite aperte dopo il salvataggio.
+7. **IVA per cassa verificata:** FFPC genera registro IVA differito/sospeso; PFPC parziale genera rilascio proporzionale; saldo finale azzera residuo IVA. Il giroconto e prodotto da funzioni riusabili (`buildIvaPerCassaGirocontoRows`, `calculateIvaPerCassaPreviewRelease`, `ivaPerCassaRelease`) e non da logiche duplicate. Non risultano piu dipendenze dalla causale come fonte primaria: la logica passa da policy e configurazione causale, con fallback espliciti sui ruoli contabili.
+8. **Coerenza tra partitario e IVA per cassa:** il partitario ordinario e il ramo IVA per cassa restano allineati al centesimo sui casi totale, parziale e saldo finale. Il bug del residuo UI era dovuto a precedenza di alias legacy e a refresh non sufficiente, ora risolti con resolver unico e ricarico dopo salvataggio.
+9. **Riusabilita futura:** il motore attuale e gia impostato bene per essere consumato da Import Contabilita, Riconciliazione bancaria, Registrazione Manuale avanzata, Liquidazione IVA e consultazione partitario/mastrini. Restano pero alcuni punti ancora legati alla view: `RegistrazioneManualeView.jsx` orchestra refresh, preview e selezione, quindi e il primo candidato a essere spezzato in un coordinatore piu sottile quando si aprira il riuso multi-sorgente.
+10. **Criticita trovate:** il perimetro e solido, ma il lavoro ha mostrato ancora alcuni rischi strutturali minori: molte responsabilita convergono nella view principale; alcuni helper devono ancora convivere con alias legacy per compatibilita; il report e i file di checkpoint vivono nel worktree insieme al codice applicativo, quindi il rischio di confusione operativa e reale in fasi di staging non selettivo.
+11. **Rischi di regressione:** split payment, reverse charge e ritenute restano i punti piu sensibili perche usano la stessa architettura di draft, policy e persistenza. Il rischio non e nella matematica IVA per cassa gia validata, ma nella proliferazione di rami fiscali con convenzioni diverse se non si mantiene un unico punto di risoluzione del comportamento causale.
+12. **Test esistenti controllati:** `tests/ivaPerCassaSchemaMapping.test.js`, `tests/ivaPerCassaDocumento.test.js`, `tests/ivaPerCassaRelease.test.js`, `tests/ivaPerCassaPreviewRelease.test.js`, `tests/ivaPerCassaPagamentoUiPolicy.test.js`, `tests/manualeIvaOrdinaria.test.js`, `tests/partitarioDocumentiIva.test.js`, `tests/partitarioPagamentiIncassi.test.js`, `tests/causaliPolicyEngine.test.js`, `tests/persistPrimaNotaDraft.test.js`, `tests/canonicalAccountingValidation.test.js`, `tests/fase3RegistrazioneManualeMovimentiGenerali.test.js`.
+13. **Test mancanti consigliati prima di split payment:** caso split payment con documento, partitario e rilascio separati; reverse charge con giroconto e liquidazione; ritenute con persistenza e preview; test di non-regressione del refresh della tabella partite aperte dopo salvataggio; test di isolamento tra alias legacy e `importo_residuo` in piu sorgenti dati.
+14. **Valutazione di riusabilita del motore:** alta per il nucleo `buildRegistrazioneDraft`/`buildRegistrazionePartitarioDraft`/`liquidazioneIvaClient`, media per la UI che resta ancora troppo orchestratrice, bassa per eventuali future estensioni se si continua a lasciare nella view il coordinamento di preview, refresh e stati derivati.
+15. **Esito audit:** il ciclo IVA per cassa e strutturalmente valido e coerente; il progetto e in buono stato per il riuso, ma non ancora completamente de-accoppiato dalla UI. Il sistema e pronto per essere usato come motore madre interno, con qualche debito tecnico da tenere sotto controllo prima di aprire altri regimi fiscali complessi.
+16. **Giudizio finale:** **giallo-verde**. Verde sul ciclo IVA per cassa validato e sulla solidita dei resolver/draft/persistenza; giallo per la concentrazione di responsabilita nella view e per la presenza di alias legacy ancora necessari in alcuni punti.
+17. **Prossimo step consigliato:** fare un refactor mirato di decomposizione della view di Registrazione Manuale in coordinatore e sottocomponenti di dominio, poi affrontare split payment come primo stress test della riusabilita multi-regime.
+18. **Conferme esplicite:** nessun codice modificato in questo audit, nessun commit, nessun push, nessun rollback.
+
+---
+
+## CONTROLLO-STATO-GIT-POST-AUDIT-IVA-PER-CASSA
+
+- **Path:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+- **Branch:** `mio-branch`
+- **Ultimo commit:** `c5d2893 checkpoint: iva per cassa ciclo completo validato`
+- **Git status sintetico:** worktree sporco; c'e una modifica a `REPORT/REPORT_CODEX.md` e vari untracked di documentazione, backup e scratch.
+- **File modificati:** `REPORT/REPORT_CODEX.md`
+- **File untracked:** `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md`, `ROADMAP_Copilot.md`, `fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip`, `fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip`, `fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip`, `fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip`, `fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip`, `fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip`, `fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip`, `fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip`, `scratch/`
+- **Classificazione per categoria:**
+  - **A. File gia inclusi nel commit `c5d2893`:** nessuno tra gli elementi oggi visibili nello status; il commit stabile resta il riferimento, ma i file correnti sono fuori dal commit perche il report e gli untracked non erano parte di `c5d2893`.
+  - **B. File modificati dopo `c5d2893` e coerenti con fix/audit post-IVA per cassa:** `REPORT/REPORT_CODEX.md` e `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md` come documentazione di audit e handoff.
+  - **C. File solo report/documentazione:** `REPORT/REPORT_CODEX.md`, `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md`, `ROADMAP_Copilot.md`.
+  - **D. File ZIP/scratch/roadmap da NON committare:** tutti i `fiscosim-checkpoint-*.zip`, `scratch/`, `ROADMAP_Copilot.md`.
+  - **E. File sospetti o fuori perimetro:** nessun file applicativo nuovo rispetto a questo controllo; i soli elementi delicati restano gli untracked storici di backup e la documentazione operativa, che vanno tenuti fuori da eventuali commit di codice.
+- **Worktree:** sporco.
+- **Giudizio sullo sporco:** sporco coerente, non rischioso dal punto di vista del codice applicativo in questa istante; il rumore e dovuto soprattutto a report, handoff e backup, ma va comunque tenuto sotto controllo per evitare staging involontario.
+- **Raccomandazione:** prima di un nuovo commit checkpoint, fare solo una verifica finale del perimetro da includere; se si resta sul blocco corrente, il passo successivo sensato e il test manuale o la preparazione di uno staging selettivo molto stretto. Per ora non serve alcuna correzione.
+- **Conferme esplicite:** nessun codice modificato, nessuna patch, nessun commit, nessun push, nessun rollback.
+
+---
+
+## SPLIT-PAYMENT-FASE-1-AUDIT-PROGETTAZIONE
+
+- **Path:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+- **Branch:** `mio-branch`
+- **Ultimo commit:** `c5d2893 checkpoint: iva per cassa ciclo completo validato`
+- **Git status sintetico:** worktree sporco per report, handoff e backup storici; nessuna modifica al codice introdotta in questo audit.
+- **File letti:** `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/calculateIvaPerCassaPreviewRelease.js`, `src/modules/contabilita/application/registrazioneOperations/ivaPerCassaRelease.js`, `src/modules/contabilita/application/registrazioneOperations/buildIvaPerCassaGirocontoRows.js`, `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`, `src/modules/contabilita/canonical/buildManualRegistrationCommitInput.js`, `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, `src/modules/contabilita/domain/registrazione/buildRegistrazioneManualeUiPolicy.js`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`, `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js`, `src/modules/contabilita/application/liquidazioneIvaClient.js`, `supabase/migrations/20260430230000_registri_iva_prima_nota_link.sql`, `supabase/migrations/20260412130000_rls_multi_tenant_isolation.sql`, `supabase/migrations/20260508140000_core_commit_canonical_accounting_payload.sql`, `tests/manualeIvaOrdinaria.test.js`, `tests/partitarioDocumentiIva.test.js`, `tests/partitarioPagamentiIncassi.test.js`, `tests/ivaPerCassaDocumento.test.js`, `tests/ivaPerCassaPreviewRelease.test.js`, `tests/ivaPerCassaRelease.test.js`, `tests/ivaPerCassaPagamentoUiPolicy.test.js`, `tests/ivaPerCassaSchemaMapping.test.js`, `tests/causaliPolicyEngine.test.js`, `tests/persistPrimaNotaDraft.test.js`, `tests/canonicalAccountingValidation.test.js`, `tests/fase3RegistrazioneManualeMovimentiGenerali.test.js`.
+- **Flusso FC ordinario attuale:** la causale FC e ancora governata da `buildCausaleContabilePolicy` e dalla configurazione causale; la UI apre i tab `rows`, `iva`, `partitario`; `buildRegistrazioneDraft` normalizza input, costruisce draft documento/IVA/partitario/ritenute, produce righe da template, valida e poi mappa verso il payload canonico; `mapRegistrazioneManualeToCanonical` traduce `header`, `ivaDraft`, `partitarioDraft`, `rows` e `pnPayload` in payload di commit; `persistPrimaNotaDraft` salva prima nota, IVA e partitario; `contabilitaRepo` e `liquidazioneIvaClient` chiudono il cerchio su partitario, registri IVA e liquidazione.
+- **Punti di innesto split payment:** il punto piu naturale e `buildRegistrazioneIvaDraft` per distinguere `esigibilita`, `splitPayment` e registro IVA; poi `buildRegistrazioneRowsFromTemplate` e `buildRegistrazioneDraft` per fare in modo che il totale partita cliente non venga gonfiato dall'IVA split; `buildRegistrazionePartitarioDraft` e `validateRegistrazionePartitarioDraft` per il credito cliente effettivamente incassabile; `mapRegistrazioneManualeToCanonical` e `buildManualRegistrationCommitInput` per trasmettere il flag in modo canonico; `RegistrazioneManualeView.jsx` e `RegistrazionePreviewPanel.jsx` per mostrare il comportamento; `contabilitaRepo.js` e `liquidazioneIvaClient.js` per persistenza e liquidazione.
+- **Comportamento contabile atteso:** su FC split payment con imponibile 1.000 e IVA 220, la partita cliente deve aprirsi a 1.000, l'IVA split deve restare registrata nel registro IVA vendite e nel calcolo fiscale ma non nel credito verso cliente, la liquidazione deve trattare in modo separato la quota split e non aspettare mai un incasso futuro dell'IVA dal cliente. Il totale documento resta 1.220, ma il totale incassabile dalla controparte e 1.000.
+- **Gap DB/schema eventuali:** il motore canonico e il codice applicativo gia conoscono `splitPayment`/`split_payment` e `esigibilita`, ma non ho trovato in questa lettura una colonna operativa chiaramente dedicata nello schema delle tabelle contabili per marcare lo split payment come attributo persistente autonomo. Se serve un flag dedicato su `registri_iva` o su un documento operativo, lo schema va verificato prima della patch; in questa fase non si crea alcuna migration.
+- **File da modificare nella fase patch:**
+  - **Dominio/policy:** `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, `src/modules/contabilita/domain/registrazione/buildRegistrazioneManualeUiPolicy.js`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`, `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js`
+  - **Builder/draft:** `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/validateRegistrazionePartitarioDraft.js`
+  - **Mapper canonico:** `src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`, `src/modules/contabilita/canonical/buildManualRegistrationCommitInput.js`
+  - **Persistenza:** `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `src/modules/contabilita/data/contabilitaRepo.js`
+  - **UI/preview:** `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/components/registrazione/RegistrazionePreviewPanel.jsx`, `src/modules/contabilita/components/registrazione/RegistrazionePartitarioPanel.jsx`
+  - **Test:** `tests/manualeIvaOrdinaria.test.js`, `tests/partitarioDocumentiIva.test.js`, `tests/partitarioPagamentiIncassi.test.js`, `tests/ivaPerCassaDocumento.test.js`, `tests/ivaPerCassaPreviewRelease.test.js`, `tests/ivaPerCassaRelease.test.js`, `tests/ivaPerCassaPagamentoUiPolicy.test.js`, `tests/ivaPerCassaSchemaMapping.test.js`, `tests/causaliPolicyEngine.test.js`, `tests/persistPrimaNotaDraft.test.js`, `tests/canonicalAccountingValidation.test.js`, `tests/fase3RegistrazioneManualeMovimentiGenerali.test.js`
+- **Test automatici richiesti:** FC ordinaria invariata; FC split con partita cliente pari all'imponibile; evidenza split nel registro IVA; liquidazione separata per split; nessuna regressione IVA per cassa; nessuna regressione FC ordinaria; nessuna dipendenza esclusiva dal codice causale.
+- **Rischi regressione:** il rischio principale e il rimbalzo tra partita cliente, registro IVA e liquidazione se lo split viene modellato con un solo flag senza una policy chiara; secondo rischio e il mantenere fallback basati sul codice causale; terzo rischio e introdurre duplicazione tra preview UI e commit canonico.
+- **Giudizio finale:** **giallo**. La base architetturale e buona e il motore manuale puo ospitare lo split payment, ma serve una fase patch molto disciplinata per fissare bene lo schema di persistenza, il calcolo della partita e la liquidazione separata.
+- **Proposta di prossimo prompt operativo:** chiedere una fase 2 di progettazione o patch strettamente limitata a `buildRegistrazioneIvaDraft`, `buildRegistrazionePartitarioDraft`, `mapRegistrazioneManualeToCanonical`, `liquidazioneIvaClient` e ai test minimi, con un audit preventivo dei campi DB effettivamente disponibili.
+- **Conferma:** nessun codice modificato, nessun file creato, nessun commit, nessun push, nessun rollback.
+
+---
+
+## SPLIT-PAYMENT-FASE-2-PATCH-FUNZIONALE
+
+1. **Path:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Branch:** `mio-branch`
+3. **Ultimo commit:** `c5d2893 checkpoint: iva per cassa ciclo completo validato`
+4. **Git status iniziale:** worktree gia sporco per `REPORT/REPORT_CODEX.md`, documentazione di handoff, roadmap, ZIP storici e `scratch/`; nessuna modifica applicativa post-interruzione era presente prima della patch.
+5. **Audit pre-patch sintetico:** il flusso manuale aveva gia `splitPayment` nel payload canonico e `split_payment` nell'anagrafica/piano dei conti, ma il flag non veniva propagato dalla selezione cliente ai builder. Partitario e righe PN usavano il totale documento; la liquidazione non distingueva IVA split; `registri_iva` non aveva una colonna persistente dedicata.
+6. **File modificati:** `REPORT/REPORT_CODEX.md`, `src/modules/contabilita/application/liquidazioneIvaClient.js`, `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `buildRegistrazioneIvaDraft.js`, `buildRegistrazioneIvaRows.js`, `buildRegistrazionePartitarioDraft.js`, `normalizeRegistrazioneInput.js`, `src/modules/contabilita/components/registrazione/RegistrazionePreviewPanel.jsx`, `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `tests/ivaPerCassaSchemaMapping.test.js`.
+7. **File creati:** `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneSplitPayment.js`, `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `supabase/migrations/20260607120000_split_payment_registri_iva.sql`, `tests/splitPaymentDocumentoAttivo.test.js`.
+8. **Comportamento implementato:** il flag anagrafico viene propagato dalla controparte selezionata alla testata normalizzata; un resolver centrale attiva lo split solo per documento IVA attivo e flag controparte/documento; IVA, PN, partitario, mapping canonico, persistenza, preview e liquidazione usano lo stesso esito.
+9. **Regola di attivazione:** documento/fattura attiva secondo policy causale piu flag `split_payment` della controparte oppure flag documento esplicito. Il codice causale non attiva lo split: una causale esemplificativa `FCPA` senza flag resta ordinaria. Le fatture passive non attivano lo split.
+10. **Comportamento contabile PN:** su imponibile 1.000, IVA 220 e totale 1.220 vengono prodotti cliente Dare 1.000, ricavo Avere 1.000, conto IVA split Dare 220 e lo stesso conto Avere 220. Le due righe tecniche sono read-only e la scrittura resta quadrata.
+11. **Conto tecnico split:** risolto da campi espliciti della causale (`conto_iva_split_payment` e alias) oppure da una riga template con ruolo `iva_split_payment`/`iva_split`/`split_payment`. Se manca, il draft viene bloccato prima del salvataggio.
+12. **Registro IVA:** imponibile e IVA restano integralmente nel registro vendite; le righe IVA e il payload canonico portano `splitPayment=true`; la persistenza salva `registri_iva.split_payment=true`.
+13. **Partitario:** la partita cliente apre `importo_originale`, `importo_residuo` e importo incassabile sul solo imponibile; il totale documento lordo resta separato nel draft.
+14. **Liquidazione IVA:** espone `iva_debito_registrata`, `iva_split_payment`, `iva_debito_effettiva`, `iva_credito`, `iva_dovuta` e mantiene `iva_debito`/`saldo` compatibili con la UI. Esempio verificato: 1.500 registrata, 200 split, 1.300 effettiva, 100 credito, 1.200 dovuta.
+15. **Gap DB/configurazione:** necessaria la nuova colonna `registri_iva.split_payment boolean`; e stata aggiunta una migration minima e non eseguita. Resta necessario configurare sulla causale o sul template un conto tecnico IVA split; non e stato introdotto alcun ID hardcoded.
+16. **Test dedicati:** `tests/splitPaymentDocumentoAttivo.test.js` copre ordinaria, attivazione da cliente con causale generica, causale dedicata senza flag, fattura passiva, righe PN, conto mancante, partitario netto, mapping canonico e liquidazione.
+17. **Test eseguiti:** nuovo test `9/9`; test persistenza/schema combinati `18/18`; suite richiesta IVA ordinaria, partitario, IVA per cassa e split `177/177`; suite completa `362/362`.
+18. **Build:** `npm run build` OK, Vite 5.4.21, 392 moduli trasformati. Resta il warning preesistente sul chunk principale oltre 2 MB.
+19. **Rischi residui:** la migration va applicata prima del test reale; la causale usata deve avere il conto tecnico split configurato; la liquidazione UI conserva i campi legacy ma non mostra ancora una colonna dedicata nella vista fiscale; note credito split richiedono un test funzionale dedicato prima di considerarle operative.
+20. **Test manuali consigliati:** applicare la migration in ambiente controllato; configurare il conto tecnico; registrare FC attiva 1.000+220 con cliente split e verificare quattro righe PN, partita 1.000, registro IVA 220 con flag split e liquidazione separata; ripetere con cliente ordinario e causale dedicata senza flag.
+21. **Vincoli rispettati:** nessun commit, nessun push, nessun rollback, nessun `git add .`, nessuna modifica a env/auth/Supabase URL; Import Contabilita e Riconciliazione non toccati.
+
+---
+
+## FIX-PianoConti-Note-Column
+
+- **Causa precisa:** il campo `note` veniva propagato nei payload di scrittura del `piano_conti` da `AnagraficheContabiliView.jsx` e dai wrapper di repository (`updatePianoConto`, `updatePianoContoByCodiceSocieta`, `insertPianoConto`), ma la tabella `piano_conti` non espone la colonna `note` nella schema cache di Supabase. Il problema non era nella lettura del conto, bensì nel payload di update/insert che includeva un campo non persistibile.
+- **File modificati:** `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `REPORT/REPORT_CODEX.md`.
+- **Query corretta:** i payload verso `piano_conti` ora rimuovono esplicitamente `note` prima di `update` e `insert`; la lettura continua a usare i campi realmente presenti e usati dal codice (`id`, `codice`, `descrizione`, `tipo`, `natura`, `sezione`, `livello`, `partita_iva`, `anagrafica_piva`, `anagrafica_cf`, `is_cliente`, `is_fornitore`, `is_professionista`, `attivo`, `societa_id`).
+- **Migration:** nessuna migration creata.
+- **Test eseguiti:** `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- **Build:** `npm run build` OK.
+- **Rischi residui:** resta solo il rischio funzionale di eventuali altri payload legacy che provino a reinserire `note` sul piano conti; in questo passaggio ho blindato i tre punti di scrittura noti. Le warning di CRLF di Git non sono un problema funzionale.
+- **Conferme esplicite:** nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+---
+
+## FIX-Anagrafica-SplitPayment-Persistenza-Verificata
+
+- **Causa precisa o causa tecnica più probabile:** l’update del `piano_conti` era tecnicamente valido ma non restituiva il record aggiornato; la UI chiudeva la modale dopo un semplice `update(...).eq('id', id)` senza una conferma esplicita del dato persistito, lasciando spazio a stato stale o a un refresh che non dimostrava il nuovo valore. Il flag `split_payment` non era il problema di naming, ma di verifica/ri-lettura del risultato.
+- **File modificati:** `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `tests/anagraficaSplitPaymentSave.test.js`, `REPORT/REPORT_CODEX.md`.
+- **Modifica a `updatePianoConto`:** ora esegue `update(normalizeOptionalUuidFields(...)).eq('id', id).select('*').single()` e normalizza ancora i campi UUID opzionali, rimuovendo `note` e preservando i booleani.
+- **Come viene restituito il record aggiornato:** il repo restituisce direttamente la riga aggiornata da Supabase; se la select non porta alcuna riga, la promise fallisce con `Nessuna anagrafica aggiornata: verifica id record o permessi RLS.`.
+- **Come la UI aggiorna lista/stato locale:** il salvataggio attende il record restituito, aggiorna temporaneamente `editConto` con il record aggiornato, poi richiama `onRefresh?.()`/reload del parent e chiude la modale. Non tratta più il caso “nessuna riga” come successo silenzioso.
+- **Conferma che `split_payment: false` non viene scartato:** il test mirato verifica che `split_payment` resti presente anche quando vale `false` e non venga eliminato da sanitizzatori/falsy filtering.
+- **Test eseguiti con esito:** `node --test tests/anagraficaSplitPaymentSave.test.js` OK, `node --test tests/normalizeUuidOrNull.test.js` OK, `node --test tests/splitPaymentDocumentoAttivo.test.js` OK, `node --test tests/manualeIvaOrdinaria.test.js` OK, `node --test tests/partitarioDocumentiIva.test.js` OK.
+- **Build con esito:** `npm run build` OK.
+- **Test manuale consigliato:** riaprire la modale anagrafica cliente/fornitore, attivare/disattivare `Split Payment`, salvare, chiudere e riaprire il record per confermare che il valore persista e che il refresh della lista mostri lo stato corretto.
+- **Rischi residui:** resta la dipendenza dal refresh del parent per mostrare l’ultimo stato in lista; il ramo di persistenza ora e verificabile, ma un eventuale problema di refresh esterno continuerebbe a sembrare un dato stale. Nessuna migration necessaria.
+- **Conferme esplicite:** nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+---
+
+## FIX-Anagrafica-Apertura-Modale-Record-Fresco
+
+- **Causa precisa:** la modale di modifica veniva riaperta partendo da un oggetto già presente nella lista/filtered tree in memoria. Dopo il save il DB era corretto, ma la riapertura immediata poteva ancora pescare la copia stale prima che il parent completasse il refresh.
+- **Da quale stato/lista stale veniva aperta la modale:** dalla lista `pianoConti` passata alla `PianoContiView` e dalle sue viste derivate `filterRows`, `tree` e `filtered`, senza una rilettura diretta per id.
+- **Nuova funzione repo creata/usata:** `getPianoContoById(id)` in `src/modules/contabilita/data/contabilitaRepo.js`, con select diretta su `piano_conti` per `id` e `single()`.
+- **Come viene letto il record fresco dal DB:** all’apertura della modifica il click passa solo l’`id`; la view chiama `await contabilitaRepo.getPianoContoById(id)` e usa quel record per `setEditConto`.
+- **Come viene aggiornato lo stato dopo save:** il save continua a restituire il record aggiornato da Supabase, lo passa a `setEditConto`, attende `await onRefresh()` e poi chiude la modale; in parallelo `replacePianoContoInList` permette di sostituire il record in una lista locale se serve.
+- **Conferma che non serve hard reset:** confermato; la riapertura della modale ora legge il record fresco per id e non dipende piu dal refresh completo del browser.
+- **Test eseguiti:** `node --test tests/anagraficaSplitPaymentSave.test.js` OK, `node --test tests/normalizeUuidOrNull.test.js` OK, `node --test tests/splitPaymentDocumentoAttivo.test.js` OK.
+- **Build:** `npm run build` OK.
+- **Rischi residui:** resta solo il rischio di errore di rete o RLS sulla fetch per id; in quel caso la modale non si apre con dati vecchi ma mostra l’errore. Nessuna migration necessaria.
+- **Conferme esplicite:** nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+---
+
+## FIX-Anagrafica-Cache-Stale-Post-Save
+
+- **Causa precisa:** la persistenza DB era corretta, ma la UI chiudeva la modale prima che il refresh del parent fosse completato. Questo lasciava una finestra di stato stale in cui la riapertura immediata poteva rileggere il vecchio oggetto ancora in memoria.
+- **Quali stati locali erano stale:** `editConto` nella `PianoContiView` e la prop `pianoConti` ricaricata dal parent, più eventuali viste derivate costruite da `filterRows`/`tree`/`filtered` che dipendono dal vecchio array finché il reload non termina.
+- **File modificati:** `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `tests/anagraficaSplitPaymentSave.test.js`, `REPORT/REPORT_CODEX.md`.
+- **Come viene sostituito il record aggiornato nella UI:** il save riceve il record aggiornato dal repo, lo mette in `editConto`, attende `await onRefresh()` e solo dopo chiude la modale; il refresh del parent ricostruisce la lista dal DB invece di affidarsi alla copia stale.
+- **Conferma che non serve hard reset:** confermato; la correzione elimina la dipendenza dal reload completo del browser per vedere il valore aggiornato.
+- **Test eseguiti:** `node --test tests/anagraficaSplitPaymentSave.test.js` OK, `node --test tests/normalizeUuidOrNull.test.js` OK, `node --test tests/splitPaymentDocumentoAttivo.test.js` OK.
+- **Build:** `npm run build` OK.
+- **Rischi residui:** resta solo la dipendenza dal corretto comportamento del parent `caricaTutto()` e dalla risposta Supabase; non emergono altri cache layer applicativi specifici sul flusso anagrafico corrente.
+- **Conferme esplicite:** nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+---
+
+## FIX-Anagrafica-SplitPayment-False-Persistente
+
+- **Causa precisa:** il valore booleano `false` poteva essere perso nel percorso di salvataggio perché il payload era affidato a un merge generico e non esplicitava il booleano nel modo piu chiaro possibile. Il problema non era nel nome campo, ma nella fragilita del passaggio UI -> payload -> persist -> ri-lettura quando il toggle veniva disattivato.
+- **Punto in cui `false` veniva scartato:** nel percorso di costruzione del payload anagrafica, dove il booleano era affidato allo stato del form e al merge generico senza una normalizzazione esplicita dei booleani; la correzione ha reso il passaggio del flag inequivocabile. Il repo non filtra piu il booleano e la UI invia sempre `split_payment` come valore booleano.
+- **File modificati:** `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `tests/anagraficaSplitPaymentSave.test.js`, `REPORT/REPORT_CODEX.md`.
+- **Test aggiornati:** `tests/anagraficaSplitPaymentSave.test.js` ora copre `true`, `false`, il record aggiornato ritornato da Supabase, la preservazione di `false` anche sui booleani vicini e l’errore quando non torna alcuna riga aggiornata.
+- **Conferma che `split_payment: false` viene incluso nel payload:** si, il payload di update lo include esplicitamente e il test lo verifica sia nel payload inviato sia nel record restituito dal repo.
+- **Test eseguiti:** `node --test tests/anagraficaSplitPaymentSave.test.js` OK, `node --test tests/normalizeUuidOrNull.test.js` OK, `node --test tests/splitPaymentDocumentoAttivo.test.js` OK.
+- **Build:** `npm run build` OK.
+- **Conferme esplicite:** nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+---
+
+## AUDIT-Anagrafica-SplitPayment-Non-Persistente
+
+- **Path:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+- **Branch:** `mio-branch`
+- **Ultimo commit:** `c5d2893 checkpoint: iva per cassa ciclo completo validato`
+- **Git status iniziale:** worktree sporco per il blocco Split Payment e per report/backup gia presenti; nessuna nuova modifica applicativa richiesta da questo audit.
+- **File letti:** `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneSplitPayment.js`, `src/modules/contabilita/index.jsx`.
+- **Flusso save ricostruito:** apertura modal `PianoContiView` -> selezione riga `ModalEditConto` -> tab `Anagrafica` -> toggle `split_payment` sul `form` locale -> click `Salva` -> `onSave(form)` -> `validatePianoContoForm(form)` -> `contabilitaRepo.updatePianoConto(editConto.id, safeUpdates)` -> `caricaTutto()`/`onRefresh()` dal parent -> chiusura modal con `setEditConto(null)`.
+- **Campo split scritto:** `split_payment` nel payload del `piano_conti`.
+- **Campo split letto:** `split_payment` da `conto` in `ModalEditConto` e in `AnagraficaTab`; la lista piano conti viene ricaricata con `getPianoConti(societaId)` che fa `select('*')`.
+- **Campo split usato dal motore registrazione:** `resolveRegistrazioneSplitPayment` legge `split_payment`, `splitPayment`, `cliente_split_payment` e `clienteSplitPayment`; nel nostro flusso il ramo canonico e `split_payment`.
+- **Payload atteso:** `updatePianoConto(id, { ..., split_payment: true, ... })` con `id` valido e senza campi UUID vuoti su altri `_id` opzionali; il risultato atteso e la persistenza del flag sul record `piano_conti` seguito da reload della lista.
+- **Query Supabase usata:** `sb.from('piano_conti').update(normalizeOptionalUuidFields(safeUpdates)).eq('id', id)`; la lista usa `sb.from('piano_conti').select('*').eq('societa_id', societaId).eq('attivo', true).order('codice')`.
+- **Ipotesi confermata:** non emerge un problema di nome campo o di campo sbagliato; il campo scritto e quello letto coincidono. L’ipotesi piu probabile resta **UI stale / reload non osservato dall’utente** oppure **update senza conferma esplicita** (il repo non fa `.select()` dopo update e il caller non usa la risposta aggiornata). Non ho evidenza di DB non aggiornato dal codice letto, ma senza query di ritorno non si vede il dato appena scritto.
+- **Causa precisa se individuata:** non individuata con certezza dal solo codice letto; il flusso e coerente, quindi la causa piu probabile e una combinazione di stato locale stale dopo il save e mancanza di lettura esplicita del record aggiornato. Se il problema persiste a runtime, il prossimo controllo va fatto sul response Supabase dell’update e sulla sequenza reale di refresh del parent `caricaTutto(true)`.
+- **Patch consigliata, ma NON applicata:** far restituire al repo il record aggiornato con `.select('*').maybeSingle()` o comunque confermare il risultato dell’update, quindi forzare un refresh esplicito della vista dopo `setEditConto(null)`; in alternativa, tracciare il payload e la risposta dell’update per verificare se il record viene davvero aggiornato o se la UI rilegge un oggetto stale.
+- **Eventuali test da fare:** test mirato sul save del conto con `split_payment=true` e reload della lista; smoke di persistenza su `updatePianoConto` con mock Supabase che verifica il payload scritto e la reiezione dei campi vuoti; verifica manuale che la riapertura della modal mostri il flag aggiornato.
+- **Conferma:** nessun codice modificato, nessuna migration, nessun commit, nessun push, nessun rollback.
+
+---
+
+## FIX-Anagrafica-UUID-Vuoto
+
+- **Causa precisa:** la modale anagrafica cliente/fornitore passava al salvataggio valori placeholder vuoti su campi opzionali di tipo UUID. Il caso piu probabile e `causale_iva_id` nel tab `Anagrafica`, ma la protezione e stata estesa a tutti i campi `_id` opzionali del payload `piano_conti`.
+- **Campo/i coinvolti:** soprattutto `causale_iva_id`; per robustezza anche qualunque altro campo opzionale con suffisso `_id` presente nel payload di `piano_conti` (ad esempio eventuali `conto_iva_split_id`, `tipo_pagamento_id`, `regime_fiscale_id`, `soggetto_operazione_id`, `banca_id` se introdotti o presenti nello schema).
+- **File modificati:** `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `tests/normalizeUuidOrNull.test.js`, `REPORT/REPORT_CODEX.md`.
+- **Normalizzazione applicata:** nuova funzione `normalizeUuidOrNull(value)` che converte in `null` `""`, `undefined`, `"null"`, `"__none__"`, `"undefined"` e stringhe vuote/spazi; il wrapper `normalizeOptionalUuidFields()` la applica a tutti i campi `_id` del payload `piano_conti` prima di `insert`/`update`.
+- **Migration:** nessuna migration creata.
+- **Test eseguiti:** `node --test tests/normalizeUuidOrNull.test.js`, `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- **Build:** `npm run build` OK.
+- **Rischi residui:** se emergono altri payload anagrafici fuori da `piano_conti` con UUID opzionali lasciati vuoti, andranno normalizzati con la stessa helper; per il flusso attuale il punto critico e coperto. Restano solo i warning CRLF di Git e il worktree gia sporco per il blocco Split Payment precedente.
+- **Conferme esplicite:** nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+---
+
+## FIX-SplitPayment-Trigger-Cliente-FC
+
+- **Path verificato:** `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+- **Branch:** `mio-branch`
+- **Ultimo commit stabile:** `c5d2893 checkpoint: iva per cassa ciclo completo validato`
+- **Git status iniziale:** worktree sporco per fix e report gia presenti, senza commit o rollback in questa sessione
+- **File letti:** `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneSplitPayment.js`, `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneConti.js`, `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `tests/splitPaymentDocumentoAttivo.test.js`
+- **Flusso ricostruito:** selezione controparte -> header registrazione -> normalizzazione input -> build draft -> resolver split -> righe PN/IVA/partitario
+- **Causa precisa:** quando il soggetto era gia presente nell'header, la normalizzazione lo preservava ma non riallineava `splitPayment` al record fresco del `pianoConti`; una copia stale dell'anagrafica poteva mantenere `false` anche se il cliente era split
+- **Punto di fix:** `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, nel ramo `resolveRegistrazioneHeaderCounterpartyDraft`, con lettura del record corrente da `pianoConti` anche nel caso di soggetto preservato
+- **Campo split scritto:** `split_payment`
+- **Campo split letto:** `split_payment` e `splitPayment` dopo normalizzazione, con fallback sul record corrente del piano conti
+- **Campo split usato dal motore registrazione:** `header.splitPayment` e `header.split_payment` nel draft, poi `resolveRegistrazioneSplitPayment` e `buildSplitPaymentRows`
+- **Payload atteso:** FC ordinaria con cliente split attivo produce `splitPayment: true` nel draft e accende il ramo split payment senza dipendere dal codice causale
+- **Query / source usata:** nessuna query nuova; il fix opera sul record gia caricato in memoria e lo riallinea prima del draft
+- **Test eseguiti:** `node --test tests/splitPaymentDocumentoAttivo.test.js` OK, `node --test tests/anagraficaSplitPaymentSave.test.js` OK, `node --test tests/manualeIvaOrdinaria.test.js` OK, `node --test tests/partitarioDocumentiIva.test.js` OK
+- **Build:** `npm run build` OK
+- **Rischi residui:** dipendenza dalla qualita del record caricato in `pianoConti`; se qualche altro percorso costruisse l'header fuori da questa normalizzazione, il medesimo allineamento va riusato li
+- **Conferme esplicite:** nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`
+
+---
+
+## FIX-SplitPayment-RighePN-MovimentiIVA
+
+- **Causa precisa:** il flag split arrivava al partitario, ma nella catena PN/IVA poteva restare fermo a una copia stale dell'header oppure essere ricondotto al ramo ordinario quando la riga IVA template non esponeva un `ruolo` abbastanza esplicito.
+- **PerchÃ© il partitario era corretto ma le righe PN restavano ordinarie:** il partitario usa direttamente il residuo/incassabile, mentre le righe PN passavano da `buildSplitPaymentRows`; lÃ¬ il ramo split poteva restare inattivo se il record controparte non veniva riesolto dal `pianoConti` o se la riga IVA ordinaria del template non veniva riconosciuta come tale.
+- **File modificati:** `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneSplitPayment.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `tests/splitPaymentDocumentoAttivo.test.js`, `REPORT/REPORT_CODEX.md`
+- **Comportamento righe PN cliente split:** il cliente viene portato all'imponibile incassabile; la riga IVA ordinaria `IVA NS.DEBITO` non viene piÃ¹ lasciata passare; vengono create due righe tecniche `IVA split payment` Dare/Avere con importo 136,36 nel caso di prova
+- **Comportamento movimento IVA split:** il draft IVA mantiene `splitPayment: true`, `ivaSplit: 136,36`, `totaleDocumento: 1.500`, `imponibile: 1.363,64`, e il flag risulta stabile nel payload canonico
+- **Comportamento partitario:** invariato e corretto, con apertura cliente al solo imponibile/incassabile
+- **Comportamento FC ordinaria cliente non split:** resta invariato, con cliente Dare totale documento, ricavo Avere imponibile, IVA ns. debito Avere, partitario al totale documento e `splitPayment: false`
+- **Test eseguiti:** `node --test tests/splitPaymentDocumentoAttivo.test.js` OK, `node --test tests/anagraficaSplitPaymentSave.test.js` OK, `node --test tests/manualeIvaOrdinaria.test.js` OK, `node --test tests/partitarioDocumentiIva.test.js` OK
+- **Build:** `npm run build` OK
+- **Rischi residui:** il ramo split dipende dalla corretta configurazione del conto IVA split nella causale o nel template; in assenza di configurazione esplicita il builder emette blocco e non fallback silenzioso
+- **Conferma no migration/no commit/no push/no rollback/no git add .**: confermato
+
+## AUDIT-PROFONDO-SPLIT-PAYMENT-CAUSA-REALE
+
+### A. Stato iniziale
+
+- Path verificato: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`.
+- Branch: `mio-branch`.
+- Ultimo commit: `c5d2893 checkpoint: iva per cassa ciclo completo validato`.
+- Worktree iniziale: sporco, con modifiche e file untracked derivanti dalle lavorazioni post-checkpoint già presenti.
+
+### B. Flusso reale dei dati
+
+Il flusso effettivo di salvataggio è:
+
+`RegistrazioneManualeView` -> `normalizeRegistrazioneInput` -> `buildRegistrazioneDraft` -> righe da template -> trasformazione `buildSplitPaymentRows` -> partitario/IVA -> mapping canonico -> validazione -> `persistPrimaNotaDraft`.
+
+`RegistrazioneManualeView` usa correttamente `draftModel.draft` per il salvataggio e `draftModel.normalized.rows` come `resolvedRows`. La tabella delle righe riceve però contemporaneamente:
+
+- `rows={rowsWithCounterpartySync}`, cioè lo stato UI originario;
+- `resolvedRows={resolvedRows}`, cioè le righe trasformate dal motore.
+
+In `RegistrazioneRowsTable` le righe principali vengono visualizzate da `rows`; da `resolvedRows` vengono aggiunte soltanto le righe tecniche con ID non già presenti. Per una riga soggetto con lo stesso ID, gli importi visualizzati restano quindi quelli dello stato UI originario.
+
+### C. Mappa campi Split Payment
+
+| Livello | Campo/fonte | Uso |
+|---|---|---|
+| Anagrafica/testata | `split_payment`, `splitPayment`, alias compatibili | Attivazione da cliente o documento |
+| Risoluzione | `resolveRegistrazioneSplitPayment().active` | Decisione applicativa centrale |
+| Draft IVA | `ivaDraft.splitPayment` | Marcatura movimenti IVA |
+| Righe contabili | `buildSplitPaymentRows` | Riduzione partita cliente all'imponibile e giroconto IVA split |
+| Partitario | `splitPaymentImportoIncassabile` | Apertura partita per il solo importo incassabile |
+| Canonico | `fiscalContext.splitPayment`, `vat.splitPayment` | Trasporto semantica fiscale |
+| Persistenza | `registri_iva.split_payment` | Evidenza DB, se lo schema applicato la supporta |
+
+La logica applicativa non usa il codice causale come fonte primaria: usa flag, policy/configurazione e conto IVA split configurato.
+
+### D. Causa reale
+
+La causa principale del comportamento visibile è la divergenza tra righe UI e righe risolte:
+
+`RegistrazioneRowsTable` mostra gli importi delle righe originali `rowsWithCounterpartySync` e non sostituisce le righe con stesso ID usando `resolvedRows`.
+
+Di conseguenza il motore può produrre correttamente:
+
+- partita cliente pari al solo imponibile;
+- righe tecniche IVA split;
+- draft IVA marcato Split Payment;
+- payload canonico e persistenza coerenti;
+
+mentre il tab righe continua a mostrare la registrazione FC ordinaria, per esempio cliente Dare `1.500` invece dell'importo incassabile `1.363,64`.
+
+La trasformazione Split Payment avviene inoltre dopo `buildRegistrazioneRowsFromTemplate`, che resta orientato alla fattura ordinaria. Questo non è di per sé errato, ma rende obbligatorio che preview, tabella, validazione e salvataggio consumino tutti il risultato trasformato.
+
+### E. Punti esatti per la futura patch
+
+1. `RegistrazioneRowsTable.jsx`: usare la riga risolta per gli importi quando esiste lo stesso ID, preservando dallo stato UI solo i dati realmente editabili non derivati.
+2. `RegistrazioneManualeView.jsx`: mantenere una sola fonte effettiva per preview e visualizzazione contabile dopo la costruzione del draft.
+3. `buildSplitPaymentRows.js`: verificare esplicitamente la presenza del ruolo soggetto e produrre un blocker se la riga da ridurre non è identificabile.
+4. `RegistrazionePreviewPanel.jsx`: rendere inequivocabile la terminologia IVA vendite/split; il riepilogo generico usa ancora l'etichetta `IVA detratta`.
+5. Verificare in test integrato che `persistPrimaNotaDraft` riceva `split_payment: true` e le righe contabili trasformate.
+
+### F. Test attuali insufficienti
+
+`tests/splitPaymentDocumentoAttivo.test.js` copre resolver, builder, partitario, righe IVA, mapping canonico e parte del draft, ma non monta il percorso UI né verifica ciò che `RegistrazioneRowsTable` visualizza.
+
+Mancano almeno:
+
+- test della tabella con riga UI stale e corrispondente riga risolta con lo stesso ID;
+- test integrato `RegistrazioneManualeView` -> draft -> preview -> payload di persistenza;
+- test che distingua totale documento, importo incassabile e partita cliente;
+- test del blocker per conto split realmente assente;
+- test che fallisca se la riga soggetto non viene trasformata;
+- test di persistenza del flag `registri_iva.split_payment`;
+- regressione con IVA per cassa, FC ordinaria, reverse charge, ritenute e split disattivato.
+
+Il test del conto split mancante deve usare una causale priva del conto: il fixture corrente contiene già la configurazione split e non rappresenta correttamente lo scenario dichiarato.
+
+### G. Piano patch consigliato
+
+Giudizio: **giallo**.
+
+La logica di dominio e il percorso di salvataggio risultano impostati per lo Split Payment, ma la UI mantiene due rappresentazioni parallele delle righe. La futura patch dovrebbe essere limitata alla convergenza della tabella sulle righe risolte, al rafforzamento dei blocker e ai test integrati. Prima di ulteriori funzioni fiscali va verificato manualmente sia ciò che appare nel tab righe sia il record salvato in prima nota, partitario e registri IVA.
+
+### H. Conferme
+
+- Nessun codice modificato.
+- Nessuna migration creata o modificata.
+- Nessun commit.
+- Nessun push.
+- Nessun rollback.
+- Nessun `git add .`.
+
+## AUDIT-Config-Conto-Iva-Split-Payment
+
+- Causa del blocker attuale: lo Split Payment viene rilevato correttamente, ma il conto tecnico IVA split non viene risolto nella causale/template attivi; per scelta funzionale il builder blocca la registrazione con `SPLIT_PAYMENT_ACCOUNT_MISSING` invece di far passare una FC ordinaria mascherata.
+- Dove `resolveSplitAccount(...)` cerca il conto: prima nei campi diretti della causale `conto_iva_split_payment`, `contoIvaSplitPayment`, `conto_split_payment`, `contoSplitPayment`; poi nelle righe template (`righe_prima_nota_template`, `righePrimaNotaTemplate`, `righe_prima_nota`) cercando una riga con ruolo `iva_split`, `iva_split_payment` o `split_payment` e leggendo `conto_id`, `conto_codice`, `conto_descrizione`.
+- Perché non lo trova nel caso manuale: la causale/template usata nel test FC cliente split non espone un conto split configurato in quei campi, e la griglia template disponibile genera la riga IVA ordinaria, non una riga con ruolo split risolvibile.
+- Fonti di configurazione già esistenti: causale contabile e template righe prima nota. Il pattern esiste già anche per IVA per cassa, dove la causale espone un campo tecnico dedicato e il builder lo risolve prima dei fallback.
+- Fonte consigliata per FiscoSim: causale/template, non anagrafica cliente, perché il codice già separa il profilo soggetto (`split_payment` sull’anagrafica) dalla configurazione tecnica contabile del conto da usare nel giroconto.
+- Se serve patch UI causali/template: sì. Oggi la UI delle causali espone chiaramente `conto_iva_esig_differita`, ma non un campo analogo per il conto IVA split payment; inoltre la lista ruoli template non include esplicitamente i ruoli split, quindi la configurazione non è autodescrivibile dall’interfaccia corrente.
+- Se serve patch resolver: probabilmente sì, ma solo come allineamento al nuovo campo UI se si decide di introdurlo con un nome diverso dagli alias già letti; il resolver in sé già accetta i nomi tecnici principali e il fallback su template righe.
+- Se serve configurazione manuale del conto: al momento no, non in modo chiaro e affidabile dalla UI corrente; l’unico percorso teorico è una riga template con ruolo split e `conto_id`, ma il ruolo non è esposto in modo stabile nella select disponibile.
+- Istruzioni manuali se già possibile configurarlo: verificare nelle causali/template se esiste un campo tecnico split payment già salvabile con uno dei nomi letti dal resolver. Se non appare, la configurazione non è oggi accessibile in UI in modo trasparente.
+- Patch consigliata ma NON applicata: aggiungere un campo dedicato nella causale/template per il conto tecnico IVA split payment, mappandolo su uno dei nomi già letti da `resolveSplitAccount(...)`, e aggiornare la UI delle causali/template per renderlo configurabile esplicitamente; eventualmente ampliare i ruoli template supportati con un ruolo split dedicato.
+- Conferma: nessuna modifica codice/DB/commit/push/rollback/git add.
+
+## FIX-Config-Conto-Iva-Split-Payment-Causale
+
+- Esito audit schema: il campo dedicato per il conto tecnico IVA split payment non risulta presente nello schema/mapping causali attuale. Nel `create table` e nella migration `20260503123000_causali_contabili_config_columns.sql` sono presenti `conto_iva_esig_differita` e `registro_iva_differita`, ma non un equivalente `conto_iva_split_payment`.
+- File analizzati: `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneSplitPayment.js`, `src/modules/contabilita/application/registrazioneOperations/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`, `tests/splitPaymentDocumentoAttivo.test.js`, `supabase/migrations/20260503123000_causali_contabili_config_columns.sql`.
+- Campo UI esistente e riusabile: nella causale contabile esiste già il campo `Conto IVA esig. differita` nella sezione IVA della modale, ma non un campo dedicato allo split payment. La UI delle template righe permette la gestione di `righe_prima_nota_template`, ma la lista ruoli attuale non include un ruolo split dedicato.
+- Campo payload salvato oggi: il payload causale salva `conto_iva_esig_differita` e `registro_iva_differita`; non salva alcun campo split payment dedicato perché non è modellato nel form/normalizer corrente.
+- Come `resolveSplitAccount` legge i dati: cerca prima `conto_iva_split_payment` e alias camelCase sulla causale; in alternativa scansiona le righe template cercando i ruoli `iva_split`, `iva_split_payment`, `split_payment` e legge `conto_id`, `conto_codice`, `conto_descrizione`.
+- Perché il manuale non funziona oggi: la UI non espone un campo dedicato per il conto split e la configurazione template non espone in modo stabile un ruolo split selezionabile; quindi il resolver non trova alcun conto e il builder emette il blocker `SPLIT_PAYMENT_ACCOUNT_MISSING`.
+- Comportamento FC cliente split con conto configurato: atteso cliente Dare imponibile/incassabile, ricavo Avere imponibile, due righe tecniche IVA split Dare/Avere, nessuna IVA NS.DEBITO, partitario all’imponibile, nessun blocker.
+- Comportamento FC cliente split senza conto configurato: blocker esplicito `SPLIT_PAYMENT_ACCOUNT_MISSING`, nessun salvataggio/nessun fallback ordinario valido, partitario separato dal blocco.
+- Comportamento FC cliente ordinario: invariato, con righe ordinarie e IVA NS.DEBITO.
+- Fonte consigliata: causale/template, non anagrafica cliente. Il flag cliente resta `split_payment`; il conto tecnico va configurato nella causale o nel template.
+- Patch consigliata ma NON applicata: aggiungere in causale/template un campo dedicato `conto_iva_split_payment` o `conto_iva_split_payment_id` e un supporto UI coerente; se il campo è solo ID, rendere il resolver capace di recuperare anche codice/descrizione o normalizzare la selezione conto. Se non si vuole introdurre il campo nella UI corrente, serve una migration minima prima della patch applicativa.
+- Test controllati: `tests/splitPaymentDocumentoAttivo.test.js` copre il ramo con conto configurato e il blocker senza conto; i test attuali risultano coerenti con il nuovo comportamento bloccante.
+- Conferme: nessuna modifica codice funzionale, nessuna migration eseguita, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+## FIX-DB-UI-Conto-Iva-Split-Payment-Causale
+
+- Causa del blocco precedente: lo Split Payment era correttamente rilevato, ma mancava un campo stabile e configurabile nella causale per il conto tecnico IVA split payment; senza quel dato `resolveSplitAccount(...)` non trovava alcuna configurazione e scattava `SPLIT_PAYMENT_ACCOUNT_MISSING`.
+- Campo DB creato: `causali_contabili.conto_iva_split_payment` di tipo `text`, coerente con il modello già usato per `conto_iva_esig_differita`.
+- Migration creata e NON applicata automaticamente: `supabase/migrations/20260608150000_causali_contabili_conto_iva_split_payment.sql`. La migration è stata solo aggiunta al repo; va applicata con la procedura già usata nel progetto.
+- File modificati: `supabase/migrations/20260608150000_causali_contabili_conto_iva_split_payment.sql`, `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`, `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `tests/splitPaymentDocumentoAttivo.test.js`, `REPORT/REPORT_CODEX.md`.
+- Campo UI aggiunto: nella causale contabile, sezione IVA, è stato aggiunto “Conto IVA split payment” con descrizione di supporto; usa il selettore conto già presente e salva il codice conto.
+- Payload salvato: il payload causale include ora `conto_iva_split_payment`; il valore viene mantenuto anche nel normalizzatore/hydrator della causale.
+- Normalizzatore/policy aggiornati: `normalizeRegistrazioneCausaleDetail.js` legge e riscrive `conto_iva_split_payment`; `buildSplitPaymentRows.js` lo consuma già tramite `resolveSplitAccount(...)`, senza hardcode su descrizioni.
+- Come `resolveSplitAccount` legge il conto: prima dai campi diretti della causale `conto_iva_split_payment` e alias compatibili; se assente, resta il fallback sulle righe template con ruolo `iva_split`, `iva_split_payment` o `split_payment`.
+- Comportamento FC cliente split con conto configurato: cliente Dare imponibile/incassabile, ricavo Avere imponibile, due righe IVA split Dare/Avere, nessuna IVA NS.DEBITO, partitario all’imponibile, nessun blocker.
+- Comportamento FC cliente split senza conto configurato: blocker `SPLIT_PAYMENT_ACCOUNT_MISSING`, nessun fallback ordinario, nessun salvataggio fuorviante.
+- Comportamento FC cliente ordinario: invariato, con cliente sul totale documento, ricavo imponibile e IVA NS.DEBITO.
+- Test eseguiti: `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/anagraficaSplitPaymentSave.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- Build: `npm run build` OK.
+- Istruzioni test manuale: creare o modificare una causale contabile cliente/FC, valorizzare “Conto IVA split payment”, salvare, poi aprire una FC cliente split e verificare che le righe PN mostrino il giroconto split senza blocco.
+- Rischi residui: il selettore conto salva il codice del conto e non un FK; il comportamento dipende quindi dalla stabilità del codice conto nel piano dei conti della società. Resta opportuno verificare un caso reale con causale già esistente e una nuova causale appena creata.
+- Conferme: nessun commit, nessun push, nessun rollback, nessun `git add .`.
+- Conferma extra: Import Contabilità e Riconciliazione non sono stati toccati.
+
+## FIX-SplitPayment-ClienteImponibile-ContoRigheTecniche
+
+- Causa del cliente rimasto a totale documento: il ramo split abbassava la riga soggetto solo quando il ruolo risultava esplicitamente `soggetto`; nel caso reale la riconciliazione della riga cliente non era sufficientemente robusta e il valore totale documento restava esposto nella riga base.
+- Causa del conto split visibile solo in denominazione ma non nella cella conto: le righe tecniche split avevano `conto_id`, `conto_codice` e `conto_descrizione`, ma non `contoQuery`; la griglia usa `contoQuery` per la cella editabile “Conto”, quindi mostrava il placeholder.
+- File modificati: `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `tests/splitPaymentDocumentoAttivo.test.js`, `REPORT/REPORT_CODEX.md`.
+- Campi conto valorizzati sulle righe tecniche: `conto_id`, `conto_codice`, `conto_descrizione`, `contoQuery`, più alias di supporto `accountId`, `accountCode`, `accountDescription`.
+- Comportamento FC cliente split con conto configurato: cliente Dare = imponibile/incassabile, ricavo Avere = imponibile, IVA split Dare/Avere = IVA, nessuna IVA NS.DEBITO, quadratura 0, nessun blocker.
+- Comportamento FC cliente ordinario: invariato, con cliente Dare = totale documento, ricavo Avere = imponibile, IVA NS.DEBITO Avere = IVA.
+- Comportamento FC cliente split senza conto configurato: resta il blocker `SPLIT_PAYMENT_ACCOUNT_MISSING` senza fallback ordinario.
+- Test eseguiti: `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/anagraficaSplitPaymentSave.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- Build: `npm run build` OK.
+- Rischi residui: il riconoscimento della riga cliente ora usa anche `clienteFornitoreId` del header; resta opportuno verificare un paio di causali reali con template manuali molto personalizzati.
+- Nota separata: resta aperto il problema dell’input importi con virgole nella cella manuale, ma non è stato toccato in questo prompt.
+- Conferme: nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+## FIX-SplitPayment-ContoTecnico-PianoConti-Reale
+
+- Causa reale del conto non trovato: il campo della causale `conto_iva_split_payment` stava propagando un valore non stabilmente risolto nel piano dei conti, così la griglia vedeva la denominazione ma non il conto reale; il resolver non aveva ancora un passaggio rigoroso da valore configurato a record `piano_conti`.
+- Cosa salvava prima `conto_iva_split_payment`: un riferimento non ancora normalizzato al conto, di fatto trattato come etichetta/codice legacy o valore non risolto; non era garantito il PK reale del sottoconto.
+- Cosa salva ora: il selettore causale salva il riferimento stabile al conto reale, usando il `id` del conto dal piano dei conti; il valore legacy per codice resta leggibile solo come compatibilità, ma la scrittura corrente privilegia il PK reale.
+- Come viene risolto il conto dal piano conti: `resolveSplitAccount(...)` riceve `pianoConti`, cerca prima il match per `id`, poi un eventuale match unico per codice legacy; se non trova un record reale non costruisce righe tecniche “quasi valide” e mantiene il blocco.
+- Campi conto valorizzati sulle righe tecniche: `conto_id`, `conto_codice`, `conto_descrizione`, `contoQuery`, `contoId`, `contoCodice`, `contoDescrizione`, `accountId`, `accountCode`, `accountDescription`.
+- Comportamento FC cliente split: cliente all’imponibile/incassabile, ricavo all’imponibile, due righe tecniche IVA split, quadratura zero, nessuna IVA NS.DEBITO ordinaria, conto reale agganciato anche nella cella editabile.
+- Comportamento configurazione conto non risolta: resta il blocker `SPLIT_PAYMENT_ACCOUNT_MISSING`; non vengono generate righe tecniche fuorvianti con conto inesistente.
+- Comportamento FC cliente ordinario: invariato, con cliente sul totale documento, ricavo sull’imponibile, IVA NS.DEBITO e nessuna riga split.
+- Test eseguiti: `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/anagraficaSplitPaymentSave.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- Build: `npm run build` OK.
+- Rischi residui: il supporto ai record legacy salvati per codice resta in lettura, ma la scrittura corrente punta al PK reale; serve attenzione su eventuali causali già memorizzate con vecchi valori da migrare manualmente se necessario.
+- Nota separata sul bug input importi con virgola: ancora aperto e rinviato, non trattato in questo prompt.
+- Conferme: nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+## CHECKPOINT-SplitPayment-Manuale-Validato
+
+- Data checkpoint: 2026-06-08.
+- Path progetto: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`.
+- Riepilogo funzionale validato: Split Payment in Registrazione Manuale genera cliente all’imponibile/incassabile, ricavo all’imponibile, due righe tecniche IVA split, registro IVA marcato `split_payment=true` e partitario aperto solo per l’imponibile.
+- Esito DB validato dall’utente: PN quadrata, righe IVA split Dare/Avere presenti, nessuna IVA NS.DEBITO ordinaria, registro IVA con split_payment true, partitario solo imponibile.
+- File modificati classificati:
+  - A. Pertinenti allo Split Payment: `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/views/AnagraficheContabiliView.jsx`, `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`, `src/modules/contabilita/data/contabilitaRepo.js`, `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneSplitPayment.js`, `src/modules/contabilita/components/registrazione/RegistrazioneRowsTable.jsx`, `src/modules/contabilita/views/RegistrazioneManualeView.jsx`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`, `src/modules/contabilita/application/liquidazioneIvaClient.js`, `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `src/modules/contabilita/components/registrazione/RegistrazionePreviewPanel.jsx`, `tests/splitPaymentDocumentoAttivo.test.js`, `tests/anagraficaSplitPaymentSave.test.js`, `tests/ivaPerCassaSchemaMapping.test.js`, `supabase/migrations/20260608150000_causali_contabili_conto_iva_split_payment.sql`, `supabase/migrations/20260607120000_split_payment_registri_iva.sql`.
+  - B. Report/documentazione: `REPORT/REPORT_CODEX.md`, `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md` (non da includere nel commit).
+  - C. Migration: `supabase/migrations/20260608150000_causali_contabili_conto_iva_split_payment.sql`, `supabase/migrations/20260607120000_split_payment_registri_iva.sql`.
+  - D. Test: `tests/splitPaymentDocumentoAttivo.test.js`, `tests/anagraficaSplitPaymentSave.test.js`, `tests/ivaPerCassaSchemaMapping.test.js`, `tests/normalizeUuidOrNull.test.js`.
+  - E. Potenzialmente fuori perimetro: `ROADMAP_Copilot.md`, `scratch/`, i checkpoint ZIP storici presenti in root, `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md`.
+- Migration creata: `supabase/migrations/20260608150000_causali_contabili_conto_iva_split_payment.sql`.
+- Conferma migration applicata manualmente dall’utente: sì, come da contesto fornito.
+- Test eseguiti: `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/anagraficaSplitPaymentSave.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- Build: `npm run build` OK.
+- Backup ZIP creato: `fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip` in `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity\`, dimensione `3157922` byte.
+- Rischi residui: liquidazione IVA split non ancora validata end-to-end; input importi con virgola da trattare dopo; causale FCPA e casi cliente non split ancora da testare; report/consultazione split da verificare in fase successiva.
+- Conferme: no Import Contabilità, no Riconciliazione, no env, no push, no rollback, no `git add .`.
+- Stato commit: non eseguito, perché il worktree contiene file estranei al perimetro checkpoint e va ripulito prima di uno staging selettivo affidabile.
+- Istruzioni rollback sicuro: commit non creato, quindi nessun hash da rollbackare in questa esecuzione.
+
+## FIX-SplitPayment-ContoIvaSplit-Mancante-Blocker
+
+- Causa reale confermata: lo Split Payment attivava il ramo corretto ma, se il conto tecnico IVA split non era risolvibile, `buildSplitPaymentRows` restituiva in passato le righe ordinarie come fallback silenzioso; il partitario restava comunque corretto perché riceveva `importoIncassabile`.
+- Dove mancava/non veniva trovato il conto IVA split: `resolveSplitAccount(...)` cerca prima su `causale.conto_iva_split_payment` e alias camelCase, poi su template righe con ruolo `iva_split`, `iva_split_payment` o `split_payment`; nel caso manuale reale la configurazione non era presente o non era risolvibile da quel percorso.
+- Comportamento precedente errato: con split attivo ma conto tecnico mancante, la tabella PN mostrava ancora Cliente/Ricavo/IVA NS.DEBITO come se la fattura fosse ordinaria.
+- Comportamento nuovo: `buildSplitPaymentRows` ora restituisce `rows: []` nel ramo di errore, mantiene `splitPayment: true`, conserva `imponibile`, `ivaSplit` e `importoIncassabile`, e segnala il blocker `SPLIT_PAYMENT_ACCOUNT_MISSING`.
+- Come viene propagato il blocker: `buildRegistrazioneDraft` incorpora `splitPaymentRows.blockers` nei `technicalBlockers`, li mette in testa alla lista `validation.blockers` e porta `blockerCode`/`blockerMessage` in `draft.meta.splitPayment`.
+- Come viene impedito il fallback a IVA NS.DEBITO ordinaria: il ramo senza conto split non restituisce più `sourceRows`; quindi non può più apparire una scrittura “ordinaria” falsa al posto dello split.
+- Comportamento FC cliente split con conto configurato: cliente Dare imponibile, ricavo Avere imponibile, due righe tecniche split, nessuna IVA NS.DEBITO, partitario all’imponibile, nessun blocker.
+- Comportamento FC cliente split senza conto configurato: registrazione bloccata, `SPLIT_PAYMENT_ACCOUNT_MISSING` visibile, righe PN non ordinate come una normale FC, salvataggio impedito.
+- Comportamento FC cliente ordinario: invariato, con cliente sul totale documento, ricavo imponibile e IVA NS.DEBITO.
+- Test eseguiti: `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/anagraficaSplitPaymentSave.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- Build: `npm run build` OK.
+- Eventuale gap configurazione conto IVA split: la causale/template manuale deve esporre davvero il conto tecnico split o un alias risolvibile; senza quello lo split resta bloccato per scelta funzionale.
+- File modificati: `src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `tests/splitPaymentDocumentoAttivo.test.js`, `REPORT/REPORT_CODEX.md`.
+- Conferme: nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+## FIX-SplitPayment-Render-RighePN-ResolvedRows
+
+- Causa reale confermata: la tabella `RegistrazioneRowsTable` mostrava ancora le righe originate dallo stato UI `rowsWithCounterpartySync` e non usava le `resolvedRows` come fonte visiva primaria; nel ramo split questo lasciava visibili la riga cliente/IVA stale anche dopo la risoluzione del draft.
+- File modificati: `src/modules/contabilita/components/registrazione/RegistrazioneRowsTable.jsx`, `src/modules/contabilita/components/registrazione/mergeResolvedRowsForVisual.js`, `tests/splitPaymentDocumentoAttivo.test.js`, `REPORT/REPORT_CODEX.md`.
+- Lista visiva finale: viene costruita partendo da `resolvedRows`; per ogni ID presente nelle righe risolte la riga originale viene sostituita/integrata, mentre le righe tecniche nuove vengono aggiunte una sola volta.
+- Sostituzione per stesso ID: se una riga risolta ha lo stesso `id` della riga origine, la versione visiva usa gli importi e i campi risolti, non il valore stale della UI.
+- FC cliente ordinario: resta invariata, perché le `resolvedRows` coincidono con le righe ordinarie e non attivano il filtro Split Payment.
+- FC cliente split: la riga cliente visualizzata usa l’importo incassabile/imponibile, la riga IVA ordinaria stale non resta visibile, e compaiono le due righe tecniche Split Payment.
+- Nessuna duplicazione righe: la merge visuale evita duplicati sugli stessi ID e non reinserisce le righe tecniche già presenti.
+- Test eseguiti: `node --test tests/splitPaymentDocumentoAttivo.test.js`, `node --test tests/anagraficaSplitPaymentSave.test.js`, `node --test tests/manualeIvaOrdinaria.test.js`, `node --test tests/partitarioDocumentiIva.test.js`.
+- Build: `npm run build` OK.
+- Rischi residui: il merge visuale è ancora una logica di presentazione locale; resta da verificare manualmente che l’editing delle righe non introduca casi limite su righe manuali molto personalizzate.
+- Conferme: nessuna migration, nessun commit, nessun push, nessun rollback, nessun `git add .`.
+
+## AUDIT-PUNTUALE-RIGHE-PN-SOURCE-RENDER
+
+### 1. RegistrazioneManualeView
+
+- Il componente `RegistrazioneRowsTable` viene montato in `RegistrazioneManualeView.jsx` nel ramo `activeTab === 'rows'`, intorno alla riga 2769.
+- Le props rilevanti sono:
+  - `rows={rowsWithCounterpartySync}`;
+  - `resolvedRows={resolvedRows}`;
+  - `totals={draftModel.totals}`;
+  - `validation={draftModel.validation}`;
+  - callback di modifica che continuano ad agire sullo stato UI originario.
+- `rowsWithCounterpartySync` deriva da `syncCounterpartySubjectRow(state.rows, state.header)`: è quindi la lista UI/editabile precedente alla trasformazione Split Payment.
+- `rowsForDraftModel` deriva normalmente da `rowsWithCounterpartySync`; contiene una logica aggiuntiva solo per le causali di chiusura partite.
+- `draftModel` viene costruito con `buildRegistrazioneDraft(... rows: rowsForDraftModel ...)`.
+- `resolvedRows` è assegnato a `draftModel.normalized.rows`; non è una seconda copia dello stato UI, ma l'output finale restituito dal builder.
+- Per una FC split correttamente configurata, `resolvedRows` dovrebbe contenere cliente all'imponibile, ricavo all'imponibile e due righe tecniche IVA split.
+- Nel caso manuale osservato, `resolvedRows` è invece già ordinario prima di arrivare alla tabella: cliente al totale documento, ricavo all'imponibile e IVA NS.DEBITO.
+
+### 2. RegistrazioneRowsTable
+
+- `RegistrazioneRowsTable` chiama realmente `mergeResolvedRowsForVisual(rows, resolvedRows)` e salva il risultato in `visibleRows`.
+- `effectiveRows` è costruito da `visibleRows`, con la sola eventuale aggiunta della ghost row.
+- Il render usa effettivamente `effectiveRows.map(...)`; non usa direttamente `rows`.
+- Gli importi visualizzati sono letti dalla riga di `effectiveRows`.
+- Quindi il merge non è ignorato e non risulta montata un'altra tabella nel ramo analizzato.
+- Nota strutturale: `RegistrazioneRowsTable.jsx` contiene una propria implementazione inline di `mergeResolvedRowsForVisual`; il file esterno omonimo non è importato dal componente. Le due implementazioni sono attualmente equivalenti, ma il test verifica quella esterna mentre il browser esegue quella inline.
+
+### 3. mergeResolvedRowsForVisual
+
+- Input atteso:
+  - `rows`: lista UI originaria;
+  - `resolvedRows`: lista già trasformata dal draft.
+- A parità di ID, la riga resolved prevale sui campi della riga base.
+- Se `resolvedRows` contiene righe tecniche split, il merge esclude la vecchia riga IVA ordinaria rimasta solo nella lista base.
+- Con input resolved corretto, l'output atteso è:
+  - Cliente Dare imponibile;
+  - Ricavo Avere imponibile;
+  - IVA split Dare;
+  - IVA split Avere.
+- Il difetto del caso manuale non nasce nel merge: il merge non può creare il giroconto se `resolvedRows` contiene ancora le righe ordinarie.
+
+### 4. Causa reale confermata
+
+**`resolvedRows` è già sbagliato prima della tabella.**
+
+In `buildSplitPaymentRows`, quando lo Split Payment è attivo ma `resolveSplitAccount(...)` non trova il conto IVA split nella causale o in una riga template con ruolo split, la funzione restituisce:
+
+- `active: true`;
+- `rows: sourceRows`, cioè le righe ordinarie non trasformate;
+- un blocker per conto IVA split non configurato;
+- `importoIncassabile: imponibile`.
+
+`buildRegistrazioneDraft` passa comunque `splitPaymentRows.importoIncassabile` a `buildRegistrazionePartitarioDraft`. Per questo il partitario mostra correttamente `1.272,73`, mentre `draftModel.normalized.rows` e la tabella PN restano:
+
+- Cliente Dare `1.400`;
+- Ricavo Avere `1.272,73`;
+- IVA NS.DEBITO Avere `127,27`.
+
+La ricerca nel codice trova i campi `conto_iva_split_payment` soltanto nel builder e nei test, non nella configurazione produttiva della causale. Il template mostrato genera inoltre la riga IVA ordinaria, non una riga con ruolo `iva_split`, `iva_split_payment` o `split_payment`. Questo rende il ramo `splitAccount` mancante la spiegazione coerente con il comportamento osservato.
+
+Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows` contiene già le righe ordinarie perché il conto IVA split non viene risolto; il partitario appare corretto perché riceve comunque l'imponibile come `importoIncassabile`.**
+
+### 5. Test automatici
+
+- `tests/splitPaymentDocumentoAttivo.test.js` verifica funzioni isolate del draft e il file helper esterno `mergeResolvedRowsForVisual.js`.
+- Non monta `RegistrazioneManualeView`.
+- Non monta il vero `RegistrazioneRowsTable`.
+- Non verifica le props reali passate dal browser.
+- Il test può quindi passare anche se la UI browser resta sbagliata.
+- Inoltre i casi positivi configurano artificialmente `conto_iva_split_payment` nel fixture `activeInvoice`; non riproducono la causale FC reale priva di tale configurazione.
+
+### 6. Patch consigliata, non applicata
+
+- File principale: configurazione/policy della causale FC e percorso che fornisce `selectedCausale` a `buildRegistrazioneDraft`.
+- Modifica minima: fornire un conto IVA split realmente configurato e risolvibile, oppure una riga template con ruolo split e conto finale valido.
+- `buildSplitPaymentRows`: valutare se impedire anche la costruzione del partitario split quando il giroconto non può essere generato, così UI e partitario non mostrano due stati semanticamente divergenti.
+- `RegistrazioneRowsTable.jsx`: eliminare in futuro la duplicazione dell'helper e importare l'unica implementazione testata.
+- Test richiesto: scenario integrato con la causale FC reale, senza conto split configurato, che verifichi blocker, righe PN e partitario; scenario positivo con conto configurato che verifichi le props/render del componente reale.
+
+### 7. Conferme
+
+- Nessun codice funzionale modificato.
+- Nessuna migration.
+- Nessun commit.
+- Nessun push.
+- Nessun rollback.
+- Nessun `git add .`.

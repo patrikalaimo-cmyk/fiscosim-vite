@@ -127,6 +127,7 @@ export function buildRegistrazioneIvaDraft(input = {}, options = {}) {
   const ivaData = input?.ivaData && typeof input.ivaData === 'object' ? input.ivaData : {}
   const documentData = input?.documentData && typeof input.documentData === 'object' ? input.documentData : {}
   const behavior = options?.behavior && typeof options.behavior === 'object' ? options.behavior : {}
+  const splitPayment = Boolean(options?.splitPayment?.active)
   const active = Boolean(behavior.showIvaPanel)
   const normalizedRows = normalizeRegistrazioneIvaRows(ivaData.rows || ivaData.ivaRows || ivaData.iva_rows || [], ivaData)
   const causaleIva = resolveBaseCandidate(input, options, normalizedRows)
@@ -162,6 +163,7 @@ export function buildRegistrazioneIvaDraft(input = {}, options = {}) {
     causaleContabile: options?.causaleContabile || behavior || input?.causaleContabile || null,
     causaleBehavior: effectiveResolver,
     baseCausale: causaleIva,
+    splitPayment,
   })
 
   const rows = Array.isArray(rowsResult.rows) ? rowsResult.rows : []
@@ -233,6 +235,7 @@ export function buildRegistrazioneIvaDraft(input = {}, options = {}) {
     reasons: Array.from(new Set([...(rowsResult.reasons || []), ...(effectiveResolver.reasons || [])])),
     esigibilita: ivaData.esigibilita || (policy.ivaPerCassa ? 'differita' : 'immediata'),
     ivaPerCassa: Boolean(ivaData.ivaPerCassa || policy.ivaPerCassa),
+    splitPayment,
   }
 
   const validation = validateRegistrazioneIvaDraft({ header, ivaData: draft, behavior, documentData }, options)

@@ -6,6 +6,32 @@ import {
   deletePrimaNotaById,
 } from '../../../../services/primaNotaService.js'
 import { syncPercipienteFromDocumentoContabilita } from '../application/percipientiRegistryService.js'
+
+export function normalizeUuidOrNull(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return null
+  const lowered = text.toLowerCase()
+  if (lowered === 'null' || lowered === '__none__' || lowered === 'undefined') return null
+  return text
+}
+
+function normalizeOptionalUuidFields(payload = {}) {
+  const next = { ...(payload || {}) }
+  for (const [key, value] of Object.entries(next)) {
+    if (key === 'societa_id') continue
+    if (/_id$/.test(key)) next[key] = normalizeUuidOrNull(value)
+  }
+  return next
+}
+
+function ensureUpdatedRow(result) {
+  if (result?.error) throw result.error
+  if (!result?.data) {
+    throw new Error('Nessuna anagrafica aggiornata: verifica id record o permessi RLS.')
+  }
+  return result
+}
+
 export function getSocietaAttive() {
   return sb.from('societa').select('*').eq('attiva', true).order('denominazione')
 }
@@ -454,12 +480,52 @@ export function getPianoContiCodiciByLike(societaId, parent) {
     .like('codice', parent + ' %')
 }
 
+export async function getPianoContoById(id) {
+  const cleanId = String(id || '').trim()
+  if (!cleanId) {
+    throw new Error('Id anagrafica mancante.')
+  }
+  const { data, error } = await sb
+    .from('piano_conti')
+    .select('*')
+    .eq('id', cleanId)
+    .single()
+  if (error) throw error
+  if (!data) {
+    throw new Error('Anagrafica non trovata.')
+  }
+  return data
+}
+
+export function replacePianoContoInList(list = [], updatedConto = null) {
+  const updatedId = String(updatedConto?.id || '').trim()
+  if (!updatedId) return Array.isArray(list) ? [...list] : []
+  return (Array.isArray(list) ? list : []).map((row) => (
+    String(row?.id || '').trim() === updatedId ? { ...row, ...updatedConto } : row
+  ))
+}
+
 export function updatePianoConto(id, updates) {
-  return sb.from('piano_conti').update(updates).eq('id', id)
+  const { note, ...safeUpdates } = updates || {}
+  return sb
+    .from('piano_conti')
+    .update(normalizeOptionalUuidFields(safeUpdates))
+    .eq('id', id)
+    .select('*')
+    .single()
+    .then(ensureUpdatedRow)
 }
 
 export function updatePianoContoByCodiceSocieta(updates, codice, societaId) {
-  return sb.from('piano_conti').update(updates).eq('codice', codice).eq('societa_id', societaId)
+  const { note, ...safeUpdates } = updates || {}
+  return sb
+    .from('piano_conti')
+    .update(normalizeOptionalUuidFields(safeUpdates))
+    .eq('codice', codice)
+    .eq('societa_id', societaId)
+    .select('*')
+    .single()
+    .then(ensureUpdatedRow)
 }
 
 export function bulkDeactivatePianoConti(ids) {
@@ -467,7 +533,8 @@ export function bulkDeactivatePianoConti(ids) {
 }
 
 export function insertPianoConto(payload) {
-  return sb.from('piano_conti').insert([payload]).select('*').maybeSingle()
+  const { note, ...safePayload } = payload || {}
+  return sb.from('piano_conti').insert([normalizeOptionalUuidFields(safePayload)]).select('*').maybeSingle()
 }
 
 export function getPianoContiBasic(societaId) {
@@ -724,7 +791,7 @@ export async function upsertLiquidazioneIvaCanonica(row) {
 export function getRegistriIvaByPeriodo(periodo_inizio, periodo_fine) {
   return sb
     .from('registri_iva')
-    .select('tipo, iva, iva_detraibile, data, esigibilita')
+    .select('tipo, iva, iva_detraibile, data, esigibilita, split_payment')
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
     .or('esigibilita.in.(immediata,rilascio),esigibilita.is.null')

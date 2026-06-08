@@ -981,27 +981,28 @@ function ModalImportAnagraficaNESPianoConti({societaId, pianoConti, onComplete, 
 
     // Aggiorna conti esistenti
     for(const rec of preview.aggiornati){
+      const { note, ...safeRec } = rec || {}
       const {error} = await contabilitaRepo.updatePianoContoByCodiceSocieta({
-        rag_sociale_2:    rec.rag_sociale_2||null,
-        indirizzo:        rec.indirizzo||null,
-        cap:              rec.cap||null,
-        citta:            rec.citta||null,
-        provincia:        rec.provincia||null,
-        nazione:          rec.nazione||null,
-        codice_iso:       rec.codice_iso||null,
-        codice_fiscale:   rec.codice_fiscale||null,
-        partita_iva:      rec.partita_iva||null,
-        anagrafica_piva:  rec.anagrafica_piva||null,
-        anagrafica_cf:    rec.anagrafica_cf||null,
-        email_pec:        rec.email_pec||null,
-        codice_dest_efat: rec.codice_dest_efat||null,
-        split_payment:    rec.split_payment,
-        includi_spesometro: rec.includi_spesometro,
-        includi_esterometro: rec.includi_esterometro,
-        richiede_efat_b2b: rec.richiede_efat_b2b,
-        soggetto_operaz:  rec.soggetto_operaz||null,
-        tipo_controparte: rec.tipo_controparte||null,
-        partecipa_gruppo_iva: rec.partecipa_gruppo_iva,
+        rag_sociale_2:    safeRec.rag_sociale_2||null,
+        indirizzo:        safeRec.indirizzo||null,
+        cap:              safeRec.cap||null,
+        citta:            safeRec.citta||null,
+        provincia:        safeRec.provincia||null,
+        nazione:          safeRec.nazione||null,
+        codice_iso:       safeRec.codice_iso||null,
+        codice_fiscale:   safeRec.codice_fiscale||null,
+        partita_iva:      safeRec.partita_iva||null,
+        anagrafica_piva:  safeRec.anagrafica_piva||null,
+        anagrafica_cf:    safeRec.anagrafica_cf||null,
+        email_pec:        safeRec.email_pec||null,
+        codice_dest_efat: safeRec.codice_dest_efat||null,
+        split_payment:    safeRec.split_payment,
+        includi_spesometro: safeRec.includi_spesometro,
+        includi_esterometro: safeRec.includi_esterometro,
+        richiede_efat_b2b: safeRec.richiede_efat_b2b,
+        soggetto_operaz:  safeRec.soggetto_operaz||null,
+        tipo_controparte: safeRec.tipo_controparte||null,
+        partecipa_gruppo_iva: safeRec.partecipa_gruppo_iva,
       }, rec.codice_piano, societaId);
       error ? err++ : ok++;
     }
@@ -1088,6 +1089,7 @@ export function PianoContiView({pianoConti,societaId,onImport,onRefresh,usageByC
   const [open,setOpen]=useState(new Set()); // nodi espansi
   const [deleting,setDeleting]=useState(false);
   const [editConto,setEditConto]=useState(null);
+  const [editContoLoading,setEditContoLoading]=useState(false);
   const [nuovoConto,setNuovoConto]=useState({open:false});
   const [importAnagrafica,setImportAnagrafica]=useState(false); // {id, codice, descrizione, ...}
   const [showInlineImport,setShowInlineImport]=useState(false);
@@ -1196,6 +1198,20 @@ export function PianoContiView({pianoConti,societaId,onImport,onRefresh,usageByC
   }).length;
   const collapseAll=()=>setOpen(new Set());
 
+  const openEditConto = async (contoOrId) => {
+    const contoId = typeof contoOrId === 'string' ? contoOrId : contoOrId?.id
+    if (!contoId || editContoLoading) return
+    setEditContoLoading(true)
+    try {
+      const freshConto = await contabilitaRepo.getPianoContoById(contoId)
+      setEditConto(freshConto)
+    } catch (error) {
+      alert('Errore caricamento anagrafica: ' + (error?.message || String(error)))
+    } finally {
+      setEditContoLoading(false)
+    }
+  }
+
   // Render ricorsivo nodo albero
   const [nodePage,setNodePage]=useState({}); // paginazione nodi grandi
   const renderNode=(node,depth=0)=>{
@@ -1244,7 +1260,7 @@ export function PianoContiView({pianoConti,societaId,onImport,onRefresh,usageByC
             {usedIds.has(String(node.id||''))&&<span className="bdg bdg-blue" style={{fontSize:'.5rem',padding:'1px 4px'}}>MOV</span>}
           </div>
           {/* Matita edit */}
-          <div onClick={e=>{e.stopPropagation();setEditConto(node);}} style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer',flexShrink:0}}
+          <div onClick={e=>{e.stopPropagation();void openEditConto(node.id);}} style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer',flexShrink:0}}
             onMouseEnter={e=>{e.currentTarget.style.background='rgba(200,164,94,.15)';e.currentTarget.style.color='var(--gold)';}}
             onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--mu)';}}>
             Modifica
@@ -1273,7 +1289,7 @@ export function PianoContiView({pianoConti,societaId,onImport,onRefresh,usageByC
         <code style={{fontSize:'.7rem',color:lvlColors[depth]||'var(--mu)',minWidth:90,flexShrink:0}}>{c.codice}</code>
         <span style={{flex:1,fontSize:'.8rem',color:'var(--tx)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.descrizione}</span>
         {usedIds.has(String(c.id||''))&&<span className="bdg bdg-blue" style={{fontSize:'.55rem',padding:'1px 4px'}}>MOV</span>}
-        <div onClick={()=>setEditConto(c)} style={{padding:'.15rem .35rem',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer'}}
+        <div onClick={()=>void openEditConto(c.id)} style={{padding:'.15rem .35rem',borderRadius:5,color:'var(--mu)',fontSize:'.75rem',cursor:'pointer'}}
           onMouseEnter={e=>{e.currentTarget.style.color='var(--gold)';}}
           onMouseLeave={e=>{e.currentTarget.style.color='var(--mu)';}}>Modifica</div>
       </div>
@@ -1298,16 +1314,40 @@ export function PianoContiView({pianoConti,societaId,onImport,onRefresh,usageByC
       {editConto&&<ModalEditConto conto={editConto} onSave={async(updates)=>{
         const validationError = validatePianoContoForm(updates)
         if(validationError){alert(validationError);return;}
-        const {error}=await contabilitaRepo.updatePianoConto(editConto.id,updates);
-        if(error){alert('Errore: '+error.message);return;}
-        setEditConto(null);onRefresh();
+        const { note, ...safeUpdates } = updates || {}
+        const payload = {
+          ...safeUpdates,
+          split_payment: Boolean(safeUpdates.split_payment),
+          consumatore_finale: Boolean(safeUpdates.consumatore_finale),
+          includi_spesometro: safeUpdates.includi_spesometro !== false,
+          soggetto_riepilogativo: Boolean(safeUpdates.soggetto_riepilogativo),
+          proc_concorsuale: Boolean(safeUpdates.proc_concorsuale),
+          richiede_efat_b2b: Boolean(safeUpdates.richiede_efat_b2b),
+          singola_ft_elettronica: Boolean(safeUpdates.singola_ft_elettronica),
+          includi_esterometro: Boolean(safeUpdates.includi_esterometro),
+          partecipa_gruppo_iva: Boolean(safeUpdates.partecipa_gruppo_iva),
+        }
+        let updatedConto
+        try {
+          updatedConto = await contabilitaRepo.updatePianoConto(editConto.id, payload)
+        } catch (error) {
+          alert('Errore: ' + (error?.message || String(error)))
+          return
+        }
+        setEditConto(updatedConto || null)
+        if (typeof onRefresh === 'function') {
+          await onRefresh()
+        }
+        setEditConto(null)
       }} onClose={()=>setEditConto(null)}/>}
+      {editContoLoading&&<div className="alert alert-info" style={{position:'fixed',right:16,bottom:16,zIndex:400}}>Caricamento anagrafica...</div>}
       {nuovoConto.open&&<ModalNuovoConto societaId={societaId} pianoConti={pianoConti} onSave={async(rec)=>{
         const validationError = validatePianoContoForm(rec)
         if(validationError){alert(validationError);return;}
         const existing = await contabilitaRepo.findPianoContoByCodice(societaId, rec.codice)
         if(existing?.data?.id){alert(`Esiste già un conto con codice ${rec.codice}.`);return;}
-        const{error}=await contabilitaRepo.insertPianoConto({...rec,societa_id:societaId,attivo:true});
+        const { note, ...safeRec } = rec || {}
+        const{error}=await contabilitaRepo.insertPianoConto({...safeRec,societa_id:societaId,attivo:true});
         if(error){alert('Errore: '+error.message);return;}
         setNuovoConto({open:false});onRefresh();
       }} onClose={()=>setNuovoConto({open:false})}/>}
@@ -1400,7 +1440,10 @@ function SelettoreContropartita({value, onChange, societaId}){
     ? conti.filter(c=>(c.codice+' '+c.descrizione).toLowerCase().includes(search.toLowerCase())).slice(0,50)
     : conti.slice(0,50);
 
-  const label=value?conti.find(c=>c.codice===value||c.id===value)?.let?.(c=>`${c.codice} — ${c.descrizione}`)||value:'-- Nessuna contropartita --';
+  const selected=conti.find(c=>c.id===value||c.codice===value)
+  const label=value
+    ? (selected ? `${selected.codice} — ${selected.descrizione}` : value)
+    : '-- Nessuna contropartita --';
 
   return(
     <div ref={ref} style={{position:'relative'}}>
@@ -1425,10 +1468,10 @@ function SelettoreContropartita({value, onChange, societaId}){
             </div>
             {loading?<div style={{padding:'.75rem',fontSize:'.75rem',color:'var(--mu)',textAlign:'center'}}>Caricamento...</div>
               :filtered.map(c=>(
-              <div key={c.id} onClick={()=>{onChange(c.codice);setOpen(false);}}
-                style={{padding:'.4rem .7rem',cursor:'pointer',display:'flex',gap:'.5rem',alignItems:'center',borderBottom:'1px solid rgba(33,40,58,.3)',background:value===c.codice?'rgba(200,164,94,.08)':'transparent'}}
+              <div key={c.id} onClick={()=>{onChange(c.id);setOpen(false);}}
+                style={{padding:'.4rem .7rem',cursor:'pointer',display:'flex',gap:'.5rem',alignItems:'center',borderBottom:'1px solid rgba(33,40,58,.3)',background:value===c.id||value===c.codice?'rgba(200,164,94,.08)':'transparent'}}
                 onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.04)'}
-                onMouseLeave={e=>e.currentTarget.style.background=value===c.codice?'rgba(200,164,94,.08)':'transparent'}>
+                onMouseLeave={e=>e.currentTarget.style.background=value===c.id||value===c.codice?'rgba(200,164,94,.08)':'transparent'}>
                 <code style={{fontSize:'.7rem',color:'var(--gold)',minWidth:80,flexShrink:0}}>{c.codice}</code>
                 <span style={{fontSize:'.75rem',color:'var(--tx)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.descrizione}</span>
               </div>
@@ -2096,7 +2139,19 @@ function ModalEditCausale({causale,tipo,pianoConti,onSave,onClose}){
                 {TD_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
               </select>
             </div>
-            <div className="fg full"><label>Conto IVA esig. differita</label><input value={form.conto_iva_esig_differita} onChange={e=>up('conto_iva_esig_differita',e.target.value)} placeholder="es. 600000011" style={{fontFamily:'monospace'}}/></div>
+            <div className="fg full">
+              <label>Conto IVA esig. differita</label>
+              <input value={form.conto_iva_esig_differita} onChange={e=>up('conto_iva_esig_differita',e.target.value)} placeholder="es. 600000011" style={{fontFamily:'monospace'}}/>
+            </div>
+            <div className="fg full">
+              <label>Conto IVA split payment</label>
+              <div style={{fontSize:'.7rem',color:'var(--mu)',marginBottom:'.35rem'}}>Conto tecnico usato per il giroconto IVA split payment Dare/Avere nelle fatture attive verso clienti con Split Payment.</div>
+              <SelettoreContropartita
+                value={form.conto_iva_split_payment}
+                onChange={(v)=>up('conto_iva_split_payment',v)}
+                societaId={causale?.societa_id}
+              />
+            </div>
             <div className="fg"><label>Registro IVA differita</label><input value={form.registro_iva_differita} onChange={e=>up('registro_iva_differita',e.target.value)}/></div>
           </div>}
 
@@ -2720,8 +2775,6 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
       // 1. Estrai testo nel browser (leggero, zero costi) â€” BRANCH PDF
       setProgress('Estrazione testo dal PDF...');
       const text=await extractTextFromPDFBrowser(file);
-      console.log('TESTO ESTRATTO lunghezza:', text?.length, 'chars');
-      console.log('PRIME 500 CHARS:', JSON.stringify(text?.substring(0,500)));
       if(!text||text.trim().length<20)throw new Error('Impossibile estrarre testo dal PDF.');
 
       // 2. Parsing locale deterministico
@@ -2730,7 +2783,6 @@ function ModalImportPDF({tipo,societaId,onComplete,onClose}){
       if(tipo==='piano_conti') parsed=parsePianoContiFromText(text);
       else if(tipo==='causali_iva') parsed=parseCausaliIvaFromText(text);
       else parsed=parseCausaliContabiliFromText(text);
-      console.log('PARSED:', parsed.length, 'conti');
 
       if(!parsed.length)throw new Error('Nessun record trovato. Verifica il formato del PDF (NES, BLUENEXT, PROFIS).');
 

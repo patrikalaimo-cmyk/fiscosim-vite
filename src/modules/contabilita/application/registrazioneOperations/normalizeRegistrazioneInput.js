@@ -78,6 +78,19 @@ export function resolveRegistrazioneHeaderCounterpartyDraft(header = {}, pianoCo
   const existingName = normalizeText(sourceHeader.clienteFornitoreNome ?? sourceHeader.cliente_fornitore_nome)
   const existingType = normalizeText(sourceHeader.clienteFornitoreTipo ?? sourceHeader.cliente_fornitore_tipo)
   const subjectText = normalizeText(sourceHeader.soggetto ?? existingName ?? '')
+  const currentSplitPayment = (account = null) => Boolean(
+    sourceHeader.splitPayment ||
+    sourceHeader.split_payment ||
+    account?.splitPayment ||
+    account?.split_payment ||
+    account?.cliente_split_payment
+  )
+
+  const findAccountById = (id = '') => {
+    const targetId = normalizeText(id)
+    if (!targetId) return null
+    return (Array.isArray(pianoConti) ? pianoConti : []).find((item) => normalizeText(item?.id) === targetId) || null
+  }
 
   const preservedSubject =
     existingId && (
@@ -88,6 +101,7 @@ export function resolveRegistrazioneHeaderCounterpartyDraft(header = {}, pianoCo
     )
 
   if (preservedSubject) {
+    const preservedAccount = findAccountById(existingId)
     return {
       ...sourceHeader,
       soggetto: subjectText || existingName || '',
@@ -99,6 +113,8 @@ export function resolveRegistrazioneHeaderCounterpartyDraft(header = {}, pianoCo
       cliente_fornitore_nome: existingName || subjectText,
       clienteFornitoreTipo: existingType,
       cliente_fornitore_tipo: existingType,
+      splitPayment: currentSplitPayment(preservedAccount),
+      split_payment: currentSplitPayment(preservedAccount),
     }
   }
 
@@ -155,6 +171,8 @@ export function resolveRegistrazioneHeaderCounterpartyDraft(header = {}, pianoCo
     cliente_fornitore_nome: resolvedName || resolvedLabel,
     clienteFornitoreTipo: resolvedType,
     cliente_fornitore_tipo: resolvedType,
+    splitPayment: currentSplitPayment(match),
+    split_payment: currentSplitPayment(match),
   }
 }
 
@@ -430,6 +448,8 @@ export function normalizeRegistrazioneInput(input = {}, { pianoConti = [], causa
     clienteFornitoreNome: normalizeText(normalizedHeaderSource.clienteFornitoreNome ?? normalizedHeaderSource.cliente_fornitore_nome),
     clienteFornitoreCodice: normalizeText(normalizedHeaderSource.clienteFornitoreCodice ?? normalizedHeaderSource.cliente_fornitore_codice),
     clienteFornitoreTipo: normalizeText(normalizedHeaderSource.clienteFornitoreTipo ?? normalizedHeaderSource.cliente_fornitore_tipo),
+    splitPayment: Boolean(normalizedHeaderSource.splitPayment || normalizedHeaderSource.split_payment),
+    split_payment: Boolean(normalizedHeaderSource.splitPayment || normalizedHeaderSource.split_payment),
   }
 
   const normalizedRows = rowsSource.map((row, index) => normalizeRow(row, index, pianoConti))

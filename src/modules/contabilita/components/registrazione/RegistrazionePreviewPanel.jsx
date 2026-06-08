@@ -435,6 +435,18 @@ export function RegistrazionePreviewPanel({
             ]}
           />
         ) : null}
+        {ivaDraft?.splitPayment ? (
+          <DraftBlock
+            title="Split payment"
+            note="IVA registrata fiscalmente ma esclusa dal credito cliente e dal debito IVA effettivo."
+            rows={[
+              { label: 'Totale documento', value: fmtCurrency(ivaDraft?.totaleDocumento || 0) },
+              { label: 'Importo incassabile', value: fmtCurrency(partitarioDraft?.importoIncassabile || ivaDraft?.totaleImponibile || 0), tone: 'positive' },
+              { label: 'IVA split', value: fmtCurrency(ivaDraft?.totaleIva || ivaDraft?.totaleImposta || 0), tone: 'negative' },
+              { label: 'Partita cliente', value: fmtCurrency(partitarioDraft?.importoAperto || 0), tone: 'positive' },
+            ]}
+          />
+        ) : null}
         {partitarioDraft?.active ? (
           <>
             <DraftBlock

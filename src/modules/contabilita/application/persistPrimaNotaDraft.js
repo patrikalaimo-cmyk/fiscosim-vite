@@ -122,7 +122,7 @@ export function resolveDraftBundle(input = {}) {
   const partitarioDraft = bundle.partitarioDraft || innerDraft.partitarioDraft || null
   const partitarioRows = Array.isArray(partitarioDraft?.rows) ? partitarioDraft.rows : []
 
-  return {
+  const mapped = {
     bundle,
     innerDraft,
     pnPayload,
@@ -136,6 +136,7 @@ export function resolveDraftBundle(input = {}) {
     classification: bundle.classification || innerDraft.classification || null,
     meta: bundle.meta || innerDraft.meta || null,
   }
+  return mapped
 }
 
 function requiresControparteForPersistence(resolved = {}) {
@@ -234,12 +235,13 @@ export function buildPersistenceValidation(resolved = {}) {
     })
   }
 
-  return {
+  const mapped = {
     status: blockers.length ? 'blocked' : (warnings.length ? 'warning' : 'ok'),
     blockers: Array.from(new Set(blockers)),
     warnings: Array.from(new Set(warnings)),
     totals,
   }
+  return mapped
 }
 
 function buildPersistError(validation) {
@@ -300,7 +302,7 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
 
   const origin_registro_iva_id = normalizeDbText(row.origin_registro_iva_id || row.originRegistroIvaId) || null
 
-  return {
+  const mapped = {
     documento_id: pnPayload.numero_documento || 'manual-reg-doc',
     riga_idx: index,
     data: pnPayload.data_documento || pnPayload.data_registrazione,
@@ -320,6 +322,8 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
     esigibilita,
     origin_registro_iva_id,
   }
+  if (row.splitPayment || row.split_payment || ivaDraft?.splitPayment) mapped.split_payment = true
+  return mapped
 }
 
 function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {

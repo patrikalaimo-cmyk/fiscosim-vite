@@ -9,6 +9,8 @@ import { buildRegistrazioneRowsFromTemplateResolved } from './buildRegistrazione
 import { buildCausaleStructureHistory } from './buildCausaleStructureHistory.js'
 import { resolveRegistrazioneRigheTemplate } from '../../domain/registrazione/resolveRegistrazioneRigheTemplate.js'
 import { buildIvaPerCassaGirocontoRows } from './buildIvaPerCassaGirocontoRows.js'
+import { resolveRegistrazioneSplitPayment } from './resolveRegistrazioneSplitPayment.js'
+import { buildSplitPaymentRows } from './buildSplitPaymentRows.js'
 
 function buildRegistrazioneDocumentDraft(normalized = {}, behavior = {}) {
   const documentData = normalized?.documentData || {}
@@ -69,9 +71,16 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
   const normalized = normalizeRegistrazioneInput(input, options)
   const behavior = options?.behavior || options?.config || options?.causaleConfig || {}
   const templateSource = options?.selectedCausale || options?.causaleContabile || options?.causale || normalized?.header?.causaleContabile || {}
+  const splitPayment = resolveRegistrazioneSplitPayment({
+    header: normalized.header,
+    documentData: normalized.documentData,
+    ivaData: normalized.ivaData,
+    causaleContabile: templateSource,
+    pianoConti: Array.isArray(options?.pianoConti) ? options.pianoConti : [],
+  })
   const ivaDraft = buildRegistrazioneIvaDraft(
     { header: normalized.header, documentData: normalized.documentData, ivaData: normalized.ivaData, causaliIva: options?.causaliIva || [] },
-    { behavior, causaleContabile: templateSource, ...options }
+    { behavior, causaleContabile: templateSource, splitPayment, ...options }
   )
   const normalizedTemplate = normalizeRegistrazioneRigheTemplate(
     templateSource?.righe_prima_nota_template || templateSource?.righePrimaNotaTemplate || templateSource?.righe_prima_nota || []
@@ -144,9 +153,18 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     }
     return hasConto || hasAmount || (!isPlaceholderDesc && desc);
   });
+  const splitPaymentRows = buildSplitPaymentRows({
+    rows: filteredRows,
+    splitPayment,
+    ivaDraft,
+    documentData: normalized.documentData,
+    causale: templateSource,
+    header: normalized.header,
+    pianoConti: Array.isArray(options?.pianoConti) ? options.pianoConti : [],
+  })
   const preliminaryNormalizedForDraft = {
     ...normalized,
-    rows: filteredRows,
+    rows: splitPaymentRows.rows,
   };
   const partitarioDraft = buildRegistrazionePartitarioDraft({
     header: preliminaryNormalizedForDraft.header,
@@ -157,7 +175,12 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     currentPartitarioDraft: preliminaryNormalizedForDraft.partitarioData,
     pianoConti: Array.isArray(options?.pianoConti) ? options.pianoConti : [],
     selectedCausale: templateSource,
-  }, { behavior, ...options })
+  }, {
+    behavior,
+    splitPayment,
+    splitPaymentImportoIncassabile: splitPaymentRows.importoIncassabile,
+    ...options,
+  })
   const ivaPerCassaGiroconto = buildIvaPerCassaGirocontoRows({
     rows: preliminaryNormalizedForDraft.rows,
     causale: templateSource,
@@ -199,11 +222,13 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     { ...options, behavior, documentDraft, ivaDraft, partitarioDraft, ritenutaDraft }
   )
   const girocontoBlockers = Array.isArray(ivaPerCassaGiroconto.blockers) ? ivaPerCassaGiroconto.blockers : []
-  const validation = girocontoBlockers.length
+  const splitPaymentBlockers = Array.isArray(splitPaymentRows.blockers) ? splitPaymentRows.blockers : []
+  const technicalBlockers = [...girocontoBlockers, ...splitPaymentBlockers]
+  const validation = technicalBlockers.length
     ? {
         ...baseValidation,
         status: 'blocked',
-        blockers: Array.from(new Set([...(baseValidation.blockers || []), ...girocontoBlockers])),
+        blockers: Array.from(new Set([...technicalBlockers, ...(baseValidation.blockers || [])])),
       }
     : baseValidation
   const readiness = validation.status === 'ok' ? 'pronto_per_contabilita' : 'incompleto'
@@ -227,6 +252,8 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
       cliente_fornitore_nome: normalizedForDraft.header.clienteFornitoreNome,
       cliente_fornitore_codice: normalizedForDraft.header.clienteFornitoreCodice,
       cliente_fornitore_tipo: normalizedForDraft.header.clienteFornitoreTipo,
+      splitPayment: Boolean(normalizedForDraft.header.splitPayment || normalizedForDraft.header.split_payment),
+      split_payment: Boolean(normalizedForDraft.header.splitPayment || normalizedForDraft.header.split_payment),
     },
     rows: normalizedForDraft.rows,
     meta: {
@@ -251,6 +278,14 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
         direction: ivaPerCassaGiroconto.direction || '',
         totalRelease: ivaPerCassaGiroconto.totalRelease || 0,
         blockers: girocontoBlockers,
+      },
+      splitPayment: {
+        ...splitPayment,
+        ivaSplit: splitPaymentRows.ivaSplit,
+        importoIncassabile: splitPaymentRows.importoIncassabile,
+        blockerCode: splitPaymentRows.blockerCode || splitPayment?.blockerCode || '',
+        blockerMessage: splitPaymentRows.blockerMessage || splitPayment?.blockerMessage || '',
+        blockers: splitPaymentBlockers,
       },
       panelStatus: {
         document: documentDraft.status || 'ok',
