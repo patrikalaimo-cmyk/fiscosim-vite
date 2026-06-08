@@ -4518,3 +4518,22 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build: `npm run build`.
 - Rischi residui: registro/protocollo/segno CEE non risultano ancora persistiti come colonne dedicate nel database; la liquidazione usa il tipo riga e l'importo, non quei metadati.
 - Conferme operative: nessuna Import Contabilità, nessuna Riconciliazione, nessuna migration, nessun push, nessun rollback, nessun `git add .`.
+## AUDIT-POST-MOTORE-FISCALE-MANUALE
+
+- Commit base di riferimento: `27a410d fix: CEE doppio registro iva da impostazioni`.
+- Esito gestione `registrazioneCausaleConfig.js`: il diff residuo era solo rumore/newline; il file e stato ripristinato e non risulta piu sporco.
+- Stato worktree finale: rimangono solo modifiche esterne al perimetro del prompt (report/chat storiche, ZIP checkpoint, scratch), nessuna patch funzionale aggiunta in questa fase.
+- Conferme operative: nessuna Import Contabilita, nessuna Riconciliazione, nessuna migration, nessun push.
+- Mappa sorgenti dati: la UI alimenta `rows`, il motore costruisce `resolvedRows`/draft, la preview deriva da `buildRegistrazioneDraft`, la persistenza passa da `persistPrimaNotaDraft`, la liquidazione legge i registri IVA persistiti.
+- Rischi sorgenti parallele: il rischio maggiore resta la divergenza tra source UI e source persistita; oggi e contenuta da `resolvedRows`, draft e persistenza, ma va vigilata nei casi speciali.
+- Hardcode codici causale: nei path produttivi auditati non emergono trigger `if codice === 'FF5'` o `if codice === 'A17X'`; i codici restano etichette operative/test/fixture e i casi funzionano da policy/impostazioni causale.
+- Split da anagrafica: confermato come dipendente dal flag controparte/anagrafica cliente, non dalla causale contabile.
+- Reverse/CEE da impostazioni causale: confermato; `tipo_causale`, `operazione_partite`/`gestione_partite`, `tipo_documento`, `registro_iva`, `registro_iva_cee`, `protocollo_iva_cee`, `segno_iva_registro_cee` guidano il comportamento.
+- IVA per cassa: il flusso documento -> partita ordinaria -> rilascio IVA resta coerente; il blocco dedicato e verde sui test presenti.
+- Liquidazione IVA: oggi aggrega ordinaria, split, reverse/CEE e IVA per cassa con shape ancora relativamente piatto; il rischio residuo e semantico, non bloccante.
+- Persistenza: `persistPrimaNotaDraft.js` e` robusto ma sta accumulando casi speciali (split, CEE, autofattura, IVA per cassa); in futuro conviene estrarre helper/mapper mirati per mantenere leggibilita.
+- Copertura test: presenti e verdi i casi split, A17X, CEE/acq beni CEE, liquidazione split, IVA per cassa.
+- Test eseguiti: `node --test tests/a17xAutofatturaBase.test.js tests/ff5BeniEsteroBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`.
+- Build: `npm run build`.
+- Raccomandazione prossimo step: non introdurre nuove regole fiscali; prima di aggiungere altri casi speciali, estrarre helper comuni e consolidare il contratto della liquidazione.
+- Conferme finali: nessuna patch funzionale su causali/Imposte, nessuna modifica a Import/Riconciliazione, nessun commit/push/rollback oltre a questo audit documentale.
