@@ -4408,3 +4408,21 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - rischi residui: il comportamento resta vincolato alla policy autofattura/reverse e non estende alcun caso FF5 / UE / extra UE
 - nota: il DB attuale non ha ancora campi registro/protocollo/segno, quindi per ora viene validato il doppio record acquisti/vendite senza persistenza del protocollo 3
 - conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`
+
+## FIX-A17X-Doppio-Registro-Iva-UUID-Fittizio
+- commit base precedente: `05633b3 fix: reverse A17X doppio registro iva`
+- errore manuale rilevato: `invalid input syntax for type uuid: "iva-row-1-vendita"`
+- causa tecnica: la seconda riga IVA vendite/autofattura veniva duplicata con un id fittizio UI e quel campo veniva propagato fino al payload di persistenza
+- campo esatto coinvolto: `id` della riga IVA duplicata, poi riusato dal merge verso `registri_iva`
+- file modificati:
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `tests/a17xAutofatturaBase.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- regola di sanificazione UUID: gli id UI fittizi restano nello stato frontend come `ui_id`, mentre nel payload DB i campi UUID ricevono solo UUID reali, `null` oppure restano omessi
+- test eseguiti:
+  - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
+- build eseguita: `npm run build`
+- conferma PN e partitario non regressi: restano corretti e quadrati
+- conferma `iva-row-1-vendita` non entra più nel payload DB: la riga duplicata conserva solo `ui_id` lato frontend e non viene più inviata a Supabase come `id`
+- nota: il DB attuale non ha ancora campi registro/protocollo/segno, quindi il controllo resta sulla doppia riga acquisto/vendita e sulla sanificazione UUID
+- conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`

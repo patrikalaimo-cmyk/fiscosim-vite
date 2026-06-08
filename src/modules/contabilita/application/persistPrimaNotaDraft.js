@@ -344,7 +344,7 @@ function expandAutofatturaVatEntries(rows = [], resolvedDraft = {}) {
   }
   const venditaRow = {
     ...baseRow,
-    id: `${normalizeText(baseRow?.id || 'iva-row-1')}-vendita`,
+    ui_id: `${normalizeText(baseRow?.id || 'iva-row-1')}-vendita`,
     tipo: 'vendita',
   }
 
