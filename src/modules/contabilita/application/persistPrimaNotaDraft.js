@@ -351,6 +351,21 @@ function expandAutofatturaVatEntries(rows = [], resolvedDraft = {}) {
   return [acquistoRow, venditaRow]
 }
 
+function sanitizeRegistroIvaForInsert(row = {}) {
+  const source = row && typeof row === 'object' ? row : {}
+  const {
+    ui_id,
+    uiId,
+    rowId,
+    tempId,
+    key,
+    label,
+    display,
+    ...safeRow
+  } = source
+  return safeRow
+}
+
 function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
   const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile || resolvedDraft.pnPayload?.causaleContabile
   const causaleObj = {
@@ -528,6 +543,7 @@ export async function persistPrimaNotaDraft({
     ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
     : []
   vatEntriesForDb = expandAutofatturaVatEntries(vatEntriesForDb, resolved)
+  vatEntriesForDb = vatEntriesForDb.map(sanitizeRegistroIvaForInsert)
 
   const partitarioEnabled = Boolean(
     resolved.partitarioDraft?.active ||

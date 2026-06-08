@@ -4426,3 +4426,20 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - conferma `iva-row-1-vendita` non entra più nel payload DB: la riga duplicata conserva solo `ui_id` lato frontend e non viene più inviata a Supabase come `id`
 - nota: il DB attuale non ha ancora campi registro/protocollo/segno, quindi il controllo resta sulla doppia riga acquisto/vendita e sulla sanificazione UUID
 - conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`
+
+## FIX-A17X-Registri-Iva-Rimozione-Campi-UI
+- commit base precedente: `5f2511b fix: reverse A17X sanifica uuid righe iva`
+- errore manuale rilevato: `Could not find the 'ui_id' column of 'registri_iva' in the schema cache`
+- causa tecnica: la seconda riga IVA vendite/autofattura veniva duplicata con un campo tecnico UI (`ui_id`) e quel campo finiva nel payload destinato a `registri_iva`
+- file modificati:
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `tests/a17xAutofatturaBase.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- campo `ui_id` rimosso dal payload DB: gli id tecnici UI restano solo nello stato frontend e vengono rimossi prima dell'insert
+- conferma due righe IVA ancora generate: persistenza con riga acquisti e riga vendite/autofattura resta attiva
+- conferma PN e partitario non regressi: restano corretti e quadrati
+- test eseguiti:
+  - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
+- build eseguita: `npm run build`
+- rischi residui: il comportamento resta vincolato alla policy autofattura/reverse e non estende alcun caso FF5 / UE / extra UE
+- conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`
