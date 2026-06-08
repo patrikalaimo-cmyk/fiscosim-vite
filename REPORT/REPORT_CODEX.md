@@ -4443,3 +4443,37 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - build eseguita: `npm run build`
 - rischi residui: il comportamento resta vincolato alla policy autofattura/reverse e non estende alcun caso FF5 / UE / extra UE
 - conferma: nessuna modifica a Import Contabilità, Riconciliazione, migration, push, rollback o `git add .`
+
+## CHECKPOINT-FF5-Beni-Estero-Base
+- commit base: `24c54dd fix: reverse A17X pulizia payload registri iva`
+- regole operative confermate: nessuna modifica a Import Contabilita, nessuna modifica a Riconciliazione, nessuna migration, nessun push, nessun rollback, nessun `git add .`
+- differenza rispetto ad A17X:
+  - A17X servizi -> causale IVA default `A17`
+  - FF5 beni -> causale IVA default `B0IW`
+- file modificati:
+  - `tests/ff5BeniEsteroBase.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- policy usata: fixture FF5 configurata come `Autofattura` con apertura partitario, riuso del flusso A17X gia validato
+- righe PN generate:
+  - costo/merci Dare `1229,51`
+  - fornitore Avere `1229,51`
+  - IVA NS.CREDITO Dare `270,49`
+  - IVA NS.DEBITO Avere `270,49`
+  - totale Dare `1500,00`
+  - totale Avere `1500,00`
+- partitario generato: fornitore aperto a `1229,51`, non a `1500,00`
+- registri IVA generati: due righe, una `tipo = acquisto` e una `tipo = vendita`, entrambe con imponibile `1229,51` e IVA `270,49`
+- liquidazione: effetto netto zero, IVA debito e credito si compensano
+- test eseguiti:
+  - `node --test tests/ff5BeniEsteroBase.test.js tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
+- build: `npm run build`
+- rischi residui: il caso resta dipendente da policy/coerenza della causale; non sono stati introdotti flussi nuovi per TD17/TD18/TD19, UE avanzato, extra UE avanzato, indetraibilita, Import o Riconciliazione
+- cosa NON e stato implementato:
+  - TD17/TD18/TD19
+  - UE avanzato
+  - extra UE avanzato
+  - indetraibilita
+  - Import Contabilita
+  - Riconciliazione
+  - protocolli / registri IVA persistiti se lo schema non li supporta
+- conferma: nessun hardcode produttivo FF5, il caso e stato espresso tramite policy/fixture e test dedicato
