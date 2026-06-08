@@ -9,6 +9,17 @@ import { normalizeText } from '../../application/canonical_mapper/utils.js'
  * @returns {Object} 
  */
 export function resolveIvaDocumentPostingDirection(causalePolicy) {
+  if (causalePolicy?.isAutofattura) {
+    return {
+      registroKind: 'autofattura',
+      segnoRegistro: 'somma',
+      subjectSide: null,
+      vatSide: null,
+      imputationSide: null,
+      registroSign: 1,
+    }
+  }
+
   // Verifichiamo se la policy ha già categorizzato in modo pulito il tipo di documento
   // tramite buildCausaleContabilePolicy
   let isAcquisti = causalePolicy?.isFatturaPassiva === true || causalePolicy?.isNotaCreditoPassiva === true

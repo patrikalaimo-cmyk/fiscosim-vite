@@ -100,7 +100,21 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
     toAmount(documentData.totaleDocumento || documentData.totale_documento || header.totaleDocumento || header.totale_documento)
   const splitPayment = options?.splitPayment && typeof options.splitPayment === 'object' ? options.splitPayment : {}
   const splitImportoIncassabile = toAmount(options?.splitPaymentImportoIncassabile)
-  const partitarioDocumentTotal = isApertura && splitPayment.active ? splitImportoIncassabile : documentTotal
+  const autofatturaImportoImponibile = toAmount(
+    documentData.imponibile ||
+      documentData.totaleImponibile ||
+      documentData.totale_imponibile ||
+      currentPartitarioDraft.imponibile ||
+      currentPartitarioDraft.totaleImponibile ||
+      currentPartitarioDraft.totale_imponibile
+  )
+  const partitarioDocumentTotal = isApertura
+    ? splitPayment.active
+      ? splitImportoIncassabile
+      : policy.isAutofattura
+        ? autofatturaImportoImponibile || documentTotal
+        : documentTotal
+    : documentTotal
   const importoOrigine = isApertura
     ? partitarioDocumentTotal
     : selectedPartita

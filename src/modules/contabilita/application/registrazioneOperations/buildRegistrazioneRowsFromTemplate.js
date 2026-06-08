@@ -199,6 +199,11 @@ function resolveIvaRowSide(row = {}, behavior = {}) {
 
   const isNotaCreditoPassiva = Boolean(behavior?.isNotaCreditoPassiva)
   const isNotaCreditoAttiva = Boolean(behavior?.isNotaCreditoAttiva)
+  const explicitSide = normalizeText(row?.lato)
+
+  if (behavior?.documentMode === 'autofattura' || behavior?.ivaMode === 'autofattura') {
+    if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
+  }
 
   // Matrice Dare/Avere IVA:
   //   FF (fattura passiva):   IVA credito → Dare
@@ -210,7 +215,6 @@ function resolveIvaRowSide(row = {}, behavior = {}) {
   if (behavior?.isFatturaAttiva && !isNotaCreditoAttiva) return 'avere'
   if (isNotaCreditoAttiva) return 'dare'
 
-  const explicitSide = normalizeText(row?.lato)
   if (explicitSide === 'dare' || explicitSide === 'avere') return explicitSide
   return 'dare'
 }

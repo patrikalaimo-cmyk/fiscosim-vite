@@ -4322,3 +4322,40 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - test ripristinati/verdi: gli scenari già passanti di FC cliente split, FC cliente non split, FCPA cliente split, FCPA cliente non split, persistenza split sui registri e liquidazione split restano invariati
 - build: `npm run build` OK
 - conferma: nessun cambiamento a Import Contabilità, nessun cambiamento a Riconciliazione, nessun push, nessun rollback, nessun `git add .`
+
+## CHECKPOINT-Reverse-Servizi-A17X-Base
+
+- commit base di partenza: `18561a2` come ultimo stato documentale prima di questo intervento
+- obiettivo: abilitare il caso A17X autofattura/reverse servizi base con partitario sul solo imponibile e template righe configurabile
+- causa individuata: il motore trattava l'autofattura come documenti IVA standard, imponendo una sola direzione IVA e facendo aprire il partitario sul totale documento
+- file modificati:
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`
+  - `src/modules/contabilita/domain/causali/resolveIvaDocumentPostingDirection.js`
+  - `tests/a17xAutofatturaBase.test.js`
+- modifica funzionale:
+  - il partitario in apertura usa `documentData.imponibile` quando la causale è autofattura
+  - il posting direction per autofattura non forza più un lato unico su tutte le righe IVA
+  - i template A17X possono quindi esprimere le due righe IVA con lati distinti e i conti espliciti
+- comportamento implementato:
+  - soggetto/fornitore aperto sull'imponibile
+  - costo/servizio Dare sull'imponibile
+  - IVA NS.CREDITO Dare sull'IVA
+  - IVA NS.DEBITO Avere sull'IVA
+  - liquidazione netta zero quando le righe fiscali di acquisti e vendite/autofattura sono coerenti
+- test aggiunto:
+  - `tests/a17xAutofatturaBase.test.js`
+  - copre comportamento A17X, partitario sull'imponibile, righe PN bilanciate e liquidazione netta zero
+- test eseguiti:
+  - `node --test tests/a17xAutofatturaBase.test.js`
+  - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js tests/anagraficaSplitPaymentSave.test.js`
+- build:
+  - `npm run build` OK
+- rischio residuo:
+  - il flusso A17X resta dipendente da una causale configurata con template righe coerenti; non ho introdotto hardcode di conti tecnici in produzione
+- conferme:
+  - nessuna migration
+  - nessun commit
+  - nessun push
+  - nessun rollback
+  - nessun `git add .`
