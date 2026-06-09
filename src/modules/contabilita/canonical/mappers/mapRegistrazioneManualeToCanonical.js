@@ -173,7 +173,7 @@ function buildSubjects(draft = {}) {
     tipoSoggetto: 'percipiente',
     anagraficaId: ritenutaDraft.percipienteId || percipienteRecord.id || '',
     denominazione: ritenutaDraft.percipienteNome || percipienteRecord.denominazione || percipienteRecord.nome || ritenutaDraft.percipiente || '',
-    codiceFiscale: ritenutaDraft.codiceFiscale || percipienteRecord.codiceFiscale || percipienteRecord.cf || '',
+    codiceFiscale: ritenutaDraft.codiceFiscale || percipienteRecord.codiceFiscale || percipienteRecord.codice_fiscale || percipienteRecord.cf || '',
     partitaIva: percipienteRecord.partitaIva || percipienteRecord.partita_iva || '',
     paese: percipienteRecord.paese || '',
     pianoContiIdPatrimoniale: '',
@@ -421,7 +421,7 @@ function normalizeWithholdingRows(draft = {}) {
         tipoSoggetto: 'percipiente',
         anagraficaId: text(ritenutaDraft.percipienteId || recipientRecord.id),
         denominazione: text(ritenutaDraft.percipienteNome || recipientRecord.denominazione || recipientRecord.nome || ritenutaDraft.percipiente),
-        codiceFiscale: text(ritenutaDraft.codiceFiscale || recipientRecord.codiceFiscale || recipientRecord.cf),
+        codiceFiscale: text(ritenutaDraft.codiceFiscale || recipientRecord.codiceFiscale || recipientRecord.codice_fiscale || recipientRecord.cf),
         partitaIva: text(recipientRecord.partitaIva || recipientRecord.partita_iva),
         paese: text(recipientRecord.paese),
       }
@@ -509,7 +509,7 @@ export function mapRegistrazioneManualeToCanonical(registrazioneDraftResult, opt
   )
   const totalVat = numberOrZero(ivaDraft.totaleIva, ivaDraft.totaleImposta)
   const withholdingAmount = numberOrZero(ritenutaDraft.ritenuta)
-  const socialSecurity = numberOrZero(ritenutaDraft.cassaPrevidenziale)
+  const socialSecurity = numberOrZero(ritenutaDraft.importoCassa)
   const stampDuty = numberOrZero(documentDraft.bollo, documentDraft.impostaBollo)
   const rounding = numberOrZero(documentDraft.arrotondamento, documentDraft.rounding)
   const excluded = numberOrZero(ritenutaDraft.quotaNonSoggetta, ritenutaDraft.sommeNonSoggette)

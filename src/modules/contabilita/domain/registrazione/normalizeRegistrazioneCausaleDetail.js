@@ -40,6 +40,8 @@ const CAUSALE_RIGHE_TEMPLATE_RUOLI = [
   'iva_split',
   'iva_split_payment',
   'split_payment',
+  'ritenuta',
+  'erario_ritenute',
   'sbilancio',
 ]
 
@@ -48,9 +50,13 @@ const CAUSALE_RIGHE_TEMPLATE_LATI = ['dare', 'avere']
 const CAUSALE_RIGHE_TEMPLATE_FORMULE = [
   'totale_documento',
   'imponibile',
+  'compenso',
+  'cassa_previdenziale',
   'iva_detraibile',
   'iva_indetraibile',
   'netto',
+  'ritenuta',
+  'netto_pagabile',
   'residuo_sbilancio',
   'manuale',
 ]

@@ -1064,7 +1064,7 @@ export async function getScritturaOperationContext(primaNotaId, societaId) {
 
 export async function deleteScritturaControllata(primaNotaId, societaId) {
   try {
-    const delRitRes = await sb.from('ritenute_dacconto').delete().like('note', `%${primaNotaId}%`)
+    const delRitRes = await sb.from('ritenute_dacconto').delete().eq('prima_nota_id', primaNotaId)
     if (delRitRes.error) throw delRitRes.error
 
     const delPartRes = await sb.from('partitario').delete().eq('prima_nota_id', primaNotaId)

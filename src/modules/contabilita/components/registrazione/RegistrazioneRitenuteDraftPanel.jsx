@@ -289,7 +289,7 @@ export function RegistrazioneRitenuteDraftPanel({
   ]
 
   const mainMessage = active
-    ? 'Ritenute predisposte. CU/770, scadenzario e F24 non sono generati in questa fase.'
+    ? `Ritenuta e dati CU/770/F24 predisposti${draft?.dataScadenza ? `; scadenza ${draft.dataScadenza}` : ''}.`
     : 'La causale corrente non prevede ritenute operative. Se cambi causale, la tab si predisporrà in modo automatico.'
 
   const renderQuickCreateModal = () => {

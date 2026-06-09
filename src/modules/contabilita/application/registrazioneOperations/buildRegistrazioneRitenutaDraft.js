@@ -2,6 +2,7 @@ import { normalizeText } from '../canonical_mapper/utils.js'
 import { calculateRegistrazioneRitenutaTotals } from './calculateRegistrazioneRitenutaTotals.js'
 import { validateRegistrazioneRitenutaDraft } from './validateRegistrazioneRitenutaDraft.js'
 import { resolveRegistrazioneRitenutaDefaults } from './resolveRegistrazioneRitenutaDefaults.js'
+import { resolveRitenutaScadenza } from '../../domain/ritenute/resolveRitenutaScadenza.js'
 
 export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   const header = input?.header && typeof input.header === 'object' ? input.header : {}
@@ -81,12 +82,17 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   }
 
   const totals = calculateRegistrazioneRitenutaTotals(base, { mode, totaleDocumento: baseDocumento.totaleDocumento, importoPagamento: base.importoPagamento })
+  const fiscalSchedule = resolveRitenutaScadenza(base.dataPagamento || base.dataDocumento)
   const draft = {
     active: Boolean(behavior.showRitenute),
     mode,
     enabled: Boolean(behavior.showRitenute),
     ...base,
     ...totals,
+    dataScadenza: fiscalSchedule.dataScadenza,
+    periodoRiferimento: fiscalSchedule.periodoRiferimento,
+    annoRiferimento: fiscalSchedule.annoRiferimento,
+    statoVersamento: normalizeText(currentRitenutaDraft.statoVersamento || currentRitenutaDraft.stato_versamento) || 'aperta',
     dataPagamento: base.dataPagamento,
     stato: normalizeText(currentRitenutaDraft.stato) || (behavior.showRitenute ? (isPagamento ? 'ritenuta_pagamento_predisposta' : 'ritenuta_documento_predisposta') : 'idle'),
     rows: [
@@ -118,6 +124,13 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
         aliquotaRitenuta: totals.aliquotaRitenuta,
         ritenuta: totals.ritenuta,
         netto: totals.netto,
+        dataScadenza: fiscalSchedule.dataScadenza,
+        dueDateF24: fiscalSchedule.dataScadenza,
+        periodoRiferimento: fiscalSchedule.periodoRiferimento,
+        period: fiscalSchedule.periodoRiferimento,
+        annoRiferimento: fiscalSchedule.annoRiferimento,
+        tributeCode: base.codiceTributo,
+        statoVersamento: normalizeText(currentRitenutaDraft.statoVersamento || currentRitenutaDraft.stato_versamento) || 'aperta',
         dataDocumento: base.dataDocumento,
         numeroDocumento: base.numeroDocumento,
         dataPagamento: base.dataPagamento,

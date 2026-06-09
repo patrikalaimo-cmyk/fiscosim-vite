@@ -4537,3 +4537,44 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build: `npm run build`.
 - Raccomandazione prossimo step: non introdurre nuove regole fiscali; prima di aggiungere altri casi speciali, estrarre helper comuni e consolidare il contratto della liquidazione.
 - Conferme finali: nessuna patch funzionale su causali/Imposte, nessuna modifica a Import/Riconciliazione, nessun commit/push/rollback oltre a questo audit documentale.
+## CHECKPOINT-RITENUTE-PERCIPIENTI-CU770-F24
+
+- Commit base: `af417eb audit: post motore fiscale manuale`.
+- Audit precedente:
+  - il calcolo ritenuta era gia centralizzato, ma interpretava la cassa come quota inclusa nel compenso;
+  - il partitario apriva sul totale documento;
+  - la ritenuta veniva persistita solo in modalita pagamento;
+  - il collegamento alla prima nota era contenuto nel JSON di `note`;
+  - scadenza F24 e campi CU/770 non erano persistiti.
+- Tabelle rilevate: `percipienti`, `ritenute_dacconto`, `partitario`, `prima_nota`, `f24`. Le viste fiscali CU/770/F24 gia aggregano dati da ritenute e percipienti, ma mancavano collegamenti relazionali e campi minimi nel grafo migration.
+- Migration creata: `supabase/migrations/20260609120000_ritenute_percipienti_cu770_f24.sql`.
+  - crea `ritenute_dacconto` se assente;
+  - aggiunge in modo retrocompatibile `prima_nota_id`, `partitario_id`, `percipiente_id`, stato, scadenza, codice tributo, periodo/anno, imponibile e aliquota;
+  - aggiunge indici e policy RLS per societa.
+- Contratto funzionale:
+  - compenso professionale e cassa previdenziale sono grandezze distinte;
+  - base ritenuta = compenso meno quote/somme non soggette;
+  - ritenuta = base per aliquota configurata;
+  - netto pagabile = totale documento meno ritenuta;
+  - scadenza F24 = giorno 16 del mese successivo alla data di pagamento/riferimento.
+- Regole contabili:
+  - il template causale usa ruoli/formule dichiarative `ritenuta`, `erario_ritenute`, `compenso`, `cassa_previdenziale`, `netto_pagabile`;
+  - la riga soggetto viene ridotta al netto;
+  - la riga Erario c/ritenute riceve l'importo ritenuta;
+  - se il conto Erario non e configurato nel template, il draft viene bloccato;
+  - nessun hardcode produttivo su `RP` o `RPPC`.
+- Partitario: la parcella professionista apre la partita sul netto da pagare. Caso test: totale `1.268,80`, ritenuta `200,00`, partita `1.068,80`.
+- Collegamenti persistiti: `ritenute_dacconto.prima_nota_id`, `partitario_id` e `percipiente_id` ricevono gli ID reali generati/risolti; `note` non e piu il collegamento primario.
+- Percipiente: resta obbligatorio l'aggancio a un record attivo; la UI mantiene la creazione rapida gia esistente e il salvataggio blocca dati fiscali senza percipiente risolto.
+- Dati F24 predisposti: codice tributo, periodo, anno, data scadenza, importo, stato, percipiente, prima nota e partita.
+- Dati CU/770 predisposti: percipiente/CF, compenso, imponibile ritenuta, aliquota, ritenuta, cassa, anno e causale prestazione.
+- File modificati: helper dominio/applicazione ritenute; builder, normalizzazione, validazione, partitario e righe template; mapper canonico e persistenza; servizio prima nota e repository; pannello ritenute; migration e test dedicato.
+- Test richiesti, tutti OK: `ritenutePercipientiCompleto` 6/6, `a17xAutofatturaBase` 2/2, `ff5BeniEsteroBase` 4/4, `splitPaymentDocumentoAttivo` 15/15, `liquidazioneIvaSplitPayment` 4/4.
+- Regressione estesa OK: `partitarioDocumentiIva`, `persistPrimaNotaDraft`, `ivaPerCassaDocumento`, `ivaPerCassaRelease`, `manualeIvaOrdinaria`.
+- Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
+- Rischi residui:
+  - la causale professionale deve avere un sottoconto Erario c/ritenute configurato nel template;
+  - la migration deve essere applicata prima del test manuale reale;
+  - versamento F24, generazione telematica CU/770 e cambio stato a `versata` restano flussi futuri.
+- Non implementato: integrazione Import Contabilita, Riconciliazione, invio F24/CU/770 o automatismi di pagamento.
+- Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessun push, rollback o `git add .`.

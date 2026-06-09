@@ -61,7 +61,9 @@ export function validateRegistrazioneRitenutaDraft(draft = {}, options = {}) {
   if ((quotaNonSoggetta > 0 || sommeNonSoggette > 0) && !codiceSommeNonSoggette && !codiceQuotaNonSoggetta) blockers.push('codice somme / quota non soggette mancante')
   if (mode === 'pagamento' && !partitarioDraft?.selectedPartitaId && !partitarioDraft?.selectedPartitaNumeroDocumento) warnings.push('partita collegata non selezionata per la ritenuta su pagamento')
   if (mode === 'pagamento' && importoPagamento <= 0) warnings.push('importo pagamento non disponibile')
-  info.push('Ritenute predisposte. CU/770, scadenzario e F24 non sono generati in questa fase.')
+  if (mode !== 'none' && !normalizeText(ritenutaData.codiceTributo)) blockers.push('codice tributo ritenuta mancante')
+  if (mode !== 'none' && !normalizeText(ritenutaData.dataScadenza)) blockers.push('data scadenza ritenuta non calcolabile')
+  info.push('Ritenuta, scadenza F24 e dati base CU/770 predisposti.')
 
   const status = blockers.length ? 'blocked' : warnings.length ? 'warning' : 'ok'
 

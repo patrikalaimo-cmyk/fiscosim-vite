@@ -1,4 +1,5 @@
 import { normalizeText, round2 } from '../canonical_mapper/utils.js'
+import { calculateRitenutaProfessionista } from '../../domain/ritenute/calculateRitenutaProfessionista.js'
 
 function toAmount(value) {
   const text = normalizeText(value).replace(',', '.')
@@ -17,18 +18,7 @@ export function calculateRegistrazioneRitenutaTotals(input = {}, options = {}) {
   const importoCompensoSeed = input.importoCompenso ?? input.importo_compenso ?? input.imponibileReddito ?? input.imponibile ?? (mode === 'pagamento' ? importoPagamento : totaleDocumento)
   const baseSeed = toAmount(importoCompensoSeed)
 
-  // Scale base value if cassa previdenziale is active and compenso is not manually overridden
-  let compensoEffettivo = baseSeed
-  let cassaAmount = 0
-  
-  if (aliquotaCassa > 0 && !manualCompensoOverride) {
-    compensoEffettivo = round2(baseSeed / (1 + aliquotaCassa / 100))
-    cassaAmount = round2(baseSeed - compensoEffettivo)
-  } else if (aliquotaCassa > 0) {
-    cassaAmount = round2(compensoEffettivo * aliquotaCassa / 100)
-  }
-
-  const importoCompenso = compensoEffettivo
+  const importoCompenso = baseSeed
   const quotaNonSoggetta = toAmount(input.quotaNonSoggetta ?? input.quota_non_soggetta)
   const sommeNonSoggette = toAmount(input.sommeNonSoggette ?? input.somme_non_soggette)
   const nonSoggetteTotali = round2(quotaNonSoggetta + sommeNonSoggette)
@@ -59,14 +49,21 @@ export function calculateRegistrazioneRitenutaTotals(input = {}, options = {}) {
 
   const baseRitenuta = baseImponibile
 
-  const ritenutaCalcolata = round2((baseRitenuta * aliquotaRitenuta) / 100)
-  const ritenuta = manualRitenutaOverride
-    ? toAmount(input.ritenuta)
-    : toAmount(input.ritenuta != null && input.ritenuta !== '' ? input.ritenuta : ritenutaCalcolata)
-
-  const nettoDefault = mode === 'pagamento'
-    ? round2(Math.max(0, (importoPagamento || importoCompenso || totaleDocumento) - ritenuta))
-    : round2(Math.max(0, importoCompenso - ritenuta))
+  const fiscalTotals = calculateRitenutaProfessionista({
+    compenso: importoCompenso,
+    aliquotaCassa,
+    importoCassa: input.importoCassa ?? input.importo_cassa,
+    quotaNonSoggetta,
+    sommeNonSoggette,
+    baseRitenuta,
+    aliquotaRitenuta,
+    ritenuta: manualRitenutaOverride || (input.ritenuta != null && input.ritenuta !== '') ? input.ritenuta : undefined,
+    totaleDocumento: mode === 'pagamento'
+      ? (importoPagamento || totaleDocumento || importoCompenso)
+      : (totaleDocumento || importoCompenso),
+  })
+  const ritenuta = fiscalTotals.ritenuta
+  const nettoDefault = fiscalTotals.nettoPagabile
   const netto = manualNettoOverride
     ? toAmount(input.netto)
     : toAmount(input.netto != null && input.netto !== '' ? input.netto : nettoDefault)
@@ -82,7 +79,8 @@ export function calculateRegistrazioneRitenutaTotals(input = {}, options = {}) {
     sommeNonSoggette,
     cassaPrevidenziale: aliquotaCassa,
     aliquotaCassa,
-    importoCassa: cassaAmount,
+    importoCassa: fiscalTotals.importoCassa,
+    imponibileIva: fiscalTotals.imponibileIva,
     baseImponibile: round2(baseImponibile),
     baseRitenuta: round2(baseRitenuta),
     imponibileSoggettoRitenuta: round2(baseRitenuta),

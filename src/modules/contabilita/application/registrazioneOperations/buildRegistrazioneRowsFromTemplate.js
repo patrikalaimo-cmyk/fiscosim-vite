@@ -299,7 +299,7 @@ function buildManualDocumentEconomicRow(index = 0, behavior = {}) {
     id: `template-row-${index + 1}`,
     riga_numero: index + 1,
     templateGenerated: true,
-    ruolo: normalizeText(row.ruolo),
+    ruolo: isAttiva || isNotaCreditoAttiva ? 'ricavo' : 'costo',
     templateKey: '',
     manualEdited: false,
     templateScope: false,
@@ -345,6 +345,7 @@ function appendManualDocumentEconomicRow(templateRows = [], behavior = {}) {
 function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare: 0, avere: 0 }, row = {}) {
   const documentData = context?.documentData || {}
   const ivaDraft = context?.ivaDraft || {}
+  const ritenutaDraft = context?.ritenutaDraft || {}
   const causaleBehavior = context?.causaleBehavior || {}
   const causalePolicy = context?.causalePolicy || {}
   const useTaxableAmountForCounterparty = shouldUseTaxableAmountForCounterparty(causalePolicy, causaleBehavior)
@@ -371,6 +372,14 @@ function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare
     return toAmountNumber(documentData.imponibile || documentData.totaleImponibile || ivaDraft.imponibile || ivaDraft.totaleImponibile)
   }
 
+  if (value === 'compenso') {
+    return toAmountNumber(ritenutaDraft.importoCompenso)
+  }
+
+  if (value === 'cassa_previdenziale') {
+    return toAmountNumber(ritenutaDraft.importoCassa)
+  }
+
   if (value === 'iva_detraibile') {
     return toAmountNumber(ivaDraft.ivaDetraibile || ivaDraft.ivaDetratta || ivaDraft.imposta || ivaDraft.totaleImposta)
   }
@@ -384,6 +393,14 @@ function resolveFormulaAmount(formula = '', context = {}, runningTotals = { dare
     if (netto !== undefined && netto !== null && normalizeText(netto) !== '') return toAmountNumber(netto)
     const totale = toAmountNumber(documentData.totaleDocumento || documentData.totale_documento)
     return totale > 0 ? totale : 0
+  }
+
+  if (value === 'ritenuta') {
+    return toAmountNumber(ritenutaDraft.ritenuta)
+  }
+
+  if (value === 'netto_pagabile') {
+    return toAmountNumber(ritenutaDraft.netto)
   }
 
   if (value === 'residuo_sbilancio') {
@@ -429,6 +446,7 @@ function buildGeneratedRow(templateRow = {}, index = 0, context = {}, runningTot
     id: row.id || `template-row-${index + 1}`,
     riga_numero: index + 1,
     templateGenerated: true,
+    ruolo: normalizeText(row.ruolo),
     manualSelectionOnly: Boolean(row.manualSelectionOnly),
     source: accountResolution.source || context?.templateSource || 'behavior_fallback',
     templateKey: context?.templateKey || '',
@@ -482,6 +500,7 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   const templateRows = appendManualDocumentEconomicRow(Array.isArray(normalizedTemplate.rows) ? normalizedTemplate.rows : [], resolvedBehavior)
   const documentData = source.documentData && typeof source.documentData === 'object' ? source.documentData : {}
   const ivaDraft = source.ivaDraft && typeof source.ivaDraft === 'object' ? source.ivaDraft : {}
+  const ritenutaDraft = source.ritenutaDraft && typeof source.ritenutaDraft === 'object' ? source.ritenutaDraft : {}
   const soggetto = source.soggetto && typeof source.soggetto === 'object' ? source.soggetto : {}
   const currentRows = Array.isArray(source.currentRows) ? source.currentRows : []
   const force = Boolean(options.force)
@@ -551,7 +570,7 @@ export function buildRegistrazioneRowsFromTemplate(input = {}, options = {}) {
   let runningTotals = { dare: 0, avere: 0 }
 
   templateRows.forEach((templateRow, index) => {
-    const generated = buildGeneratedRow(templateRow, index, { documentData, ivaDraft, soggetto, templateKey, causaleBehavior: resolvedBehavior, causalePolicy }, runningTotals)
+    const generated = buildGeneratedRow(templateRow, index, { documentData, ivaDraft, ritenutaDraft, soggetto, templateKey, causaleBehavior: resolvedBehavior, causalePolicy }, runningTotals)
     const { _runningTotals, ...cleanRow } = generated
     generatedRows.push(cleanRow)
     runningTotals = _runningTotals
@@ -594,6 +613,7 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
   const source = input && typeof input === 'object' ? input : {}
   const documentData = source.documentData && typeof source.documentData === 'object' ? source.documentData : {}
   const ivaDraft = source.ivaDraft && typeof source.ivaDraft === 'object' ? source.ivaDraft : {}
+  const ritenutaDraft = source.ritenutaDraft && typeof source.ritenutaDraft === 'object' ? source.ritenutaDraft : {}
   const soggetto = source.soggetto && typeof source.soggetto === 'object' ? source.soggetto : {}
   const currentRows = Array.isArray(source.currentRows) ? source.currentRows : []
   const historicalCausaleStructure = source.historicalCausaleStructure && typeof source.historicalCausaleStructure === 'object' ? source.historicalCausaleStructure : null
@@ -696,6 +716,7 @@ export function buildRegistrazioneRowsFromTemplateResolved(input = {}, options =
       {
         documentData,
         ivaDraft,
+        ritenutaDraft,
         soggetto,
         templateKey,
         societaId: source.societaId || '',

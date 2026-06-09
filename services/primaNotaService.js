@@ -68,7 +68,7 @@ async function deleteRitenuteDaccontoByPrimaNotaId({
   db = sb,
   primaNotaId,
 }) {
-  return db.from('ritenute_dacconto').delete().like('note', `%${primaNotaId}%`)
+  return db.from('ritenute_dacconto').delete().eq('prima_nota_id', primaNotaId)
 }
 
 async function cleanupPrimaNotaCompleta({ db = sb, primaNotaId }) {
@@ -144,15 +144,6 @@ export async function createPrimaNotaCompleta({
   }
 
   let ritenuteIns = null
-  if (Array.isArray(ritenutaEntries) && ritenutaEntries.length > 0) {
-    const query = db.from('ritenute_dacconto').insert(ritenutaEntries)
-    ritenuteIns = await (ritenutaSelect ? query.select(ritenutaSelect) : query.select())
-    if (ritenuteIns.error) {
-      await cleanupPrimaNotaCompleta({ db, primaNotaId })
-      return { data: null, error: ritenuteIns.error, pn, righeIns, vatIns, partIns: null, ritenuteIns }
-    }
-  }
-
   let partIns = null
   if (Array.isArray(partEntries) && partEntries.length > 0) {
     const partEntriesWithPrimaNotaId = partEntries.map((r) => ({
@@ -199,6 +190,21 @@ export async function createPrimaNotaCompleta({
           ritenuteIns,
         }
       }
+    }
+  }
+
+  if (Array.isArray(ritenutaEntries) && ritenutaEntries.length > 0) {
+    const openedPartitarioId = Array.isArray(partIns?.data) ? partIns.data[0]?.id || null : null
+    const linkedEntries = ritenutaEntries.map((entry) => ({
+      ...entry,
+      prima_nota_id: primaNotaId,
+      partitario_id: entry.partitario_id || openedPartitarioId,
+    }))
+    const query = db.from('ritenute_dacconto').insert(linkedEntries)
+    ritenuteIns = await (ritenutaSelect ? query.select(ritenutaSelect) : query.select())
+    if (ritenuteIns.error) {
+      await cleanupPrimaNotaCompleta({ db, primaNotaId })
+      return { data: null, error: ritenuteIns.error, pn, righeIns, vatIns, partIns, ritenuteIns }
     }
   }
 

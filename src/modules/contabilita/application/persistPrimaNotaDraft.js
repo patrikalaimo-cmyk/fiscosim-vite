@@ -4,6 +4,7 @@ import { normalizeText, round2 } from './canonical_mapper/utils.js'
 import { mapRegistrazioneManualeToCanonical } from '../canonical/mappers/mapRegistrazioneManualeToCanonical.js'
 import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleContabilePolicy.js'
 import { handleIvaPerCassaRelease } from './registrazioneOperations/ivaPerCassaRelease.js'
+import { buildRitenutaPersistencePayload } from './ritenute/buildRitenutaPersistencePayload.js'
 
 
 function normalizeDbText(value) {
@@ -443,36 +444,7 @@ function mapPartitarioClosureForDb(row = {}, pnPayload = {}) {
 }
 
 function mapRitenutaRowForDb(ritDraft = {}, pnPayload = {}) {
-  const compensoLordo = normalizeDbAmount(ritDraft.importoCompenso)
-  const ritenuta = normalizeDbAmount(ritDraft.ritenuta)
-  const compensoNetto = normalizeDbAmount(ritDraft.netto)
-
-  const auditPayload = {
-    primaNotaId: '__PRIMA_NOTA_ID_PLACEHOLDER__',
-    causaleCu: ritDraft.causaleCu || null,
-    codiceTributo: ritDraft.codiceTributo || null,
-    aliquotaRitenuta: ritDraft.aliquotaRitenuta || 0,
-    aliquotaCassa: ritDraft.aliquotaCassa || 0,
-    importoCassa: ritDraft.importoCassa || 0,
-    codiceCassa: ritDraft.codiceCassa || null,
-    sommeNonSoggette: ritDraft.sommeNonSoggette || 0,
-    quotaNonSoggetta: ritDraft.quotaNonSoggetta || 0
-  }
-
-  const userNote = normalizeText(ritDraft.note)
-  const noteStr = `[FSM_PARCELLA_AUDIT]${JSON.stringify(auditPayload)}${userNote ? ' | ' + userNote : ''}`
-
-  return {
-    societa_id: pnPayload.societa_id || null,
-    percipiente_cf: normalizeText(ritDraft.codiceFiscale || ritDraft.percipienteRecord?.codice_fiscale || ''),
-    percipiente_denominazione: normalizeText(ritDraft.percipiente || ritDraft.percipienteNome || ''),
-    data_pagamento: normalizeText(ritDraft.dataPagamento || pnPayload.data_registrazione || ''),
-    compenso_lordo: compensoLordo,
-    ritenuta: ritenuta,
-    compenso_netto: compensoNetto,
-    causale: normalizeText(ritDraft.causaleCu || ritDraft.causaleReddituale || ''),
-    note: noteStr
-  }
+  return buildRitenutaPersistencePayload(ritDraft, pnPayload)
 }
 
 export async function persistPrimaNotaDraft({
@@ -603,7 +575,10 @@ export async function persistPrimaNotaDraft({
   }
 
   const ritenuteDraft = resolved.innerDraft?.ritenutaDraft || resolved.bundle?.ritenutaDraft || resolved.innerDraft?.ritenutaData || null
-  const ritenutaEnabled = Boolean(ritenuteDraft?.active && ritenuteDraft?.mode === 'pagamento')
+  const ritenutaEnabled = Boolean(
+    ritenuteDraft?.active &&
+    ['documento', 'pagamento'].includes(String(ritenuteDraft?.mode || '').trim().toLowerCase())
+  )
   const ritenutaEntriesForDb = ritenutaEnabled
     ? (Array.isArray(ritenuteDraft?.rows)
         ? ritenuteDraft.rows.map(row => mapRitenutaRowForDb(row, pnPayloadForDb))
