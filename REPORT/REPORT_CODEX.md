@@ -4629,3 +4629,17 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
 - Rischi residui: le causali professionali devono mantenere ruoli e formule dichiarative coerenti nel template; i documenti privi sia di riga compenso/costo sia di imponibile esplicito vengono intenzionalmente bloccati.
 - Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessuna migration; nessun push; nessun rollback; nessun `git add .`.
+## FIX-RITENUTE-UI-SCORPORO-CASSA-E-VIRGOLA
+
+- Data: 2026-06-09.
+- Commit base: `4321840 fix: ritenute compenso non da iva`.
+- Prima nota verificata: `e348108d-fabc-418e-9510-34ca559314ec`.
+- Conferma SQL: persistenza gia corretta con PN quadrata `1.268,80`, fornitore lordo e partitario `1.268,80`, compenso/ritenuta `1.000,00`, cassa `40,00`, IVA `228,80`, ritenuta `200,00` e netto `1.068,80`.
+- Bug UI: un `importoCompenso` presente nello stato, anche se non marcato come override manuale, prevaleva sul compenso risolto e poteva mostrare `1.040,00`; inoltre il componente controllato renderizzava subito il numero normalizzato del draft, cancellando virgole e stati intermedi durante la digitazione.
+- Scorporo cassa: se l'imponibile IVA comprende la cassa, il compenso e calcolato come `imponibileIva / (1 + aliquotaCassa / 100)` e la cassa come `imponibileIva * aliquotaCassa / (100 + aliquotaCassa)`. Caso `1.040,00` al 4%: compenso `1.000,00`, cassa `40,00`.
+- Override: il valore UI prevale solo quando `manualCompensoOverride` e attivo; altrimenti il pannello mostra il draft risolto. La stessa precedenza e applicata a base, ritenuta e netto tramite i rispettivi flag manuali.
+- Input virgola: i campi numerici della tab Ritenute restano input testuali con `inputMode=decimal`, conservano stringhe come `1,` e `4,` durante la digitazione e convertono virgola/punto solo nel parsing interno.
+- File modificati: `buildRegistrazioneRitenutaDraft.js`, `resolveRegistrazioneRitenutaDefaults.js`, `RegistrazioneRitenuteDraftPanel.jsx`, nuovo helper `ritenuteUiNumbers.js`, `tests/ritenutePercipientiCompleto.test.js`.
+- Test: `ritenutePercipientiCompleto`, `ritenutePagamentoParcella`, A17X, FF5/CEE, split payment e liquidazione IVA split: `40/40` OK.
+- Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
+- Conferme: nessuna migration; nessuna modifica a Import Contabilita o Riconciliazione; nessun push; nessun rollback; nessun `git add .`.

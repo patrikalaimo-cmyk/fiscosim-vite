@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import * as contabilitaRepo from '../../data/contabilitaRepo.js'
 import { REG_CARD_STYLE, REG_INPUT_STYLE, REG_SECTION_TITLE_STYLE, formatMoney } from './registrazioneUi.js'
+import { parseRitenutaDecimalInput, resolveRitenutaNumericInputValue } from './ritenuteUiNumbers.js'
 
 function normalizeText(value) {
   return String(value ?? '').trim()
@@ -193,18 +194,26 @@ export function RegistrazioneRitenuteDraftPanel({
 
   const percipienteValue = row.percipienteNome ?? row.percipiente ?? ritenutaData.percipienteNome ?? ritenutaData.percipiente ?? ''
   const causaleValue = row.causaleCu ?? row.causaleReddituale ?? ritenutaData.causaleCu ?? ritenutaData.causaleReddituale ?? ''
-  const importoCompensoValue = row.importoCompenso ?? ritenutaData.importoCompenso ?? row.imponibileReddito ?? row.imponibile ?? ''
-  const quotaNonSoggettaValue = row.quotaNonSoggetta ?? ritenutaData.quotaNonSoggetta ?? ''
-  const sommeNonSoggetteValue = row.sommeNonSoggette ?? ritenutaData.sommeNonSoggette ?? ''
+  const importoCompensoValue = resolveRitenutaNumericInputValue(
+    ritenutaData.manualCompensoOverride ? ritenutaData.importoCompenso : '',
+    row.importoCompenso ?? row.imponibileReddito ?? row.imponibile
+  )
+  const quotaNonSoggettaValue = resolveRitenutaNumericInputValue(ritenutaData.quotaNonSoggetta, row.quotaNonSoggetta)
+  const sommeNonSoggetteValue = resolveRitenutaNumericInputValue(ritenutaData.sommeNonSoggette, row.sommeNonSoggette)
   const codiceQuotaValue = row.codiceQuotaNonSoggetta ?? ritenutaData.codiceQuotaNonSoggetta ?? ''
   const codiceSommeValue = row.codiceSommeNonSoggette ?? ritenutaData.codiceSommeNonSoggette ?? ''
-  const baseImponibileValue = row.baseImponibile ?? row.baseRitenuta ?? row.imponibileSoggettoRitenuta ?? ritenutaData.baseImponibile ?? ritenutaData.baseRitenuta ?? ritenutaData.imponibileSoggettoRitenuta ?? ''
-  const aliquotaValue = row.aliquotaRitenuta ?? ritenutaData.aliquotaRitenuta ?? ''
-  const ritenutaValue = row.ritenuta ?? ritenutaData.ritenuta ?? ''
-  const nettoValue = row.netto ?? ritenutaData.netto ?? ''
-  const cassaValue = row.cassaPrevidenziale ?? ritenutaData.cassaPrevidenziale ?? ''
-  const aliquotaCassaValue = row.aliquotaCassa ?? ritenutaData.aliquotaCassa ?? ''
-  const importoCassaValue = row.importoCassa ?? ritenutaData.importoCassa ?? ''
+  const baseImponibileValue = resolveRitenutaNumericInputValue(
+    ritenutaData.manualBaseOverride
+      ? ritenutaData.baseImponibile ?? ritenutaData.baseRitenuta ?? ritenutaData.imponibileSoggettoRitenuta
+      : '',
+    row.baseImponibile ?? row.baseRitenuta ?? row.imponibileSoggettoRitenuta
+  )
+  const aliquotaValue = resolveRitenutaNumericInputValue(ritenutaData.aliquotaRitenuta, row.aliquotaRitenuta)
+  const ritenutaValue = resolveRitenutaNumericInputValue(ritenutaData.manualRitenutaOverride ? ritenutaData.ritenuta : '', row.ritenuta)
+  const nettoValue = resolveRitenutaNumericInputValue(ritenutaData.manualNettoOverride ? ritenutaData.netto : '', row.netto)
+  const cassaValue = resolveRitenutaNumericInputValue(ritenutaData.cassaPrevidenziale, row.cassaPrevidenziale)
+  const aliquotaCassaValue = resolveRitenutaNumericInputValue(ritenutaData.aliquotaCassa, row.aliquotaCassa)
+  const importoCassaValue = resolveRitenutaNumericInputValue(ritenutaData.importoCassa, row.importoCassa)
   const codiceCassaValue = row.codiceCassa ?? ritenutaData.codiceCassa ?? ''
   const codiceTributoValue = row.codiceTributo ?? ritenutaData.codiceTributo ?? '1040'
   const statusValue = row.stato || ritenutaData.stato || 'predisposto'
@@ -289,8 +298,8 @@ export function RegistrazioneRitenuteDraftPanel({
     { label: 'Percipiente collegato', ok: Boolean(draft?.percipienteRecord), detail: draft?.percipienteRecord?.ragione_sociale || percipienteValue || '' },
     { label: 'Codice fiscale presente', ok: Boolean(normalizeText(row.codiceFiscale || ritenutaData.codiceFiscale)), detail: normalizeText(row.codiceFiscale || ritenutaData.codiceFiscale) },
     { label: 'Causale reddituale valorizzata', ok: Boolean(normalizeText(causaleValue)), detail: normalizeText(causaleValue) || 'compila la causale CU' },
-    { label: 'Importo compenso compilato', ok: Number(draft?.importoCompenso ?? importoCompensoValue ?? 0) > 0, detail: formatMoney(draft?.importoCompenso ?? importoCompensoValue ?? 0) },
-    { label: 'Base imponibile compilata', ok: Number(draft?.baseImponibile ?? baseImponibileValue ?? 0) > 0, detail: formatMoney(draft?.baseImponibile ?? baseImponibileValue ?? 0) },
+    { label: 'Importo compenso compilato', ok: (parseRitenutaDecimalInput(draft?.importoCompenso ?? importoCompensoValue) ?? 0) > 0, detail: formatMoney(draft?.importoCompenso ?? importoCompensoValue ?? 0) },
+    { label: 'Base imponibile compilata', ok: (parseRitenutaDecimalInput(draft?.baseImponibile ?? baseImponibileValue) ?? 0) > 0, detail: formatMoney(draft?.baseImponibile ?? baseImponibileValue ?? 0) },
     { label: 'Base ritenuta coerente', ok: Math.abs(Number(draft?.baseRitenuta ?? baseImponibileValue ?? 0) - Number(draft?.baseImponibile ?? baseImponibileValue ?? 0)) < 0.01, detail: `Base ritenuta ${formatMoney(draft?.baseRitenuta ?? baseImponibileValue ?? 0)}` },
     { label: 'Aliquota presente', ok: Number(draft?.aliquotaRitenuta ?? aliquotaValue ?? 0) > 0, detail: `${formatMoney(draft?.aliquotaRitenuta ?? aliquotaValue ?? 0)}%` },
     { label: 'Ritenuta corretta', ok: Math.abs(Number(draft?.ritenuta ?? ritenutaValue ?? 0) - Math.round((Number(draft?.baseRitenuta ?? baseImponibileValue ?? 0) * Number(draft?.aliquotaRitenuta ?? aliquotaValue ?? 0)) / 100 * 100) / 100) < 0.01, detail: formatMoney(draft?.ritenuta ?? ritenutaValue ?? 0) },
@@ -648,6 +657,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={aliquotaCassaValue || cassaValue}
                       onChange={setField('aliquotaCassa')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="4"
                       style={REG_INPUT_STYLE}
@@ -660,6 +670,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={importoCassaValue}
                       onChange={setField('importoCassa')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="0,00"
                       style={REG_INPUT_STYLE}
@@ -672,6 +683,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={importoCompensoValue}
                       onChange={setField('importoCompenso')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="0,00"
                       style={REG_INPUT_STYLE}
@@ -684,6 +696,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={quotaNonSoggettaValue}
                       onChange={setField('quotaNonSoggetta')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="0,00"
                       style={REG_INPUT_STYLE}
@@ -696,6 +709,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={sommeNonSoggetteValue}
                       onChange={setField('sommeNonSoggette')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="0,00"
                       style={REG_INPUT_STYLE}
@@ -732,6 +746,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={baseImponibileValue}
                       onChange={setField('baseImponibile')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="0,00"
                       style={REG_INPUT_STYLE}
@@ -742,8 +757,9 @@ export function RegistrazioneRitenuteDraftPanel({
                   </Field>
                   <Field label="Base ritenuta">
                     <input
-                      value={row.baseRitenuta ?? ritenutaData.baseRitenuta ?? baseImponibileValue ?? ''}
+                      value={resolveRitenutaNumericInputValue(ritenutaData.manualBaseOverride ? ritenutaData.baseRitenuta : '', row.baseRitenuta ?? baseImponibileValue)}
                       onChange={setField('baseRitenuta')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="0,00"
                       style={REG_INPUT_STYLE}
@@ -756,6 +772,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={aliquotaValue}
                       onChange={setField('aliquotaRitenuta')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder="20"
                       style={REG_INPUT_STYLE}
@@ -768,6 +785,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={ritenutaValue}
                       onChange={setField('ritenuta')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder={formatMoney(0)}
                       style={REG_INPUT_STYLE}
@@ -780,6 +798,7 @@ export function RegistrazioneRitenuteDraftPanel({
                     <input
                       value={nettoValue}
                       onChange={setField('netto')}
+                      inputMode="decimal"
                       disabled={disabled}
                       placeholder={formatMoney(0)}
                       style={REG_INPUT_STYLE}

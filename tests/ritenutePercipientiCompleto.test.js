@@ -4,6 +4,7 @@ import { buildRegistrazioneDraft } from '../src/modules/contabilita/application/
 import { calculateRitenutaProfessionista } from '../src/modules/contabilita/domain/ritenute/calculateRitenutaProfessionista.js'
 import { resolveRitenutaScadenza } from '../src/modules/contabilita/domain/ritenute/resolveRitenutaScadenza.js'
 import { persistPrimaNotaDraft } from '../src/modules/contabilita/application/persistPrimaNotaDraft.js'
+import { parseRitenutaDecimalInput, resolveRitenutaNumericInputValue } from '../src/modules/contabilita/components/registrazione/ritenuteUiNumbers.js'
 
 class MockQuery {
   constructor(table, client) {
@@ -240,6 +241,41 @@ test('default percipiente ricavano compenso e cassa dalla parcella senza input m
   assert.equal(result.ritenutaDraft.causaleCu, 'A')
   assert.equal(result.ritenutaDraft.codiceCassa, 'INPS')
   assert.equal(result.ritenutaDraft.escludiDaCu, true)
+})
+
+test('UI ritenute scorpora la cassa dall imponibile IVA comprensivo', () => {
+  const { input, options } = buildInput()
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+    importoCompenso: 1040,
+    imponibileReddito: 1040,
+    imponibile: 1040,
+    aliquotaCassa: 4,
+    manualCompensoOverride: false,
+  }
+  const result = buildRegistrazioneDraft(input, options)
+  const supplier = result.draft.rows.find((row) => row.ruolo === 'soggetto')
+  const vat = result.draft.rows.find((row) => row.ruolo === 'iva')
+
+  assert.equal(result.ritenutaDraft.importoCompenso, 1000)
+  assert.equal(result.ritenutaDraft.importoCassa, 40)
+  assert.equal(result.ritenutaDraft.baseRitenuta, 1000)
+  assert.equal(result.ritenutaDraft.ritenuta, 200)
+  assert.equal(result.ritenutaDraft.netto, 1068.8)
+  assert.equal(result.partitarioDraft.importoAperto, 1268.8)
+  assert.equal(Number(vat.dare), 228.8)
+  assert.equal(Number(supplier.avere), 1268.8)
+})
+
+test('input ritenute accetta virgola, punto e conserva gli stati intermedi', () => {
+  assert.equal(parseRitenutaDecimalInput('1000,50'), 1000.5)
+  assert.equal(parseRitenutaDecimalInput('1000.50'), 1000.5)
+  assert.equal(parseRitenutaDecimalInput('4,5'), 4.5)
+  assert.equal(parseRitenutaDecimalInput('4.5'), 4.5)
+  assert.equal(parseRitenutaDecimalInput('1,'), 1)
+  assert.equal(resolveRitenutaNumericInputValue('1,', 1), '1,')
+  assert.equal(resolveRitenutaNumericInputValue('4,', 4), '4,')
 })
 
 test('compenso ritenuta deriva dalla riga professionale e non dalla riga IVA', () => {

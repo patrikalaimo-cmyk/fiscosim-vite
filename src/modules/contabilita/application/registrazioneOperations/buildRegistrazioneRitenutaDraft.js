@@ -75,6 +75,10 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   const isPagamento = mode === 'pagamento'
   const linked = isPagamento ? resolveLinkedRitenuta(ritenute, partitarioData, partite) : { record: null, partita: null, importoChiusura: 0 }
   const linkedRitenuta = linked.record || {}
+  const manualCompensoOverride = Boolean(currentRitenutaDraft.manualCompensoOverride || currentRitenutaDraft.manual_compenso_override)
+  const currentCompenso = manualCompensoOverride
+    ? firstMeaningful(currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile)
+    : undefined
   const base = {
     mode,
     ritenutaId: normalizeText(currentRitenutaDraft.ritenutaId || currentRitenutaDraft.ritenuta_id || linkedRitenuta.id),
@@ -87,10 +91,10 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     codiceTributo: normalizeText(linkedRitenuta.codice_tributo || defaults.codiceTributo),
     compensoSource: linkedRitenuta.compenso_lordo ? 'ritenuta_collegata' : defaults.compensoSource,
     compensoResolved: Boolean(linkedRitenuta.compenso_lordo) || defaults.compensoResolved,
-    importoCompenso: firstMeaningful(linkedRitenuta.compenso_lordo, currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile, defaults.importoCompenso),
-    imponibile: currentRitenutaDraft.imponibile != null && currentRitenutaDraft.imponibile !== '' ? currentRitenutaDraft.imponibile : defaults.importoCompenso,
+    importoCompenso: firstMeaningful(linkedRitenuta.compenso_lordo, currentCompenso, defaults.importoCompenso),
+    imponibile: firstMeaningful(currentCompenso, defaults.importoCompenso),
     imponibileReddito: isDocumento
-      ? (currentRitenutaDraft.imponibileReddito != null && currentRitenutaDraft.imponibileReddito !== '' ? currentRitenutaDraft.imponibileReddito : currentRitenutaDraft.imponibile != null && currentRitenutaDraft.imponibile !== '' ? currentRitenutaDraft.imponibile : defaults.importoCompenso)
+      ? firstMeaningful(currentCompenso, defaults.importoCompenso)
       : (currentRitenutaDraft.imponibileReddito != null && currentRitenutaDraft.imponibileReddito !== '' ? currentRitenutaDraft.imponibileReddito : currentRitenutaDraft.imponibile != null && currentRitenutaDraft.imponibile !== '' ? currentRitenutaDraft.imponibile : partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || defaults.importoCompenso),
     quotaNonSoggetta: currentRitenutaDraft.quotaNonSoggetta ?? currentRitenutaDraft.quota_non_soggetta ?? 0,
     sommeNonSoggette: currentRitenutaDraft.sommeNonSoggette ?? currentRitenutaDraft.somme_non_soggette ?? 0,

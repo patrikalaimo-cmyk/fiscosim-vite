@@ -140,9 +140,15 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
     currentRitenutaDraft.imponibileReddito,
     currentRitenutaDraft.imponibile
   ))
-  const compensationResolution = currentImportoCompenso > 0
+  const manualCompensoOverride = Boolean(currentRitenutaDraft.manualCompensoOverride || currentRitenutaDraft.manual_compenso_override)
+  const resolvedCompensation = resolveImportoCompenso({ documentData, ivaDraft, rows, mode, aliquotaCassa })
+  const compensationResolution = manualCompensoOverride && currentImportoCompenso > 0
     ? { amount: currentImportoCompenso, source: 'input_ritenuta', resolved: true }
-    : resolveImportoCompenso({ documentData, ivaDraft, rows, mode, aliquotaCassa })
+    : resolvedCompensation.resolved
+      ? resolvedCompensation
+      : currentImportoCompenso > 0
+        ? { amount: currentImportoCompenso, source: 'input_ritenuta_fallback', resolved: true }
+        : resolvedCompensation
   return {
     mode,
     percipienteRecord,
