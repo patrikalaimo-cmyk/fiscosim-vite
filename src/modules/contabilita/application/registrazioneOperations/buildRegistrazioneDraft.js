@@ -226,7 +226,7 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
       ritenutaData: normalized.ritenutaData,
       currentRitenutaDraft: normalized.ritenutaData,
       percipienti: Array.isArray(options?.percipienti) ? options.percipienti : [],
-      rows: normalized.rows,
+      rows: normalizedForDraft.rows,
       partite: Array.isArray(options?.partite) ? options.partite : [],
       ritenute: Array.isArray(options?.ritenute) ? options.ritenute : [],
     },

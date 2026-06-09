@@ -4615,3 +4615,17 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
 - Rischi residui: l'orchestrazione prima nota/partitario/ritenuta usa chiamate Supabase sequenziali e non una singola RPC transazionale; il pagamento F24 richiedera un workflow dedicato con chiusura del debito Erario e stato `versata`.
 - Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessun push; nessun rollback; nessun `git add .`.
+## FIX-RITENUTE-COMPENSO-NON-DA-IVA
+
+- Data: 2026-06-09.
+- Commit base: `fcfe6ee checkpoint: pagamento parcella con ritenuta`.
+- Causa precisa: il resolver del compenso considerava qualunque riga non riconosciuta come soggetto, IVA o cassa. Una riga `IVA a credito` con codice conto non convenzionale e metadata incompleti poteva quindi essere scelta come compenso; inoltre erano presenti fallback ambigui sul totale del draft IVA/documento.
+- Regola applicata: il compenso deriva prima dalla riga con `formula_importo: compenso`, poi da una riga con ruolo esplicito `costo`, escludendo sempre ruoli/formule IVA e cassa previdenziale. In assenza di righe risolte e ammesso unicamente l'imponibile dichiarato del documento, depurato della cassa; totale documento e importo IVA non sono piu fonti del compenso.
+- Blocco: se non esiste una fonte identificabile, il draft resta bloccato con il messaggio `compenso professionale non identificabile: configurare una riga costo con formula compenso`.
+- Flusso corretto: la risoluzione definitiva della ritenuta legge le righe contabili generate, non la lista iniziale potenzialmente incompleta.
+- Caso regressione: compenso `1.000,00`, cassa `40,00`, IVA `228,80`, ritenuta `200,00`; `228,80` non viene mai assunto come compenso.
+- File modificati: `buildRegistrazioneDraft.js`, `buildRegistrazioneRitenutaDraft.js`, `resolveRegistrazioneRitenutaDefaults.js`, `validateRegistrazioneRitenutaDraft.js`, `tests/ritenutePercipientiCompleto.test.js`.
+- Test: `ritenutePercipientiCompleto` 9/9, `ritenutePagamentoParcella` 4/4, `a17xAutofatturaBase` 2/2, `ff5BeniEsteroBase` 4/4, split payment e liquidazione IVA split 19/19, tutti OK.
+- Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
+- Rischi residui: le causali professionali devono mantenere ruoli e formule dichiarative coerenti nel template; i documenti privi sia di riga compenso/costo sia di imponibile esplicito vengono intenzionalmente bloccati.
+- Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessuna migration; nessun push; nessun rollback; nessun `git add .`.

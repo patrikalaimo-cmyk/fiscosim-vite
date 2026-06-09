@@ -26,50 +26,58 @@ function resolvePercipienteRecord(percipienti = [], draft = {}, header = {}) {
   )
 }
 
-function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDraft = {}, rows = [], header = {}, mode = 'documento', aliquotaCassa = 0 } = {}) {
-  const rowsList = Array.isArray(rows) ? rows : []
-  const costRowsAmount = rowsList
-    .filter(row => {
-      const contoId = String(row.conto_id || row.contoId || '').trim()
-      if (!contoId) return false
-      const isCounterparty = contoId === String(header.clienteFornitoreId || header.cliente_fornitore_id || '').trim()
-      const contoCod = String(row.conto_codice || row.contoCodice || '')
-      const isVat = contoCod.startsWith('22') || contoCod.startsWith('33')
-      const desc = String(row.conto_descrizione || row.contoDescrizione || '').toLowerCase()
-      const isVatByDesc = desc.includes('iva c/') || desc.includes('iva su ') || desc.includes('erario c/iva')
-      const role = normalizeText(row.ruolo || row.role || row.formula_importo).toLowerCase()
-      const isCassa = role.includes('cassa') || desc.includes('cassa previd')
-      return !isCounterparty && !isVat && !isVatByDesc && !isCassa
-    })
-    .reduce((sum, row) => sum + toAmount(row.dare || row.importo_dare || row.avere || row.importo_avere || 0), 0)
+function rowAmount(row = {}) {
+  return toAmount(row.dare || row.importo_dare || row.avere || row.importo_avere || 0)
+}
 
-  if (costRowsAmount > 0) {
-    return costRowsAmount
+function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], mode = 'documento', aliquotaCassa = 0 } = {}) {
+  const rowsList = Array.isArray(rows) ? rows : []
+  const rowDetails = rowsList.map((row) => ({
+    row,
+    role: normalizeText(row.ruolo || row.role).toLowerCase(),
+    formula: normalizeText(row.formula_importo || row.formulaImporto || row.templateFormula).toLowerCase(),
+    description: normalizeText(row.conto_descrizione || row.contoDescrizione || row.descrizione || row.descrizione_riga).toLowerCase(),
+  }))
+  const explicitCompenso = rowDetails
+    .filter(({ role, formula }) => formula === 'compenso' || role === 'compenso')
+    .reduce((sum, { row }) => sum + rowAmount(row), 0)
+
+  if (explicitCompenso > 0) {
+    return { amount: explicitCompenso, source: 'riga_formula_compenso', resolved: true }
   }
 
-  const ivaNetto = toAmount(
-    ivaDraft?.imponibile ??
-      ivaDraft?.totaleImponibile ??
-      ivaDraft?.totaleDocumento ??
-      documentData?.imponibile ??
-      documentData?.totaleImponibile ??
-      0
-  )
-  const documentTotal = toAmount(documentData?.totaleDocumento || documentData?.totale_documento || 0)
-  const ivaTotale = toAmount(
-    ivaDraft?.totaleIva ??
-      ivaDraft?.totaleImposta ??
-      ivaDraft?.totaleImposte ??
-      documentData?.totaleImposte ??
-      documentData?.totaleImposta ??
-      0
-  )
-  const documentImponibile = toAmount(documentData?.imponibile || documentData?.totaleImponibile || 0)
-  const partitarioAmount = toAmount(partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || 0)
+  const economicCost = rowDetails
+    .filter(({ role, formula, description }) => {
+      const isVat = role === 'iva' || formula.startsWith('iva_') || description.includes('iva a credito') || description.includes('iva c/') || description.includes('iva su ') || description.includes('erario c/iva')
+      const isCassa = formula === 'cassa_previdenziale' || role.includes('cassa') || description.includes('cassa previd')
+      return role === 'costo' && !isVat && !isCassa
+    })
+    .reduce((sum, { row }) => sum + rowAmount(row), 0)
 
-  if (mode === 'pagamento') return partitarioAmount || documentImponibile || ivaNetto || documentTotal
-  const imponibileIva = ivaNetto || documentImponibile || (documentTotal && ivaTotale ? Math.max(0, documentTotal - ivaTotale) : 0)
-  return aliquotaCassa > 0 ? imponibileIva / (1 + aliquotaCassa / 100) : imponibileIva
+  if (economicCost > 0) {
+    return { amount: economicCost, source: 'riga_ruolo_costo', resolved: true }
+  }
+
+  if (mode === 'pagamento') {
+    return { amount: 0, source: 'non_identificato', resolved: false }
+  }
+
+  const taxableBase = toAmount(
+    documentData?.imponibile ??
+      documentData?.totaleImponibile ??
+      ivaDraft?.imponibile ??
+      ivaDraft?.totaleImponibile ??
+      0
+  )
+  if (taxableBase > 0) {
+    return {
+      amount: aliquotaCassa > 0 ? taxableBase / (1 + aliquotaCassa / 100) : taxableBase,
+      source: 'imponibile_documento',
+      resolved: true,
+    }
+  }
+
+  return { amount: 0, source: 'non_identificato', resolved: false }
 }
 
 function resolveAliquota({ currentDraft = {}, percipienteRecord = null, causaleRitenutaDefaults = {}, mode = 'documento' } = {}) {
@@ -127,7 +135,14 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
       0
     )
   )
-  const importoCompenso = resolveImportoCompenso({ documentData, ivaDraft, partitarioDraft, rows, header, mode, aliquotaCassa })
+  const currentImportoCompenso = toAmount(firstMeaningful(
+    currentRitenutaDraft.importoCompenso,
+    currentRitenutaDraft.imponibileReddito,
+    currentRitenutaDraft.imponibile
+  ))
+  const compensationResolution = currentImportoCompenso > 0
+    ? { amount: currentImportoCompenso, source: 'input_ritenuta', resolved: true }
+    : resolveImportoCompenso({ documentData, ivaDraft, rows, mode, aliquotaCassa })
   return {
     mode,
     percipienteRecord,
@@ -137,7 +152,9 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
     causaleCu: normalizeText(currentRitenutaDraft.causaleCu || currentRitenutaDraft.causaleReddituale || percipienteRecord?.causale_prevalente || percipienteRecord?.causale_reddituale || causaleRitenutaDefaults.causaleCu || ''),
     causaleReddituale: normalizeText(currentRitenutaDraft.causaleReddituale || currentRitenutaDraft.causaleCu || percipienteRecord?.causale_prevalente || percipienteRecord?.causale_reddituale || causaleRitenutaDefaults.causaleReddituale || ''),
     codiceTributo: resolveCodiceTributo({ currentDraft: currentRitenutaDraft, percipienteRecord }),
-    importoCompenso: toAmount(firstMeaningful(currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile, importoCompenso)),
+    importoCompenso: compensationResolution.amount,
+    compensoSource: compensationResolution.source,
+    compensoResolved: compensationResolution.resolved,
     quotaNonSoggetta: toAmount(currentRitenutaDraft.quotaNonSoggetta || currentRitenutaDraft.quota_non_soggetta || 0),
     sommeNonSoggette: toAmount(currentRitenutaDraft.sommeNonSoggette || currentRitenutaDraft.somme_non_soggette || 0),
     codiceQuotaNonSoggetta: normalizeText(currentRitenutaDraft.codiceQuotaNonSoggetta || currentRitenutaDraft.codice_quota_non_soggetta || ''),

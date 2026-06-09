@@ -242,6 +242,48 @@ test('default percipiente ricavano compenso e cassa dalla parcella senza input m
   assert.equal(result.ritenutaDraft.escludiDaCu, true)
 })
 
+test('compenso ritenuta deriva dalla riga professionale e non dalla riga IVA', () => {
+  const { input, options } = buildInput()
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+  }
+  input.rows = [
+    { ruolo: 'costo', formula_importo: 'compenso', conto_id: 'costo-1', conto_descrizione: 'Compensi professionali', dare: 1000, avere: 0 },
+    { ruolo: 'costo', formula_importo: 'cassa_previdenziale', conto_id: 'cassa-prev-1', conto_descrizione: 'Cassa previdenziale', dare: 40, avere: 0 },
+    { ruolo: 'iva', formula_importo: 'iva_detraibile', conto_id: 'iva-1', conto_descrizione: 'IVA a credito', dare: 228.8, avere: 0 },
+    { ruolo: 'soggetto', formula_importo: 'totale_documento', conto_id: 'fornitore-1', conto_descrizione: 'Studio Professionista', dare: 0, avere: 1268.8 },
+  ]
+  const result = buildRegistrazioneDraft(input, options)
+
+  assert.equal(result.ritenutaDraft.importoCompenso, 1000)
+  assert.equal(result.ritenutaDraft.compensoSource, 'riga_formula_compenso')
+  assert.equal(result.ritenutaDraft.importoCassa, 40)
+  assert.equal(result.ritenutaDraft.ritenuta, 200)
+  assert.notEqual(result.ritenutaDraft.importoCompenso, 228.8)
+})
+
+test('ritenuta blocca il documento quando sono disponibili solo IVA e totale documento', () => {
+  const { input, options } = buildInput()
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+  }
+  input.documentData = { totaleDocumento: 1268.8, totaleImposte: 228.8 }
+  input.ivaData = { active: true, imposta: 228.8, causaleIvaId: 'iva-22', causaleIva: 'IVA 22%' }
+  input.rows = [
+    { ruolo: 'iva', formula_importo: 'iva_detraibile', conto_id: 'iva-1', conto_descrizione: 'IVA a credito', dare: 228.8, avere: 0 },
+  ]
+  options.forceTemplateRows = false
+  options.selectedCausale = { ...options.selectedCausale, righe_prima_nota_template: [] }
+  options.causaleContabile = options.selectedCausale
+  const result = buildRegistrazioneDraft(input, options)
+
+  assert.equal(result.ritenutaDraft.importoCompenso, 0)
+  assert.equal(result.ritenutaDraft.compensoResolved, false)
+  assert.ok(result.ritenutaDraft.blockers.some((item) => item.includes('compenso professionale non identificabile')))
+})
+
 test('causale senza gestione ritenute ignora dati stale', () => {
   const { input, options } = buildInput({ ritenute: false })
   const result = buildRegistrazioneDraft(input, options)

@@ -52,7 +52,9 @@ export function validateRegistrazioneRitenutaDraft(draft = {}, options = {}) {
   if (mode !== 'none' && !defaults.percipienteRecord) blockers.push('percipiente / professionista non presente in anagrafica percipienti')
   if (mode !== 'none' && !ritenutaData.causaleCu && !ritenutaData.causaleReddituale) blockers.push('causale reddituale non compilata')
   if (mode !== 'none' && !percipiente) blockers.push('percipiente / professionista non compilato')
-  if (mode !== 'none' && (importoCompenso <= 0 || !Number.isFinite(importoCompenso))) blockers.push('importo compenso non compilato')
+  if (mode !== 'none' && (importoCompenso <= 0 || !Number.isFinite(importoCompenso) || ritenutaData.compensoResolved === false)) {
+    blockers.push('compenso professionale non identificabile: configurare una riga costo con formula compenso')
+  }
   if (mode !== 'none' && (!Number.isFinite(aliquota) || aliquota <= 0)) blockers.push('aliquota ritenuta non definita')
   if (mode !== 'none' && (!Number.isFinite(base) || base <= 0)) blockers.push('base imponibile / base ritenuta non compilata')
   if (mode !== 'none' && (!Number.isFinite(ritenuta) || ritenuta < 0)) blockers.push('ritenuta non valida')

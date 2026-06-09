@@ -85,6 +85,8 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     causaleCu: normalizeText(linkedRitenuta.causale_prestazione || linkedRitenuta.causale || defaults.causaleCu),
     causaleReddituale: normalizeText(linkedRitenuta.causale_prestazione || linkedRitenuta.causale || defaults.causaleReddituale),
     codiceTributo: normalizeText(linkedRitenuta.codice_tributo || defaults.codiceTributo),
+    compensoSource: linkedRitenuta.compenso_lordo ? 'ritenuta_collegata' : defaults.compensoSource,
+    compensoResolved: Boolean(linkedRitenuta.compenso_lordo) || defaults.compensoResolved,
     importoCompenso: firstMeaningful(linkedRitenuta.compenso_lordo, currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile, defaults.importoCompenso),
     imponibile: currentRitenutaDraft.imponibile != null && currentRitenutaDraft.imponibile !== '' ? currentRitenutaDraft.imponibile : defaults.importoCompenso,
     imponibileReddito: isDocumento
