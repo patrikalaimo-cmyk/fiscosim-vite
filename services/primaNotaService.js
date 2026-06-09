@@ -94,6 +94,7 @@ export async function createPrimaNotaCompleta({
   partEntries = [],
   vatEntries = [],
   ritenutaEntries = [],
+  ritenutaUpdates = [],
   headerSelect = 'id',
   righeSelect = '*',
   partitarioSelect = '*',
@@ -144,6 +145,7 @@ export async function createPrimaNotaCompleta({
   }
 
   let ritenuteIns = null
+  let ritenuteUpd = null
   let partIns = null
   if (Array.isArray(partEntries) && partEntries.length > 0) {
     const partEntriesWithPrimaNotaId = partEntries.map((r) => ({
@@ -208,14 +210,45 @@ export async function createPrimaNotaCompleta({
     }
   }
 
+  if (Array.isArray(ritenutaUpdates) && ritenutaUpdates.length > 0) {
+    const updatedRows = []
+    for (const entry of ritenutaUpdates) {
+      const id = String(entry?.id || '').trim()
+      if (!id) {
+        const error = new Error('Posizione ritenuta da maturare non identificata')
+        await cleanupPrimaNotaCompleta({ db, primaNotaId })
+        return { data: null, error, pn, righeIns, vatIns, partIns, ritenuteIns, ritenuteUpd }
+      }
+      const { id: _id, ...updates } = entry
+      const query = db
+        .from('ritenute_dacconto')
+        .update({
+          ...updates,
+          prima_nota_pagamento_id: primaNotaId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select(ritenutaSelect || '*')
+      const result = await query
+      if (result.error || !Array.isArray(result.data) || result.data.length !== 1) {
+        const error = result.error || new Error(`Posizione ritenuta '${id}' non aggiornata`)
+        await cleanupPrimaNotaCompleta({ db, primaNotaId })
+        return { data: null, error, pn, righeIns, vatIns, partIns, ritenuteIns, ritenuteUpd: result }
+      }
+      updatedRows.push(result.data[0])
+    }
+    ritenuteUpd = { data: updatedRows, error: null }
+  }
+
   return {
-    data: { primaNotaId, pn, righeIns, vatIns, partIns, ritenuteIns },
+    data: { primaNotaId, pn, righeIns, vatIns, partIns, ritenuteIns, ritenuteUpd },
     error: null,
     pn,
     righeIns,
     vatIns,
     partIns,
     ritenuteIns,
+    ritenuteUpd,
   }
 }
 

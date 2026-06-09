@@ -8,6 +8,27 @@ function firstMeaningful(...values) {
   return values.find((value) => value !== undefined && value !== null && normalizeText(value) !== '')
 }
 
+function resolveLinkedRitenuta(ritenute = [], partitarioData = {}, partite = []) {
+  const selectedIds = Array.isArray(partitarioData?.selectedPartitaIds)
+    ? partitarioData.selectedPartitaIds.map((id) => String(id || '').trim()).filter(Boolean)
+    : partitarioData?.selectedPartitaId
+      ? [String(partitarioData.selectedPartitaId).trim()]
+      : []
+  if (selectedIds.length !== 1) return { record: null, partita: null, importoChiusura: 0 }
+
+  const partitaId = selectedIds[0]
+  const partita = (Array.isArray(partite) ? partite : []).find((item) => String(item?.id || '').trim() === partitaId) || null
+  const record = (Array.isArray(ritenute) ? ritenute : []).find((item) =>
+    String(item?.partitario_id || item?.partitarioId || '').trim() === partitaId &&
+    !['versata', 'annullata'].includes(normalizeText(item?.stato).toLowerCase())
+  ) || null
+  const configuredAmount = partitarioData?.importiChiusura?.[partitaId] ?? partitarioData?.importoChiusura
+  const importoChiusura = Number.parseFloat(String(
+    configuredAmount ?? partita?.importo_residuo ?? partita?.importoResiduo ?? partita?.saldo_residuo ?? 0
+  ).replace(',', '.')) || 0
+  return { record, partita, importoChiusura: Math.abs(importoChiusura) }
+}
+
 export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   const header = input?.header && typeof input.header === 'object' ? input.header : {}
   const ritenutaData = input?.ritenutaData && typeof input.ritenutaData === 'object' ? input.ritenutaData : {}
@@ -17,6 +38,9 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   const currentRitenutaDraft = input?.currentRitenutaDraft && typeof input.currentRitenutaDraft === 'object' ? input.currentRitenutaDraft : ritenutaData
   const percipienti = Array.isArray(input?.percipienti) ? input.percipienti : Array.isArray(options?.percipienti) ? options.percipienti : []
   const rows = Array.isArray(input?.rows) ? input.rows : []
+  const partitarioData = input?.partitarioData && typeof input.partitarioData === 'object' ? input.partitarioData : {}
+  const partite = Array.isArray(input?.partite) ? input.partite : []
+  const ritenute = Array.isArray(input?.ritenute) ? input.ritenute : Array.isArray(options?.ritenute) ? options.ritenute : []
   const causaleRitenutaDefaults = options?.causaleRitenutaDefaults && typeof options.causaleRitenutaDefaults === 'object' ? options.causaleRitenutaDefaults : {}
   const behavior = options?.behavior && typeof options.behavior === 'object' ? options.behavior : {}
   const modeHint = normalizeText(behavior?.ritenuteMode || behavior?.opRitenute || behavior?.op_ritenute || ritenutaData.mode || '').toLowerCase()
@@ -49,16 +73,19 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   }
   const isDocumento = mode === 'documento'
   const isPagamento = mode === 'pagamento'
+  const linked = isPagamento ? resolveLinkedRitenuta(ritenute, partitarioData, partite) : { record: null, partita: null, importoChiusura: 0 }
+  const linkedRitenuta = linked.record || {}
   const base = {
     mode,
-    percipienteId: defaults.percipienteId,
-    percipiente: defaults.percipienteNome,
-    percipienteNome: defaults.percipienteNome,
-    codiceFiscale: defaults.codiceFiscale,
-    causaleCu: defaults.causaleCu,
-    causaleReddituale: defaults.causaleReddituale,
-    codiceTributo: defaults.codiceTributo,
-    importoCompenso: firstMeaningful(currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile, defaults.importoCompenso),
+    ritenutaId: normalizeText(currentRitenutaDraft.ritenutaId || currentRitenutaDraft.ritenuta_id || linkedRitenuta.id),
+    percipienteId: normalizeText(linkedRitenuta.percipiente_id || defaults.percipienteId),
+    percipiente: normalizeText(linkedRitenuta.percipiente_denominazione || defaults.percipienteNome),
+    percipienteNome: normalizeText(linkedRitenuta.percipiente_denominazione || defaults.percipienteNome),
+    codiceFiscale: normalizeText(linkedRitenuta.percipiente_cf || defaults.codiceFiscale),
+    causaleCu: normalizeText(linkedRitenuta.causale_prestazione || linkedRitenuta.causale || defaults.causaleCu),
+    causaleReddituale: normalizeText(linkedRitenuta.causale_prestazione || linkedRitenuta.causale || defaults.causaleReddituale),
+    codiceTributo: normalizeText(linkedRitenuta.codice_tributo || defaults.codiceTributo),
+    importoCompenso: firstMeaningful(linkedRitenuta.compenso_lordo, currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile, defaults.importoCompenso),
     imponibile: currentRitenutaDraft.imponibile != null && currentRitenutaDraft.imponibile !== '' ? currentRitenutaDraft.imponibile : defaults.importoCompenso,
     imponibileReddito: isDocumento
       ? (currentRitenutaDraft.imponibileReddito != null && currentRitenutaDraft.imponibileReddito !== '' ? currentRitenutaDraft.imponibileReddito : currentRitenutaDraft.imponibile != null && currentRitenutaDraft.imponibile !== '' ? currentRitenutaDraft.imponibile : defaults.importoCompenso)
@@ -72,23 +99,27 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     aliquotaCassa: firstMeaningful(currentRitenutaDraft.aliquotaCassa, currentRitenutaDraft.cassaPrevidenziale, currentRitenutaDraft.cassa_previdenziale, defaults.aliquotaCassa, defaults.cassaPrevidenziale, 0),
     importoCassa: currentRitenutaDraft.importoCassa ?? currentRitenutaDraft.importo_cassa ?? '',
     codiceCassa: currentRitenutaDraft.codiceCassa || currentRitenutaDraft.codice_cassa || defaults.codiceCassa || '',
-    baseImponibile: currentRitenutaDraft.baseImponibile ?? currentRitenutaDraft.base_imponibile ?? currentRitenutaDraft.baseRitenuta ?? currentRitenutaDraft.imponibileSoggettoRitenuta ?? '',
-    baseRitenuta: currentRitenutaDraft.baseRitenuta ?? currentRitenutaDraft.base_imponibile ?? currentRitenutaDraft.imponibileSoggettoRitenuta ?? '',
-    aliquotaRitenuta: firstMeaningful(currentRitenutaDraft.aliquotaRitenuta, causaleRitenutaDefaults.aliquotaRitenuta, defaults.aliquotaRitenuta, 0),
-    ritenuta: currentRitenutaDraft.ritenuta ?? '',
-    netto: currentRitenutaDraft.netto ?? '',
+    baseImponibile: firstMeaningful(linkedRitenuta.imponibile_ritenuta, currentRitenutaDraft.baseImponibile, currentRitenutaDraft.base_imponibile, currentRitenutaDraft.baseRitenuta, currentRitenutaDraft.imponibileSoggettoRitenuta, ''),
+    baseRitenuta: firstMeaningful(linkedRitenuta.imponibile_ritenuta, currentRitenutaDraft.baseRitenuta, currentRitenutaDraft.base_imponibile, currentRitenutaDraft.imponibileSoggettoRitenuta, ''),
+    aliquotaRitenuta: firstMeaningful(linkedRitenuta.aliquota_ritenuta, currentRitenutaDraft.aliquotaRitenuta, causaleRitenutaDefaults.aliquotaRitenuta, defaults.aliquotaRitenuta, 0),
+    ritenuta: firstMeaningful(linkedRitenuta.importo_ritenuta, linkedRitenuta.ritenuta, currentRitenutaDraft.ritenuta, ''),
+    netto: isPagamento ? '' : currentRitenutaDraft.netto ?? '',
     note: normalizeText(currentRitenutaDraft.note || ''),
-    escludiDaCu: currentRitenutaDraft.escludiDaCu == null && currentRitenutaDraft.escludi_da_cu == null
-      ? !defaults.inclusaCu
-      : Boolean(currentRitenutaDraft.escludiDaCu ?? currentRitenutaDraft.escludi_da_cu),
-    dataPagamento: normalizeText(currentRitenutaDraft.dataPagamento || currentRitenutaDraft.dataPagamentoRitenuta || defaults.dataPagamento),
+    escludiDaCu: isPagamento
+      ? false
+      : true,
+    dataPagamento: isPagamento
+      ? normalizeText(currentRitenutaDraft.dataPagamento || currentRitenutaDraft.dataPagamentoRitenuta || header.dataRegistrazione || defaults.dataPagamento)
+      : '',
     numeroDocumento: baseDocumento.numeroDocumento,
     tipoDocumento: baseDocumento.tipoDocumento,
-    importoPagamento: isPagamento ? (currentRitenutaDraft.importoPagamento || partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || baseDocumento.totaleDocumento || baseDocumento.imponibile || 0) : '',
+    importoPagamento: isPagamento ? (linked.importoChiusura || currentRitenutaDraft.importoPagamento || partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || baseDocumento.totaleDocumento || baseDocumento.imponibile || 0) : '',
   }
 
   const totals = calculateRegistrazioneRitenutaTotals(base, { mode, totaleDocumento: baseDocumento.totaleDocumento, importoPagamento: base.importoPagamento })
-  const fiscalSchedule = resolveRitenutaScadenza(base.dataPagamento || base.dataDocumento)
+  const fiscalSchedule = isPagamento
+    ? resolveRitenutaScadenza(base.dataPagamento)
+    : { dataScadenza: '', periodoRiferimento: '', annoRiferimento: null }
   const draft = {
     active: Boolean(behavior.showRitenute),
     mode,
@@ -98,7 +129,9 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     dataScadenza: fiscalSchedule.dataScadenza,
     periodoRiferimento: fiscalSchedule.periodoRiferimento,
     annoRiferimento: fiscalSchedule.annoRiferimento,
-    statoVersamento: normalizeText(currentRitenutaDraft.statoVersamento || currentRitenutaDraft.stato_versamento) || 'aperta',
+    statoVersamento: isPagamento
+      ? 'da_versare'
+      : normalizeText(currentRitenutaDraft.statoVersamento || currentRitenutaDraft.stato_versamento) || 'predisposta',
     dataPagamento: base.dataPagamento,
     stato: normalizeText(currentRitenutaDraft.stato || defaults.stato) || (behavior.showRitenute ? (isPagamento ? 'ritenuta_pagamento_predisposta' : 'ritenuta_documento_predisposta') : 'idle'),
     rows: [
@@ -136,7 +169,7 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
         period: fiscalSchedule.periodoRiferimento,
         annoRiferimento: fiscalSchedule.annoRiferimento,
         tributeCode: base.codiceTributo,
-        statoVersamento: normalizeText(currentRitenutaDraft.statoVersamento || currentRitenutaDraft.stato_versamento) || 'aperta',
+        statoVersamento: isPagamento ? 'da_versare' : 'predisposta',
         dataDocumento: base.dataDocumento,
         numeroDocumento: base.numeroDocumento,
         dataPagamento: base.dataPagamento,
@@ -151,7 +184,11 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
       },
     ],
     documentData: baseDocumento,
-    percipienteRecord: defaults.percipienteRecord,
+    percipienteRecord: defaults.percipienteRecord || percipienti.find((item) =>
+      String(item?.id || '').trim() === String(linkedRitenuta.percipiente_id || '').trim()
+    ) || null,
+    linkedRitenutaRecord: linked.record,
+    linkedPartitaRecord: linked.partita,
     partitarioDraft,
   }
   const validation = validateRegistrazioneRitenutaDraft({ header, ritenutaData: draft, behavior, documentData, ivaDraft, partitarioDraft, percipienti }, { ...options, percipienti, partitarioDraft, documentData, ivaDraft })

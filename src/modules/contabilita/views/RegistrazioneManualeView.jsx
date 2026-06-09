@@ -564,6 +564,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     releasedVatRows: [],
   })
   const [percipientiCatalog, setPercipientiCatalog] = useState([])
+  const [ritenuteDaMaturare, setRitenuteDaMaturare] = useState([])
   const [historicalCausaleEntries, setHistoricalCausaleEntries] = useState([])
   const [causaliIvaCatalog, setCausaliIvaCatalog] = useState([])
   const [fallbackPianoConti, setFallbackPianoConti] = useState([])
@@ -735,6 +736,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           historicalEntries: historicalCausaleEntries,
           causaliIva: effectiveCausaliIva,
           percipienti: percipientiCatalog,
+          ritenute: ritenuteDaMaturare,
         },
         {
           pianoConti: effectivePianoConti,
@@ -749,7 +751,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           historicalEntries: historicalCausaleEntries,
         }
       ),
-    [causaliContabili, effectiveCausaliIva, effectivePianoConti, historicalCausaleEntries, ivaPerCassaPreviewData, percipientiCatalog, selectedCausale, selectedCausaleConfig, selectedContropartePartite, societaAttiva?.id, state.documentData, state.header, state.ivaData, state.partitarioData, state.ritenutaData, rowsForDraftModel]
+    [causaliContabili, effectiveCausaliIva, effectivePianoConti, historicalCausaleEntries, ivaPerCassaPreviewData, percipientiCatalog, ritenuteDaMaturare, selectedCausale, selectedCausaleConfig, selectedContropartePartite, societaAttiva?.id, state.documentData, state.header, state.ivaData, state.partitarioData, state.ritenutaData, rowsForDraftModel]
   )
 
   const resolvedRows = draftModel.normalized.rows
@@ -1195,6 +1197,27 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       .catch(() => {
         if (!alive) return
         setPartiteAperte([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [societaAttiva?.id, partiteRefreshKey])
+
+  useEffect(() => {
+    if (!isValidSocietaId(societaAttiva?.id)) {
+      setRitenuteDaMaturare([])
+      return
+    }
+    let alive = true
+    contabilitaRepo.getRitenuteDaMaturare(societaAttiva.id)
+      .then(({ data, error: qErr }) => {
+        if (!alive) return
+        if (qErr) throw qErr
+        setRitenuteDaMaturare(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        if (!alive) return
+        setRitenuteDaMaturare([])
       })
     return () => {
       alive = false

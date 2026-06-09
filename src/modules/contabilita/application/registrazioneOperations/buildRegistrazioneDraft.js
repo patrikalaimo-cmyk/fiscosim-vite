@@ -93,6 +93,9 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
       currentRitenutaDraft: normalized.ritenutaData,
       percipienti: Array.isArray(options?.percipienti) ? options.percipienti : [],
       rows: normalized.rows,
+      partitarioData: normalized.partitarioData,
+      partite: Array.isArray(options?.partite) ? options.partite : [],
+      ritenute: Array.isArray(options?.ritenute) ? options.ritenute : [],
     },
     { behavior, causaleRitenutaDefaults: options?.causaleRitenutaDefaults || {}, ...options }
   )
@@ -177,7 +180,7 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     header: normalized.header,
     pianoConti: Array.isArray(options?.pianoConti) ? options.pianoConti : [],
   })
-  const ritenutaRows = applyRegistrazioneRitenutaRows(splitPaymentRows.rows, preliminaryRitenutaDraft)
+  const ritenutaRows = applyRegistrazioneRitenutaRows(splitPaymentRows.rows, preliminaryRitenutaDraft, { causale: templateSource })
   const preliminaryNormalizedForDraft = {
     ...normalized,
     rows: ritenutaRows.rows,
@@ -213,10 +216,22 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
   }
   const totals = calculateRegistrazioneTotals(normalizedForDraft.rows)
   const documentDraft = buildRegistrazioneDocumentDraft(normalizedForDraft, behavior)
-  const ritenutaDraft = {
-    ...preliminaryRitenutaDraft,
-    partitarioDraft,
-  }
+  const ritenutaDraft = buildRegistrazioneRitenutaDraft(
+    {
+      header: normalized.header,
+      documentData: normalized.documentData,
+      ivaDraft,
+      partitarioDraft,
+      partitarioData: normalized.partitarioData,
+      ritenutaData: normalized.ritenutaData,
+      currentRitenutaDraft: normalized.ritenutaData,
+      percipienti: Array.isArray(options?.percipienti) ? options.percipienti : [],
+      rows: normalized.rows,
+      partite: Array.isArray(options?.partite) ? options.partite : [],
+      ritenute: Array.isArray(options?.ritenute) ? options.ritenute : [],
+    },
+    { behavior, causaleRitenutaDefaults: options?.causaleRitenutaDefaults || {}, ...options }
+  )
   const baseValidation = validateRegistrazioneDraft(
     {
       header: normalizedForDraft.header,

@@ -866,6 +866,15 @@ export function getRitenuteByAnnoPerData(societaId, annoSel) {
     .order('data_pagamento', { ascending: false })
 }
 
+export function getRitenuteDaMaturare(societaId) {
+  return sb
+    .from('ritenute_dacconto')
+    .select('*')
+    .eq('societa_id', societaId)
+    .in('stato', ['aperta', 'predisposta'])
+    .order('data_documento', { ascending: true })
+}
+
 export function insertRitenuta(record) {
   return sb.from('ritenute_dacconto').insert([record]).select().single()
 }

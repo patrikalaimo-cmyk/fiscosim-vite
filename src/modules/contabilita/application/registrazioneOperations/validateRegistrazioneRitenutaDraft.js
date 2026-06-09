@@ -61,9 +61,22 @@ export function validateRegistrazioneRitenutaDraft(draft = {}, options = {}) {
   if ((quotaNonSoggetta > 0 || sommeNonSoggette > 0) && !codiceSommeNonSoggette && !codiceQuotaNonSoggetta) blockers.push('codice somme / quota non soggette mancante')
   if (mode === 'pagamento' && !partitarioDraft?.selectedPartitaId && !partitarioDraft?.selectedPartitaNumeroDocumento) warnings.push('partita collegata non selezionata per la ritenuta su pagamento')
   if (mode === 'pagamento' && importoPagamento <= 0) warnings.push('importo pagamento non disponibile')
+  if (mode === 'pagamento' && !ritenutaData.linkedRitenutaRecord?.id) blockers.push('posizione ritenuta predisposta non trovata per la partita selezionata')
+  if (mode === 'pagamento' && ritenutaData.linkedPartitaRecord) {
+    const residuo = Math.abs(toAmount(
+      ritenutaData.linkedPartitaRecord.importo_residuo ??
+        ritenutaData.linkedPartitaRecord.importoResiduo ??
+        ritenutaData.linkedPartitaRecord.saldo_residuo
+    ))
+    if (residuo > 0 && Math.abs(importoPagamento - residuo) > 0.01) {
+      blockers.push('pagamento parziale ritenute non ancora supportato')
+    }
+  }
   if (mode !== 'none' && !normalizeText(ritenutaData.codiceTributo)) blockers.push('codice tributo ritenuta mancante')
-  if (mode !== 'none' && !normalizeText(ritenutaData.dataScadenza)) blockers.push('data scadenza ritenuta non calcolabile')
-  info.push('Ritenuta, scadenza F24 e dati base CU/770 predisposti.')
+  if (mode === 'pagamento' && !normalizeText(ritenutaData.dataScadenza)) blockers.push('data scadenza ritenuta non calcolabile')
+  info.push(mode === 'pagamento'
+    ? 'Ritenuta maturata, scadenza e dati CU/770 predisposti.'
+    : 'Ritenuta calcolata e predisposta; scadenza e CU/770 maturano al pagamento.')
 
   const status = blockers.length ? 'blocked' : warnings.length ? 'warning' : 'ok'
 

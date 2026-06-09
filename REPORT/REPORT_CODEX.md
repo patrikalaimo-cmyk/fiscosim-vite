@@ -4597,3 +4597,21 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Audit suite storica `registrazioneOperations.test.js`: `101/113` pass; restano 12 failure legacy/preesistenti, incluse aspettative ritenute basate sulla vecchia semantica netta e fixture non allineate. Non sono state ampliate o corrette fuori perimetro.
 - Rischi residui: il pagamento parcella con rilevazione del debito 1040 e il successivo pagamento F24 devono essere implementati e validati in una fase dedicata prima dell'uso operativo completo.
 - Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessuna migration; nessun push; nessun rollback; nessun `git add .`.
+## CHECKPOINT-PAGAMENTO-PARCELLA-CON-RITENUTA
+
+- Data: 2026-06-09.
+- Commit base: `d172563 fix: ritenute parcella lordo e automatismi percipiente`.
+- Regola fiscale confermata: il debito verso Erario per ritenute nasce al pagamento della parcella; la rilevazione documento resta al lordo e mantiene la ritenuta solo predisposta.
+- Scrittura pagamento implementata: fornitore/percipiente Dare `1.268,80`, banca Avere `1.068,80`, Debiti v/Erario ritenute Avere `200,00`.
+- Configurazione conto Erario: risolta esclusivamente dalla riga template della causale pagamento con ruolo `ritenuta` o `erario_ritenute`; nessuna ricerca per descrizione e nessun hardcode di codice causale.
+- Chiusura partitario: la partita ordinaria viene chiusa per il lordo `1.268,80`, con residuo zero; il pagamento parziale con ritenuta e bloccato con messaggio esplicito.
+- Maturazione ritenuta: la posizione predisposta collegata tramite `partitario_id` viene aggiornata, non duplicata; stato `da_versare`, data pagamento valorizzata, scadenza al giorno 16 del mese successivo, codice tributo configurato, inclusione CU/770 attiva.
+- Parcella predisposta: non ha data pagamento, scadenza F24 o inclusione CU operativa; tali dati maturano soltanto al pagamento.
+- Collegamento pagamento: migration `supabase/migrations/20260609190000_ritenute_pagamento_prima_nota_link.sql` aggiunge `prima_nota_pagamento_id`, distinto dal `prima_nota_id` della parcella originaria.
+- UI/dati: Registrazione Manuale carica le ritenute aperte/predisposte della societa e il builder seleziona quella collegata alla singola partita scelta.
+- Cosa NON e stato implementato: pagamento F24 e chiusura del debito patrimoniale verso Erario.
+- File modificati/creati: builder pagamento ritenuta, draft/validazione ritenute, persistenza e servizio prima nota, repository e view Registrazione Manuale, mapper payload maturazione, migration, test dedicato e regressione parcella.
+- Test eseguiti: `36/36` OK su pagamento ritenuta, parcella ritenuta, A17X, FF5/CEE, split payment e liquidazione IVA split.
+- Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
+- Rischi residui: l'orchestrazione prima nota/partitario/ritenuta usa chiamate Supabase sequenziali e non una singola RPC transazionale; il pagamento F24 richiedera un workflow dedicato con chiusura del debito Erario e stato `versata`.
+- Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessun push; nessun rollback; nessun `git add .`.

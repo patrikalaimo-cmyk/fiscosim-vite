@@ -5,6 +5,7 @@ import { mapRegistrazioneManualeToCanonical } from '../canonical/mappers/mapRegi
 import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleContabilePolicy.js'
 import { handleIvaPerCassaRelease } from './registrazioneOperations/ivaPerCassaRelease.js'
 import { buildRitenutaPersistencePayload } from './ritenute/buildRitenutaPersistencePayload.js'
+import { buildRitenutaMaturazionePayload } from './ritenute/buildRitenutaMaturazionePayload.js'
 
 
 function normalizeDbText(value) {
@@ -575,14 +576,15 @@ export async function persistPrimaNotaDraft({
   }
 
   const ritenuteDraft = resolved.innerDraft?.ritenutaDraft || resolved.bundle?.ritenutaDraft || resolved.innerDraft?.ritenutaData || null
-  const ritenutaEnabled = Boolean(
-    ritenuteDraft?.active &&
-    ['documento', 'pagamento'].includes(String(ritenuteDraft?.mode || '').trim().toLowerCase())
-  )
+  const ritenutaMode = String(ritenuteDraft?.mode || '').trim().toLowerCase()
+  const ritenutaEnabled = Boolean(ritenuteDraft?.active && ritenutaMode === 'documento')
   const ritenutaEntriesForDb = ritenutaEnabled
     ? (Array.isArray(ritenuteDraft?.rows)
         ? ritenuteDraft.rows.map(row => mapRitenutaRowForDb(row, pnPayloadForDb))
         : [mapRitenutaRowForDb(ritenuteDraft, pnPayloadForDb)])
+    : []
+  const ritenutaUpdatesForDb = ritenuteDraft?.active && ritenutaMode === 'pagamento'
+    ? [buildRitenutaMaturazionePayload(ritenuteDraft)]
     : []
 
   const complete = await createPrimaNotaCompleta({
@@ -592,6 +594,7 @@ export async function persistPrimaNotaDraft({
     vatEntries: vatEntriesForDb,
     partEntries: partEntriesForDb,
     ritenutaEntries: ritenutaEntriesForDb,
+    ritenutaUpdates: ritenutaUpdatesForDb,
     headerSelect,
     righeSelect,
     partitarioSelect: '*',
@@ -607,6 +610,7 @@ export async function persistPrimaNotaDraft({
       vatIns: complete.vatIns || null,
       partIns: complete.partIns || null,
       ritenuteIns: complete.ritenuteIns || null,
+      ritenuteUpd: complete.ritenuteUpd || null,
     }
     return {
       data: null,
@@ -663,6 +667,7 @@ export async function persistPrimaNotaDraft({
     vatIns: complete.vatIns || null,
     partIns: complete.partIns || null,
     ritenuteIns: complete.ritenuteIns || null,
+    ritenuteUpd: complete.ritenuteUpd || null,
     rollback: complete.rollback || null,
   }
 }

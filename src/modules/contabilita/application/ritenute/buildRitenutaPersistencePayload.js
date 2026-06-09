@@ -13,7 +13,9 @@ export function buildRitenutaPersistencePayload(ritenuta = {}, pnPayload = {}) {
     percipiente_id: text(ritenuta.percipienteId || ritenuta.percipienteRecord?.id) || null,
     percipiente_cf: text(ritenuta.codiceFiscale || ritenuta.percipienteRecord?.codice_fiscale),
     percipiente_denominazione: text(ritenuta.percipiente || ritenuta.percipienteNome),
-    data_pagamento: text(ritenuta.dataPagamento || pnPayload.data_registrazione) || null,
+    data_pagamento: text(ritenuta.mode) === 'pagamento'
+      ? text(ritenuta.dataPagamento || pnPayload.data_registrazione) || null
+      : null,
     data_documento: text(ritenuta.dataDocumento || pnPayload.data_documento) || null,
     numero_documento: text(ritenuta.numeroDocumento || pnPayload.numero_documento) || null,
     compenso_lordo: amount(ritenuta.importoCompenso),
@@ -26,11 +28,11 @@ export function buildRitenutaPersistencePayload(ritenuta = {}, pnPayload = {}) {
     causale: text(ritenuta.causaleCu || ritenuta.causaleReddituale),
     causale_prestazione: text(ritenuta.causaleCu || ritenuta.causaleReddituale),
     codice_tributo: text(ritenuta.codiceTributo) || '1040',
-    data_scadenza: text(ritenuta.dataScadenza),
-    periodo_riferimento: text(ritenuta.periodoRiferimento),
+    data_scadenza: text(ritenuta.dataScadenza) || null,
+    periodo_riferimento: text(ritenuta.periodoRiferimento) || null,
     anno_riferimento: Number(ritenuta.annoRiferimento) || null,
     stato: text(ritenuta.statoVersamento) || 'aperta',
-    inclusa_cu: !ritenuta.escludiDaCu,
+    inclusa_cu: text(ritenuta.mode) === 'pagamento' && !ritenuta.escludiDaCu,
     note: text(ritenuta.note) || null,
   }
 }
