@@ -9,11 +9,14 @@ function toAmount(value) {
 
 export function calculateRitenutaProfessionista(input = {}) {
   const compenso = toAmount(input.compenso)
-  const aliquotaCassa = toAmount(input.aliquotaCassa)
+  const aliquotaCassaInput = toAmount(input.aliquotaCassa)
   const importoCassaEsplicito = input.importoCassa
   const importoCassa = importoCassaEsplicito !== undefined && importoCassaEsplicito !== null && importoCassaEsplicito !== ''
     ? toAmount(importoCassaEsplicito)
-    : round2(compenso * aliquotaCassa / 100)
+    : round2(compenso * aliquotaCassaInput / 100)
+  const aliquotaCassa = compenso > 0 && importoCassaEsplicito !== undefined && importoCassaEsplicito !== null && importoCassaEsplicito !== ''
+    ? round2(importoCassa / compenso * 100)
+    : aliquotaCassaInput
   const quotaNonSoggetta = toAmount(input.quotaNonSoggetta)
   const sommeNonSoggette = toAmount(input.sommeNonSoggette)
   const baseRitenutaEsplicita = input.baseRitenuta

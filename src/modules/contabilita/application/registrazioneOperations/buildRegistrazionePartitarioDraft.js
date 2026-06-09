@@ -113,9 +113,7 @@ export function buildRegistrazionePartitarioDraft(input = {}, options = {}) {
   )
   const useTaxableAmountForCounterparty = shouldUseTaxableAmountForCounterparty(policy, behavior)
   const partitarioDocumentTotal = isApertura
-    ? options?.ritenutaAttivaDocumento
-      ? toAmount(options?.ritenutaNettoPagabile)
-      : splitPayment.active
+    ? splitPayment.active
       ? splitImportoIncassabile
       : useTaxableAmountForCounterparty
         ? autofatturaImportoImponibile || documentTotal

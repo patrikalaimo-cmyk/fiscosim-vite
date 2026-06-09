@@ -116,6 +116,7 @@ export function RegistrazioneRitenuteDraftPanel({
   draft = null,
   percipienti = [],
   onRefreshPercipienti,
+  header = {},
 }) {
   const active = Boolean(behavior?.showRitenute)
   const mode = normalizeText(draft?.mode || ritenutaData?.mode || behavior?.ritenuteMode || 'documento').toLowerCase()
@@ -167,6 +168,12 @@ export function RegistrazioneRitenuteDraftPanel({
     }
     const aliquota = match.aliquota_ritenuta ?? match.aliquotaRitenuta
     if (aliquota != null && aliquota !== '') onChange?.('aliquotaRitenuta', aliquota)
+    const codiceTributo = match.codice_tributo ?? match.codiceTributo ?? match.metadata?.codice_tributo
+    if (codiceTributo) onChange?.('codiceTributo', codiceTributo)
+    const codiceCassa = match.codice_cassa ?? match.codiceCassa ?? match.metadata?.codice_cassa
+    if (codiceCassa) onChange?.('codiceCassa', codiceCassa)
+    onChange?.('escludiDaCu', !(match.soggetto_cu ?? match.inclusa_cu ?? match.metadata?.soggetto_cu ?? true))
+    onChange?.('stato', match.stato_ritenuta_default ?? match.metadata?.stato_ritenuta_default ?? 'predisposto')
     
     // Auto-fill cassa previdenziale percentage if present in percipiente
     const cassa = match.cassa_previdenziale ?? match.cassaPrevidenziale ?? 0
@@ -271,9 +278,11 @@ export function RegistrazioneRitenuteDraftPanel({
 
   const summaryRows = [
     { label: 'Compenso', value: draft?.importoCompenso ?? importoCompensoValue ?? 0, tone: 'positive' },
-    { label: 'Base', value: draft?.baseRitenuta ?? baseImponibileValue ?? 0, tone: 'positive' },
+    { label: 'Cassa', value: draft?.importoCassa ?? importoCassaValue ?? 0, tone: 'positive' },
+    { label: 'Totale lordo', value: draft?.documentData?.totaleDocumento ?? 0, tone: 'positive' },
     { label: 'Ritenuta', value: draft?.ritenuta ?? ritenutaValue ?? 0, tone: 'negative' },
-    { label: 'Netto', value: draft?.netto ?? nettoValue ?? 0, tone: 'positive' },
+    { label: 'Netto da pagare', value: draft?.netto ?? nettoValue ?? 0, tone: 'positive' },
+    { label: 'Partitario aperto', value: draft?.partitarioDraft?.importoAperto ?? draft?.documentData?.totaleDocumento ?? 0, tone: 'positive' },
   ]
 
   const checks = [
@@ -289,7 +298,7 @@ export function RegistrazioneRitenuteDraftPanel({
   ]
 
   const mainMessage = active
-    ? `Ritenuta e dati CU/770/F24 predisposti${draft?.dataScadenza ? `; scadenza ${draft.dataScadenza}` : ''}.`
+    ? `Parcella rilevata al lordo; ritenuta predisposta per pagamento/F24${draft?.dataScadenza ? ` con scadenza ${draft.dataScadenza}` : ''}.`
     : 'La causale corrente non prevede ritenute operative. Se cambi causale, la tab si predisporrà in modo automatico.'
 
   const renderQuickCreateModal = () => {

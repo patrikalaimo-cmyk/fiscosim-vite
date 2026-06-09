@@ -196,8 +196,6 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     behavior,
     splitPayment,
     splitPaymentImportoIncassabile: splitPaymentRows.importoIncassabile,
-    ritenutaNettoPagabile: preliminaryRitenutaDraft.netto,
-    ritenutaAttivaDocumento: Boolean(preliminaryRitenutaDraft.active && preliminaryRitenutaDraft.mode === 'documento'),
     ...options,
   })
   const ivaPerCassaGiroconto = buildIvaPerCassaGirocontoRows({

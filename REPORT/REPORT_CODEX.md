@@ -4578,3 +4578,22 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - versamento F24, generazione telematica CU/770 e cambio stato a `versata` restano flussi futuri.
 - Non implementato: integrazione Import Contabilita, Riconciliazione, invio F24/CU/770 o automatismi di pagamento.
 - Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessun push, rollback o `git add .`.
+## FIX-RITENUTE-PARCELLA-LORDO-E-AUTOMATISMI-PERCIPIENTE
+
+- Data: 2026-06-09.
+- Commit base: `7ec7a5a checkpoint: ritenute percipienti CU770 F24`.
+- Correzione contabile applicata: nella rilevazione della parcella il fornitore/percipiente resta al totale documento lordo; la ritenuta e predisposta come dato fiscale e non genera una riga Erario nella prima nota documento.
+- Caso validato: compenso `1.000,00`, cassa 4% `40,00`, IVA `228,80`, totale lordo `1.268,80`, ritenuta `200,00`, netto informativo `1.068,80`.
+- Righe parcella validate: costo Dare `1.000,00`, cassa Dare `40,00`, IVA credito Dare `228,80`, fornitore Avere `1.268,80`; nessuna riga Erario c/ritenute; quadratura zero.
+- Partitario: apertura sul lordo `1.268,80`, non sul netto `1.068,80`.
+- Ritenuta fiscale: resta persistita come predisposta e collegata a prima nota, partita e percipiente, con codice tributo, scadenza e dati CU/770.
+- Automatismi percipiente: codice fiscale, aliquota ritenuta, percentuale e codice cassa, causale CU, codice tributo, inclusione CU e stato predisposto. Il compenso viene ricavato dall'imponibile IVA al netto della cassa; percentuale e importo cassa restano coerenti anche con importo manuale.
+- UI: riepilogo esplicito di compenso, cassa, totale lordo, ritenuta, netto da pagare e partitario aperto lordo.
+- Pagamento parcella: il draft fiscale in modalita pagamento esiste, ma non e presente un builder contabile completo e verificato per fornitore Dare lordo, banca Avere netto e debito ritenuta Avere. Non e stato forzato in questa patch; e il prossimo step obbligatorio.
+- Pagamento F24: comportamento atteso confermato, debito ritenuta Dare e banca Avere; il workflow contabile di chiusura non e stato implementato in questa patch.
+- File modificati: `applyRegistrazioneRitenutaRows.js`, `buildRegistrazioneDraft.js`, `buildRegistrazionePartitarioDraft.js`, `buildRegistrazioneRitenutaDraft.js`, `resolveRegistrazioneRitenutaDefaults.js`, `normalizeRegistrazioneInput.js`, `calculateRitenutaProfessionista.js`, `RegistrazioneRitenuteDraftPanel.jsx`, `tests/ritenutePercipientiCompleto.test.js`, `REPORT/REPORT_CODEX.md`.
+- Test richiesti: `32/32` OK su ritenute, A17X, FF5/CEE, split payment e liquidazione IVA split.
+- Build: `npm run build` OK; solo warning Vite preesistente sulla dimensione chunk.
+- Audit suite storica `registrazioneOperations.test.js`: `101/113` pass; restano 12 failure legacy/preesistenti, incluse aspettative ritenute basate sulla vecchia semantica netta e fixture non allineate. Non sono state ampliate o corrette fuori perimetro.
+- Rischi residui: il pagamento parcella con rilevazione del debito 1040 e il successivo pagamento F24 devono essere implementati e validati in una fase dedicata prima dell'uso operativo completo.
+- Conferme: nessuna modifica a Import Contabilita o Riconciliazione; nessuna migration; nessun push; nessun rollback; nessun `git add .`.

@@ -63,6 +63,8 @@ const percipiente = {
   cassa_previdenziale: 4,
   causale_prevalente: 'A',
   codice_tributo: '1040',
+  codice_cassa: 'INPS',
+  soggetto_cu: true,
   attivo: true,
 }
 
@@ -79,7 +81,6 @@ const causaleProfessionista = {
     { ordine: 2, ruolo: 'costo', lato: 'dare', formula_importo: 'cassa_previdenziale', conto_id: 'cassa-prev-1', conto_codice: '6002', conto_descrizione: 'Cassa previdenziale', hierarchyType: 'sottoconto' },
     { ordine: 3, ruolo: 'iva', lato: 'dare', formula_importo: 'iva_detraibile', conto_id: 'iva-1', conto_codice: '1201', conto_descrizione: 'IVA a credito', hierarchyType: 'sottoconto' },
     { ordine: 4, ruolo: 'soggetto', lato: 'avere', formula_importo: 'totale_documento', conto_id: 'fornitore-1', conto_codice: '2001', conto_descrizione: 'Studio Professionista', hierarchyType: 'sottoconto' },
-    { ordine: 5, ruolo: 'ritenuta', lato: 'avere', formula_importo: 'ritenuta', conto_id: 'erario-1', conto_codice: '2401', conto_descrizione: 'Erario c/ritenute', hierarchyType: 'sottoconto' },
   ],
 }
 
@@ -144,7 +145,6 @@ function buildInput({ withCassa = true, ritenute = true } = {}) {
         { id: 'costo-1', codice: '6001', descrizione: 'Compensi professionali', hierarchyType: 'sottoconto' },
         { id: 'cassa-prev-1', codice: '6002', descrizione: 'Cassa previdenziale', hierarchyType: 'sottoconto' },
         { id: 'iva-1', codice: '1201', descrizione: 'IVA a credito', hierarchyType: 'sottoconto' },
-        { id: 'erario-1', codice: '2401', descrizione: 'Erario c/ritenute', hierarchyType: 'sottoconto' },
       ],
       forceTemplateRows: true,
     },
@@ -176,27 +176,40 @@ test('calcolo professionista con cassa produce netto, F24 e CU/770 coerenti', ()
     periodoRiferimento: '2026-06',
     annoRiferimento: 2026,
   })
+
+  const cassaManuale = calculateRitenutaProfessionista({
+    compenso: 1000,
+    aliquotaCassa: 4,
+    importoCassa: 50,
+    aliquotaRitenuta: 20,
+    totaleDocumento: 1278.8,
+  })
+  assert.equal(cassaManuale.importoCassa, 50)
+  assert.equal(cassaManuale.aliquotaCassa, 5)
 })
 
-test('draft parcella genera PN quadrata, partitario netto e dati fiscali completi', () => {
+test('draft parcella genera PN quadrata, partitario lordo e dati fiscali completi', () => {
   const { input, options } = buildInput()
   const result = buildRegistrazioneDraft(input, options)
 
   assert.equal(result.totals.isBalanced, true)
   assert.equal(result.totals.totaleDare, 1268.8)
   assert.equal(result.totals.totaleAvere, 1268.8)
-  assert.equal(result.partitarioDraft.importoAperto, 1068.8)
+  assert.equal(result.partitarioDraft.importoAperto, 1268.8)
   assert.equal(result.ritenutaDraft.ritenuta, 200)
   assert.equal(result.ritenutaDraft.netto, 1068.8)
   assert.equal(result.ritenutaDraft.dataScadenza, '2026-07-16')
   assert.equal(result.ritenutaDraft.codiceTributo, '1040')
   assert.equal(result.ritenutaDraft.annoRiferimento, 2026)
   assert.equal(result.ritenutaDraft.percipienteId, percipiente.id)
+  assert.equal(result.ritenutaDraft.codiceCassa, 'INPS')
+  assert.equal(result.draft.meta.ritenute.appliedToRows, false)
+  assert.deepEqual(result.draft.meta.ritenute.blockers, [])
 
   const subject = result.draft.rows.find((row) => row.ruolo === 'soggetto')
   const withholding = result.draft.rows.find((row) => row.ruolo === 'ritenuta')
-  assert.equal(Number(subject.avere), 1068.8)
-  assert.equal(Number(withholding.avere), 200)
+  assert.equal(Number(subject.avere), 1268.8)
+  assert.equal(withholding, undefined)
 })
 
 test('ritenuta senza cassa mantiene netto corretto', () => {
@@ -205,8 +218,28 @@ test('ritenuta senza cassa mantiene netto corretto', () => {
   assert.equal(result.ritenutaDraft.importoCassa, 0)
   assert.equal(result.ritenutaDraft.ritenuta, 200)
   assert.equal(result.ritenutaDraft.netto, 1020)
-  assert.equal(result.partitarioDraft.importoAperto, 1020)
+  assert.equal(result.partitarioDraft.importoAperto, 1220)
   assert.equal(result.totals.isBalanced, true)
+})
+
+test('default percipiente ricavano compenso e cassa dalla parcella senza input manuali', () => {
+  const { input, options } = buildInput()
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+  }
+  const result = buildRegistrazioneDraft(input, options)
+
+  assert.equal(result.ritenutaDraft.importoCompenso, 1000)
+  assert.equal(result.ritenutaDraft.aliquotaCassa, 4)
+  assert.equal(result.ritenutaDraft.importoCassa, 40)
+  assert.equal(result.ritenutaDraft.aliquotaRitenuta, 20)
+  assert.equal(result.ritenutaDraft.ritenuta, 200)
+  assert.equal(result.ritenutaDraft.netto, 1068.8)
+  assert.equal(result.ritenutaDraft.codiceTributo, '1040')
+  assert.equal(result.ritenutaDraft.causaleCu, 'A')
+  assert.equal(result.ritenutaDraft.codiceCassa, 'INPS')
+  assert.equal(result.ritenutaDraft.escludiDaCu, false)
 })
 
 test('causale senza gestione ritenute ignora dati stale', () => {

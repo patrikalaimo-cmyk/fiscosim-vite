@@ -5,6 +5,10 @@ function toAmount(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function firstMeaningful(...values) {
+  return values.find((value) => value !== undefined && value !== null && normalizeText(value) !== '')
+}
+
 function resolvePercipienteRecord(percipienti = [], draft = {}, header = {}) {
   const rows = Array.isArray(percipienti) ? percipienti : []
   const id = String(draft?.percipienteId || '').trim()
@@ -22,7 +26,7 @@ function resolvePercipienteRecord(percipienti = [], draft = {}, header = {}) {
   )
 }
 
-function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDraft = {}, rows = [], header = {}, mode = 'documento' } = {}) {
+function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDraft = {}, rows = [], header = {}, mode = 'documento', aliquotaCassa = 0 } = {}) {
   const rowsList = Array.isArray(rows) ? rows : []
   const costRowsAmount = rowsList
     .filter(row => {
@@ -33,7 +37,9 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDr
       const isVat = contoCod.startsWith('22') || contoCod.startsWith('33')
       const desc = String(row.conto_descrizione || row.contoDescrizione || '').toLowerCase()
       const isVatByDesc = desc.includes('iva c/') || desc.includes('iva su ') || desc.includes('erario c/iva')
-      return !isCounterparty && !isVat && !isVatByDesc
+      const role = normalizeText(row.ruolo || row.role || row.formula_importo).toLowerCase()
+      const isCassa = role.includes('cassa') || desc.includes('cassa previd')
+      return !isCounterparty && !isVat && !isVatByDesc && !isCassa
     })
     .reduce((sum, row) => sum + toAmount(row.dare || row.importo_dare || row.avere || row.importo_avere || 0), 0)
 
@@ -62,7 +68,8 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, partitarioDr
   const partitarioAmount = toAmount(partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || 0)
 
   if (mode === 'pagamento') return partitarioAmount || documentImponibile || ivaNetto || documentTotal
-  return ivaNetto || documentImponibile || (documentTotal && ivaTotale ? Math.max(0, documentTotal - ivaTotale) : 0)
+  const imponibileIva = ivaNetto || documentImponibile || (documentTotal && ivaTotale ? Math.max(0, documentTotal - ivaTotale) : 0)
+  return aliquotaCassa > 0 ? imponibileIva / (1 + aliquotaCassa / 100) : imponibileIva
 }
 
 function resolveAliquota({ currentDraft = {}, percipienteRecord = null, causaleRitenutaDefaults = {}, mode = 'documento' } = {}) {
@@ -108,7 +115,19 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
   const percipienteNome = normalizeText(
     currentRitenutaDraft.percipiente || currentRitenutaDraft.percipienteNome || header.soggetto || header.clienteFornitoreNome || percipienteRecord?.ragione_sociale || percipienteRecord?.denominazione || percipienteRecord?.nome || ''
   )
-  const importoCompenso = resolveImportoCompenso({ documentData, ivaDraft, partitarioDraft, rows, header, mode })
+  const aliquotaCassa = toAmount(
+    firstMeaningful(
+      currentRitenutaDraft.aliquotaCassa,
+      currentRitenutaDraft.aliquota_cassa,
+      currentRitenutaDraft.cassaPrevidenziale,
+      currentRitenutaDraft.cassa_previdenziale,
+      percipienteRecord?.aliquota_cassa,
+      percipienteRecord?.cassa_previdenziale,
+      percipienteRecord?.metadata?.aliquota_cassa,
+      0
+    )
+  )
+  const importoCompenso = resolveImportoCompenso({ documentData, ivaDraft, partitarioDraft, rows, header, mode, aliquotaCassa })
   return {
     mode,
     percipienteRecord,
@@ -118,13 +137,25 @@ export function resolveRegistrazioneRitenutaDefaults(input = {}) {
     causaleCu: normalizeText(currentRitenutaDraft.causaleCu || currentRitenutaDraft.causaleReddituale || percipienteRecord?.causale_prevalente || percipienteRecord?.causale_reddituale || causaleRitenutaDefaults.causaleCu || ''),
     causaleReddituale: normalizeText(currentRitenutaDraft.causaleReddituale || currentRitenutaDraft.causaleCu || percipienteRecord?.causale_prevalente || percipienteRecord?.causale_reddituale || causaleRitenutaDefaults.causaleReddituale || ''),
     codiceTributo: resolveCodiceTributo({ currentDraft: currentRitenutaDraft, percipienteRecord }),
-    importoCompenso: toAmount(currentRitenutaDraft.importoCompenso || currentRitenutaDraft.imponibileReddito || currentRitenutaDraft.imponibile || importoCompenso),
+    importoCompenso: toAmount(firstMeaningful(currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile, importoCompenso)),
     quotaNonSoggetta: toAmount(currentRitenutaDraft.quotaNonSoggetta || currentRitenutaDraft.quota_non_soggetta || 0),
     sommeNonSoggette: toAmount(currentRitenutaDraft.sommeNonSoggette || currentRitenutaDraft.somme_non_soggette || 0),
     codiceQuotaNonSoggetta: normalizeText(currentRitenutaDraft.codiceQuotaNonSoggetta || currentRitenutaDraft.codice_quota_non_soggetta || ''),
     codiceSommeNonSoggette: normalizeText(currentRitenutaDraft.codiceSommeNonSoggette || currentRitenutaDraft.codice_somme_non_soggette || ''),
     codiceEsclusione: normalizeText(currentRitenutaDraft.codiceEsclusione || currentRitenutaDraft.codice_esclusione || causaleRitenutaDefaults.codiceEsclusione || ''),
-    cassaPrevidenziale: toAmount(currentRitenutaDraft.cassaPrevidenziale || currentRitenutaDraft.cassa_previdenziale || percipienteRecord?.cassa_previdenziale || 0),
+    cassaPrevidenziale: aliquotaCassa,
+    aliquotaCassa,
+    codiceCassa: normalizeText(
+      currentRitenutaDraft.codiceCassa ||
+        currentRitenutaDraft.codice_cassa ||
+        percipienteRecord?.codice_cassa ||
+        percipienteRecord?.metadata?.codice_cassa ||
+        ''
+    ),
+    inclusaCu: currentRitenutaDraft.escludiDaCu == null && currentRitenutaDraft.escludi_da_cu == null
+      ? Boolean(percipienteRecord?.soggetto_cu ?? percipienteRecord?.inclusa_cu ?? percipienteRecord?.metadata?.soggetto_cu ?? true)
+      : !Boolean(currentRitenutaDraft.escludiDaCu ?? currentRitenutaDraft.escludi_da_cu),
+    stato: normalizeText(currentRitenutaDraft.stato || percipienteRecord?.stato_ritenuta_default || percipienteRecord?.metadata?.stato_ritenuta_default || 'predisposto'),
     aliquotaRitenuta: resolveAliquota({ currentDraft: currentRitenutaDraft, percipienteRecord, causaleRitenutaDefaults, mode }),
     dataDocumento: normalizeText(currentRitenutaDraft.dataDocumento || documentData.dataDocumento || header.dataDocumento || header.dataRegistrazione || ''),
     numeroDocumento: normalizeText(currentRitenutaDraft.numeroDocumento || documentData.numeroDocumento || header.numeroDocumento || ''),
