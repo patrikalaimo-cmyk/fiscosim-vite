@@ -76,6 +76,7 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
   const linked = isPagamento ? resolveLinkedRitenuta(ritenute, partitarioData, partite) : { record: null, partita: null, importoChiusura: 0 }
   const linkedRitenuta = linked.record || {}
   const manualCompensoOverride = Boolean(currentRitenutaDraft.manualCompensoOverride || currentRitenutaDraft.manual_compenso_override)
+  const manualImportoCassaOverride = Boolean(currentRitenutaDraft.manualImportoCassaOverride || currentRitenutaDraft.manual_importo_cassa_override)
   const currentCompenso = manualCompensoOverride
     ? firstMeaningful(currentRitenutaDraft.importoCompenso, currentRitenutaDraft.imponibileReddito, currentRitenutaDraft.imponibile)
     : undefined
@@ -91,6 +92,9 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     codiceTributo: normalizeText(linkedRitenuta.codice_tributo || defaults.codiceTributo),
     compensoSource: linkedRitenuta.compenso_lordo ? 'ritenuta_collegata' : defaults.compensoSource,
     compensoResolved: Boolean(linkedRitenuta.compenso_lordo) || defaults.compensoResolved,
+    imponibileIvaInclusaCassa: ivaDraft.imponibile ?? ivaDraft.totaleImponibile ?? documentData.imponibile ?? documentData.totaleImponibile ?? '',
+    manualCompensoOverride,
+    manualImportoCassaOverride,
     importoCompenso: firstMeaningful(linkedRitenuta.compenso_lordo, currentCompenso, defaults.importoCompenso),
     imponibile: firstMeaningful(currentCompenso, defaults.importoCompenso),
     imponibileReddito: isDocumento
@@ -103,7 +107,9 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     codiceEsclusione: normalizeText(currentRitenutaDraft.codiceEsclusione || currentRitenutaDraft.codice_esclusione || causaleRitenutaDefaults.codiceEsclusione || ''),
     cassaPrevidenziale: firstMeaningful(currentRitenutaDraft.cassaPrevidenziale, currentRitenutaDraft.cassa_previdenziale, defaults.cassaPrevidenziale, 0),
     aliquotaCassa: firstMeaningful(currentRitenutaDraft.aliquotaCassa, currentRitenutaDraft.cassaPrevidenziale, currentRitenutaDraft.cassa_previdenziale, defaults.aliquotaCassa, defaults.cassaPrevidenziale, 0),
-    importoCassa: currentRitenutaDraft.importoCassa ?? currentRitenutaDraft.importo_cassa ?? '',
+    importoCassa: manualImportoCassaOverride
+      ? currentRitenutaDraft.importoCassa ?? currentRitenutaDraft.importo_cassa ?? ''
+      : '',
     codiceCassa: currentRitenutaDraft.codiceCassa || currentRitenutaDraft.codice_cassa || defaults.codiceCassa || '',
     baseImponibile: firstMeaningful(linkedRitenuta.imponibile_ritenuta, currentRitenutaDraft.baseImponibile, currentRitenutaDraft.base_imponibile, currentRitenutaDraft.baseRitenuta, currentRitenutaDraft.imponibileSoggettoRitenuta, ''),
     baseRitenuta: firstMeaningful(linkedRitenuta.imponibile_ritenuta, currentRitenutaDraft.baseRitenuta, currentRitenutaDraft.base_imponibile, currentRitenutaDraft.imponibileSoggettoRitenuta, ''),

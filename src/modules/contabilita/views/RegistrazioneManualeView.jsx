@@ -333,6 +333,7 @@ function makeInitialState(exercise = String(new Date().getFullYear())) {
       manualRitenutaOverride: false,
       manualNettoOverride: false,
       manualCompensoOverride: false,
+      manualImportoCassaOverride: false,
       stato: 'predisposto',
     },
     rows: [makeEmptyRow(0), makeEmptyRow(1)],
@@ -1535,6 +1536,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           ? { baseImponibile: value, baseRitenuta: value, imponibileSoggettoRitenuta: value, manualBaseOverride: true }
           : {}),
         ...(field === 'ritenuta' ? { manualRitenutaOverride: true } : {}),
+        ...(field === 'importoCassa' ? { manualImportoCassaOverride: true } : {}),
         ...(field === 'netto' ? { manualNettoOverride: true } : {}),
         [field]: value,
       },
@@ -1776,6 +1778,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
         percipienteNome: '',
         codiceFiscale: '',
         manualCompensoOverride: false,
+        manualImportoCassaOverride: false,
         manualBaseOverride: false,
         manualRitenutaOverride: false,
         manualNettoOverride: false,

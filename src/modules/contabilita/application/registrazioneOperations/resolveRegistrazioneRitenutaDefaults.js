@@ -32,6 +32,13 @@ function rowAmount(row = {}) {
 
 function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], mode = 'documento', aliquotaCassa = 0 } = {}) {
   const rowsList = Array.isArray(rows) ? rows : []
+  const taxableBase = toAmount(
+    documentData?.imponibile ??
+      documentData?.totaleImponibile ??
+      ivaDraft?.imponibile ??
+      ivaDraft?.totaleImponibile ??
+      0
+  )
   const rowDetails = rowsList.map((row) => ({
     row,
     role: normalizeText(row.ruolo || row.role).toLowerCase(),
@@ -55,6 +62,14 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], m
     .reduce((sum, { row }) => sum + rowAmount(row), 0)
 
   if (economicCost > 0) {
+    const isVatTaxableBase = aliquotaCassa > 0 && taxableBase > 0 && Math.abs(economicCost - taxableBase) <= 0.01
+    if (isVatTaxableBase) {
+      return {
+        amount: taxableBase / (1 + aliquotaCassa / 100),
+        source: 'riga_costo_imponibile_iva_scorporato',
+        resolved: true,
+      }
+    }
     return { amount: economicCost, source: 'riga_ruolo_costo', resolved: true }
   }
 
@@ -62,13 +77,6 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], m
     return { amount: 0, source: 'non_identificato', resolved: false }
   }
 
-  const taxableBase = toAmount(
-    documentData?.imponibile ??
-      documentData?.totaleImponibile ??
-      ivaDraft?.imponibile ??
-      ivaDraft?.totaleImponibile ??
-      0
-  )
   if (taxableBase > 0) {
     return {
       amount: aliquotaCassa > 0 ? taxableBase / (1 + aliquotaCassa / 100) : taxableBase,

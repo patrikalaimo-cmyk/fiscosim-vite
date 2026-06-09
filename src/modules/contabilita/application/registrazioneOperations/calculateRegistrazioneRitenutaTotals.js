@@ -14,11 +14,23 @@ export function calculateRegistrazioneRitenutaTotals(input = {}, options = {}) {
   
   const aliquotaCassa = toAmount(input.aliquotaCassa ?? input.aliquota_cassa ?? input.cassaPrevidenziale ?? input.cassa_previdenziale ?? 0)
   const manualCompensoOverride = Boolean(input.manualCompensoOverride || input.manual_compenso_override)
+  const manualImportoCassaOverride = Boolean(input.manualImportoCassaOverride || input.manual_importo_cassa_override)
   
   const importoCompensoSeed = input.importoCompenso ?? input.importo_compenso ?? input.imponibileReddito ?? input.imponibile ?? (mode === 'pagamento' ? importoPagamento : totaleDocumento)
   const baseSeed = toAmount(importoCompensoSeed)
-
-  const importoCompenso = baseSeed
+  const imponibileIvaInclusaCassa = toAmount(input.imponibileIvaInclusaCassa ?? input.imponibile_iva_inclusa_cassa)
+  const shouldScorporoCassa =
+    mode !== 'pagamento' &&
+    !manualCompensoOverride &&
+    aliquotaCassa > 0 &&
+    imponibileIvaInclusaCassa > 0 &&
+    Math.abs(baseSeed - imponibileIvaInclusaCassa) <= 0.01
+  const importoCompenso = shouldScorporoCassa
+    ? round2(imponibileIvaInclusaCassa / (1 + aliquotaCassa / 100))
+    : baseSeed
+  const importoCassaAutomatico = shouldScorporoCassa
+    ? round2(imponibileIvaInclusaCassa - importoCompenso)
+    : undefined
   const quotaNonSoggetta = toAmount(input.quotaNonSoggetta ?? input.quota_non_soggetta)
   const sommeNonSoggette = toAmount(input.sommeNonSoggette ?? input.somme_non_soggette)
   const nonSoggetteTotali = round2(quotaNonSoggetta + sommeNonSoggette)
@@ -52,7 +64,9 @@ export function calculateRegistrazioneRitenutaTotals(input = {}, options = {}) {
   const fiscalTotals = calculateRitenutaProfessionista({
     compenso: importoCompenso,
     aliquotaCassa,
-    importoCassa: input.importoCassa ?? input.importo_cassa,
+    importoCassa: manualImportoCassaOverride
+      ? input.importoCassa ?? input.importo_cassa
+      : importoCassaAutomatico,
     quotaNonSoggetta,
     sommeNonSoggette,
     baseRitenuta,
@@ -91,5 +105,6 @@ export function calculateRegistrazioneRitenutaTotals(input = {}, options = {}) {
     manualRitenutaOverride,
     manualNettoOverride,
     manualCompensoOverride,
+    manualImportoCassaOverride,
   }
 }

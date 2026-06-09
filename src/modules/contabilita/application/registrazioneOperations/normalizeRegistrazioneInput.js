@@ -397,6 +397,7 @@ function normalizeRitenutaData(source = {}) {
     manualRitenutaOverride: normalizePanelBoolean(source.manualRitenutaOverride || source.manual_ritenuta_override, false),
     manualNettoOverride: normalizePanelBoolean(source.manualNettoOverride || source.manual_netto_override, false),
     manualCompensoOverride: normalizePanelBoolean(source.manualCompensoOverride || source.manual_compenso_override, false),
+    manualImportoCassaOverride: normalizePanelBoolean(source.manualImportoCassaOverride || source.manual_importo_cassa_override, false),
     stato: normalizePanelText(source.stato) || 'predisposto',
   }
 }

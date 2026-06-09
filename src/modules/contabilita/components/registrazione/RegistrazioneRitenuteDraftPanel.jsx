@@ -213,7 +213,10 @@ export function RegistrazioneRitenuteDraftPanel({
   const nettoValue = resolveRitenutaNumericInputValue(ritenutaData.manualNettoOverride ? ritenutaData.netto : '', row.netto)
   const cassaValue = resolveRitenutaNumericInputValue(ritenutaData.cassaPrevidenziale, row.cassaPrevidenziale)
   const aliquotaCassaValue = resolveRitenutaNumericInputValue(ritenutaData.aliquotaCassa, row.aliquotaCassa)
-  const importoCassaValue = resolveRitenutaNumericInputValue(ritenutaData.importoCassa, row.importoCassa)
+  const importoCassaValue = resolveRitenutaNumericInputValue(
+    ritenutaData.manualImportoCassaOverride ? ritenutaData.importoCassa : '',
+    row.importoCassa
+  )
   const codiceCassaValue = row.codiceCassa ?? ritenutaData.codiceCassa ?? ''
   const codiceTributoValue = row.codiceTributo ?? ritenutaData.codiceTributo ?? '1040'
   const statusValue = row.stato || ritenutaData.stato || 'predisposto'

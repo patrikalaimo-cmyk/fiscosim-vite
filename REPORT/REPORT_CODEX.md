@@ -4643,3 +4643,26 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Test: `ritenutePercipientiCompleto`, `ritenutePagamentoParcella`, A17X, FF5/CEE, split payment e liquidazione IVA split: `40/40` OK.
 - Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione chunk.
 - Conferme: nessuna migration; nessuna modifica a Import Contabilita o Riconciliazione; nessun push; nessun rollback; nessun `git add .`.
+## FIX-AUTOMATISMO-SCORPORO-CASSA-RITENUTE
+
+- Data: 2026-06-09.
+- Base di lavoro: `0fa7683 fix: ritenute UI scorporo cassa e virgola`; modifica corrente non committata.
+- Problema confermato: il draft preliminare poteva leggere una riga generica `costo` da `1.040,00` come compenso puro prima del fallback di scorporo. Inoltre un `importoCassa` stale da `41,60` presente nello stato veniva sempre passato come importo esplicito, anche se l'operatore non lo aveva modificato.
+- Causa del risultato errato: `calculateRegistrazioneRitenutaTotals` riceveva compenso `1.040,00` e importo cassa esplicito/stale `41,60`; quindi calcolava base ritenuta `1.040,00` e ritenuta `208,00`.
+- Fix applicato: il calcolatore riceve ora l'imponibile IVA comprensivo di cassa e, quando non esiste override manuale del compenso, applica lo scorporo `compenso = imponibileIva / (1 + aliquotaCassa / 100)` e `cassa = imponibileIva - compenso`.
+- Override cassa: aggiunto `manualImportoCassaOverride`. Un importo cassa nello stato viene rispettato solo se realmente modificato dall'operatore; valori stale non prevalgono piu sull'automatismo.
+- UI/stato: la modifica manuale del campo Importo cassa attiva il relativo flag; cambio controparte lo azzera. Il pannello mostra il valore raw solo durante un override manuale reale, altrimenti mostra il draft calcolato.
+- Caso automatico coperto: imponibile IVA `1.040,00`, cassa 4%, ritenuta 20%, totale documento `1.268,80` produce cassa `40,00`, compenso/base `1.000,00`, ritenuta `200,00`, netto `1.068,80`.
+- File corretti: `resolveRegistrazioneRitenutaDefaults.js`, `calculateRegistrazioneRitenutaTotals.js`, `buildRegistrazioneRitenutaDraft.js`, `normalizeRegistrazioneInput.js`, `RegistrazioneManualeView.jsx`, `RegistrazioneRitenuteDraftPanel.jsx`, `tests/ritenutePercipientiCompleto.test.js`.
+- Test eseguiti: `ritenutePercipientiCompleto` 13/13 OK; `ritenutePagamentoParcella` 4/4 OK.
+- Build: `npm run build` OK; resta il warning Vite preesistente sulla dimensione chunk.
+- Verifica manuale richiesta: nuova parcella con imponibile IVA `1.040,00`; senza modificare Compenso o Importo cassa, la tab deve mostrare compenso `1.000,00`, cassa `40,00`, ritenuta `200,00`, netto `1.068,80`. Digitare inoltre `1000,50`, `4,5`, `1,` e `4,` per verificare la gestione della virgola.
+- Conferme: nessuna modifica a DB, migration, persistenza, pagamento parcella, F24, Import Contabilita, Riconciliazione, IVA per cassa, split payment o reverse/CEE; nessun `git add .`; nessun commit; nessun push; nessun rollback.
+### CHECKPOINT-VALIDATO-MANUALMENTE
+
+- Validazione manuale utente completata il 2026-06-09: con imponibile IVA `1.040,00` e cassa 4%, la tab Ritenute mostra compenso `1.000,00`, cassa `40,00`, ritenuta `200,00` e netto futuro `1.068,80`.
+- File inclusi nel checkpoint: `buildRegistrazioneRitenutaDraft.js`, `calculateRegistrazioneRitenutaTotals.js`, `normalizeRegistrazioneInput.js`, `resolveRegistrazioneRitenutaDefaults.js`, `RegistrazioneRitenuteDraftPanel.jsx`, `RegistrazioneManualeView.jsx`, `tests/ritenutePercipientiCompleto.test.js`, `REPORT/REPORT_CODEX.md`.
+- Test finali: `ritenutePercipientiCompleto` 13/13 OK; `ritenutePagamentoParcella` 4/4 OK.
+- Build finale: `npm run build` OK; solo warning Vite preesistente sulla dimensione chunk.
+- Commit checkpoint autorizzato e creato con messaggio `fix: automatismo scorporo cassa ritenute UI`.
+- Conferme: nessuna modifica DB/migration, Import Contabilita, Riconciliazione o F24; nessun push; nessun rollback; nessun `git add .`.

@@ -268,6 +268,49 @@ test('UI ritenute scorpora la cassa dall imponibile IVA comprensivo', () => {
   assert.equal(Number(supplier.avere), 1268.8)
 })
 
+test('draft preliminare scorpora la cassa anche da una riga costo aggregata a 1040', () => {
+  const { input, options } = buildInput()
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+    aliquotaCassa: 4,
+    importoCassa: 41.6,
+    manualCompensoOverride: false,
+    manualImportoCassaOverride: false,
+  }
+  input.rows = [
+    { ruolo: 'costo', formula_importo: 'imponibile', conto_id: 'costo-1', conto_descrizione: 'Compensi professionali', dare: 1040, avere: 0 },
+    { ruolo: 'iva', formula_importo: 'iva_detraibile', conto_id: 'iva-1', conto_descrizione: 'IVA a credito', dare: 228.8, avere: 0 },
+    { ruolo: 'soggetto', formula_importo: 'totale_documento', conto_id: 'fornitore-1', conto_descrizione: 'Studio Professionista', dare: 0, avere: 1268.8 },
+  ]
+  const result = buildRegistrazioneDraft(input, options)
+
+  assert.equal(result.ritenutaDraft.importoCompenso, 1000)
+  assert.equal(result.ritenutaDraft.importoCassa, 40)
+  assert.equal(result.ritenutaDraft.baseRitenuta, 1000)
+  assert.equal(result.ritenutaDraft.ritenuta, 200)
+  assert.equal(result.ritenutaDraft.netto, 1068.8)
+})
+
+test('override manuale importo cassa resta esplicito solo quando marcato dall operatore', () => {
+  const { input, options } = buildInput()
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+    importoCompenso: 1000,
+    aliquotaCassa: 4,
+    importoCassa: '40,50',
+    aliquotaRitenuta: 20,
+    manualCompensoOverride: true,
+    manualImportoCassaOverride: true,
+  }
+  const result = buildRegistrazioneDraft(input, options)
+
+  assert.equal(result.ritenutaDraft.importoCompenso, 1000)
+  assert.equal(result.ritenutaDraft.importoCassa, 40.5)
+  assert.equal(result.ritenutaDraft.ritenuta, 200)
+})
+
 test('input ritenute accetta virgola, punto e conserva gli stati intermedi', () => {
   assert.equal(parseRitenutaDecimalInput('1000,50'), 1000.5)
   assert.equal(parseRitenutaDecimalInput('1000.50'), 1000.5)
