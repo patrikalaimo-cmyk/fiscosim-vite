@@ -83,6 +83,9 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     { header: normalized.header, documentData: normalized.documentData, ivaData: normalized.ivaData, causaliIva: options?.causaliIva || [] },
     { behavior, causaleContabile: templateSource, splitPayment, ...options }
   )
+  const normalizedTemplate = normalizeRegistrazioneRigheTemplate(
+    templateSource?.righe_prima_nota_template || templateSource?.righePrimaNotaTemplate || templateSource?.righe_prima_nota || []
+  )
   const preliminaryRitenutaDraft = buildRegistrazioneRitenutaDraft(
     {
       header: normalized.header,
@@ -92,15 +95,12 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
       ritenutaData: normalized.ritenutaData,
       currentRitenutaDraft: normalized.ritenutaData,
       percipienti: Array.isArray(options?.percipienti) ? options.percipienti : [],
-      rows: normalized.rows,
+      rows: normalized.rows.length ? normalized.rows : normalizedTemplate.rows,
       partitarioData: normalized.partitarioData,
       partite: Array.isArray(options?.partite) ? options.partite : [],
       ritenute: Array.isArray(options?.ritenute) ? options.ritenute : [],
     },
     { behavior, causaleRitenutaDefaults: options?.causaleRitenutaDefaults || {}, ...options }
-  )
-  const normalizedTemplate = normalizeRegistrazioneRigheTemplate(
-    templateSource?.righe_prima_nota_template || templateSource?.righePrimaNotaTemplate || templateSource?.righe_prima_nota || []
   )
   const historicalEntries = Array.isArray(options?.historicalEntries) ? options.historicalEntries : []
   const historicalCausaleStructure = buildCausaleStructureHistory({

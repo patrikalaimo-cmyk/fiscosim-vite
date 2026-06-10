@@ -1,4 +1,5 @@
 import { normalizeText } from '../canonical_mapper/utils.js'
+import { resolveRegistrazioneRowFormula, resolveRegistrazioneRowRole } from './normalizeRegistrazioneRowFormula.js'
 
 function toAmount(value) {
   const parsed = Number.parseFloat(String(normalizeText(value)).replace(',', '.'))
@@ -7,6 +8,14 @@ function toAmount(value) {
 
 function firstMeaningful(...values) {
   return values.find((value) => value !== undefined && value !== null && normalizeText(value) !== '')
+}
+
+function firstPositiveAmount(...values) {
+  for (const value of values) {
+    const parsed = toAmount(value)
+    if (parsed > 0) return parsed
+  }
+  return 0
 }
 
 function resolvePercipienteRecord(percipienti = [], draft = {}, header = {}) {
@@ -30,33 +39,74 @@ function rowAmount(row = {}) {
   return toAmount(row.dare || row.importo_dare || row.avere || row.importo_avere || 0)
 }
 
+function rowDareAmount(row = {}) {
+  return toAmount(row.dare ?? row.importo_dare ?? 0)
+}
+
+function isExcludedCompensationRole(role = '') {
+  return [
+    'iva',
+    'soggetto',
+    'professionista',
+    'percipiente',
+    'fornitore',
+    'cliente',
+    'banca',
+    'cassa',
+    'ritenuta',
+    'erario_ritenute',
+  ].includes(role)
+}
+
 function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], mode = 'documento', aliquotaCassa = 0 } = {}) {
   const rowsList = Array.isArray(rows) ? rows : []
-  const taxableBase = toAmount(
-    documentData?.imponibile ??
-      documentData?.totaleImponibile ??
-      ivaDraft?.imponibile ??
-      ivaDraft?.totaleImponibile ??
-      0
+  const taxableBase = firstPositiveAmount(
+    documentData?.imponibile,
+    documentData?.totaleImponibile,
+    ivaDraft?.imponibile,
+    ivaDraft?.totaleImponibile
   )
   const rowDetails = rowsList.map((row) => ({
     row,
-    role: normalizeText(row.ruolo || row.role).toLowerCase(),
-    formula: normalizeText(row.formula_importo || row.formulaImporto || row.templateFormula).toLowerCase(),
-    description: normalizeText(row.conto_descrizione || row.contoDescrizione || row.descrizione || row.descrizione_riga).toLowerCase(),
+    role: resolveRegistrazioneRowRole(row),
+    formula: resolveRegistrazioneRowFormula(row),
   }))
+  const hasTechnicalCompensationBase = rowDetails.some(({ role, formula }) =>
+    (formula === 'imponibile' && !isExcludedCompensationRole(role))
+    || ['compenso', 'base_ritenuta'].includes(formula)
+  )
   const explicitCompenso = rowDetails
-    .filter(({ role, formula }) => formula === 'compenso' || role === 'compenso')
+    .filter(({ role, formula }) => ['compenso', 'base_ritenuta'].includes(formula) || role === 'compenso')
     .reduce((sum, { row }) => sum + rowAmount(row), 0)
 
   if (explicitCompenso > 0) {
     return { amount: explicitCompenso, source: 'riga_formula_compenso', resolved: true }
   }
 
+  const imponibileCost = rowDetails
+    .filter(({ role, formula, row }) =>
+      formula === 'imponibile'
+      && rowDareAmount(row) > 0
+      && !isExcludedCompensationRole(role)
+    )
+    .reduce((sum, { row }) => sum + rowDareAmount(row), 0)
+
+  if (imponibileCost > 0) {
+    return {
+      amount: aliquotaCassa > 0
+        ? imponibileCost / (1 + aliquotaCassa / 100)
+        : imponibileCost,
+      source: aliquotaCassa > 0
+        ? 'riga_formula_imponibile_scorporata'
+        : 'riga_formula_imponibile',
+      resolved: true,
+    }
+  }
+
   const economicCost = rowDetails
-    .filter(({ role, formula, description }) => {
-      const isVat = role === 'iva' || formula.startsWith('iva_') || description.includes('iva a credito') || description.includes('iva c/') || description.includes('iva su ') || description.includes('erario c/iva')
-      const isCassa = formula === 'cassa_previdenziale' || role.includes('cassa') || description.includes('cassa previd')
+    .filter(({ role, formula }) => {
+      const isVat = role === 'iva' || formula.startsWith('iva_')
+      const isCassa = formula === 'cassa_previdenziale' || role === 'cassa'
       return role === 'costo' && !isVat && !isCassa
     })
     .reduce((sum, { row }) => sum + rowAmount(row), 0)
@@ -77,10 +127,11 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], m
     return { amount: 0, source: 'non_identificato', resolved: false }
   }
 
-  if (taxableBase > 0) {
+  if (hasTechnicalCompensationBase && taxableBase > 0) {
+    const hasCompensoFormula = rowDetails.some(({ formula }) => ['compenso', 'base_ritenuta'].includes(formula))
     return {
       amount: aliquotaCassa > 0 ? taxableBase / (1 + aliquotaCassa / 100) : taxableBase,
-      source: 'imponibile_documento',
+      source: hasCompensoFormula ? 'riga_formula_compenso' : 'riga_formula_imponibile',
       resolved: true,
     }
   }

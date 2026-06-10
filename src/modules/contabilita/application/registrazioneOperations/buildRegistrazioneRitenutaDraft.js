@@ -8,6 +8,14 @@ function firstMeaningful(...values) {
   return values.find((value) => value !== undefined && value !== null && normalizeText(value) !== '')
 }
 
+function firstPositiveAmount(...values) {
+  for (const value of values) {
+    const parsed = Number.parseFloat(String(value ?? '').replace(',', '.'))
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return ''
+}
+
 function resolveLinkedRitenuta(ritenute = [], partitarioData = {}, partite = []) {
   const selectedIds = Array.isArray(partitarioData?.selectedPartitaIds)
     ? partitarioData.selectedPartitaIds.map((id) => String(id || '').trim()).filter(Boolean)
@@ -92,7 +100,12 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     codiceTributo: normalizeText(linkedRitenuta.codice_tributo || defaults.codiceTributo),
     compensoSource: linkedRitenuta.compenso_lordo ? 'ritenuta_collegata' : defaults.compensoSource,
     compensoResolved: Boolean(linkedRitenuta.compenso_lordo) || defaults.compensoResolved,
-    imponibileIvaInclusaCassa: ivaDraft.imponibile ?? ivaDraft.totaleImponibile ?? documentData.imponibile ?? documentData.totaleImponibile ?? '',
+    imponibileIvaInclusaCassa: firstPositiveAmount(
+      ivaDraft.imponibile,
+      ivaDraft.totaleImponibile,
+      documentData.imponibile,
+      documentData.totaleImponibile
+    ),
     manualCompensoOverride,
     manualImportoCassaOverride,
     importoCompenso: firstMeaningful(linkedRitenuta.compenso_lordo, currentCompenso, defaults.importoCompenso),

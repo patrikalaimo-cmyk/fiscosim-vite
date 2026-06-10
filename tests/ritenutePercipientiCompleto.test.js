@@ -292,6 +292,59 @@ test('draft preliminare scorpora la cassa anche da una riga costo aggregata a 10
   assert.equal(result.ritenutaDraft.netto, 1068.8)
 })
 
+test('runtime React conserva formulaImporto Imponibile anche senza ruolo costo', () => {
+  const { input, options } = buildInput()
+  input.documentData.imponibile = 0
+  input.documentData.totaleImponibile = 1040
+  input.ivaData.imponibile = 0
+  input.ivaData.totaleImponibile = 1040
+  input.rows = [
+    {
+      id: 'runtime-subject',
+      tipoFormula: 'Totale documento',
+      conto_id: 'fornitore-1',
+      dare: '',
+      avere: '1268,80',
+      manualEdited: true,
+    },
+    {
+      id: 'runtime-taxable',
+      formula_importo: '',
+      formulaImporto: ' Imponibile ',
+      conto_id: 'costo-1',
+      dare: '1040,00',
+      avere: '',
+      manualEdited: true,
+    },
+    {
+      id: 'runtime-vat',
+      formula_calcolo: 'IVA detraibile',
+      role: 'iva',
+      conto_id: 'iva-1',
+      dare: '228,80',
+      avere: '',
+      manualEdited: true,
+    },
+  ]
+  input.ritenutaData = {
+    percipienteId: percipiente.id,
+    percipienteNome: percipiente.ragione_sociale,
+    aliquotaCassa: 4,
+    aliquotaRitenuta: 20,
+  }
+  options.forceTemplateRows = false
+
+  const result = buildRegistrazioneDraft(input, options)
+
+  assert.equal(result.ritenutaDraft.compensoSource, 'riga_formula_imponibile_scorporata')
+  assert.equal(result.ritenutaDraft.importoCompenso, 1000)
+  assert.equal(result.ritenutaDraft.importoCassa, 40)
+  assert.equal(result.ritenutaDraft.baseRitenuta, 1000)
+  assert.equal(result.ritenutaDraft.ritenuta, 200)
+  assert.equal(result.ritenutaDraft.netto, 1068.8)
+  assert.equal(result.ritenutaDraft.blockers.some((item) => item.includes('compenso professionale non identificabile')), false)
+})
+
 test('override manuale importo cassa resta esplicito solo quando marcato dall operatore', () => {
   const { input, options } = buildInput()
   input.ritenutaData = {

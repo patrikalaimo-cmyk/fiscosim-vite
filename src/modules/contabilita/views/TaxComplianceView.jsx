@@ -18,8 +18,8 @@ import {
 } from '../application/parcellaWorkflowState.js'
 import {
   build770RowsFromPayments,
-  buildWithholdingScheduleRows,
 } from '../application/paymentDrivenFiscalViews.js'
+import { buildRitenuteScadenzarioRows } from '../application/ritenute/ritenuteScadenzarioService.js'
 import {
   aggregateRegistriIvaRows,
   buildLiquidazionePayload,
@@ -2194,20 +2194,18 @@ function RitenuteView({societa}){
   );
 
   const scheduleRows = useMemo(
-    ()=>buildWithholdingScheduleRows({
-      percipienti,
-      documenti,
-      payments: ritenute,
+    ()=>buildRitenuteScadenzarioRows({
+      ritenute,
       year: annoSel,
     }),
-    [annoSel, documenti, percipienti, ritenute]
+    [annoSel, ritenute]
   );
 
   const totali={
-    lordo:scheduleRows.reduce((s,r)=>s+parseFloat(r.paidCompensation||0),0),
-    ritenuta:scheduleRows.reduce((s,r)=>s+parseFloat(r.maturedWithholding||0),0),
+    lordo:scheduleRows.reduce((s,r)=>s+parseFloat(r.compensationAmount||0),0),
+    ritenuta:scheduleRows.reduce((s,r)=>s+parseFloat(r.withholdingAmount||0),0),
     netto:ritenute.reduce((s,r)=>s+parseFloat(r.compenso_netto||0),0),
-    scadute:scheduleRows.filter((row)=>row.paymentStatus==='scaduto').length,
+    scadute:scheduleRows.filter((row)=>row.operationalStatus==='scaduta').length,
   };
 
   return(
@@ -2253,10 +2251,11 @@ function RitenuteView({societa}){
                   <th>Percipiente</th>
                   <th>Parcella</th>
                   <th>Data pag.</th>
-                  <th>Periodo dovuto</th>
+                  <th>Scadenza</th>
+                  <th>Tributo</th>
                   <th style={{textAlign:'right'}}>Ritenuta maturata</th>
                   <th>Stato</th>
-                  <th>F24</th>
+                  <th>Riferimenti PN</th>
                   <th>Audit</th>
                   <th></th>
                 </tr>
@@ -2270,22 +2269,26 @@ function RitenuteView({societa}){
                     </td>
                     <td style={{fontSize:'.75rem'}}>{row.sourceParcella || '—'}</td>
                     <td>{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString('it-IT') : '—'}</td>
-                    <td>{row.duePeriod}</td>
-                    <td style={{textAlign:'right',color:'var(--rd)'}}>{fmt(row.maturedWithholding)}</td>
+                    <td>{row.dueDate ? new Date(row.dueDate).toLocaleDateString('it-IT') : '—'}</td>
+                    <td>{row.codiceTributo}</td>
+                    <td style={{textAlign:'right',color:'var(--rd)'}}>{fmt(row.withholdingAmount)}</td>
                     <td>
-                      <span className={`bdg ${row.paymentStatus==='scaduto'?'bdg-red':row.paymentStatus==='collegato_f24'?'bdg-green':'bdg-gold'}`}>
-                        {row.paymentStatus==='scaduto' ? 'Scaduto' : row.paymentStatus==='collegato_f24' ? 'Collegato F24' : 'Da versare'}
+                      <span className={`bdg ${row.operationalStatus==='scaduta'?'bdg-red':'bdg-gold'}`}>
+                        {row.operationalStatus==='scaduta' ? 'Da versare - scaduta' : 'Da versare'}
                       </span>
                     </td>
-                    <td>{row.f24Reference ? <span className="bdg bdg-green">{row.f24Reference}</span> : <span className="bdg bdg-gray">Non collegato</span>}</td>
+                    <td style={{fontSize:'.7rem'}}>
+                      <div>Parcella: {row.primaNotaParcellaId || '—'}</div>
+                      <div>Pagamento: {row.primaNotaPagamentoId || '—'}</div>
+                    </td>
                     <td>
-                      <button className={'bdg '+(row.auditStatus==='Variato'?'bdg-gold':'bdg-green')} onClick={()=>setModalAudit(row.sourcePayment)} style={{border:'none',cursor:'pointer'}}>
-                        {row.auditStatus}
+                      <button className="bdg bdg-green" onClick={()=>setModalAudit(row.sourceRitenuta)} style={{border:'none',cursor:'pointer'}}>
+                        {row.cu770.ready ? 'CU/770 pronti' : 'Dati da verificare'}
                       </button>
                     </td>
                     <td style={{display:'flex',gap:'.35rem',justifyContent:'flex-end'}}>
-                      <button className="btn-icon" onClick={()=>setModalAudit(row.sourcePayment)} title="Diff">i</button>
-                      <button className="btn-icon" onClick={()=>eliminaRitenuta(row.sourcePayment.id)} title="Elimina">Ã—</button>
+                      <button className="btn-icon" onClick={()=>setModalAudit(row.sourceRitenuta)} title="Diff">i</button>
+                      <button className="btn-icon" onClick={()=>eliminaRitenuta(row.id)} title="Elimina">Ã—</button>
                     </td>
                   </tr>
                 ))}
@@ -2294,6 +2297,10 @@ function RitenuteView({societa}){
           </div>
         </div>
       )}
+
+      <div className="alert alert-info" style={{marginTop:'1rem'}}>
+        F24 ritenute non automatizzato: l'eventuale pagamento va registrato con una prima nota semplice, Debiti v/Erario ritenute in Dare e Banca/Cassa in Avere.
+      </div>
 
       {modalNuova&&(
         <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setModalNuova(false)}>

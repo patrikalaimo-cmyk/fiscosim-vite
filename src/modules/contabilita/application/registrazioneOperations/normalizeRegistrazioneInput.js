@@ -1,5 +1,6 @@
 import { normalizeText, round2 } from '../canonical_mapper/utils.js'
 import { normalizeRegistrazioneIvaRows } from './normalizeRegistrazioneIvaRows.js'
+import { resolveRegistrazioneRowFormula, resolveRegistrazioneRowRole } from './normalizeRegistrazioneRowFormula.js'
 import { findRegistrazioneControparteExactMatch } from './resolveRegistrazioneControparti.js'
 import { buildRegistrazioneContoSelection, resolveRegistrazioneContoDescrizione, resolveRegistrazioneContoLabel } from './resolveRegistrazioneConti.js'
 import { buildCausaleContabilePolicy } from '../../domain/causali/buildCausaleContabilePolicy.js'
@@ -198,6 +199,8 @@ function normalizeRow(row = {}, index = 0, pianoConti = []) {
   const contoMatch = normalizeText(row.conto_id) ? resolveCatalogItem(row.conto_id, pianoConti) : resolveStrictContoItem(contoQuery, pianoConti)
   const contoSelection = contoMatch ? buildRegistrazioneContoSelection(contoMatch, contoQuery) : null
   const resolvedContoId = normalizeText(contoSelection?.id || contoSelection?.value || contoMatch?.id || contoMatch?.value)
+  const formulaImporto = resolveRegistrazioneRowFormula(row)
+  const ruolo = resolveRegistrazioneRowRole(row)
 
   return {
     id: normalizeText(row.id) || `row-${index + 1}`,
@@ -209,6 +212,14 @@ function normalizeRow(row = {}, index = 0, pianoConti = []) {
       normalizeText(row.conto_descrizione) ||
       normalizeText(contoSelection?.conto_descrizione || (contoMatch ? resolveRegistrazioneContoDescrizione(contoSelection || contoMatch) : '')),
     descrizione: normalizeText(row.descrizione ?? row.descrizione_riga),
+    descrizione_riga: normalizeText(row.descrizione_riga ?? row.descrizione),
+    ruolo,
+    role: ruolo,
+    lato: normalizeText(row.lato ?? row.side),
+    side: normalizeText(row.side ?? row.lato),
+    formula_importo: formulaImporto,
+    formulaImporto,
+    templateFormula: formulaImporto,
     dare: round2(row.dare ?? row.importo_dare ?? 0),
     avere: round2(row.avere ?? row.importo_avere ?? 0),
     autoResidualApplied: Boolean(row.autoResidualApplied),

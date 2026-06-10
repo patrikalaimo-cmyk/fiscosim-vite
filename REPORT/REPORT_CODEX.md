@@ -4666,3 +4666,145 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build finale: `npm run build` OK; solo warning Vite preesistente sulla dimensione chunk.
 - Commit checkpoint autorizzato e creato con messaggio `fix: automatismo scorporo cassa ritenute UI`.
 - Conferme: nessuna modifica DB/migration, Import Contabilita, Riconciliazione o F24; nessun push; nessun rollback; nessun `git add .`.
+## AUDIT-F24-RITENUTE-GAP-SCHEMA
+
+- Data: 2026-06-09.
+- Commit base verificato: `54a426d fix: automatismo scorporo cassa ritenute UI`.
+- Stato implementazione: fermata prima di qualsiasi patch funzionale, come richiesto quando mancano campi schema indispensabili.
+- Flusso esistente ricostruito:
+  - la parcella crea una ritenuta `predisposta`, collegata alla prima nota documento tramite `prima_nota_id` e alla partita tramite `partitario_id`;
+  - il pagamento integrale della parcella genera fornitore Dare lordo, banca Avere netto e Debiti v/Erario ritenute Avere;
+  - lo stesso pagamento aggiorna la ritenuta esistente, senza duplicarla, a `da_versare`;
+  - `data_pagamento` registra la data del pagamento parcella, `data_scadenza` la scadenza F24 e `prima_nota_pagamento_id` collega la prima nota del pagamento parcella.
+- Campi schema gia disponibili su `ritenute_dacconto`: `stato`, `data_pagamento`, `data_scadenza`, `prima_nota_id`, `partitario_id`, `prima_nota_pagamento_id`, `codice_tributo`, periodo e anno di riferimento.
+- Gap bloccante:
+  - manca una data dedicata al versamento F24, ad esempio `data_versamento_f24`;
+  - manca un collegamento dedicato alla prima nota del versamento F24, ad esempio `prima_nota_pagamento_f24_id`.
+- I campi esistenti non sono riutilizzabili:
+  - sovrascrivere `data_pagamento` eliminerebbe la data in cui la parcella ha fatto maturare la ritenuta;
+  - sovrascrivere `prima_nota_pagamento_id` eliminerebbe il collegamento alla scrittura che ha chiuso la parcella e generato il debito verso Erario.
+- La tabella `f24` esistente contiene scadenza, data pagamento, importo e stato, ma non collega le singole ritenute selezionate e non contiene un riferimento alla prima nota generata; non risolve quindi il requisito di tracciabilita e blocco del doppio pagamento.
+- Conto Debiti v/Erario ritenute: il flusso pagamento parcella lo risolve gia dalla configurazione dichiarativa del template causale tramite ruolo `ritenuta`/`erario_ritenute`. Non esiste un hardcode produttivo del conto; il codice tributo fiscale predefinito resta `1040`.
+- Migration minima proposta, non creata:
+  - `data_versamento_f24 date`;
+  - `prima_nota_pagamento_f24_id uuid references public.prima_nota(id)`;
+  - indice su `prima_nota_pagamento_f24_id`;
+  - opzionale vincolo/coerenza applicativa: stato `versata` ammesso solo con entrambi i campi valorizzati.
+- Dopo approvazione della migration, il workflow dovra selezionare esclusivamente ritenute `da_versare`, creare una PN con Debiti v/Erario Dare e banca/cassa Avere, aggiornare atomicamente le ritenute a `versata` e impedire il riuso di posizioni gia collegate a una PN F24.
+- File modificati in questa fase: solo `REPORT/REPORT_CODEX.md`.
+- Test e build: non eseguiti, perche l'implementazione e stata arrestata prima di modificare codice e il prompt richiede di fermarsi in presenza del gap schema.
+- Rischi: implementare senza campi dedicati renderebbe indistinguibili pagamento parcella e versamento F24, indebolirebbe l'audit trail e potrebbe consentire doppi pagamenti.
+- Prossimo step: approvare e applicare la migration minima dedicata, quindi implementare workflow, UI e test F24 in una fase separata.
+- Conferme: nessuna migration creata; nessun codice funzionale modificato; nessuna modifica a DB, Import Contabilita, Riconciliazione, IVA per cassa, split payment o reverse/CEE; nessun commit; nessun push; nessun rollback; nessun `git add .`.
+## SCADENZARIO-RITENUTE-POST-PAGAMENTO-SENZA-F24-AUTOMATICO
+
+- Data: 2026-06-10.
+- Commit base: `54a426d fix: automatismo scorporo cassa ritenute UI`.
+- Decisione architetturale: il pagamento F24 automatico delle ritenute e rinviato. L'eventuale versamento resta una normale prima nota semplice con Debiti v/Erario ritenute Dare e Banca/Cassa Avere.
+- Flusso confermato: la parcella rileva la ritenuta come `predisposta`; il pagamento parcella genera il debito Erario, aggiorna la posizione esistente a `da_versare`, valorizza `data_pagamento`, scadenza al 16 del mese successivo e `prima_nota_pagamento_id`.
+- Servizio implementato: `ritenuteScadenzarioService.js`, funzione pura e read-only `buildRitenuteScadenzarioRows`.
+- Fonte canonica scadenzario: record persistiti di `ritenute_dacconto` con `stato = da_versare`; le posizioni `predisposta` non ancora maturate sono escluse.
+- Dati esposti: percipiente e CF, importo ritenuta, imponibile/compenso, data pagamento parcella, scadenza, codice tributo, periodo/anno, stato, prima nota parcella, prima nota pagamento parcella e partitario collegato.
+- CU/770: il servizio espone un blocco di readiness con percipiente, imponibile ritenuta, importo, data pagamento, codice tributo e anno fiscale. Questi dati risultano disponibili dopo il pagamento parcella.
+- Futuro F24: viene prodotto solo un descrittore operativo non persistito con `automated: false`, importo, tributo e scadenza. Non viene creato alcun F24 e non viene generata alcuna prima nota.
+- UI consolidata: la sezione Ritenute gia presente in `TaxComplianceView.jsx` usa ora i campi persistiti dello scadenzario, mostra scadenza reale, tributo, stato, riferimenti PN e readiness CU/770. E presente l'avviso che il versamento va registrato con PN semplice.
+- Stati opzionali: non sono stati aggiunti `gestita_cliente` o `versata_manualmente`; richiederebbero un contratto persistente/migration dedicato e non sono necessari allo scadenzario minimo `da_versare`.
+- Invarianti: nessuna modifica a parcella originaria, pagamento parcella, partitario, persistenza o formula ritenute; nessuna duplicazione di posizioni; nessuna sovrascrittura di `data_pagamento` o `prima_nota_pagamento_id`.
+- File modificati/creati:
+  - `src/modules/contabilita/application/ritenute/ritenuteScadenzarioService.js`;
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`;
+  - `tests/ritenuteScadenzarioService.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test: `ritenuteScadenzarioService` 4/4 OK; `ritenutePercipientiCompleto` 13/13 OK; `ritenutePagamentoParcella` 4/4 OK.
+- Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione del chunk principale.
+- Test manuale richiesto:
+  1. registrare e pagare integralmente una parcella con ritenuta;
+  2. aprire la sezione Ritenute/Scadenzario;
+  3. verificare presenza di una sola posizione `Da versare`, con percipiente, importo, data pagamento, scadenza al 16 del mese successivo e codice 1040;
+  4. verificare i riferimenti alla PN parcella e alla PN pagamento parcella;
+  5. verificare l'indicazione CU/770 e l'avviso F24 non automatizzato;
+  6. confermare che nessuna PN F24 sia stata generata e che una parcella solo predisposta non compaia nello scadenzario.
+- Limiti: non viene registrato uno stato operativo cliente/versamento manuale e non viene chiuso automaticamente il debito Erario. La gestione contabile resta intenzionalmente manuale.
+- Futuro modulo F24: IVA proposta automaticamente e modificabile; ritenute selezionabili e opzionali, perche il cliente puo gestire autonomamente il versamento.
+- Prossimo step: validazione manuale della consultazione; solo dopo valutare export operativo o stati aggiuntivi con schema esplicitamente approvato.
+- Conferme: nessuna migration; nessuna prima nota F24; nessuna modifica a Import Contabilita, Riconciliazione, IVA per cassa, split payment, reverse/A17X/CEE, rilevazione o pagamento parcella; nessun commit; nessun push; nessun rollback; nessun `git add .`.
+## FIX-RITENUTE-BASE-COMPENSO-DA-FORMULA-IMPONIBILE
+
+- Data: 2026-06-10.
+- Commit base: `54a426d fix: automatismo scorporo cassa ritenute UI`; modifica non committata in attesa di validazione manuale.
+- Causa precisa: il resolver del compenso dipendeva dalla riga gia materializzata e selezionava l'imponibile con operatori nullish. Un valore preliminare `0` poteva bloccare il fallback al `totaleImponibile` valorizzato; inoltre il draft preliminare non riceveva le formule del template quando le righe UI erano ancora vuote.
+- Conseguenza: la rilevazione RP poteva mostrare `compenso professionale non identificabile` e `base imponibile / base ritenuta non compilata`, pur avendo una riga costo configurata con formula tecnica `Imponibile`.
+- Fix:
+  - il template normalizzato viene reso disponibile gia al draft ritenute preliminare;
+  - la formula tecnica `compenso`/`base_ritenuta` resta prioritaria;
+  - in assenza di essa, una riga con ruolo `costo` e `formula_importo = imponibile` diventa una base valida;
+  - viene scelto il primo imponibile positivo tra draft documento e IVA, evitando che uno zero preliminare oscuri il valore `1.040,00`;
+  - nessuna descrizione libera del conto viene usata come trigger produttivo;
+  - il guardrail resta attivo se esistono soltanto totale documento e IVA, senza una formula tecnica di base.
+- Calcolo invariato: imponibile `1.040,00`, cassa 4% produce cassa `40,00`, compenso/base `1.000,00`, ritenuta 20% `200,00`, netto futuro `1.068,80`.
+- Messaggio di blocco aggiornato, solo per i casi realmente non risolvibili: configurare una base tecnica compenso o imponibile; non viene piu richiesta obbligatoriamente una formula non disponibile nella configurazione operativa corrente.
+- File modificati per questo fix:
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`;
+  - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRitenutaDraft.js`;
+  - `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneRitenutaDefaults.js`;
+  - `src/modules/contabilita/application/registrazioneOperations/validateRegistrazioneRitenutaDraft.js`;
+  - `tests/ritenutePercipientiCompleto.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test aggiunto: template composto esclusivamente da `Totale documento`, `Imponibile` e `IVA detraibile`, con campi preliminari a zero e totale imponibile `1.040,00`; verifica compenso `1.000,00`, cassa `40,00`, ritenuta `200,00`, netto `1.068,80` e assenza del blocker compenso.
+- Test eseguiti: `ritenutePercipientiCompleto` 14/14 OK; `ritenutePagamentoParcella` 4/4 OK; `ritenuteScadenzarioService` 4/4 OK.
+- Build: `npm run build` OK; resta solo il warning Vite preesistente sulla dimensione del chunk principale.
+- Test manuale richiesto: aprire `RP - RILEVATA PARCELLA` con totale `1.268,80`, riga costo formula `Imponibile` a `1.040,00`, IVA detraibile `228,80`, cassa 4% e ritenuta 20%; verificare assenza dei due blocker e valori tab Ritenute `1.000,00 / 40,00 / 200,00 / 1.068,80`.
+- Conferme: scadenzario ritenute, pagamento parcella e F24 non sono stati modificati da questo fix; nessuna migration; nessuna modifica a Import Contabilita, Riconciliazione, IVA per cassa, split payment o reverse/A17X/CEE; nessun commit; nessun push; nessun rollback; nessun `git add .`.
+## FIX-RUNTIME-RITENUTE-METADATA-FORMULA-PERSI
+
+- Data: 2026-06-10.
+- Commit base: `54a426d fix: automatismo scorporo cassa ritenute UI`; modifiche non committate in attesa di validazione manuale.
+- Diagnosi runtime: il test precedente costruiva righe gia canoniche con `formula_importo` e `ruolo`. Nel browser, invece, le righe generate dal template venivano salvate nello stato React e poi attraversavano `normalizeRegistrazioneInput.normalizeRow()` a ogni ricostruzione del draft.
+- Causa precisa: `normalizeRow()` conservava conto, descrizione e Dare/Avere, ma eliminava `formula_importo`, `formulaImporto`, `formula`, `formula_calcolo`, `tipoFormula`, `templateFormula`, `ruolo`, `role` e `side/lato`. La griglia poteva continuare a mostrare la riga risolta `Imponibile`, mentre il successivo draft ritenute riceveva soltanto `dare = 1.040,00` senza identita tecnica.
+- Traccia temporanea: una fixture con `formulaImporto: Imponibile`, `formula_calcolo: IVA detraibile` e `tipoFormula: Totale documento` ha confermato che tutti questi campi diventavano `undefined` dopo la normalizzazione. Il log diagnostico temporaneo e stato rimosso prima della consegna.
+- Punto preciso del blocker: `validateRegistrazioneRitenutaDraft()` aggiunge il blocker quando `resolveRegistrazioneRitenutaDefaults()` restituisce `compensoResolved = false` e importo compenso zero. La perdita avveniva prima, in `normalizeRegistrazioneInput.normalizeRow()`.
+- Fix runtime:
+  - nuovo helper `normalizeRegistrazioneRowFormula.js` normalizza minuscole/maiuscole, trim, camelCase, spazi e underscore;
+  - supportate le sorgenti `formula_importo`, `formulaImporto`, `formula`, `formula_calcolo`, `tipoFormula` e `templateFormula`;
+  - una sorgente presente ma vuota non oscura piu una variante successiva valorizzata;
+  - `normalizeRow()` conserva formula canonica, ruolo e lato nel contratto delle righe React;
+  - vengono conservati entrambi gli alias `lato` e `side`;
+  - il resolver accetta `formula = imponibile` con Dare positivo anche senza ruolo `costo`;
+  - restano escluse righe IVA, soggetto, professionista/percipiente, fornitore, cliente, banca, cassa, ritenuta ed Erario;
+  - `Totale documento` e `IVA detraibile` non possono diventare base compenso;
+  - nessuna descrizione libera viene letta come trigger produttivo.
+- Regola contabile invariata: imponibile `1.040,00`, cassa 4% -> cassa `40,00`, compenso/base `1.000,00`, ritenuta 20% `200,00`, netto futuro `1.068,80`.
+- File modificati per il fix runtime:
+  - `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneRowFormula.js`;
+  - `src/modules/contabilita/application/registrazioneOperations/normalizeRegistrazioneInput.js`;
+  - `src/modules/contabilita/application/registrazioneOperations/resolveRegistrazioneRitenutaDefaults.js`;
+  - restano coinvolti dal fix precedente `buildRegistrazioneDraft.js`, `buildRegistrazioneRitenutaDraft.js` e `validateRegistrazioneRitenutaDraft.js`;
+  - `tests/ritenutePercipientiCompleto.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test runtime aggiunto: righe React con nessun ruolo `costo` obbligatorio, `formula_importo` vuota seguita da `formulaImporto: Imponibile`, Dare `1.040,00`, IVA tramite `formula_calcolo`, soggetto tramite `tipoFormula`; verifica assenza blocker e importi fiscali corretti.
+- Test eseguiti: `ritenutePercipientiCompleto` 14/14 OK; `ritenutePagamentoParcella` 4/4 OK; `ritenuteScadenzarioService` 4/4 OK.
+- Build: `npm run build` OK, 402 moduli trasformati; solo warning Vite preesistente sul chunk principale.
+- Verifica browser automatizzata: il nuovo bundle e stato servito su `http://127.0.0.1:5173/` e caricato dal browser, che ha mostrato la schermata `FiscoSim - Studio Envisioning` / `Accesso riservato`. Non sono state usate credenziali, modifiche auth o workaround. La validazione funzionale autenticata resta quindi manuale.
+- Test manuale preciso:
+  1. ricaricare l'app per acquisire il nuovo bundle;
+  2. aprire Registrazione Manuale e selezionare `RP - RILEVATA PARCELLA`;
+  3. impostare totale documento `1.268,80`, imponibile `1.040,00`, IVA `228,80`, cassa 4% e ritenuta 20%;
+  4. verificare la riga PN con formula visibile `Imponibile` e Dare `1.040,00`;
+  5. aprire la tab Ritenute e verificare compenso `1.000,00`, cassa `40,00`, ritenuta `200,00`, netto `1.068,80`;
+  6. verificare che non compaiano i blocker `compenso professionale non identificabile` e `base imponibile / base ritenuta non compilata`.
+- Conferme: nessun log diagnostico temporaneo rimasto; scadenzario, pagamento parcella e F24 non modificati da questo fix; nessuna migration; nessuna modifica a Import Contabilita, Riconciliazione, IVA per cassa, split payment o reverse/A17X/CEE; nessun commit; nessun push; nessun rollback; nessun `git add .`.
+## CHECKPOINT-SCADENZARIO-RITENUTE-E-FIX-RUNTIME-IMPONIBILE
+
+- Data: 2026-06-10.
+- Esito validazione manuale: positivo.
+- Registrazione `RP - RILEVATA PARCELLA` salvata correttamente con ID `7490df80-17ff-43fe-91d5-283f07ddcd31`.
+- Caso validato: template con `Totale documento`, `Imponibile` e `IVA detraibile`; riga Dare `Imponibile` pari a `1.040,00`; cassa 4%; ritenuta 20%; nessun blocker `compenso professionale non identificabile`.
+- Causa reale del blocker: nel runtime React `normalizeRegistrazioneInput.normalizeRow()` eliminava i metadata tecnici formula, ruolo e lato. La UI continuava a mostrare `Imponibile`, ma il draft ritenute riceveva la riga Dare senza identita tecnica e non poteva riconoscerla come base compenso.
+- Fix confermato: conservazione e normalizzazione robusta di `formula_importo`, `formulaImporto`, `formula`, `formula_calcolo`, `tipoFormula`, `templateFormula`, `ruolo`/`role` e `lato`/`side`; fallback sulla formula tecnica `imponibile` con Dare positivo anche senza ruolo `costo`; esclusione esplicita di IVA, soggetto/professionista/percipiente, fornitore/cliente, banca/cassa, ritenuta ed Erario; nessun trigger produttivo basato sulla descrizione libera.
+- Calcolo confermato: imponibile `1.040,00`, cassa `40,00`, compenso/base ritenuta `1.000,00`, ritenuta `200,00`, netto `1.068,80`.
+- Scadenzario ritenute read-only confermato: mostra esclusivamente posizioni persistite `da_versare`, esclude `predisposta`, espone scadenza, tributo, riferimenti PN e readiness CU/770, senza modificare i record sorgente.
+- F24 ritenute automatico rinviato: lo scadenzario non genera F24 e non genera prima nota F24. L'eventuale versamento resta una normale prima nota semplice/giroconto con Debiti v/Erario ritenute in Dare e Banca/Cassa in Avere.
+- Test eseguiti: `node --test tests/ritenutePercipientiCompleto.test.js` 14/14 OK; `node --test tests/ritenutePagamentoParcella.test.js` 4/4 OK; `node --test tests/ritenuteScadenzarioService.test.js` 4/4 OK.
+- Build: `npm run build` OK, 402 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
+- Commit checkpoint creato con messaggio `checkpoint: scadenzario ritenute e fix runtime imponibile` mediante staging selettivo dei soli file pertinenti.
+- Conferme: nessuna migration; nessuna modifica a Import Contabilita, Riconciliazione, IVA per cassa, split payment o reverse/A17X/CEE; nessun F24 automatico; nessun push; nessun rollback; nessun `git add .`.
