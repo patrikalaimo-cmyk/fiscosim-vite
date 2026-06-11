@@ -5107,3 +5107,39 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Casi speciali confermati invariati: split payment, IVA per cassa/differita/rilascio, reverse charge, autofatture, A17X, CEE/FF5 e integrazioni estero non modificati.
 - Prossimo step consigliato: validazione manuale delle quattro casistiche ordinarie e confronto con il riepilogo liquidazione mensile; successivamente valutare, in un blocco separato, snapshot auditabile e chiusura periodo senza anticipare migration.
 - Commit selettivo previsto: `checkpoint: ciclo iva ordinaria end-to-end liquidazione base`. Nessun push.
+
+## LIQUIDAZIONE-IVA-BASE-PROVVISORIA-DA-AGGREGATORE-UNICO
+
+- Data: 2026-06-11.
+- Audit flusso attuale: `getRegistriIvaByPeriodo()` e `aggregateRegistriIvaPeriodo()` leggono `registri_iva` con periodo e scope societa; `aggregateVatRegisterEntries()` e l'unico punto di calcolo fiscale condiviso; `liquidazioneIvaClient` espone adapter e payload legacy; `TaxComplianceView.jsx` mostra il calcolo e puo invocare l'upsert canonico; `runLiquidazioneIva()` contiene un percorso storico di aggregazione e salvataggio. Il nuovo prospetto non richiama nessuno dei percorsi di scrittura.
+- Campi affidabili: `tipo`, `iva`, `iva_detraibile`, `imponibile`, `societa_id`, `data`, `esigibilita` e `split_payment`. Gli alias snake_case dell'aggregatore restano compatibilita legacy; il prospetto usa i campi canonici dell'output condiviso.
+- Funzione pura creata: `buildLiquidazioneIvaProvvisoria(rows, options)` in `src/modules/contabilita/application/iva/buildLiquidazioneIvaProvvisoria.js`. Riceve righe registro, `societaId`, `periodoInizio`, `periodoFine` e `periodicita`, delega integralmente le regole fiscali a `aggregateVatRegisterEntries()` e restituisce uno shape stabile read-only.
+- Output: stato `provvisorio`, metadati societa/periodo, `ivaVenditeLordo`, `ivaSplitPayment`, `ivaDebitoEffettivo`, `ivaAcquistiCredito`, `saldoPeriodo`, `saldoADebito`, `saldoACredito`, righe incluse/escluse con conteggi, warning e `breakdownRegistri` minimo per vendite/acquisti.
+- Breakdown: vendite con numero righe, imponibile, IVA lorda, split ed effettiva; acquisti con numero righe, imponibile, IVA registrata, detraibile e indetraibile. Il breakdown usa esclusivamente le righe gia incluse dall'aggregatore e non introduce nuove classificazioni fiscali.
+- Regole coperte: ordinario attivo/passivo; note credito tramite segno persistito; split nel lordo ma escluso dal debito effettivo; differita esclusa; rilascio IVA per cassa incluso; reverse/autofattura a doppio registro con effetto netto; isolamento `societa_id`; righe non IVA e ritenute escluse; saldi a debito/credito mutuamente esclusivi.
+- Warning informativi: societa mancante, periodo incompleto o invertito, periodicita non ammessa, assenza di righe incluse e conteggio delle esclusioni raggruppato per motivo. Nessun fallback usa codice causale o descrizione libera.
+- File letti: `REPORT/REPORT_CODEX.md`, `aggregateVatRegisterEntries.js`, `liquidazioneIvaClient.js`, `services/liquidazioneIvaService.js`, `TaxComplianceView.jsx`, `contabilitaRepo.js` e test liquidazione esistenti.
+- File modificati/creati:
+  - `src/modules/contabilita/application/iva/buildLiquidazioneIvaProvvisoria.js`;
+  - `tests/liquidazioneIvaProvvisoria.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- UI: non modificata. Il prospetto e disponibile come funzione pura, ma non sostituisce in questo blocco il workflow esistente di calcolo/salvataggio della vista.
+- Test dedicato: `node --test tests/liquidazioneIvaProvvisoria.test.js` 10/10 OK. Copre ordinario, note credito, split, differita, rilascio, reverse/autofattura, isolamento societa, esclusione ritenute e stabilita saldo debito/credito.
+- Regressioni eseguite:
+  - `ivaOrdinariaEndToEndLiquidazione`: 8/8 OK;
+  - `vatRegisterEntriesFromCanonicalPayload`: 9/9 OK;
+  - `liquidazioneIvaAggregator`: 8/8 OK;
+  - `manualeIvaOrdinaria`: 36/36 OK;
+  - `liquidazioneIvaSplitPayment`: 4/4 OK;
+  - `ivaPerCassaRelease`: 9/9 OK;
+  - `ivaPerCassaDocumento`: 9/9 OK;
+  - `a17xAutofatturaBase` + `ff5BeniEsteroBase`: 6/6 OK;
+  - `canonicalAccountingValidation`: 10/10 OK;
+  - `persistPrimaNotaDraft`: 8/8 OK;
+  - totale complessivo con nuova suite: 117/117 test OK.
+- Build: `npm run build` OK, 404 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
+- Confini rispettati: nessuna migration, nessuna chiusura o blocco periodo, nessuna liquidazione definitiva salvata, nessun popolamento `liquidazioni_iva_righe`, nessuna operazione DB/Supabase live; nessuna LIPE, F24, PDF o stampa definitiva.
+- Moduli esclusi confermati: Import Contabilita, Riconciliazione Bancaria e ritenute/scadenzario non toccati. Split payment, IVA per cassa e reverse/A17X/FF5 non modificati.
+- Limiti residui: il prospetto non e ancora collegato alla UI; non produce snapshot auditabile persistito; non gestisce credito precedente, acconti, interessi, periodicita speciali o chiusura fiscale. Il percorso storico `runLiquidazioneIva()` e l'upsert UI restano separati e non sono stati ridefiniti.
+- Prossimo step consigliato: validazione del contratto del prospetto e, solo dopo conferma, integrazione UI read-only con terminologia professionale e separazione netta dal comando di salvataggio. Storicizzazione e chiusura periodo richiedono un blocco progettuale distinto.
+- Nessun commit, push, rollback o staging eseguito.
