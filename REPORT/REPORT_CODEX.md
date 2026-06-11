@@ -5143,3 +5143,75 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Limiti residui: il prospetto non e ancora collegato alla UI; non produce snapshot auditabile persistito; non gestisce credito precedente, acconti, interessi, periodicita speciali o chiusura fiscale. Il percorso storico `runLiquidazioneIva()` e l'upsert UI restano separati e non sono stati ridefiniti.
 - Prossimo step consigliato: validazione del contratto del prospetto e, solo dopo conferma, integrazione UI read-only con terminologia professionale e separazione netta dal comando di salvataggio. Storicizzazione e chiusura periodo richiedono un blocco progettuale distinto.
 - Nessun commit, push, rollback o staging eseguito.
+
+## CHECKPOINT-LIQUIDAZIONE-IVA-PROVVISORIA-DA-AGGREGATORE-UNICO
+
+- **Hash Commit**: `444c55f5ddfad174c2172d983b2fd11edb7c3b19`
+- **Messaggio**: `checkpoint: liquidazione iva provvisoria da aggregatore unico`
+- **File inclusi nel commit**:
+  - `src/modules/contabilita/application/iva/buildLiquidazioneIvaProvvisoria.js`
+  - `tests/liquidazioneIvaProvvisoria.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- **Test eseguiti**:
+  - `tests/liquidazioneIvaProvvisoria.test.js` (10/10 OK)
+  - Suite di regressione: 107/107 OK
+- **Build**: `npm run build` eseguito con successo, 404 moduli.
+- **Nessuna Migration**: Confermato, nessuna migration creata o necessaria.
+- **Nessun DB live**: Confermato, nessuna operazione su DB o Supabase live.
+
+## LIQUIDAZIONE-IVA-PROVVISORIA-UI-READ-ONLY
+
+- **Audit Flusso UI**: La vista `LiquidazioniIVAView` in `TaxComplianceView.jsx` carica e mostra lo storico delle liquidazioni salvate e permette di calcolare e salvare nuove liquidazioni (tramite un modale con upsert nel DB). Abbiamo integrato una sezione di sola lettura (Anteprima/Prospetto Provvisorio) direttamente nella schermata principale, caricando i dati tramite la query preesistente sicura `getRegistriIvaByPeriodo` e calcolando il prospetto con la funzione pura `buildLiquidazioneIvaProvvisoria` tramite l'adapter `getLiquidazioneIvaProvvisoriaProspetto`.
+- **File Letti**:
+  - `REPORT/REPORT_CODEX.md`
+  - `src/modules/contabilita/application/iva/buildLiquidazioneIvaProvvisoria.js`
+  - `src/modules/contabilita/application/iva/aggregateVatRegisterEntries.js`
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js`
+  - `services/liquidazioneIvaService.js`
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`
+  - `src/modules/contabilita/data/contabilitaRepo.js`
+  - `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js`
+- **File Modificati**:
+  - `src/modules/contabilita/views/TaxComplianceView.jsx` (inserito componente UI del prospetto provvisorio e relativo caricamento dello stato/periodicità)
+  - `src/modules/contabilita/data/contabilitaRepo.js` (aggiunto `imponibile` alla select della query `getRegistriIvaByPeriodo`)
+  - `services/liquidazioneIvaService.js` (aggiunto `imponibile` alla select della query in `aggregateRegistriIvaPeriodo`)
+  - `REPORT/REPORT_CODEX.md` (questo report)
+- **File Creati**:
+  - `src/modules/contabilita/application/iva/liquidazioneIvaProvvisoriaUiAdapter.js` (adapter UI per mappare l'output di `buildLiquidazioneIvaProvvisoria`)
+  - `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js` (test suite dedicata all'adapter)
+- **Utilizzo Funzione Pura**: La UI richiama la funzione pura `buildLiquidazioneIvaProvvisoria` per mezzo di `getLiquidazioneIvaProvvisoriaProspetto` passando le righe caricate per il periodo selezionato e i metadati della società, calcolando all'istante l'anteprima senza interagire con database di scrittura.
+- **Test Creati/Eseguiti**:
+  - Creati test dedicati in `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js` (6 test inclusi: mappatura output, mutua esclusione debito/credito, split payment separato e detratto, righe escluse senza alterare saldo, stato vuoto se assenza dati, e nessuna chiamata a funzioni di salvataggio/chiusura).
+  - Suite di test complessiva rieseguita: `node --test tests/...` -> 123/123 test passano con successo (0 fallimenti).
+- **Build**: `npm run build` eseguito con successo, 406 moduli trasformati.
+- **Nessuna Chiusura Periodo**: Confermato, non viene chiamata alcuna routine di chiusura/blocco.
+- **Nessun Salvataggio Definitivo**: Confermato, il prospetto è calcolato in memoria e renderizzato al volo nella UI, senza alcuna mutazione o salvataggio nel database.
+- **Nessuna Migration**: Confermato, non sono stati alterati schemi né create migration.
+- **Import Contabilità non toccato**: Confermato.
+- **Riconciliazione Bancaria non toccata**: Confermato.
+- **Ritenute/Scadenzario non toccati**: Confermato.
+- **Limiti Residui**: Il prospetto provvisorio fornisce un'anteprima visuale e statistica del saldo IVA periodico basandosi sui soli registri IVA di periodo, ma non interagisce con crediti pregressi da riportare, acconti IVA versati o calcoli di interessi per periodicità trimestrali (che richiedono un workflow di chiusura e calcolo di secondo livello).
+- **Prossimo Step Consigliato**: Validazione manuale dell'interfaccia utente con dati reali dei registri e allineamento formale per la gestione dei crediti pregressi e acconti IVA nel modulo di calcolo provvisorio prima dell'implementazione di una chiusura definitiva storicizzata.
+
+## CHECKPOINT-LIQUIDAZIONE-IVA-PROVVISORIA-UI-READ-ONLY
+
+- **Hash Commit**: `a735d67d150a16617c5bcfa39d798d21e00c63a3`
+- **File inclusi**:
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`
+  - `src/modules/contabilita/data/contabilitaRepo.js`
+  - `services/liquidazioneIvaService.js`
+  - `src/modules/contabilita/application/iva/liquidazioneIvaProvvisoriaUiAdapter.js`
+  - `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- **Test eseguiti**:
+  - `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js` (6/6 OK)
+  - Totale regressioni: 123/123 OK
+- **Build**: `npm run build` OK, 406 moduli
+- **Nessuna Migration**: Confermato, nessuna migration creata.
+- **Nessun DB/Supabase live**: Confermato.
+- **Nessuna Chiusura Periodo**: Confermato.
+- **Nessun Salvataggio Definitivo**: Confermato.
+- **Import Contabilità non toccato**: Confermato.
+- **Riconciliazione Bancaria non toccata**: Confermato.
+- **Ritenute/Scadenzario non toccati**: Confermato.
+- **Working Tree Finale**: Pulito.

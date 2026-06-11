@@ -794,7 +794,7 @@ export async function upsertLiquidazioneIvaCanonica(row) {
 export function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo_fine) {
   return sb
     .from('registri_iva')
-    .select('societa_id, tipo, iva, iva_detraibile, data, esigibilita, split_payment')
+    .select('societa_id, tipo, imponibile, iva, iva_detraibile, data, esigibilita, split_payment')
     .eq('societa_id', societaId)
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)

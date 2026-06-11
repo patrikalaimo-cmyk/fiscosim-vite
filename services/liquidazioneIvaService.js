@@ -57,7 +57,7 @@ export async function aggregateRegistriIvaPeriodo({ db, societaId, periodo_inizi
 
   let query = db
     .from('registri_iva')
-    .select('societa_id, tipo, iva, iva_detraibile, data, esigibilita, split_payment')
+    .select('societa_id, tipo, imponibile, iva, iva_detraibile, data, esigibilita, split_payment')
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
   if (societaId) query = query.eq('societa_id', societaId)

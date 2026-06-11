@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { fmtNumber } from '../ui/formatters.js'
 import { getLiquidazioneBadgeClass, getLipeBadgeClass } from '../ui/viewMappers.js'
@@ -27,6 +27,7 @@ import {
   boundsMensile,
   boundsTrimestrale,
 } from '../application/liquidazioneIvaClient.js'
+import { getLiquidazioneIvaProvvisoriaProspetto } from '../application/iva/liquidazioneIvaProvvisoriaUiAdapter.js'
 
 export default function TaxComplianceView({
   contTab,
@@ -86,9 +87,60 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
     note:''
   });
 
+  const [provvisoriaPeriod, setProvvisoriaPeriod] = useState({
+    tipo_periodo: 'mensile',
+    anno: new Date().getFullYear(),
+    periodo: new Date().getMonth() + 1
+  });
+  const [provvisoriaData, setProvvisoriaData] = useState(null);
+  const [loadingProvvisoria, setLoadingProvvisoria] = useState(false);
+
   useEffect(()=>{
     if(societa?.id)caricaLiquidazioni();
   },[societa]);
+
+  useEffect(() => {
+    if (societa?.id) {
+      caricaProvvisoria();
+    }
+  }, [societa?.id, provvisoriaPeriod]);
+
+  const caricaProvvisoria = async () => {
+    setLoadingProvvisoria(true);
+    try {
+      const anno = provvisoriaPeriod.anno;
+      const periodo = provvisoriaPeriod.periodo;
+      const isTrimestrale = provvisoriaPeriod.tipo_periodo === 'trimestrale';
+      const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
+
+      const { data, error } = await contabilitaRepo.getRegistriIvaByPeriodo(
+        societa.id,
+        bounds.periodo_inizio,
+        bounds.periodo_fine
+      );
+      if (error) {
+        console.error('Errore lettura registri per provvisoria:', error);
+        setProvvisoriaData(null);
+        return;
+      }
+
+      const options = {
+        societaId: societa.id,
+        periodoInizio: bounds.periodo_inizio,
+        periodoFine: bounds.periodo_fine,
+        periodicita: provvisoriaPeriod.tipo_periodo,
+        periodo: periodo,
+      };
+
+      const prospetto = getLiquidazioneIvaProvvisoriaProspetto(data || [], options);
+      setProvvisoriaData(prospetto);
+    } catch (err) {
+      console.error(err);
+      setProvvisoriaData(null);
+    } finally {
+      setLoadingProvvisoria(false);
+    }
+  };
 
   const caricaLiquidazioni=async()=>{
     setLoading(true);
@@ -168,6 +220,172 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Calcolo periodico IVA a debito/credito</div>
         </div>
         <button className="btn" onClick={()=>setModalNuova(true)}>+ Nuova Liquidazione</button>
+      </div>
+
+      {/* Sezione Liquidazione IVA Provvisoria (Read-only) */}
+      <div className="card" style={{ marginBottom: '2rem', borderLeft: '4px solid var(--gold, #c8a45e)' }}>
+        <div className="card-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: '0.75rem' }}>
+          <div className="card-title-wrap">
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>📊 Liquidazione IVA provvisoria</span>
+              <span className="bdg bdg-warn" style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(200, 164, 94, 0.2)', color: 'var(--gold, #c8a45e)' }}>
+                Prospetto non definitivo
+              </span>
+            </div>
+            <div className="card-subtitle" style={{ fontSize: '0.75rem', color: 'var(--mu)', marginTop: '2px' }}>
+              Anteprima di calcolo in tempo reale basata sui registri IVA correnti (non salvata)
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ padding: '1rem', borderBottom: '1px solid var(--bd)' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'end', flexWrap: 'wrap' }}>
+            <div className="fg" style={{ marginBottom: 0, minWidth: '130px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Periodicità</label>
+              <BaseCombobox
+                value={provvisoriaPeriod.tipo_periodo}
+                onChange={(v) => {
+                  const newTipo = v || 'mensile';
+                  setProvvisoriaPeriod(p => ({
+                    ...p,
+                    tipo_periodo: newTipo,
+                    periodo: 1
+                  }));
+                }}
+                options={[{ id: 'trimestrale', label: 'Trimestrale' }, { id: 'mensile', label: 'Mensile' }]}
+                getOptionId={o => o?.id}
+                getOptionLabel={o => o?.label}
+                searchable={false}
+              />
+            </div>
+            
+            <div className="fg" style={{ marginBottom: 0, minWidth: '100px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Anno</label>
+              <input 
+                type="number" 
+                value={provvisoriaPeriod.anno} 
+                onChange={e => setProvvisoriaPeriod(p => ({ ...p, anno: parseInt(e.target.value) || new Date().getFullYear() }))}
+                style={{ width: '100%', height: '36px' }}
+              />
+            </div>
+            
+            <div className="fg" style={{ marginBottom: 0, minWidth: '150px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>
+                {provvisoriaPeriod.tipo_periodo === 'trimestrale' ? 'Trimestre' : 'Mese'}
+              </label>
+              <BaseCombobox
+                value={String(provvisoriaPeriod.periodo)}
+                onChange={(v) => setProvvisoriaPeriod(p => ({ ...p, periodo: parseInt(v || '1') }))}
+                options={
+                  provvisoriaPeriod.tipo_periodo === 'trimestrale'
+                    ? [1, 2, 3, 4].map(t => ({ id: String(t), label: `${t}° Trimestre` }))
+                    : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => ({ id: String(m), label: `Mese ${m}` }))
+                }
+                getOptionId={o => o?.id}
+                getOptionLabel={o => o?.label}
+                searchable={false}
+              />
+            </div>
+
+            <button 
+              className="btn-sec" 
+              onClick={caricaProvvisoria} 
+              disabled={loadingProvvisoria}
+              style={{ height: '36px' }}
+            >
+              🔄 Aggiorna anteprima
+            </button>
+          </div>
+        </div>
+
+        {loadingProvvisoria ? (
+          <div className="loading" style={{ padding: '2rem' }}>Caricamento anteprima provvisoria...</div>
+        ) : !provvisoriaData ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--mu)' }}>
+            Nessun dato provvisorio disponibile per il periodo selezionato.
+          </div>
+        ) : (
+          <div>
+            {/* Grid riassuntiva */}
+            <div className="stats-grid" style={{ padding: '1rem', borderBottom: '1px solid var(--bd)', gap: '1rem' }}>
+              <div className="stat-card">
+                <div className="stat-val">{fmt(provvisoriaData.ivaVenditeLorda)}</div>
+                <div className="stat-lbl">IVA vendite lorda</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-val" style={{ color: 'var(--mu)' }}>{fmt(provvisoriaData.ivaSplitPayment)}</div>
+                <div className="stat-lbl">IVA split payment esclusa dal debito</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-val">{fmt(provvisoriaData.ivaDebitoEffettiva)}</div>
+                <div className="stat-lbl">IVA a debito effettiva</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-val" style={{ color: 'var(--gr, #2ecc71)' }}>{fmt(provvisoriaData.ivaAcquisti)}</div>
+                <div className="stat-lbl">IVA acquisti</div>
+              </div>
+            </div>
+
+            {/* Saldo e Dettagli righe */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', padding: '1rem', background: 'var(--s2)' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  Esito liquidazione provvisoria
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.4rem', fontWeight: 700, color: provvisoriaData.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
+                    {fmt(provvisoriaData.saldoPeriodo)}
+                  </span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: provvisoriaData.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
+                    {provvisoriaData.saldoPeriodo > 0 ? 'IVA periodo a debito' : 'IVA periodo a credito'}
+                  </span>
+                </div>
+                {provvisoriaData.saldoADebito > 0 && (
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--rd)' }}>
+                    Da versare: <strong>{fmt(provvisoriaData.saldoADebito)}</strong>
+                  </div>
+                )}
+                {provvisoriaData.saldoACredito > 0 && (
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--gr)' }}>
+                    A credito: <strong>{fmt(provvisoriaData.saldoACredito)}</strong>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  Statistiche Registrazioni
+                </div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{provvisoriaData.righeIncluseCount}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe incluse</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: provvisoriaData.righeEscluseCount > 0 ? 'var(--gold)' : 'inherit' }}>
+                      {provvisoriaData.righeEscluseCount}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe escluse</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Warnings list */}
+            {provvisoriaData.warnings && provvisoriaData.warnings.length > 0 && (
+              <div style={{ padding: '1rem', borderTop: '1px solid var(--bd)', background: 'rgba(200, 164, 94, 0.05)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span>⚠️ Informazioni e Warning:</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--mu)' }}>
+                  {provvisoriaData.warnings.map((w, idx) => (
+                    <li key={idx} style={{ marginBottom: '2px' }}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading?(
