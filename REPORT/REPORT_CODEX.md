@@ -5043,3 +5043,67 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Casi speciali confermati invariati: split payment, IVA per cassa/differita/rilascio, reverse charge, autofatture, A17X, CEE/FF5 e integrazioni estero restano sul percorso esistente e superano i test regressivi.
 - Prossimo step consigliato: validazione manuale delle quattro casistiche ordinarie sulle righe persistite in `registri_iva`; solo successivamente valutare l'adozione del motore da altri producer del payload canonico.
 - Commit selettivo previsto: `checkpoint: motore registri iva ordinari centralizzato`. Nessun push.
+
+## CICLO-IVA-ORDINARIA-END-TO-END-REGISTRI-LIQUIDAZIONE-BASE
+
+- Data: 2026-06-11.
+- Audit flusso dati: la Registrazione Manuale costruisce il draft e il payload canonico tramite `mapRegistrazioneManualeToCanonical`; `persistPrimaNotaDraft()` valida il payload e delega i casi ordinari a `buildVatRegisterEntriesFromCanonicalPayload`; `createPrimaNotaCompleta()` aggiunge `prima_nota_id` e inserisce le righe in `registri_iva`; `aggregateVatRegisterEntries()` applica segno persistito, tipo acquisto/vendita, periodo e scope societa; `liquidazioneIvaClient.aggregateRegistriIvaRows()` e `liquidazioneIvaService.aggregateRegistriIvaPeriodo()` delegano entrambi allo stesso aggregatore puro.
+- Funzioni periodo e salvataggio gia presenti: `boundsMensile`, `boundsTrimestrale`, `buildLiquidazionePayload`, `runLiquidazioneIva`, `getLiquidazioniIvaCanoniche`, `upsertLiquidazioneIvaCanonica` e `getRegistriIvaByPeriodo`. Questo blocco verifica il calcolo base e non introduce chiusura/storicizzazione definitiva del periodo.
+- File letti: `REPORT/REPORT_CODEX.md`, `persistPrimaNotaDraft.js`, `buildVatRegisterEntriesFromCanonicalPayload.js`, `aggregateVatRegisterEntries.js`, `liquidazioneIvaClient.js`, `services/liquidazioneIvaService.js`, `contabilitaRepo.js`, `services/primaNotaService.js` e test IVA/liquidazione esistenti.
+- File modificati/creati:
+  - `tests/ivaOrdinariaEndToEndLiquidazione.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Nessuna modifica al codice applicativo: la nuova copertura non ha rilevato bug nel ciclo IVA ordinaria e non sono state necessarie correzioni a persistenza, motore registri, aggregatore, client, service o repository.
+- Test end-to-end creato: `node --test tests/ivaOrdinariaEndToEndLiquidazione.test.js` 8/8 OK. Le fixture non usano codici causale come trigger: classificazione e segno derivano da tipo causale tecnico, registro IVA e segno configurato.
+- Casi coperti end-to-end:
+  - fattura attiva: persistenza riga vendita e aumento IVA a debito;
+  - fattura passiva: persistenza riga acquisto e aumento IVA a credito;
+  - nota credito attiva: riga vendita negativa e riduzione IVA a debito;
+  - nota credito passiva: riga acquisto negativa e riduzione IVA a credito;
+  - multi-aliquota: due righe IVA producono due righe registro e somma corretta in liquidazione;
+  - prima nota semplice: nessuna insert in `registri_iva` e saldo IVA nullo;
+  - isolamento `societa_id`: righe estranee escluse;
+  - coerenza client/service: output identico sulle righe prodotte dalla persistenza.
+- Test eseguiti:
+  - `ivaOrdinariaEndToEndLiquidazione`: 8/8 OK;
+  - `vatRegisterEntriesFromCanonicalPayload`: 9/9 OK;
+  - `liquidazioneIvaAggregator`: 8/8 OK;
+  - `manualeIvaOrdinaria`: 36/36 OK;
+  - `liquidazioneIvaSplitPayment`: 4/4 OK;
+  - `ivaPerCassaRelease`: 9/9 OK;
+  - `ivaPerCassaDocumento`: 9/9 OK;
+  - `a17xAutofatturaBase` + `ff5BeniEsteroBase`: 6/6 OK;
+  - `canonicalAccountingValidation`: 10/10 OK;
+  - `persistPrimaNotaDraft`: 8/8 OK;
+  - totale: 107/107 test OK.
+- Build: `npm run build` OK, 404 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
+- Confini rispettati: nessuna migration e nessuna operazione DB/Supabase live; Import Contabilita e Riconciliazione Bancaria non toccati; ritenute/scadenzario non toccati.
+- Casi speciali invariati: split payment, IVA per cassa/differita/rilascio, reverse charge, autofatture, A17X, CEE/FF5 e integrazioni estero non sono stati modificati e superano le regressioni dedicate.
+- Limiti residui: non sono implementati chiusura definitiva o blocco periodo IVA, snapshot/storicizzazione dettagliata delle righe di liquidazione, LIPE, F24, registri IVA PDF o stampe definitive. Il test usa persistenza mock e aggregazione reale, non Supabase live.
+- Prossimo step consigliato: validazione manuale su dati applicativi delle quattro casistiche ordinarie e confronto con il riepilogo liquidazione mensile; dopo conferma, creare checkpoint selettivo dei soli test e report. Un eventuale blocco successivo potra progettare snapshot auditabile e chiusura periodo, separatamente e senza anticipare migration.
+- Nessun commit, push, rollback o staging eseguito.
+
+## CHECKPOINT-CICLO-IVA-ORDINARIA-END-TO-END-REGISTRI-LIQUIDAZIONE-BASE
+
+- Data checkpoint: 2026-06-11.
+- Validazione: positiva. Il ciclo Registrazione Manuale -> payload canonico -> `persistPrimaNotaDraft` -> `registri_iva` -> aggregatore unico -> liquidazione ordinaria base e coperto dalla suite end-to-end senza modifiche al codice applicativo.
+- File inclusi nel checkpoint:
+  - `tests/ivaOrdinariaEndToEndLiquidazione.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test eseguiti:
+  - `node --test tests/ivaOrdinariaEndToEndLiquidazione.test.js`: 8/8 OK;
+  - `node --test tests/vatRegisterEntriesFromCanonicalPayload.test.js`: 9/9 OK;
+  - `node --test tests/liquidazioneIvaAggregator.test.js`: 8/8 OK;
+  - `node --test tests/manualeIvaOrdinaria.test.js`: 36/36 OK;
+  - `node --test tests/liquidazioneIvaSplitPayment.test.js`: 4/4 OK;
+  - `node --test tests/ivaPerCassaRelease.test.js`: 9/9 OK;
+  - `node --test tests/ivaPerCassaDocumento.test.js`: 9/9 OK;
+  - `node --test tests/a17xAutofatturaBase.test.js tests/ff5BeniEsteroBase.test.js`: 6/6 OK;
+  - `node --test tests/canonicalAccountingValidation.test.js`: 10/10 OK;
+  - `node --test tests/persistPrimaNotaDraft.test.js`: 8/8 OK;
+  - totale: 107/107 test OK.
+- Build: `npm run build` OK, 404 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
+- Confini confermati: nessuna migration e nessun cambio schema; nessuna operazione DB/Supabase live; Import Contabilita e Riconciliazione Bancaria non toccati; ritenute/scadenzario non toccati.
+- Casi speciali confermati invariati: split payment, IVA per cassa/differita/rilascio, reverse charge, autofatture, A17X, CEE/FF5 e integrazioni estero non modificati.
+- Prossimo step consigliato: validazione manuale delle quattro casistiche ordinarie e confronto con il riepilogo liquidazione mensile; successivamente valutare, in un blocco separato, snapshot auditabile e chiusura periodo senza anticipare migration.
+- Commit selettivo previsto: `checkpoint: ciclo iva ordinaria end-to-end liquidazione base`. Nessun push.
