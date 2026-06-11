@@ -754,18 +754,20 @@ export function getLiquidazioniIvaTrimestrali(societaId) {
     .order('periodo', { ascending: false })
 }
 
-export function getLiquidazioniIvaCanoniche() {
+export function getLiquidazioniIvaCanoniche(societaId) {
   return sb
     .from('liquidazione_iva')
     .select('*')
+    .eq('societa_id', societaId)
     .order('periodo_fine', { ascending: false })
     .limit(200)
 }
 
-export async function getLiquidazioniIvaCanonicheByPeriodicita(periodicita) {
+export async function getLiquidazioniIvaCanonicheByPeriodicita(societaId, periodicita) {
   return sb
     .from('liquidazione_iva')
     .select('*')
+    .eq('societa_id', societaId)
     .eq('periodicita', periodicita)
     .order('periodo_fine', { ascending: false })
     .limit(200)
@@ -774,8 +776,9 @@ export async function getLiquidazioniIvaCanonicheByPeriodicita(periodicita) {
 export async function upsertLiquidazioneIvaCanonica(row) {
   const per = row?.periodicita
   const anno = row?.anno
-  if (!per || !anno) return { data: null, error: new Error('periodicita/anno mancanti') }
-  let sel = sb.from('liquidazione_iva').select('id').eq('periodicita', per).eq('anno', anno)
+  const societaId = row?.societa_id
+  if (!societaId || !per || !anno) return { data: null, error: new Error('societa_id/periodicita/anno mancanti') }
+  let sel = sb.from('liquidazione_iva').select('id').eq('societa_id', societaId).eq('periodicita', per).eq('anno', anno)
   if (per === 'mensile') {
     sel = sel.eq('mese', row?.mese || null).is('trimestre', null)
   } else {
@@ -788,13 +791,13 @@ export async function upsertLiquidazioneIvaCanonica(row) {
   return sb.from('liquidazione_iva').insert([row]).select('*').maybeSingle()
 }
 
-export function getRegistriIvaByPeriodo(periodo_inizio, periodo_fine) {
+export function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo_fine) {
   return sb
     .from('registri_iva')
-    .select('tipo, iva, iva_detraibile, data, esigibilita, split_payment')
+    .select('societa_id, tipo, iva, iva_detraibile, data, esigibilita, split_payment')
+    .eq('societa_id', societaId)
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
-    .or('esigibilita.in.(immediata,rilascio),esigibilita.is.null')
 }
 
 export function getCorrispettiviGiornalieri(societaId, inizioMese, fineMese) {

@@ -4808,3 +4808,173 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Build: `npm run build` OK, 402 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
 - Commit checkpoint creato con messaggio `checkpoint: scadenzario ritenute e fix runtime imponibile` mediante staging selettivo dei soli file pertinenti.
 - Conferme: nessuna migration; nessuna modifica a Import Contabilita, Riconciliazione, IVA per cassa, split payment o reverse/A17X/CEE; nessun F24 automatico; nessun push; nessun rollback; nessun `git add .`.
+
+## AUDIT-MOTORE-IVA-REGISTRI-LIQUIDAZIONE
+
+- Data audit: 2026-06-10.
+- Perimetro: sola analisi statica di codice, migration e test. Nessuna modifica applicativa, nessuna query o scrittura DB/Supabase, nessuna migration, nessun intervento su Import Contabilita o Riconciliazione Bancaria.
+
+### 1. File analizzati
+
+- Draft e persistenza manuale: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `buildRegistrazioneIvaDraft.js`, `buildRegistrazioneIvaRows.js`, `normalizeRegistrazioneIvaRows.js`, `calculateRegistrazioneIvaRow.js`, `validateRegistrazioneIvaDraft.js`, `persistPrimaNotaDraft.js`, `services/primaNotaService.js`.
+- Policy causali: `buildCausaleContabilePolicy.js`, `buildCausaleIvaPolicy.js`, `resolveIvaDocumentPostingDirection.js`, `resolveRegistrazioneCausaleIvaBehavior.js`.
+- Contratto canonico: `mapRegistrazioneManualeToCanonical.js`, `classifyCanonicalContabilitaScenario.js`, readiness e schema payload canonico.
+- UI e repository: `RegistrazioneIvaPanel.jsx`, `TaxComplianceView.jsx`, `contabilitaRepo.js`.
+- IVA per cassa e split: `ivaPerCassaRelease.js`, `calculateIvaPerCassaPreviewRelease.js`, `buildIvaPerCassaGirocontoRows.js`, `resolveRegistrazioneSplitPayment.js`, `buildSplitPaymentRows.js`.
+- Pipeline storica/import: `services/ivaRegistriSyncService.js`, `pipelineLedgerSyncService.js`, `registerDocumentoPrimaNotaFromContabilita.js`.
+- Liquidazione: `src/modules/contabilita/application/liquidazioneIvaClient.js`, `services/liquidazioneIvaService.js`, `services/fiscalOutputService.js`.
+- Schema: migration `20260403150000_registri_iva.sql`, `20260403160000_liquidazione_iva.sql`, `20260412130000_rls_multi_tenant_isolation.sql`, `20260412143000_fiscal_societa_scope.sql`, `20260430230000_registri_iva_prima_nota_link.sql`, `20260606100000_iva_per_cassa_schema.sql`, `20260607120000_split_payment_registri_iva.sql`, bootstrap `liquidazioni_iva_righe`.
+- Test principali: `manualeIvaOrdinaria`, `partitarioDocumentiIva`, `persistPrimaNotaDraft`, `registrazioneOperations`, `ivaPerCassaDocumento`, `ivaPerCassaRelease`, `ivaPerCassaPreviewRelease`, `ivaPerCassaPagamentoUiPolicy`, `ivaPerCassaSchemaMapping`, `splitPaymentDocumentoAttivo`, `liquidazioneIvaSplitPayment`, `a17xAutofatturaBase`, `ff5BeniEsteroBase`, `vatRegisterMapper`.
+
+### 2. Tabelle e campi coinvolti
+
+- `registri_iva`: `id`, `documento_id`, `accounting_entry_id` nullable, `prima_nota_id`, `riga_idx`, `data`, `imponibile`, `iva`, `aliquota`, `tipo` (`acquisto`/`vendita`), `detraibile`, `percentuale_detraibilita`, `iva_detraibile`, `iva_indetraibile`, `causale_iva_id`, `societa_id`, `numero_documento`, `data_documento`, `soggetto_piva`, `soggetto_denominazione`, `documento_contabilita_id`, `esigibilita` (`immediata`/`differita`/`rilascio`), `origin_registro_iva_id`, `split_payment`, `created_at`.
+- `liquidazione_iva`: `id`, `societa_id`, `periodicita`, `anno`, `mese`, `trimestre`, `periodo_inizio`, `periodo_fine`, `iva_debito`, `iva_credito`, `saldo`, `note`, timestamp. Gli indici univoci correnti includono `societa_id`.
+- `liquidazioni_iva_righe`: tabella bootstrap con dettaglio per tipo/registro/aliquota/natura, ma non risulta alimentata dal flusso corrente.
+- Collegate: `prima_nota`, `prima_nota_righe`, `partitario`, `causali_contabili`, `causali_iva`, `accounting_entries`, `documenti_contabilita`, `fiscal_outputs`.
+- Gap schema/contratto: `registri_iva` non materializza `registro_codice`, `registro_nome`, `segno_registro`, `natura`, protocollo/sezionale e competenza IVA. Alcuni rami di storno in `contabilitaRepo.js` leggono/scrivono anche `registro_codice`, `registro_nome`, `causale_iva_codice` e `totale`, campi non presenti nella chain migration auditata: il contratto di storno e lo schema non sono allineati.
+
+### 3. Flusso attuale di scrittura registri IVA
+
+1. Registrazione Manuale costruisce `ivaDraft` da causale contabile, causale IVA, righe UI e totale documento.
+2. `buildRegistrazioneDraft()` integra righe PN, partitario, split, IVA per cassa e payload canonico.
+3. `persistPrimaNotaDraft()` valida e trasforma ogni riga IVA con `mapRegistriIvaRowForDb()`.
+4. Il mapper determina segno da nota credito/`segnoRegistroIva`, tipo acquisto-vendita dalla policy, detraibilita, esigibilita e split payment.
+5. Autofattura/CEE con una sola riga vengono espanse in due righe `acquisto` e `vendita`.
+6. In pagamento/incasso IVA per cassa vengono aggiunte righe `rilascio`, collegate tramite `origin_registro_iva_id`.
+7. `createPrimaNotaCompleta()` inserisce testata PN, righe PN, `registri_iva`, partitario e ritenute con cleanup best-effort in caso di errore.
+- Il percorso e centralizzato solo a valle: `primaNotaService` accetta `vatEntries`, ma la costruzione fiscale dei registri resta dentro `persistPrimaNotaDraft`, quindi e ancora legata al draft della Registrazione Manuale.
+- Esiste un secondo percorso, `ivaRegistriSyncService`, che ricostruisce i registri da parsing AI + `accounting_entries`; usa euristiche su tipo documento e dati parsing, non le stesse policy/mappature del percorso manuale.
+- `registerDocumentoPrimaNotaFromContabilita()` crea PN e partitario ma non passa `vatEntries`; l'IVA dipende quindi da altri step del pipeline storico. Questo conferma che non esiste ancora un unico motore registri IVA condiviso.
+
+### 4. Flusso attuale di liquidazione IVA
+
+- UI Contabilita: legge `registri_iva` per periodo con `getRegistriIvaByPeriodo()`, esclude differita nella query, aggrega con `liquidazioneIvaClient.aggregateRegistriIvaRows()`, evidenzia IVA vendite lorda, split, credito e saldo effettivo.
+- Persistenza UI: `salvaLiquidazione()` ricostruisce pero `iva_debito` dal campo vendite lordo e non sottrae `iva_split_payment`; inoltre il payload non valorizza `societa_id`.
+- Repository: lettura e upsert di `liquidazione_iva` non filtrano esplicitamente per `societa_id`; fanno affidamento sulla RLS. La ricerca dell'esistente usa solo periodicita/anno/mese o trimestre, mentre l'unicita DB e per societa.
+- Servizio pipeline: `services/liquidazioneIvaService.aggregateRegistriIvaPeriodo()` legge tutte le righe per data senza filtro societa esplicito, senza escludere `esigibilita = differita` e senza sottrarre `split_payment`. Anche l'upsert non include `societa_id`.
+- Esistono quindi due aggregatori con regole diverse: il client UI gestisce differita e split; il servizio persistente storico no. Non devono essere mantenuti entrambi.
+- `liquidazioni_iva_righe` non viene popolata; la liquidazione persistita conserva solo totali, senza snapshot delle righe sorgente o audit della composizione.
+
+### 5. Mappa casi IVA
+
+| Caso | Stato attuale | Gestione/tabelle | Test e lacune | Rischio/riuso |
+| --- | --- | --- | --- | --- |
+| Fattura attiva ordinaria | Funzionante nel manuale | Policy causale, IVA draft, PN, `registri_iva` vendita, partitario cliente | Copertura forte in `manualeIvaOrdinaria` e `partitarioDocumentiIva`; manca test end-to-end liquidazione persistita per societa | Rischio medio; logica riusabile ma mapper registri e ancora interno alla persistenza manuale |
+| Fattura passiva ordinaria | Funzionante nel manuale | `registri_iva` acquisto con `iva_detraibile`, partitario fornitore | Copertura forte, inclusa indetraibilita parziale; manca test servizio liquidazione | Rischio medio |
+| Nota credito attiva | Funzionante nel manuale | Valori negativi su registro vendite e partita cliente negativa | Test forti su segno, coerenza registro e persistenza | Rischio medio-basso nel manuale; riuso richiede policy unica |
+| Nota credito passiva | Funzionante nel manuale | Valori negativi su registro acquisti e partita fornitore negativa | Test forti | Rischio medio-basso nel manuale |
+| IVA per cassa/differita | Operativa nel manuale, fragile nella liquidazione generale | Documento crea righe `differita`; partitario `iva_per_cassa`; pagamento crea righe `rilascio` e giroconto contabile | Ampia copertura su documento, preview, rilascio parziale/totale e schema; nessun test sul `liquidazioneIvaService` storico | Rischio alto: il servizio storico include la differita; logica oggi accoppiata a partitario/DB e Registrazione Manuale |
+| Split payment | Operativo nel manuale, salvataggio liquidazione incoerente | Flag da anagrafica cliente, righe PN tecniche, `registri_iva.split_payment` | Test forti su attivazione, conto, PN, canonico e aggregatore client | Rischio alto: UI mostra il netto corretto ma persiste debito lordo; servizio storico non sottrae split |
+| Reverse/A17X/autofattura | Parziale ma con base manuale testata | Policy autofattura/CEE, partitario solo imponibile, duplicazione registro acquisto+vendita | Test A17X e FF5/CEE verificano saldo IVA zero e doppia riga; classificatore canonico import considera reverse/estero non gestito | Rischio alto per riuso: implementazione manuale e classificazione canonica/import si contraddicono |
+| Acquisti UE/extra UE | Parziale | CEE e beni estero trattati come autofattura con doppio registro; campi CEE/protocollo presenti nelle causali ma non materializzati in `registri_iva` | Test base FF5/CEE; mancano servizi, servizi UE distinti, natura, protocollo e casi multi-aliquota completi | Rischio alto |
+| Corrispettivi | Solo predisposizione/UI separata | Policy riconosce corrispettivo; repo usa tabella `corrispettivi_giornalieri`; non emerge un collegamento certo allo stesso `registri_iva` | Test solo di classificazione behavior; nessun test di persistenza registri/liquidazione | Rischio alto, non riusabile oggi |
+| Ritenute escluse dalla liquidazione | Corretta per separazione strutturale | Le ritenute sono in `ritenute_dacconto`; aggregatori leggono solo `registri_iva` | Test IVA ordinaria verificano assenza scritture ritenute e test ritenute sono separati; manca test esplicito liquidazione con documento professionista | Rischio basso finche i domini restano separati |
+
+### 6. Funzioni/servizi riutilizzabili
+
+- `buildCausaleContabilePolicy()` e `buildCausaleIvaPolicy()`: miglior base centrale per derivare tipo documento, registro, segno, detraibilita, regime e casistiche speciali.
+- `resolveIvaDocumentPostingDirection()`: utile per orientamento contabile, ma va eliminato il fallback produttivo su codici causale prima del riuso generale.
+- `calculateRegistrazioneIvaRow()`, `normalizeRegistrazioneIvaRows()` e parti pure di `buildRegistrazioneIvaRows()`: riusabili per normalizzazione/calcolo righe, separandole dal contratto UI.
+- `mapRegistriIvaRowForDb()` ed `expandAutofatturaVatEntries()`: contengono la logica fiscale piu vicina al futuro motore, ma oggi sono private in `persistPrimaNotaDraft` e dipendono dal draft manuale.
+- `aggregateRegistriIvaRows()`: regole corrette per differita/rilascio e split; candidata a unico aggregatore centrale.
+- Funzioni pure IVA per cassa (`calculateIvaPerCassaReleaseRatio`, cap e build release rows): riusabili, pur richiedendo un adapter DB separato.
+- `createPrimaNotaCompleta()`: orchestratore di persistenza riusabile se riceve `vatEntries` gia costruite da un motore centrale.
+
+### 7. Funzioni troppo legate alla UI/manuale
+
+- `RegistrazioneIvaPanel.jsx` e il suo stato di override/manual edit.
+- `buildRegistrazioneIvaDraft()` e `buildRegistrazioneDraft()` come orchestratori completi della UI manuale.
+- `persistPrimaNotaDraft.mapRegistriIvaRowForDb()` perche legge struttura `innerDraft`, header e policy manuali direttamente.
+- `TaxComplianceView.salvaLiquidazione()` perche ricostruisce i totali da campi form e puo perdere regole fiscali gia calcolate.
+- `contabilitaRepo.upsertLiquidazioneIvaCanonica()` perche non richiede societa e replica la logica di upsert del servizio.
+- `ivaRegistriSyncService` perche dipende da parsing AI, euristiche e `accounting_entries`, invece di consumare il payload canonico IVA.
+
+### 8. Rischi per Import Contabilita
+
+- Import e manuale possono produrre registri diversi per lo stesso documento, perche usano mapper e fonti differenti.
+- Il classificatore canonico marca reverse/estero e IVA per cassa come non gestiti, mentre il manuale ha implementazioni parziali: collegare Import direttamente alla persistenza manuale aggirerebbe guardrail esistenti.
+- `ivaRegistriSyncService` non gestisce segno note credito con la stessa policy, split payment, esigibilita differita/rilascio, duplicazione autofattura/CEE e metadati causale allo stesso livello del manuale.
+- La deduplica e basata su `accounting_entry_id`; il percorso PN usa `prima_nota_id`. Senza idempotency key fiscale comune sono possibili doppie righe registro.
+- Mancano test contrattuali: stesso payload canonico da manuale e import deve produrre identiche righe `registri_iva`.
+
+### 9. Rischi per Riconciliazione Bancaria
+
+- La riconciliazione non deve generare IVA ordinaria da un movimento banca: deve attivare solo eventi fiscali collegati a partite esistenti, soprattutto rilascio IVA per cassa.
+- Oggi il rilascio e incorporato in `persistPrimaNotaDraft` e interroga direttamente partitario/registri; non e disponibile come servizio applicativo idempotente condiviso.
+- Pagamenti parziali, più partite, retry e doppia riconciliazione richiedono idempotenza su `origin_registro_iva_id` + evento pagamento, oggi non formalizzata da un vincolo univoco.
+- La riconciliazione potrebbe duplicare giroconto e righe `rilascio` se invoca percorsi diversi o ripete il commit.
+
+### 10. Proposta di architettura modulare
+
+1. Definire un contratto centrale `VatPostingInput` derivato dal payload canonico: societa, documento, policy causale, righe IVA, direzione, segno, regime, split, esigibilita e riferimenti sorgente.
+2. Estrarre un motore puro `buildVatRegisterEntries(input)` senza dipendenze React/DB, responsabile di tipo acquisto-vendita, segno note credito, detraibilita, autofattura/doppio registro, split ed esigibilita.
+3. Validare con `validateVatPosting()` e blocker espliciti per registro/segno/causale incoerenti; i dati fiscali obbligatori non devono restare semplici warning.
+4. Usare adapter sottili: Manuale -> payload canonico -> motore; Import -> stesso payload -> stesso motore; Riconciliazione -> evento pagamento/partita -> `buildCashVatReleaseEntries()`.
+5. Centralizzare `aggregateVatRegisterEntries()` e usarlo sia in UI sia nel servizio di liquidazione; eliminare la duplicazione client/server.
+6. Rendere `societa_id` obbligatorio negli input di lettura/upsert e filtrarlo esplicitamente, senza affidarsi solo alla RLS.
+7. Persistenza liquidazione con snapshot/audit delle righe considerate o popolamento di `liquidazioni_iva_righe`, per rendere il risultato riproducibile.
+8. Definire idempotency key e vincoli per origine documento/PN/riga e per rilasci IVA per cassa.
+9. Solo dopo il consolidamento, valutare se lo schema necessita campi registro, segno, natura, protocollo/sezionale e competenza; nessuna migration va creata prima di un contratto applicativo approvato.
+
+### 11. Prossimo prompt consigliato
+
+- Scelta raccomandata: **test regressivi e unificazione aggregatore liquidazione IVA prima del motore registri**.
+- Obiettivo del prossimo prompt: aggiungere test che dimostrino le divergenze tra `liquidazioneIvaClient` e `liquidazioneIvaService` per ordinario, note credito, split, differita/rilascio e isolamento societa; quindi estrarre un unico aggregatore puro usato da entrambi, senza cambiare ancora la generazione dei registri.
+- Motivo: centralizzare subito la generazione registri sopra una liquidazione incoerente rischierebbe di propagare errori fiscali. Dopo questo consolidamento, il blocco successivo potra essere **motore registri IVA ordinari centralizzato** da payload canonico.
+
+### Esito operativo
+
+- Test applicativi non eseguiti: l'attivita ha modificato esclusivamente questo report e non il codice.
+- Build non eseguita per lo stesso motivo.
+- Nessun commit, push, rollback o staging eseguito.
+
+## UNIFICAZIONE-AGGREGATORE-LIQUIDAZIONE-IVA
+
+- Data: 2026-06-10.
+- Causa del problema: la UI aggregava `registri_iva` escludendo `esigibilita = differita` e sottraendo lo split payment dal debito effettivo; `services/liquidazioneIvaService.js` sommava invece tutte le righe per data, leggeva solo `tipo`, `iva` e `iva_detraibile`, non considerava split/esigibilita e non applicava sempre uno scope societa esplicito.
+- Funzione pura condivisa: creato `src/modules/contabilita/application/iva/aggregateVatRegisterEntries.js`, indipendente da React, Supabase e UI. `liquidazioneIvaClient.aggregateRegistriIvaRows()` e `liquidazioneIvaService.aggregateRegistriIvaPeriodo()` delegano entrambi a questa funzione.
+- Contratto output: campi canonici `ivaDebitoLordo`, `ivaSplitPayment`, `ivaDebitoEffettiva`, `ivaCredito`, `saldoIva`, `righeIncluse`, `righeEscluse` e relativi conteggi; mantenuti gli alias legacy snake_case per i consumer esistenti.
+- Regole coperte: fatture attive/passive ordinarie; note credito attive/passive tramite il segno gia persistito; split incluso nel lordo ma sottratto dal debito effettivo; righe differite escluse; righe di rilascio incluse; reverse/autofattura acquisto-vendita con saldo netto coerente; righe non IVA/ritenute escluse; filtro opzionale di periodo e filtro `societa_id` applicato sia nel motore puro sia nelle query aggiornate.
+- Correzione UI/persistenza: il riepilogo e il salvataggio della liquidazione usano ora `IVA vendite lorda - IVA split payment - IVA credito`; `liquidazione_iva.iva_debito` riceve il debito effettivo. Il payload include `societa_id`.
+- Scope societa: repository liquidazioni, registri per periodo e upsert filtrano/verificano esplicitamente `societa_id`; anche il service accetta `societaId`, lo applica alla query registri e alla ricerca/upsert della liquidazione.
+- File modificati/creati:
+  - `src/modules/contabilita/application/iva/aggregateVatRegisterEntries.js`;
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js`;
+  - `services/liquidazioneIvaService.js`;
+  - `src/modules/contabilita/data/contabilitaRepo.js`;
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`;
+  - `tests/liquidazioneIvaAggregator.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test aggiunto: `node --test tests/liquidazioneIvaAggregator.test.js` 8/8 OK; copre ordinario, note credito, split, differita/rilascio, reverse/autofattura, isolamento societa, esclusione righe non IVA e identita di risultato tra funzione pura, adapter UI e service.
+- Regressioni eseguite: `liquidazioneIvaSplitPayment` 4/4 OK; `ivaPerCassaRelease` 9/9 OK; `ivaPerCassaDocumento` 9/9 OK; `manualeIvaOrdinaria` 36/36 OK; `a17xAutofatturaBase` + `ff5BeniEsteroBase` 6/6 OK.
+- Build: `npm run build` OK, 403 moduli trasformati; resta il warning Vite preesistente sulla dimensione del chunk principale.
+- Limiti residui: `liquidazioni_iva_righe` non viene popolata e non esiste ancora uno snapshot auditabile delle righe incluse; lo schema `liquidazione_iva` conserva i totali effettivi ma non il dettaglio separato di lordo/split; i caller legacy del service devono valorizzare `societaId` per ottenere lo scope esplicito, da riallineare solo nel futuro blocco dedicato alle pipeline; il motore di generazione `registri_iva` resta intenzionalmente non centralizzato.
+- Confini rispettati: nessuna modifica a `persistPrimaNotaDraft` o alla generazione dei registri IVA; nessuna modifica a Import Contabilita, Riconciliazione Bancaria, ritenute/scadenzario o partitario; nessuna migration e nessuna operazione DB/Supabase.
+- Prossimo step consigliato: validazione manuale del calcolo/salvataggio di una liquidazione con ordinario + split + IVA per cassa; successivamente testare e progettare il motore registri IVA ordinari centralizzato da payload canonico, mantenendo separato il futuro snapshot di `liquidazioni_iva_righe`.
+- Nessun commit, push, rollback o staging eseguito; nessun `git add .`.
+## CHECKPOINT-AGGREGATORE-UNICO-LIQUIDAZIONE-IVA
+
+- Data checkpoint: 2026-06-11.
+- Validazione: positiva. L'aggregatore puro condiviso `aggregateVatRegisterEntries` e confermato come unico punto di calcolo per client UI e service di liquidazione IVA.
+- Regole validate: IVA vendite lorda separata dallo split payment; split sottratto dal debito effettivo; righe `differita` escluse; righe `rilascio` incluse; note credito con segno persistito; reverse/autofattura a doppio registro con effetto netto coerente; righe non IVA/ritenute escluse; filtro esplicito `societa_id`; salvataggio `liquidazione_iva.iva_debito` sul debito effettivo.
+- File inclusi nel checkpoint:
+  - `src/modules/contabilita/application/iva/aggregateVatRegisterEntries.js`;
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js`;
+  - `services/liquidazioneIvaService.js`;
+  - `src/modules/contabilita/data/contabilitaRepo.js`;
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`;
+  - `tests/liquidazioneIvaAggregator.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test eseguiti:
+  - `node --test tests/liquidazioneIvaAggregator.test.js`: 8/8 OK;
+  - `node --test tests/liquidazioneIvaSplitPayment.test.js`: 4/4 OK;
+  - `node --test tests/ivaPerCassaRelease.test.js`: 9/9 OK;
+  - `node --test tests/ivaPerCassaDocumento.test.js`: 9/9 OK;
+  - `node --test tests/manualeIvaOrdinaria.test.js`: 36/36 OK;
+  - `node --test tests/a17xAutofatturaBase.test.js tests/ff5BeniEsteroBase.test.js`: 6/6 OK;
+  - totale: 72/72 test OK.
+- Build: `npm run build` OK, 403 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
+- Confini confermati: nessuna migration; nessuna modifica a Import Contabilita, Riconciliazione Bancaria, ritenute/scadenzario, partitario o generazione dei registri IVA; nessun motore registri IVA centralizzato implementato in questo checkpoint.
+- Prossimo step consigliato: motore registri IVA ordinari centralizzato da payload canonico, mantenendo separati persistenza e futuro snapshot auditabile della liquidazione.
+- Commit selettivo previsto: `checkpoint: aggregatore unico liquidazione iva`. Nessun push.

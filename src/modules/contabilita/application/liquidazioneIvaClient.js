@@ -1,14 +1,4 @@
-function round2(n) {
-  return Math.round((Number(n) || 0) * 100) / 100
-}
-
-function toNum(v) {
-  if (v == null || v === '') return 0
-  if (typeof v === 'number' && Number.isFinite(v)) return round2(v)
-  const s = String(v).replace(/\s/g, '').replace(',', '.')
-  const n = parseFloat(s)
-  return Number.isFinite(n) ? round2(n) : 0
-}
+import { aggregateVatRegisterEntries } from './iva/aggregateVatRegisterEntries.js'
 
 export function boundsMensile(year, month) {
   const from = new Date(year, month - 1, 1)
@@ -30,49 +20,11 @@ export function boundsTrimestrale(year, trimestre) {
   }
 }
 
-export function aggregateRegistriIvaRows(rows) {
-  let iva_debito_registrata = 0
-  let iva_split_payment = 0
-  let iva_credito = 0
-  const list = Array.isArray(rows) ? rows : []
-  let righeConsiderateCount = 0
-
-  for (const r of list) {
-    const esig = String(r?.esigibilita || '').trim().toLowerCase()
-    if (esig === 'differita') {
-      continue
-    }
-
-    const tipo = String(r?.tipo || '').toLowerCase()
-    if (tipo === 'vendita') {
-      const iva = toNum(r?.iva)
-      iva_debito_registrata += iva
-      if (r?.split_payment === true || r?.splitPayment === true) iva_split_payment += iva
-      righeConsiderateCount++
-    } else if (tipo === 'acquisto') {
-      iva_credito += toNum(r?.iva_detraibile)
-      righeConsiderateCount++
-    }
-  }
-
-  iva_debito_registrata = round2(iva_debito_registrata)
-  iva_split_payment = round2(iva_split_payment)
-  const iva_debito = round2(iva_debito_registrata - iva_split_payment)
-  iva_credito = round2(iva_credito)
-  const saldo = round2(iva_debito - iva_credito)
-  return {
-    iva_debito,
-    iva_debito_registrata,
-    iva_split_payment,
-    iva_debito_effettiva: iva_debito,
-    iva_credito,
-    iva_dovuta: saldo,
-    saldo,
-    righe_considerate: righeConsiderateCount,
-  }
+export function aggregateRegistriIvaRows(rows, options = {}) {
+  return aggregateVatRegisterEntries(rows, options)
 }
 
-export function buildLiquidazionePayload({ periodicita, anno, mese = null, trimestre = null, agg, note }) {
+export function buildLiquidazionePayload({ societaId, periodicita, anno, mese = null, trimestre = null, agg, note }) {
   let periodo_inizio
   let periodo_fine
   if (periodicita === 'mensile') {
@@ -85,13 +37,14 @@ export function buildLiquidazionePayload({ periodicita, anno, mese = null, trime
     periodo_fine = b.periodo_fine
   }
   return {
+    societa_id: societaId || null,
     periodicita,
     anno,
     mese: periodicita === 'mensile' ? mese : null,
     trimestre: periodicita === 'trimestrale' ? trimestre : null,
     periodo_inizio,
     periodo_fine,
-    iva_debito: agg.iva_debito,
+    iva_debito: agg.iva_debito_effettiva ?? agg.ivaDebitoEffettiva ?? agg.iva_debito,
     iva_credito: agg.iva_credito,
     saldo: agg.saldo,
     note: note || null,

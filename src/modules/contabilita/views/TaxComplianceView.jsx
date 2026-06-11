@@ -92,7 +92,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
 
   const caricaLiquidazioni=async()=>{
     setLoading(true);
-    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche();
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche(societa.id);
     const mapped = (data || []).map(mapLiquidazioneForUi).filter(Boolean);
     setLiquidazioni(mapped);
     setLoading(false);
@@ -104,12 +104,16 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
     const isTrimestrale=formData.tipo_periodo==='trimestrale';
     const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
 
-    const { data, error } = await contabilitaRepo.getRegistriIvaByPeriodo(bounds.periodo_inizio, bounds.periodo_fine);
+    const { data, error } = await contabilitaRepo.getRegistriIvaByPeriodo(societa.id, bounds.periodo_inizio, bounds.periodo_fine);
     if (error) {
       alert('Errore lettura registri IVA: ' + error.message);
       return;
     }
-    const agg = aggregateRegistriIvaRows(data || []);
+    const agg = aggregateRegistriIvaRows(data || [], {
+      societaId: societa.id,
+      periodoInizio: bounds.periodo_inizio,
+      periodoFine: bounds.periodo_fine,
+    });
     setFormData(prev=>({
       ...prev,
       iva_vendite: (agg.iva_debito_registrata ?? agg.iva_debito ?? 0).toFixed(2),
@@ -120,14 +124,17 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
 
   const salvaLiquidazione=async()=>{
     const ivaDebito=parseFloat(formData.iva_vendite||0);
+    const ivaSplitPayment=parseFloat(formData.iva_split_payment||0);
     const ivaCredito=parseFloat(formData.iva_acquisti||0);
+    const ivaDebitoEffettiva=Math.round((ivaDebito-ivaSplitPayment)*100)/100;
 
     const agg = {
-      iva_debito: ivaDebito,
+      iva_debito_effettiva: ivaDebitoEffettiva,
       iva_credito: ivaCredito,
-      saldo: Math.round((ivaDebito - ivaCredito) * 100) / 100,
+      saldo: Math.round((ivaDebitoEffettiva - ivaCredito) * 100) / 100,
     };
     const record = buildLiquidazionePayload({
+      societaId: societa.id,
       periodicita: formData.tipo_periodo,
       anno: formData.anno,
       mese: formData.tipo_periodo === 'mensile' ? formData.periodo : null,
@@ -275,8 +282,8 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between',paddingTop:'.5rem',borderTop:'1px solid var(--bd)'}}>
                   <span style={{fontWeight:700}}>IVA dovuta:</span>
-                  <span style={{fontWeight:700,color:(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0))>0?'var(--rd)':'var(--gr)'}}>
-                    {fmt(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_acquisti||0))}
+                  <span style={{fontWeight:700,color:(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_split_payment||0)-parseFloat(formData.iva_acquisti||0))>0?'var(--rd)':'var(--gr)'}}>
+                    {fmt(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_split_payment||0)-parseFloat(formData.iva_acquisti||0))}
                   </span>
                 </div>
               </div>
@@ -306,7 +313,7 @@ function LIPEView({societa}){
 
   const caricaDati=async()=>{
     setLoading(true);
-    const { data } = await contabilitaRepo.getLiquidazioniIvaCanonicheByPeriodicita('trimestrale');
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanonicheByPeriodicita(societa.id, 'trimestrale');
     const mapped = (data || []).map(mapLiquidazioneForUi).filter(Boolean);
     setLiquidazioni(mapped);
     setLoading(false);
@@ -1123,7 +1130,7 @@ function IvaAnnualeView({societa,scritture,causaliIva}){
     setLoading(true);
     
     // Carica liquidazioni canoniche dell'anno
-    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche();
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche(societa.id);
     const mapped = (data || []).map(mapLiquidazioneForUi).filter((l) => l && l.anno === annoSel);
     setLiquidazioni(mapped);
     

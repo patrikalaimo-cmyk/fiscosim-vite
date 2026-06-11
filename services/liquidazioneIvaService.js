@@ -7,18 +7,7 @@
 
 import { logStep } from './aiSupervisorService.js'
 import { generateFiscalOutputsFromLiquidazione } from './fiscalOutputService.js'
-
-function round2(n) {
-  return Math.round((Number(n) || 0) * 100) / 100
-}
-
-function toNum(v) {
-  if (v == null || v === '') return 0
-  if (typeof v === 'number' && Number.isFinite(v)) return round2(v)
-  const s = String(v).replace(/\s/g, '').replace(',', '.')
-  const n = parseFloat(s)
-  return Number.isFinite(n) ? round2(n) : 0
-}
+import { aggregateVatRegisterEntries } from '../src/modules/contabilita/application/iva/aggregateVatRegisterEntries.js'
 
 /**
  * @param {number} year
@@ -57,41 +46,30 @@ export function boundsTrimestrale(year, trimestre) {
  * }} p
  * @returns {Promise<{ iva_debito: number, iva_credito: number, saldo: number, righe_considerate: number }>}
  */
-export async function aggregateRegistriIvaPeriodo({ db, periodo_inizio, periodo_fine }) {
+export async function aggregateRegistriIvaPeriodo({ db, societaId, periodo_inizio, periodo_fine }) {
   if (!db?.from) {
-    return { iva_debito: 0, iva_credito: 0, saldo: 0, righe_considerate: 0 }
+    return aggregateVatRegisterEntries([], {
+      societaId,
+      periodoInizio: periodo_inizio,
+      periodoFine: periodo_fine,
+    })
   }
 
-  const { data: rows, error } = await db
+  let query = db
     .from('registri_iva')
-    .select('tipo, iva, iva_detraibile')
+    .select('societa_id, tipo, iva, iva_detraibile, data, esigibilita, split_payment')
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
+  if (societaId) query = query.eq('societa_id', societaId)
 
+  const { data: rows, error } = await query
   if (error) throw new Error(error.message || String(error))
 
-  let iva_debito = 0
-  let iva_credito = 0
-  const list = Array.isArray(rows) ? rows : []
-  for (const r of list) {
-    const tipo = String(r?.tipo || '').toLowerCase()
-    if (tipo === 'vendita') {
-      iva_debito += toNum(r?.iva)
-    } else if (tipo === 'acquisto') {
-      iva_credito += toNum(r?.iva_detraibile)
-    }
-  }
-
-  iva_debito = round2(iva_debito)
-  iva_credito = round2(iva_credito)
-  const saldo = round2(iva_debito - iva_credito)
-
-  return {
-    iva_debito,
-    iva_credito,
-    saldo,
-    righe_considerate: list.length,
-  }
+  return aggregateVatRegisterEntries(rows, {
+    societaId,
+    periodoInizio: periodo_inizio,
+    periodoFine: periodo_fine,
+  })
 }
 
 /**
@@ -111,6 +89,7 @@ export async function aggregateRegistriIvaPeriodo({ db, periodo_inizio, periodo_
 export async function runLiquidazioneIva(opts) {
   const {
     db,
+    societaId,
     periodicita,
     anno,
     mese = null,
@@ -162,13 +141,14 @@ export async function runLiquidazioneIva(opts) {
 
   let agg
   try {
-    agg = await aggregateRegistriIvaPeriodo({ db, periodo_inizio, periodo_fine })
+    agg = await aggregateRegistriIvaPeriodo({ db, societaId, periodo_inizio, periodo_fine })
   } catch (e) {
     L('IVA_LIQUIDATION_ERROR', { reason: 'aggregate', message: e?.message || String(e) })
     return { ok: false, error: e?.message || String(e) }
   }
 
   const row = {
+    ...(societaId ? { societa_id: societaId } : {}),
     periodicita: per,
     anno,
     mese: meseIns,
@@ -182,6 +162,7 @@ export async function runLiquidazioneIva(opts) {
   }
 
   let sel = db.from('liquidazione_iva').select('id').eq('periodicita', per).eq('anno', anno)
+  if (societaId) sel = sel.eq('societa_id', societaId)
   if (per === 'mensile') {
     sel = sel.eq('mese', meseIns).is('trimestre', null)
   } else {
