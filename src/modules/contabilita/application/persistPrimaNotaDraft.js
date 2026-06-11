@@ -6,6 +6,7 @@ import { buildCausaleContabilePolicy } from '../domain/causali/buildCausaleConta
 import { handleIvaPerCassaRelease } from './registrazioneOperations/ivaPerCassaRelease.js'
 import { buildRitenutaPersistencePayload } from './ritenute/buildRitenutaPersistencePayload.js'
 import { buildRitenutaMaturazionePayload } from './ritenute/buildRitenutaMaturazionePayload.js'
+import { buildVatRegisterEntriesFromCanonicalPayload } from './iva/buildVatRegisterEntriesFromCanonicalPayload.js'
 
 
 function normalizeDbText(value) {
@@ -363,6 +364,10 @@ function sanitizeRegistroIvaForInsert(row = {}) {
     key,
     label,
     display,
+    totale,
+    registerType,
+    segnoRegistro,
+    caseType,
     ...safeRow
   } = source
   return safeRow
@@ -466,21 +471,31 @@ export async function persistPrimaNotaDraft({
   // FASE 2: Esecuzione della validazione canonica prima del write
   let canonicalBlockers = []
   let canonicalWarnings = []
+  let canonicalPayload = null
+  let ordinaryVatResult = null
   try {
     const operatorId = draft?.meta?.operatorId || draft?.pnPayload?.created_by || 'sistema'
     const createdAt = draft?.meta?.createdAt || draft?.pnPayload?.created_at || new Date().toISOString()
-    const { validationResult } = mapRegistrazioneManualeToCanonical(draft, { 
+    const { payload, validationResult } = mapRegistrazioneManualeToCanonical(draft, {
       mode: 'commit',
       operatorId,
       createdAt
     })
+    canonicalPayload = payload
     if (validationResult) {
       canonicalBlockers = validationResult.blocking || []
       canonicalWarnings = validationResult.warnings || []
     }
+    ordinaryVatResult = buildVatRegisterEntriesFromCanonicalPayload(canonicalPayload, {
+      persistenceContext: resolved.pnPayload,
+    })
   } catch (err) {
-    console.error('[persistPrimaNotaDraft] Errore durante il mapping canonico:', err)
-    canonicalBlockers.push(`Errore mapping canonico: ${err.message}`)
+    if (err?.code === 'VAT_REGISTER_ENTRIES_BLOCKED') {
+      canonicalBlockers.push(...(err?.details?.blockers || [err.message]))
+    } else {
+      console.error('[persistPrimaNotaDraft] Errore durante il mapping canonico:', err)
+      canonicalBlockers.push(`Errore mapping canonico: ${err.message}`)
+    }
   }
 
   if (canonicalBlockers.length > 0) {
@@ -512,10 +527,14 @@ export async function persistPrimaNotaDraft({
     : []
 
   const ivaEnabled = Boolean(resolved.ivaDraft?.active || resolved.innerDraft?.meta?.behavior?.showIvaPanel)
-  let vatEntriesForDb = ivaEnabled && Array.isArray(resolved.ivaRows)
-    ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
-    : []
-  vatEntriesForDb = expandAutofatturaVatEntries(vatEntriesForDb, resolved)
+  let vatEntriesForDb = ordinaryVatResult?.handled
+    ? ordinaryVatResult.entries
+    : (ivaEnabled && Array.isArray(resolved.ivaRows)
+        ? resolved.ivaRows.map((row, index) => mapRegistriIvaRowForDb(row, index, pnPayloadForDb, resolved.ivaDraft, resolved))
+        : [])
+  if (!ordinaryVatResult?.handled) {
+    vatEntriesForDb = expandAutofatturaVatEntries(vatEntriesForDb, resolved)
+  }
   vatEntriesForDb = vatEntriesForDb.map(sanitizeRegistroIvaForInsert)
 
   const partitarioEnabled = Boolean(

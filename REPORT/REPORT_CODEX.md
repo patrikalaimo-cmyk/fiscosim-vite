@@ -4978,3 +4978,68 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Confini confermati: nessuna migration; nessuna modifica a Import Contabilita, Riconciliazione Bancaria, ritenute/scadenzario, partitario o generazione dei registri IVA; nessun motore registri IVA centralizzato implementato in questo checkpoint.
 - Prossimo step consigliato: motore registri IVA ordinari centralizzato da payload canonico, mantenendo separati persistenza e futuro snapshot auditabile della liquidazione.
 - Commit selettivo previsto: `checkpoint: aggregatore unico liquidazione iva`. Nessun push.
+
+## MOTORE-REGISTRI-IVA-ORDINARI-CENTRALIZZATO
+
+- Data: 2026-06-11.
+- Audit del flusso precedente: `persistPrimaNotaDraft.js` costruiva direttamente le righe `registri_iva` tramite un mapper locale. Il mapper determinava tipo e segno anche con fallback su policy generiche e stringhe di registro; la costruzione fiscale era quindi accoppiata alla persistenza della Registrazione Manuale. `createPrimaNotaCompleta()` era gia correttamente limitato alla scrittura di `vatEntries` ricevute.
+- Funzione pura creata: `buildVatRegisterEntriesFromCanonicalPayload(payload, options)` in `src/modules/contabilita/application/iva/buildVatRegisterEntriesFromCanonicalPayload.js`. Non dipende da React, Supabase o servizi DB e restituisce righe tecniche deterministiche oppure un errore bloccante `VAT_REGISTER_ENTRIES_BLOCKED`.
+- Integrazione: `persistPrimaNotaDraft()` conserva il payload restituito da `mapRegistrazioneManualeToCanonical()`, usa il nuovo motore per i casi ordinari e passa le righe risultanti alla persistenza esistente. I metadati tecnici del motore (`totale`, registro, segno e tipo caso) vengono rimossi prima dell'insert per non cambiare lo schema `registri_iva`.
+- Regole coperte:
+  - fattura attiva ordinaria su registro vendite con segno positivo;
+  - fattura passiva ordinaria su registro acquisti con segno positivo;
+  - nota credito attiva sul registro vendite con segno sottrattivo;
+  - nota credito passiva sul registro acquisti con segno sottrattivo;
+  - una riga registro per ogni riga IVA reale, inclusi documenti multi-aliquota;
+  - imponibile, IVA, totale e quote detraibile/indetraibile arrotondati al centesimo;
+  - conservazione degli importi di IVA detraibile/indetraibile gia calcolati nel draft quando presenti;
+  - nessuna riga per prima nota semplice con target IVA disattivato;
+  - blocker espliciti per registro o segno mancanti, registro incoerente e incompatibilita tra operazione gestita, registro e segno.
+- Guardrail classificazione: codice e descrizione libera della causale contabile non vengono letti dal motore come trigger produttivi. La classificazione usa esclusivamente tipo causale tecnico, operazione gestita/tipo documento tecnico, registro configurato, segno configurato e righe IVA canoniche.
+- Casi esclusi: split payment, IVA per cassa/differita/rilascio, reverse charge, autofatture, A17X, CEE/FF5 e integrazioni estero restituiscono `handled: false` e restano sul percorso legacy gia testato. Non e stata modificata la loro logica.
+- File modificati/creati:
+  - `src/modules/contabilita/application/iva/buildVatRegisterEntriesFromCanonicalPayload.js`;
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`;
+  - `tests/vatRegisterEntriesFromCanonicalPayload.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test dedicato: `node --test tests/vatRegisterEntriesFromCanonicalPayload.test.js` 9/9 OK. Copre fatture attive/passive, note credito attive/passive, detraibilita, multi-aliquota, arrotondamento, PN semplice, blocker registro/segno, assenza di trigger da codice/descrizione e bypass dei casi speciali.
+- Regressioni eseguite:
+  - `node --test tests/liquidazioneIvaAggregator.test.js`: 8/8 OK;
+  - `node --test tests/liquidazioneIvaSplitPayment.test.js`: 4/4 OK;
+  - `node --test tests/ivaPerCassaRelease.test.js`: 9/9 OK;
+  - `node --test tests/ivaPerCassaDocumento.test.js`: 9/9 OK;
+  - `node --test tests/manualeIvaOrdinaria.test.js`: 36/36 OK;
+  - `node --test tests/a17xAutofatturaBase.test.js tests/ff5BeniEsteroBase.test.js`: 6/6 OK;
+  - `node --test tests/canonicalAccountingValidation.test.js`: 10/10 OK;
+  - `node --test tests/persistPrimaNotaDraft.test.js`: 8/8 OK;
+  - totale suite richiesta: 99/99 test OK.
+- Build: `npm run build` OK, 404 moduli trasformati. Resta esclusivamente il warning Vite preesistente sulla dimensione del chunk principale.
+- Confini rispettati: nessuna modifica a Import Contabilita, Riconciliazione Bancaria, ritenute/scadenzario, aggregatore liquidazione IVA, componenti React, servizi Supabase o database live; nessuna migration e nessun cambio schema.
+- Limite intenzionale: il mapper locale precedente resta disponibile solo come adapter compatibile per i casi IVA speciali esclusi dal motore ordinario. La sua futura sostituzione richiede blocchi dedicati ai singoli regimi.
+- Prossimo step consigliato: validazione manuale di una fattura attiva, una passiva e delle due note credito verificando le righe persistite in `registri_iva`; dopo conferma, creare un checkpoint selettivo. Solo in un blocco successivo valutare l'adozione dello stesso motore da altri producer canonici.
+- Nessun commit, push, rollback o staging eseguito.
+## CHECKPOINT-MOTORE-REGISTRI-IVA-ORDINARI-CENTRALIZZATO
+
+- Data checkpoint: 2026-06-11.
+- Validazione: positiva. Il motore puro `buildVatRegisterEntriesFromCanonicalPayload(payload, options)` e confermato come generatore centralizzato delle righe `registri_iva` ordinarie da payload canonico; `persistPrimaNotaDraft()` lo usa esclusivamente per i casi ordinari e rimuove i metadati tecnici prima dell'insert.
+- File inclusi nel checkpoint:
+  - `src/modules/contabilita/application/iva/buildVatRegisterEntriesFromCanonicalPayload.js`;
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`;
+  - `tests/vatRegisterEntriesFromCanonicalPayload.test.js`;
+  - `REPORT/REPORT_CODEX.md`.
+- Test eseguiti:
+  - `node --test tests/vatRegisterEntriesFromCanonicalPayload.test.js`: 9/9 OK;
+  - `node --test tests/liquidazioneIvaAggregator.test.js`: 8/8 OK;
+  - `node --test tests/liquidazioneIvaSplitPayment.test.js`: 4/4 OK;
+  - `node --test tests/ivaPerCassaRelease.test.js`: 9/9 OK;
+  - `node --test tests/ivaPerCassaDocumento.test.js`: 9/9 OK;
+  - `node --test tests/manualeIvaOrdinaria.test.js`: 36/36 OK;
+  - `node --test tests/a17xAutofatturaBase.test.js tests/ff5BeniEsteroBase.test.js`: 6/6 OK;
+  - `node --test tests/canonicalAccountingValidation.test.js`: 10/10 OK;
+  - `node --test tests/persistPrimaNotaDraft.test.js`: 8/8 OK;
+  - totale: 99/99 test OK.
+- Build: `npm run build` OK, 404 moduli trasformati; solo warning Vite preesistente sulla dimensione del chunk principale.
+- Confini confermati: nessuna migration e nessun cambio schema; Import Contabilita e Riconciliazione Bancaria non toccati; ritenute/scadenzario e aggregatore liquidazione IVA non modificati.
+- Casi speciali confermati invariati: split payment, IVA per cassa/differita/rilascio, reverse charge, autofatture, A17X, CEE/FF5 e integrazioni estero restano sul percorso esistente e superano i test regressivi.
+- Prossimo step consigliato: validazione manuale delle quattro casistiche ordinarie sulle righe persistite in `registri_iva`; solo successivamente valutare l'adozione del motore da altri producer del payload canonico.
+- Commit selettivo previsto: `checkpoint: motore registri iva ordinari centralizzato`. Nessun push.
