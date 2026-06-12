@@ -5347,3 +5347,106 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   * riferimento operativo principale: 32–45 prompt compatti residui;
   * nessun codice applicativo modificato;
   * nessun DB/env/auth/RLS/Supabase toccato.
+
+## AUDIT-LIQUIDAZIONE-IVA-DEFINITIVA-FASE-2
+
+### 1. File Letti ed Analizzati
+- `src/modules/contabilita/domain/iva/calcoloLiquidazioneIvaDefinitiva.js`
+- `tests/calcoloLiquidazioneIvaDefinitiva.test.js`
+- `supabase/migrations/20260612150000_liquidazione_iva_definitiva_fase1.sql`
+- `src/modules/contabilita/application/liquidazioneIvaClient.js`
+- `src/modules/contabilita/data/contabilitaRepo.js`
+- `src/modules/contabilita/views/TaxComplianceView.jsx`
+- `tests/liquidazioneIvaProvvisoria.test.js`
+- `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js`
+- `tests/liquidazioneIvaAggregator.test.js`
+- `supabase/migrations/20260403160000_liquidazione_iva.sql`
+- `supabase/migrations/20260412125600_liquidazioni_iva_righe_base_bootstrap.sql`
+- `supabase/migrations/20260412143000_fiscal_societa_scope.sql`
+- `supabase/migrations/20260430230000_registri_iva_prima_nota_link.sql`
+- `supabase/migrations/20260606100000_iva_per_cassa_schema.sql`
+- `supabase/migrations/20260607120000_split_payment_registri_iva.sql`
+- `supabase/migrations/20260529114000_fase_3c_audit_modifica_annullo_storno.sql` ( stored procedure `rpc_get_prima_nota_operation_guards` )
+
+### 2. Stato dello Schema Reale
+- **Tabella `liquidazione_iva`**: Possiede i campi legacy `periodicita`, `anno`, `mese`, `trimestre`, `periodo_inizio`, `periodo_fine`, `iva_debito`, `iva_credito`, `saldo` e `societa_id` (aggiunto da RLS/scope migration). La Fase 1 introduce campi specifici per lo stato (`stato` check `provvisoria`, `definitiva`, `riaperta`), `periodo_tipo`, `periodo_anno`, `periodo_numero` e breakdown calcolati.
+- **Tabella `liquidazioni_iva_righe`**: Contiene la base delle righe (imponibile, imposta, aliquota, natura) e viene estesa da Fase 1 con riferimenti a `registro_iva_id`, `prima_nota_id`, `esigibilita`, `split_payment`, `inclusa_in_liquidazione`, `motivo_esclusione`.
+- **Rilevamento allineamento**: Le due serie di campi (mensile/trimestrale e periodicita) e (mese/trimestre e periodo_numero) devono essere scritte simultaneamente dall'RPC di consolidamento per mantenere la compatibilità sia con il legacy che con il nuovo schema.
+
+### 3. Proposta Repository (`contabilitaRepo.js`)
+- Aggiornare `isIvaPeriodLiquidated` per query su `liquidazione_iva` filtrando per `stato = 'definitiva'`, anziché sulla tabella deprecata `liquidazioni_iva_societa`.
+- Aggiungere `rpcConsolidaPeriodoIva(params)` per chiamare la nuova RPC transazionale.
+- Aggiungere `getLiquidazioneRigheSnapshot(liquidazioneId)` per caricare lo snapshot delle righe.
+
+### 4. Proposta RPC di Consolidamento
+Si progetta la RPC `public.consolida_periodo_iva_transazionale(...)`:
+- **Input**: `p_societa_id`, `p_periodo_tipo`, `p_periodo_anno`, `p_periodo_numero`, `p_periodo_inizio`, `p_periodo_fine`, crediti/acconti e metadati.
+- **Controlli**:
+  - Verifica assenza di un record consolidato attivo (`definitiva`) per lo stesso periodo per evitare doppi consolidamenti.
+  - Verifica accessibilità della società per l'operatore (RLS).
+- **Logica**:
+  - Legge le righe da `public.registri_iva` nel range temporale.
+  - Esegue la somma matematica di imponibile, imposta, detraibile, indetraibile, split payment, reverse charge ed IVA per cassa differita/rilasciata.
+  - Applica le formule del domain service per determinare saldo, interessi, e crediti/debito finale.
+  - Scrive il record header in `liquidazione_iva` (stato `'definitiva'`).
+  - Scrive le righe snapshot in `liquidazioni_iva_righe` con i rispettivi riferimenti.
+- **Output**: JSON con i totali e i breakdown.
+
+### 5. Blocco Periodo IVA e Guards
+- **Guardia del database (`rpc_get_prima_nota_operation_guards`)**: Attualmente, la variabile `v_is_liquidated` viene valorizzata vedendo se esiste un qualunque record in `liquidazione_iva`. Questo blocca anche le scritture in presenza di una liquidazione provvisoria/draft. Deve essere corretto per cercare esclusivamente record in `stato = 'definitiva'`.
+- **Regola di blocco**: La modifica/cancellazione di prima nota deve essere inibita solo se il periodo IVA è definitivo, tranne in caso di storno (storno contabile).
+
+### 6. Analisi dei Rischi
+- **Collisione di Blocco**: La mancanza del filtro `stato = 'definitiva'` in `rpc_get_prima_nota_operation_guards` provocherà il blocco del periodo anche per le liquidazioni provvisorie salvate.
+- **Drift dei Dati**: La duplicazione logica dei campi (es. `mese` vs `periodo_numero`) richiede estrema cura nella scrittura transazionale.
+
+### 7. Piano Implementativo Fase 2
+- **Fase 2A: Migration ed RPC**:
+  - File: `supabase/migrations/20260612160000_liquidazione_iva_definitiva_fase2.sql` (creazione RPC consolidamento e patch per `rpc_get_prima_nota_operation_guards`).
+- **Fase 2B: Repository contabile**:
+  - File: `src/modules/contabilita/data/contabilitaRepo.js` (refactor `isIvaPeriodLiquidated`, metodi RPC).
+- **Fase 2C: Test Suite**:
+  - File: `tests/liquidazioneIvaDefinitivaRepo.test.js` (test per l'RPC e rollback).
+- **Fase 2D: Application e UI**:
+  - File: `src/modules/contabilita/application/liquidazioneIvaClient.js` e `TaxComplianceView.jsx` (collegamento del pulsante di salvataggio all'RPC).
+
+### 8. Conferma di Sicurezza
+- Si attesta che nessun codice applicativo, database live, file di migrazione o file di ambiente `.env` è stato modificato in questa attività di solo audit e reportistica.
+
+## LIQUIDAZIONE-IVA-DEFINITIVA-FASE-2A-RPC-REPOSITORY
+
+- **Data**: 2026-06-12
+- **File Letti**:
+  - `src/modules/contabilita/domain/iva/calcoloLiquidazioneIvaDefinitiva.js`
+  - `tests/calcoloLiquidazioneIvaDefinitiva.test.js`
+  - `supabase/migrations/20260612150000_liquidazione_iva_definitiva_fase1.sql`
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js`
+  - `src/modules/contabilita/data/contabilitaRepo.js`
+  - `supabase/migrations/20260529114000_fase_3c_audit_modifica_annullo_storno.sql`
+  - `supabase/migrations/20260612170000_liquidazione_iva_definitiva_fase2a_rpc.sql`
+- **File Modificati / Creati**:
+  - `src/modules/contabilita/data/contabilitaRepo.js` (Modificato: esportazione e aggiornamento `isIvaPeriodLiquidated` con blocco su `definitiva`, query snapshot, query rpc)
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js` (Modificato: orchestrazione consolidamento, fetch snapshot, fetch liquidazione, rimosso duplicazioni)
+  - `tests/liquidazioneIvaDefinitivaRpcClient.test.js` (Creato: suite di test unitari con mock Supabase)
+  - `supabase/migrations/20260612170000_liquidazione_iva_definitiva_fase2a_rpc.sql` (Creato: migration additiva/idempotente per RPC `consolida_periodo_iva_transazionale` e patch `rpc_get_prima_nota_operation_guards`)
+  - `REPORT/REPORT_CODEX.md` (Modificato: questo report)
+- **Strategia Scelta**:
+  - **Strategia B**: L'applicazione client calcola i totali IVA dettagliati tramite il domain service puro JS `calcoloLiquidazioneIvaDefinitiva.js` e passa alla RPC un payload strutturato. PostgreSQL esegue il consolidamento in modo atomico salvando testata (`liquidazione_iva` con `stato = 'definitiva'`) e snapshot righe (`liquidazioni_iva_righe`). Questa scelta garantisce una sola fonte di verità per la complessa logica fiscale (il domain service JS) pur mantenendo l'atomicità ACID e la tracciabilità delle righe consolidata.
+- **Dettaglio RPC**:
+  - `public.consolida_periodo_iva_transazionale(...)`: inserisce l'header definitivo, copia lo snapshot righe in `liquidazioni_iva_righe` con RLS/controllo multi-tenant societario ed inibisce consolidamenti duplicati o sovrapposti.
+- **Dettaglio Patch Guards**:
+  - `public.rpc_get_prima_nota_operation_guards` è stata patchata per bloccare registrazioni di prima nota solo se ricadono in un periodo con liquidazione IVA `definitiva` (evitando il blocco per le liquidazioni provvisorie/draft).
+- **Test Eseguiti**:
+  - Nuova suite: `node --test tests/liquidazioneIvaDefinitivaRpcClient.test.js` -> 7/7 OK.
+  - Intera suite Liquidazione IVA: `node --test tests/calcoloLiquidazioneIvaDefinitiva.test.js tests/liquidazioneIvaProvvisoria.test.js tests/liquidazioneIvaProvvisoriaUiAdapter.test.js tests/liquidazioneIvaAggregator.test.js tests/liquidazioneIvaDefinitivaRpcClient.test.js` -> 47/47 OK.
+  - Altri correlati: `node --test tests/primaNotaMutationService.test.js` -> 11/11 OK.
+- **Build**:
+  - `npm run build` eseguito con successo (409 moduli).
+- **Conferma di Aderenza al Perimetro**:
+  - Migration creata ma non applicata al database remoto.
+  - Supabase live, `.env`, auth, RLS e policy non modificati.
+- **Rischi Residui**:
+  - Verifica della coerenza dei breakdown calcolati con la futura visualizzazione UI.
+- **Prossimo Step Consigliato**:
+  - Fase 2B/3: Modifica e integrazione della UI in `TaxComplianceView.jsx` per esibire il badge di stato consolidato definitivo e permettere l'invocazione della procedura di consolidamento.
+

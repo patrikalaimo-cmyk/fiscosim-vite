@@ -1,4 +1,6 @@
 import { aggregateVatRegisterEntries } from './iva/aggregateVatRegisterEntries.js'
+import * as contabilitaRepo from '../data/contabilitaRepo.js'
+import { calcoloLiquidazioneIvaDefinitiva } from '../domain/iva/calcoloLiquidazioneIvaDefinitiva.js'
 
 export function boundsMensile(year, month) {
   const from = new Date(year, month - 1, 1)
@@ -68,3 +70,50 @@ export function mapLiquidazioneForUi(l) {
   }
 }
 
+export async function getRegistriIvaLiquidabili({ societaId, periodoInizio, periodoFine }) {
+  const { data, error } = await contabilitaRepo.getRegistriIvaByPeriodo(societaId, periodoInizio, periodoFine)
+  return { data, error }
+}
+
+export async function fetchLiquidazioneIvaDefinitiva({ societaId, periodoInizio, periodoFine }) {
+  const { data, error } = await contabilitaRepo.getLiquidazioneIvaByPeriodo({ societaId, periodoInizio, periodoFine })
+  return { data: mapLiquidazioneForUi(data), error }
+}
+
+export async function fetchRigheLiquidazioneIvaSnapshot(liquidazioneId) {
+  const { data, error } = await contabilitaRepo.getRigheLiquidazioneIvaSnapshot(liquidazioneId)
+  return { data, error }
+}
+
+export async function consolidaLiquidazioneIvaDefinitiva({
+  societaId,
+  periodoInizio,
+  periodoFine,
+  tipoPeriodicita,
+  operatoreStudioId,
+  motivo,
+  options = {},
+}) {
+  const { data: rows, error: rowsErr } = await contabilitaRepo.getRegistriIvaByPeriodo(societaId, periodoInizio, periodoFine)
+  if (rowsErr) return { data: null, error: rowsErr }
+
+  const payloadCalcolo = calcoloLiquidazioneIvaDefinitiva(rows || [], {
+    societaId,
+    periodoInizio,
+    periodoFine,
+    periodicita: tipoPeriodicita,
+    ...options,
+  })
+
+  const { data, error } = await contabilitaRepo.consolidaLiquidazioneIvaDefinitiva({
+    societaId,
+    periodoInizio,
+    periodoFine,
+    tipoPeriodicita,
+    operatoreStudioId,
+    motivo,
+    payloadCalcolo,
+  })
+
+  return { data, error }
+}

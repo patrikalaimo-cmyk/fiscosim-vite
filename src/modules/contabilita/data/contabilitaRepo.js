@@ -791,13 +791,63 @@ export async function upsertLiquidazioneIvaCanonica(row) {
   return sb.from('liquidazione_iva').insert([row]).select('*').maybeSingle()
 }
 
-export function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo_fine) {
-  return sb
+export async function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo_fine) {
+  const { data, error } = await sb
     .from('registri_iva')
-    .select('societa_id, tipo, imponibile, iva, iva_detraibile, data, esigibilita, split_payment')
+    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id, causali_iva(reverse_charge, natura)')
     .eq('societa_id', societaId)
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
+
+  if (error || !data) return { data: [], error }
+
+  const flattened = data.map((row) => ({
+    ...row,
+    reverse_charge: row.causali_iva?.reverse_charge || false,
+    natura: row.causali_iva?.natura || null,
+  }))
+
+  return { data: flattened, error: null }
+}
+
+export function getLiquidazioneIvaByPeriodo({ societaId, periodoInizio, periodoFine }) {
+  return sb
+    .from('liquidazione_iva')
+    .select('*')
+    .eq('societa_id', societaId)
+    .eq('periodo_inizio', periodoInizio)
+    .eq('periodo_fine', periodoFine)
+    .limit(1)
+    .maybeSingle()
+}
+
+export function getRigheLiquidazioneIvaSnapshot(liquidazioneId) {
+  return sb
+    .from('liquidazioni_iva_righe')
+    .select('*')
+    .eq('liquidazione_id', liquidazioneId)
+    .order('tipo_riga', { ascending: true })
+}
+
+export async function consolidaLiquidazioneIvaDefinitiva({
+  societaId,
+  periodoInizio,
+  periodoFine,
+  tipoPeriodicita,
+  operatoreStudioId,
+  motivo = 'Consolidamento liquidazione IVA definitiva',
+  payloadCalcolo,
+}) {
+  const { data, error } = await sb.rpc('consolida_periodo_iva_transazionale', {
+    p_societa_id: societaId,
+    p_periodo_inizio: periodoInizio,
+    p_periodo_fine: periodoFine,
+    p_tipo_periodicita: tipoPeriodicita,
+    p_operatore_studio_id: operatoreStudioId,
+    p_motivo: motivo,
+    p_payload_calcolo: payloadCalcolo,
+  })
+  return { data, error }
 }
 
 export function getCorrispettiviGiornalieri(societaId, inizioMese, fineMese) {
@@ -888,31 +938,23 @@ export function deleteRitenuta(id) {
 
 // --- FASE 1.3: CONSULTAZIONE, STORNI E RETTIFICHE ---
 
-async function isIvaPeriodLiquidated(societaId, dataRegistrazioneStr) {
+export async function isIvaPeriodLiquidated(societaId, dataRegistrazioneStr) {
   if (!dataRegistrazioneStr) return false
   const date = new Date(dataRegistrazioneStr)
   if (isNaN(date.getTime())) return false
-  const year = date.getFullYear()
-  const month = date.getMonth() + 1 // 1-12
-  const quarter = Math.ceil(month / 3) // 1-4
+  const dateStr = dataRegistrazioneStr.slice(0, 10)
 
   const { data, error } = await sb
-    .from('liquidazioni_iva_societa')
-    .select('*')
+    .from('liquidazione_iva')
+    .select('id')
     .eq('societa_id', societaId)
-    .eq('anno', year)
+    .eq('stato', 'definitiva')
+    .lte('periodo_inizio', dateStr)
+    .gte('periodo_fine', dateStr)
+    .limit(1)
 
   if (error || !data || data.length === 0) return false
-
-  for (const liq of data) {
-    if (liq.tipo_periodo === 'mensile' && String(liq.periodo) === String(month)) {
-      return true
-    }
-    if (liq.tipo_periodo === 'trimestrale' && String(liq.periodo) === String(quarter)) {
-      return true
-    }
-  }
-  return false
+  return true
 }
 
 export async function findPianoContoByCodice(societaId, codice) {
