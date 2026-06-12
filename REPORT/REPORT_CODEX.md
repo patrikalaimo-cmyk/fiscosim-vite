@@ -5303,3 +5303,47 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - **Rischi e decisioni da validare**:
   - La logica di blocco del periodo per `isIvaPeriodLiquidated` deve transitare su `liquidazione_iva` (stato `definitiva`) in sostituzione della tabella legacy `liquidazioni_iva_societa`.
   - Validare se gli interessi trimestrali devono essere memorizzati separatamente (come fatto in `interessi_trimestrali`) ed esclusi dai crediti futuri.
+
+## CREAZIONE-AI-WORKING-AREA-FISCOSIM-E-AUDIT-STUDIO-GRADE
+
+- **Obiettivo**: Creare una working area AI stabile (`AI_WORKING_AREA_FISCOSIM/`) nella root per definire regole operative, stato attuale, architettura contabile, roadmap, decisioni fiscali, audit di conformità e stima dei prompt mancanti verso lo standard studio-grade.
+- **File creati**:
+  - `AI_WORKING_AREA_FISCOSIM/00_LEGGIMI_AI.md`
+  - `AI_WORKING_AREA_FISCOSIM/01_REGOLE_OPERATIVE.md`
+  - `AI_WORKING_AREA_FISCOSIM/02_STATO_ATTUALE.md`
+  - `AI_WORKING_AREA_FISCOSIM/03_ARCHITETTURA_CONTABILE.md`
+  - `AI_WORKING_AREA_FISCOSIM/04_DECISIONI_FISCALI_CONTABILI.md`
+  - `AI_WORKING_AREA_FISCOSIM/05_ROADMAP_ATTIVA.md`
+  - `AI_WORKING_AREA_FISCOSIM/06_PROTOCOLLO_REPORT.md`
+  - `AI_WORKING_AREA_FISCOSIM/07_AUDIT_STUDIO_GRADE.md`
+  - `AI_WORKING_AREA_FISCOSIM/08_PROMPT_MANCANTI_STUDIO_GRADE.md`
+  - `AI_WORKING_AREA_FISCOSIM/99_PROMPT_AVVIO_AI_IDE.md`
+- **Protocollo nuovo**:
+  - `REPORT/REPORT_CODEX.md` rimane lo storico append-only ufficiale del progetto.
+  - La chat dell'AI rimane sintetica (esito, file toccati, test, build, commit) senza incollare report lunghi.
+  - La cartella della working area conserva le regole vive e la roadmap corrente.
+- **Audit studio-grade**: Redatto l'audit critico che analizza i moduli completati (registrazione, consultazione, IVA cassa/split, liquidazione F1, login/RLS), quelli parziali (liquidazione F2+, LIPE, F24, registri/stampe, bilancio, cespiti), i rischi architetturali e i gap UX/sicurezza.
+- **Prompt mancanti**: Tracciate le macrofasi stimate per portare FiscoSim allo standard professionale con registro prompt iniziale.
+- **Conferma nessun codice applicativo modificato**: Nessun file sotto `src/` o `tests/` è stato modificato in questo step.
+- **Conferma nessun DB/env/auth/RLS/Supabase toccato**: Le configurazioni, i file d'ambiente e l'infrastruttura database live sono rimasti intatti.
+- **Aggiornamento successivo (Micro-Correzione)**:
+  * aggiornato `99_PROMPT_AVVIO_AI_IDE.md`;
+  * aggiunta lettura obbligatoria di `07_AUDIT_STUDIO_GRADE.md` e `08_PROMPT_MANCANTI_STUDIO_GRADE.md`;
+  * nessun codice applicativo modificato.
+- **Prossimo step**: Eseguire la Fase 2 della Liquidazione IVA Definitiva (Query Repository ed RPC PostgreSQL transazionale per il consolidamento definitivo).
+
+## FIX-WORKING-AREA-STIMA-PROMPT-MANCANTI
+
+- **Obiettivo**: Correggere la Working Area AI FiscoSim prima del commit selettivo.
+- **Dettagli modifiche**:
+  * aggiornato `99_PROMPT_AVVIO_AI_IDE.md`;
+  * aggiunta lettura obbligatoria di `07_AUDIT_STUDIO_GRADE.md` e `08_PROMPT_MANCANTI_STUDIO_GRADE.md`;
+  * corretto `08_PROMPT_MANCANTI_STUDIO_GRADE.md`;
+  * chiarito che i 15 punti sono macroblocchi, non prompt effettivi;
+  * stima ufficiale residua:
+    * 18–26 prompt per versione interna avanzata/usabile bene;
+    * 32–45 prompt per studio-grade solida;
+    * 48–65 prompt per quasi prodotto rifinito;
+  * riferimento operativo principale: 32–45 prompt compatti residui;
+  * nessun codice applicativo modificato;
+  * nessun DB/env/auth/RLS/Supabase toccato.
