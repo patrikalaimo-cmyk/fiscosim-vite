@@ -14,7 +14,15 @@ Il punto nave sulle funzionalità contabili e fiscali implementate in FiscoSim:
   * Creata la migrazione additiva `20260612150000_liquidazione_iva_definitiva_fase1.sql`.
   * Creato il domain service puro `calcoloLiquidazioneIvaDefinitiva.js`.
   * Creata la suite di test unitari con 16 scenari di calcolo coperti al 100%.
-* **Fase 2 (Repository & RPC)**: Previsto lo sviluppo delle query di lettura/scrittura e della funzione RPC transazionale Supabase per il consolidamento definitivo.
+* **Fase 2A (Repository, RPC e Patch Guards)**: Completato.
+  * Creata la migrazione additiva `20260612170000_liquidazione_iva_definitiva_fase2a_rpc.sql` con l'RPC di consolidamento transazionale e la patch di `rpc_get_prima_nota_operation_guards`.
+  * Creati/aggiornati i metodi in `contabilitaRepo.js` e `liquidazioneIvaClient.js` per il consolidamento definitivo e le letture di snapshot.
+  * Creati test unitari in `tests/liquidazioneIvaDefinitivaRpcClient.test.js` (7 scenari coperti).
+* **Fase 2B (Orchestrazione Application)**: Completato.
+  * Creato l'orchestratore applicativo `liquidazioneIvaDefinitivaOrchestrator.js` con contratto payload consolidato esplicito.
+  * Collegate ed esportate le funzioni dal client API contabile `liquidazioneIvaClient.js`.
+  * Creata suite di test dedicata in `tests/liquidazioneIvaDefinitivaOrchestrator.test.js` (11 scenari coperti).
+* **Fase 3 (UI React)**: Previsto il collegamento in `TaxComplianceView.jsx` per esibire il badge di stato definitivo e procedere al consolidamento.
 
 ## 3. Moduli da Sviluppare / Completare
 * **LIPE**: Comunicazioni Periodiche IVA (prospetti ed export XML).

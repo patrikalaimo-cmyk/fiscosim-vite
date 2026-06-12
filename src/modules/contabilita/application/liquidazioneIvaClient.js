@@ -117,3 +117,9 @@ export async function consolidaLiquidazioneIvaDefinitiva({
 
   return { data, error }
 }
+
+export {
+  preparaConsolidamentoLiquidazioneIvaDefinitiva,
+  consolidaLiquidazioneIvaDefinitivaDaPeriodo
+} from './liquidazioneIvaDefinitivaOrchestrator.js'
+

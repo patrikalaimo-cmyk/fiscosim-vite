@@ -5450,3 +5450,80 @@ Si progetta la RPC `public.consolida_periodo_iva_transazionale(...)`:
 - **Prossimo Step Consigliato**:
   - Fase 2B/3: Modifica e integrazione della UI in `TaxComplianceView.jsx` per esibire il badge di stato consolidato definitivo e permettere l'invocazione della procedura di consolidamento.
 
+## LIQUIDAZIONE-IVA-DEFINITIVA-FASE-2B-ORCHESTRAZIONE-APPLICATION
+
+- **Data**: 2026-06-12
+- **File Letti**:
+  - `src/modules/contabilita/domain/iva/calcoloLiquidazioneIvaDefinitiva.js`
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js`
+  - `src/modules/contabilita/data/contabilitaRepo.js`
+  - `tests/calcoloLiquidazioneIvaDefinitiva.test.js`
+  - `tests/liquidazioneIvaDefinitivaRpcClient.test.js`
+  - `tests/liquidazioneIvaProvvisoria.test.js`
+  - `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js`
+  - `tests/liquidazioneIvaAggregator.test.js`
+  - `supabase/migrations/20260612150000_liquidazione_iva_definitiva_fase1.sql`
+  - `supabase/migrations/20260612170000_liquidazione_iva_definitiva_fase2a_rpc.sql`
+- **File Modificati / Creati**:
+  - `src/modules/contabilita/application/liquidazioneIvaDefinitivaOrchestrator.js` (Creato: modulo dedicato per preparare ed eseguire il consolidamento transazionale)
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js` (Modificato: esportate le funzioni dell'orchestratore per mantenere la stabilità del client API contabile)
+  - `tests/liquidazioneIvaDefinitivaOrchestrator.test.js` (Creato: suite di test unitari dell'orchestratore con 11 scenari)
+  - `REPORT/REPORT_CODEX.md` (Modificato: questo report)
+- **Contratto Payload Scelto**:
+  - Un oggetto di coordinamento contenente input originari, righe IVA caricate, i risultati completi del calcolo JS, e `payloadCalcoloRpc` formattato per la stored procedure:
+    ```js
+    {
+      societaId,
+      periodoInizio,
+      periodoFine,
+      tipoPeriodicita,
+      operatoreStudioId,
+      motivo,
+      righeLiquidabili,
+      risultatoCalcolo,
+      payloadCalcoloRpc: {
+        ivaVenditeLorda,
+        ivaSplitEsclusa,
+        ivaDebitoEffettiva,
+        ivaAcquistiDetraibile,
+        ivaAcquistiIndetraibile,
+        ivaReverseDebito,
+        ivaReverseCredito,
+        ivaPerCassaDifferita,
+        ivaPerCassaRilasciata,
+        creditoPeriodoPrecedente,
+        creditoAnnoPrecedente,
+        creditoCompensatoF24,
+        accontoIvaVersato,
+        interessiTrimestrali,
+        debitoPeriodo,
+        debitoDaVersare,
+        creditoPeriodo,
+        creditoDaRiportare,
+        righe: [...] // Snapshot righe con flag inclusione e motivazione esclusione
+      }
+    }
+    ```
+- **Funzioni Applicative Create**:
+  - `preparaConsolidamentoLiquidazioneIvaDefinitiva`: valida gli input minimi, legge le righe dal repository, invoca il calcolo del domain service e mappa lo snapshot delle righe incluse ed escluse.
+  - `consolidaLiquidazioneIvaDefinitivaDaPeriodo`: coordina l'intera catena di chiamate, convertendo gli errori ed invocando la RPC transazionale nel repository.
+- **Separazione Responsabilità**:
+  - *Domain (calcoloLiquidazioneIvaDefinitiva)*: pura logica matematica contabile-fiscale italiana.
+  - *Repository (contabilitaRepo)*: query fisiche sui registri, sulle liquidazioni consolidate, e chiamata RPC SQL.
+  - *Application (liquidazioneIvaDefinitivaOrchestrator)*: coordinamento, validazione formale, mappatura per snapshot.
+  - *UI (TaxComplianceView)*: rendering visivo e trigger futuri.
+- **Test Eseguiti**:
+  - `tests/liquidazioneIvaDefinitivaOrchestrator.test.js` -> **11 / 11 OK**
+  - Suite completa Liquidazione IVA -> **58 / 58 OK**
+  - Regressioni generali (guards) -> **11 / 11 OK**
+  - Totale complessivo -> **69 / 69 test superati**.
+- **Build**:
+  - `npm run build` completato con successo (410 moduli trasformati).
+- **Conferma di Aderenza al Perimetro**:
+  - Nessuna migration applicata, Supabase live non toccato, `.env` intatti, Auth/RLS/policy non toccati. Nessuna UI cablata.
+- **Rischi Residui**:
+  - Nessuno rilevato. La separazione architetturale protegge sia la correttezza del calcolo che l'atomicità dello snapshot.
+- **Prossimo Step Consigliato**:
+  - Fase 3: Integrazione nella UI React (`TaxComplianceView.jsx`) per mostrare badge e storicizzazione e abilitare il consolidamento definitivo per l'operatore.
+
+
