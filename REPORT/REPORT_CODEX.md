@@ -5272,3 +5272,34 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - `node --test tests/liquidazioneIvaAggregator.test.js` (9/9 OK)
 - **Build**: `npm run build` eseguito con successo (408 moduli trasformati, compilazione completata).
 - **Working Tree Finale**: Modificato solo `src/modules/contabilita/views/TaxComplianceView.jsx` e `REPORT/REPORT_CODEX.md`. Nessun commit effettuato.
+
+## LIQUIDAZIONE-IVA-DEFINITIVA-FASE-1-SCHEMA-DOMINIO
+
+- **Audit schema reale**:
+  - Verificato che la tabella canonica è `public.liquidazione_iva` (definita in `20260403160000_liquidazione_iva.sql`).
+  - La tabella `public.liquidazioni_iva_righe` (definita in `20260412125600_liquidazioni_iva_righe_base_bootstrap.sql`) rappresenta lo snapshot delle righe.
+  - La tabella `liquidazioni_iva_societa` utilizzata in `contabilitaRepo.js` è una referenza legacy (probabilmente una tabella o vista creata a mano sul database) e non è definita nelle migrazioni controllate del repository.
+- **Tabella canonica scelta**:
+  - Si utilizza e si estende `public.liquidazione_iva` per evitare doppioni di modello dati.
+- **Migration creata (NON applicata)**:
+  - Creata la migration `supabase/migrations/20260612150000_liquidazione_iva_definitiva_fase1.sql`.
+  - Estende `public.liquidazione_iva` con campi per lo stato (`stato` check `provvisoria`, `definitiva`, `riaperta`), tipo periodo, anno/numero periodo, totali IVA dettagliati, crediti/acconti ed interessi, operatore e tracciamento.
+  - Estende `public.liquidazioni_iva_righe` con riferimenti e metadati per lo snapshot delle righe incluse ed escluse.
+  - Configura indici ed RLS in modo coerente tramite `public.user_has_societa_access(societa_id)`.
+- **Domain service creato**:
+  - Creato `src/modules/contabilita/domain/iva/calcoloLiquidazioneIvaDefinitiva.js`.
+  - Funzione pura `calcoloLiquidazioneIvaDefinitiva(rows, options)` che calcola in modo deterministico imponibili, imposte, split payment, detraibilità, IVA per cassa, reverse charge, crediti precedenti, acconti, ed interessi (1% per i trimestrali ordinari).
+- **Test creati ed eseguiti**:
+  - Creati 16 scenari di test unitari in `tests/calcoloLiquidazioneIvaDefinitiva.test.js`.
+  - Eseguiti i test con esito positivo: `node --test tests/calcoloLiquidazioneIvaDefinitiva.test.js` (16/16 OK).
+  - Eseguiti i test di regressione provvisoria con esito positivo: `node --test tests/liquidazioneIvaProvvisoria.test.js tests/liquidazioneIvaProvvisoriaUiAdapter.test.js tests/liquidazioneIvaAggregator.test.js` (24/24 OK).
+- **Build**: `npm run build` eseguito con successo.
+- **Cosa resta fuori (prossime fasi)**:
+  - Repository definitivo per le query/salvataggi estesi.
+  - Funzione RPC PostgreSQL per il consolidamento atomico transazionale.
+  - Integrazione e sviluppo della UI definitiva in `TaxComplianceView.jsx`.
+  - Storico liquidazioni consolidato e meccanismo di blocco del periodo.
+  - Integrazione LIPE / F24 futura.
+- **Rischi e decisioni da validare**:
+  - La logica di blocco del periodo per `isIvaPeriodLiquidated` deve transitare su `liquidazione_iva` (stato `definitiva`) in sostituzione della tabella legacy `liquidazioni_iva_societa`.
+  - Validare se gli interessi trimestrali devono essere memorizzati separatamente (come fatto in `interessi_trimestrali`) ed esclusi dai crediti futuri.
