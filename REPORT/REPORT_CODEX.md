@@ -5215,3 +5215,34 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - **Riconciliazione Bancaria non toccata**: Confermato.
 - **Ritenute/Scadenzario non toccati**: Confermato.
 - **Working Tree Finale**: Pulito.
+
+
+## FIX-LOGIN-SUPABASE-AUTH-RLS-SOCIETA
+
+- **Causa del problema**: Il modulo di login eseguiva in precedenza una query personalizzata direttamente sulla tabella `public.utenti_studio` confrontando email e password, impostando lo stato utente locale di React ma senza creare alcuna sessione a livello di client SDK Supabase Auth.
+- **Perché le società risultavano vuote**: Con RLS (Row Level Security) attiva sul database remoto, Supabase vedeva il client come utente anonimo (`auth.uid() = null`). Pertanto, qualsiasi query successiva alle società (es. `getSocietaAttive()`) restituiva un array vuoto `[]` malgrado le credenziali inserite fossero corrette.
+- **Evidenza diagnostica**:
+  - `custom login successful` ma `supabase.auth.getSession() -> session exists: false` e `user id: none`.
+  - `supabase.auth.getUser() -> AuthSessionMissingError`.
+  - Le società non venivano visualizzate nel modulo contabilità a causa dell'assenza dell'ID utente autenticato.
+- **Fix applicato**:
+  - Implementata l'autenticazione tramite `sb.auth.signInWithPassword({ email, password })`.
+  - Se il login ha successo, viene estratto l'ID utente dalla sessione e viene cercato il profilo in `public.utenti_studio` filtrando per `auth_user_id = session.user.id`.
+  - Passato ad `App.jsx` l'oggetto utente contenente l'ID FiscoSim, l'email, il ruolo e `auth_user_id`, con `login_origin = 'supabase_auth'`.
+  - Passato il prop `utente={utente}` a `<ModuloContabilita>` in `App.jsx` per consentire il corretto passaggio del contesto.
+  - Preservato il bypass locale per lo sviluppo quando `VITE_DEV_LOCAL_AUTH_BYPASS=1`.
+- **Società recuperate dopo il fix**:
+  - `IMMOBILGECO SRL` (ID: `3416f210-345e-4197-b391-cee4383682da`)
+  - `SIRIA SRL` (ID: `4a728851-be5a-412c-9ce6-ec07b72fcdfa`)
+  - `19novanta srl` (ID: `09172f00-e414-4824-8d11-ce67a7b8f92b`)
+- **Log diagnostici rimossi**: Rimossi tutti i log temporanei `[FISCOSIM_AUTH_DIAG]`, le query di tracciamento diagnostiche su SIRIA e associazioni, e ripristinate le funzioni `getSocietaAttive()` e `getSocietaAttiveBasic()` allo stato originario pulito.
+- **Nessuna modifica a env**: Confermato che `.env.local` non è stato toccato.
+- **Nessuna modifica a Supabase/RLS/policy**: Confermato che non sono state apportate modifiche a tabelle, policy RLS o record di database.
+- **Test eseguiti**:
+  - `node --test tests/ritenutePercipientiCompleto.test.js` (14/14 OK)
+  - `node --test tests/ritenutePagamentoParcella.test.js` (4/4 OK)
+  - `node --test tests/ritenuteScadenzarioService.test.js` (4/4 OK)
+  - Light verification con Puppeteer (`node scratch/run_diagnostics.mjs`): Eseguito con successo (accede, seleziona contabilità e visualizza correttamente le società).
+- **Build**: `npm run build` eseguito con successo (408 moduli trasformati, compilazione completata).
+- **Rischi residui**: Nessuno individuato. Il flusso di autenticazione Supabase Auth nativo opera correttamente in sostituzione della query personalizzata.
+- **Prossimo step consigliato**: Eseguire il commit dei file modificati e procedere con le normali attività di sviluppo.

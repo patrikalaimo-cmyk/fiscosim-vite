@@ -14,3 +14,5 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const sb = createClient(supabaseUrl || 'http://127.0.0.1:54321', supabaseAnonKey || 'missing-key')
+
+

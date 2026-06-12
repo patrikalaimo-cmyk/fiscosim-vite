@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { sb } from './lib/supabase'
 
 // Context
@@ -293,7 +293,12 @@ function App() {
     }
   }, [tab])
 
-  if (!utente) return <Login onLogin={u => { setUtente(u); setTab('dashboard') }} />
+  const handleOnLogin = (u) => {
+    setUtente(u);
+    setTab('dashboard');
+  };
+
+  if (!utente) return <Login onLogin={handleOnLogin} />
 
   const ruolo = utente.ruolo || 'collaboratore'
   const perm = getPermessi(utente)
@@ -499,6 +504,7 @@ function App() {
           {tab === 'contabilita' && (
             <ModuloContabilita
               ruolo={ruolo}
+              utente={utente}
               onHeaderContextChange={setWorkspaceContext}
               onHeaderActionsChange={setWorkspaceActions}
             />

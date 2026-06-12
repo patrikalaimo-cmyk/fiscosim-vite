@@ -23,7 +23,11 @@ function parseTruthyFlag(value) {
 }
 
 export function isLocalAuthDisabled() {
-  return Boolean(import.meta.env.DEV && isLocalHostLike() && parseTruthyFlag(import.meta.env.VITE_DEV_LOCAL_AUTH_BYPASS))
+  const isDev = Boolean(import.meta.env.DEV);
+  const localHostLike = isLocalHostLike();
+  const rawBypass = import.meta.env.VITE_DEV_LOCAL_AUTH_BYPASS;
+  const parsedBypass = parseTruthyFlag(rawBypass);
+  return Boolean(isDev && localHostLike && parsedBypass);
 }
 
 function clearAccessTokenCache() {
