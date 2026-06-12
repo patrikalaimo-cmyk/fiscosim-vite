@@ -4374,11 +4374,11 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - test eseguiti: `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js tests/anagraficaSplitPaymentSave.test.js`
 - build eseguita: `npm run build`
 - rischio residuo: il flusso resta dipendente da template causale coerenti; non ho introdotto nuove regole per FF5/UE/extra UE
-- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, DB, migration, commit, push, rollback o `git add .`
+- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, DB, migration, commit, push, rollback o `git add .`
 
 ## FIX-REALE-A17X-Fornitore-Partitario-Imponibile
 - commit base di partenza: `134a0f8 checkpoint: reverse servizi A17X base`
-- verifica iniziale: il commit precedente non bastava a coprire il caso reale 1000 / 819,67 / 180,33 solo con test/report; il comportamento produttivo � stato corretto ora nel ramo template/partitario
+- verifica iniziale: il commit precedente non bastava a coprire il caso reale 1000 / 819,67 / 180,33 solo con test/report; il comportamento produttivo � stato corretto ora nel ramo template/partitario
 - file produttivi modificati:
   - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`
   - `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`
@@ -4390,7 +4390,7 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
 - build eseguita: `npm run build`
 - rischi residui: il flusso resta dipendente da template causale coerenti e non estende alcun caso FF5 / UE / extra UE
-- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
+- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
 
 ## FIX-A17X-Doppio-Registro-Iva
 - commit base: `b02ea2f fix: reverse A17X fornitore e partitario su imponibile`
@@ -4407,7 +4407,7 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - build eseguita: `npm run build`
 - rischi residui: il comportamento resta vincolato alla policy autofattura/reverse e non estende alcun caso FF5 / UE / extra UE
 - nota: il DB attuale non ha ancora campi registro/protocollo/segno, quindi per ora viene validato il doppio record acquisti/vendite senza persistenza del protocollo 3
-- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
+- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
 
 ## FIX-A17X-Doppio-Registro-Iva-UUID-Fittizio
 - commit base precedente: `05633b3 fix: reverse A17X doppio registro iva`
@@ -4423,9 +4423,9 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
 - build eseguita: `npm run build`
 - conferma PN e partitario non regressi: restano corretti e quadrati
-- conferma `iva-row-1-vendita` non entra pi� nel payload DB: la riga duplicata conserva solo `ui_id` lato frontend e non viene pi� inviata a Supabase come `id`
+- conferma `iva-row-1-vendita` non entra pi� nel payload DB: la riga duplicata conserva solo `ui_id` lato frontend e non viene pi� inviata a Supabase come `id`
 - nota: il DB attuale non ha ancora campi registro/protocollo/segno, quindi il controllo resta sulla doppia riga acquisto/vendita e sulla sanificazione UUID
-- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
+- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
 
 ## FIX-A17X-Registri-Iva-Rimozione-Campi-UI
 - commit base precedente: `5f2511b fix: reverse A17X sanifica uuid righe iva`
@@ -4442,7 +4442,7 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
   - `node --test tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`
 - build eseguita: `npm run build`
 - rischi residui: il comportamento resta vincolato alla policy autofattura/reverse e non estende alcun caso FF5 / UE / extra UE
-- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
+- conferma: nessuna modifica a Import Contabilit�, Riconciliazione, migration, push, rollback o `git add .`
 
 ## CHECKPOINT-FF5-Beni-Estero-Base
 - commit base: `24c54dd fix: reverse A17X pulizia payload registri iva`
@@ -4481,20 +4481,20 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 ## AUDIT-FIX-CEE-Reverse-da-Impostazioni-Causale
 
 - Commit base di riferimento: `b3a30e5 checkpoint: FF5 beni estero base`.
-- Esito audit: il motore di Registrazione Manuale legge gi� il comportamento CEE/reverse/autofattura dalle impostazioni causale, non dal codice `FF5`.
+- Esito audit: il motore di Registrazione Manuale legge gi� il comportamento CEE/reverse/autofattura dalle impostazioni causale, non dal codice `FF5`.
 - Campi causale letti dal motore: `tipo_causale`, `operazione_partite` / `gestione_partite`, `tipo_documento`, `codice_registro_iva` / `registro_iva`, `segno_registro_iva`, `registro_iva_cee`, `protocollo_iva_cee`, `segno_iva_registro_cee`, `conto_iva_split_payment`, `integrazione_documento`, `causale_giro_iva_cassa`, `reverse_charge`, `split_payment`.
-- FF5 � presente nel catalogo legacy UI in `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, ma il comportamento contabile non dipende da quel codice: viene derivato da `buildCausaleContabilePolicy`, `buildCausaleIvaPolicy` e dalla normalizzazione causale.
+- FF5 � presente nel catalogo legacy UI in `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, ma il comportamento contabile non dipende da quel codice: viene derivato da `buildCausaleContabilePolicy`, `buildCausaleIvaPolicy` e dalla normalizzazione causale.
 - Il test `tests/ff5BeniEsteroBase.test.js` usa una fixture semplificata per il caso FF5, ma la logica produttiva resta parametrica e non hardcoded.
-- Default B0IW: non risulta introdotto o necessario in produzione nel catalogo legacy; nel test � usato come causale IVA fixture per verificare la pipeline, non come hardcode del motore.
+- Default B0IW: non risulta introdotto o necessario in produzione nel catalogo legacy; nel test � usato come causale IVA fixture per verificare la pipeline, non come hardcode del motore.
 - Esito finale: nessuna patch produttiva necessaria su `registrazioneCausaleConfig.js`; la modifica pendente nel worktree non aggiunge comportamento utile per FF5/CEE e resta fuori dal commit.
 - File analizzati: `src/modules/contabilita/domain/registrazione/registrazioneCausaleConfig.js`, `src/modules/contabilita/domain/registrazione/resolveRegistrazioneCausaleBehavior.js`, `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`, `src/modules/contabilita/domain/causali/buildCausaleIvaPolicy.js`, `src/modules/contabilita/domain/registrazione/normalizeRegistrazioneCausaleDetail.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaRows.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneIvaDraft.js`, `src/modules/contabilita/application/persistPrimaNotaDraft.js`, `tests/a17xAutofatturaBase.test.js`, `tests/ff5BeniEsteroBase.test.js`.
-- Cosa non � stato implementato: nessun hardcode su `FF5`/`A17X`, nessun TD17/TD18/TD19 avanzato, nessuna indetraibilit�, nessun cambiamento Import/Riconciliazione.
+- Cosa non � stato implementato: nessun hardcode su `FF5`/`A17X`, nessun TD17/TD18/TD19 avanzato, nessuna indetraibilit�, nessun cambiamento Import/Riconciliazione.
 - Conferme: nessun commit, nessun push, nessun rollback, nessun `git add .`.
 ## FIX-CEE-Fornitore-Partitario-Imponibile-da-Impostazioni
 
 - Commit base: `b3a30e5 checkpoint: FF5 beni estero base`.
 - Bug manuale rilevato: su causale CEE configurata da UI come `Doc. IVA Acq. CEE` / `Acq beni CEE`, il costo e le righe IVA erano corretti ma la riga fornitore e il partitario restavano sul totale documento invece che sull'imponibile.
-- Causa tecnica: il motore gi� gestiva il ramo CEE, ma il calcolo dell'importo del soggetto e del partitario riusava solo il ramo `autofattura`; inoltre la riga IVA vendite CEE veniva forzata dal posting direction invece di rispettare il lato esplicito del template.
+- Causa tecnica: il motore gi� gestiva il ramo CEE, ma il calcolo dell'importo del soggetto e del partitario riusava solo il ramo `autofattura`; inoltre la riga IVA vendite CEE veniva forzata dal posting direction invece di rispettare il lato esplicito del template.
 - File modificati: `src/modules/contabilita/application/registrazioneOperations/buildRegistrazioneRowsFromTemplate.js`, `src/modules/contabilita/application/registrazioneOperations/buildRegistrazionePartitarioDraft.js`, `src/modules/contabilita/application/registrazioneOperations/shouldUseTaxableAmountForCounterparty.js`, `tests/ff5BeniEsteroBase.test.js`, `REPORT/REPORT_CODEX.md`.
 - Impostazioni causale usate come trigger: `tipo_causale`, `operazione_partite`, `tipo_documento`, `registro_iva`, `registro_iva_cee`, `protocollo_iva_cee`, `segno_iva_registro_cee`.
 - Conferma hardcode: nessun `if codice === 'FF5'` o `if codice === 'A17X'` nel production path; il comportamento deriva da policy e impostazioni causale.
@@ -4502,7 +4502,7 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Conferma risultato: fornitore e partitario ora si aprono sull'imponibile (`1.229,51` nel caso test), non sul totale lordo (`1.500,00`).
 - Test eseguiti: `node --test tests/ff5BeniEsteroBase.test.js tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`.
 - Build: `npm run build`.
-- Rischi residui: non sono stati introdotti flussi nuovi per TD17/TD18/TD19, indetraibilit�, Import o Riconciliazione.
+- Rischi residui: non sono stati introdotti flussi nuovi per TD17/TD18/TD19, indetraibilit�, Import o Riconciliazione.
 - Conferme operative: nessuna migration, nessun push, nessun rollback, nessun `git add .`.
 ## FIX-CEE-Doppio-Registro-Iva-da-Impostazioni
 
@@ -4517,7 +4517,7 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - Test eseguiti: `node --test tests/ff5BeniEsteroBase.test.js tests/a17xAutofatturaBase.test.js tests/splitPaymentDocumentoAttivo.test.js tests/liquidazioneIvaSplitPayment.test.js`.
 - Build: `npm run build`.
 - Rischi residui: registro/protocollo/segno CEE non risultano ancora persistiti come colonne dedicate nel database; la liquidazione usa il tipo riga e l'importo, non quei metadati.
-- Conferme operative: nessuna Import Contabilit�, nessuna Riconciliazione, nessuna migration, nessun push, nessun rollback, nessun `git add .`.
+- Conferme operative: nessuna Import Contabilit�, nessuna Riconciliazione, nessuna migration, nessun push, nessun rollback, nessun `git add .`.
 ## AUDIT-POST-MOTORE-FISCALE-MANUALE
 
 - Commit base di riferimento: `27a410d fix: CEE doppio registro iva da impostazioni`.
@@ -4902,7 +4902,7 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 
 - La riconciliazione non deve generare IVA ordinaria da un movimento banca: deve attivare solo eventi fiscali collegati a partite esistenti, soprattutto rilascio IVA per cassa.
 - Oggi il rilascio e incorporato in `persistPrimaNotaDraft` e interroga direttamente partitario/registri; non e disponibile come servizio applicativo idempotente condiviso.
-- Pagamenti parziali, pi� partite, retry e doppia riconciliazione richiedono idempotenza su `origin_registro_iva_id` + evento pagamento, oggi non formalizzata da un vincolo univoco.
+- Pagamenti parziali, pi� partite, retry e doppia riconciliazione richiedono idempotenza su `origin_registro_iva_id` + evento pagamento, oggi non formalizzata da un vincolo univoco.
 - La riconciliazione potrebbe duplicare giroconto e righe `rilascio` se invoca percorsi diversi o ripete il commit.
 
 ### 10. Proposta di architettura modulare
@@ -5246,3 +5246,29 @@ Frase netta: **la UI renderizza correttamente `effectiveRows`, ma `resolvedRows`
 - **Build**: `npm run build` eseguito con successo (408 moduli trasformati, compilazione completata).
 - **Rischi residui**: Nessuno individuato. Il flusso di autenticazione Supabase Auth nativo opera correttamente in sostituzione della query personalizzata.
 - **Prossimo step consigliato**: Eseguire il commit dei file modificati e procedere con le normali attività di sviluppo.
+
+## FIX-ENCODING-UI-LIQUIDAZIONE-IVA
+
+- **Problema visuale rilevato**: 
+  - Il titolo del modulo mostrava caratteri corrotti tipo `ðŸ"° Liquidazioni IVA` (Mojibake derivante da una decodifica scorretta UTF-8 / Windows-1252 delle emoji).
+  - La tabella storica mostrava `â€”` al posto del trattino/simbolo vuoto per indicare l'assenza di debito o credito IVA.
+  - Altre emoji o caratteri speciali corrotti nel modulo Adempimenti (es. `ðŸ“Š`, `ðŸ“¥`, `ðŸ“¤`, `â ³`, `âš ï¸ `).
+  - La tabella della dichiarazione annuale all'interno di `generaDichiarazione` presentava cornici in caratteri semigrafici corrotti.
+- **File modificati**:
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`
+- **Descrizione delle modifiche apportate (solo UI/testo)**:
+  - Sostituite le emoji corrotte con testo pulito per i titoli/sezioni (es. da `ðŸ“Š Dichiarazione IVA Annuale` a `Dichiarazione IVA Annuale`).
+  - Sostituite le emoji corrotte con icone sicure/standard all'interno dei pulsanti e delle card (es. `⏳`, `📥`, `📤`, `💰`, `📋`, `⚠️`, `💡`).
+  - Sostituite le occorrenze di `â€”` (rappresentate nel file come la sequenza di byte surrogati `\u00e2\u20ac\u201d`) con il trattino standard `—` (em-dash).
+  - Convertite le cornici box-drawing corrotte (es. `â•”`, `â• `, `â•—`, `â•‘`) della dichiarazione annuale testuale in una griglia ASCII sicura (`+`, `-`, `|`).
+  - Corretti altri simboli rotti come `Ã—` e `âœ•` in `×` (simbolo per la chiusura dei modal ed eliminazione).
+- **Nessun impatto logico**:
+  - Confermato che il motore della liquidazione IVA (`buildLiquidazioneIvaProvvisoria`), i calcoli IVA, i registri e l'aggregatore NON sono stati toccati.
+  - Nessuna modifica apportata a query di database, client Supabase, auth, RLS, policy o migration.
+  - Nessuna modifica alle configurazioni o file `.env`, `.env.local`, `.env.example`.
+- **Test eseguiti**:
+  - `node --test tests/liquidazioneIvaProvvisoria.test.js` (10/10 OK)
+  - `node --test tests/liquidazioneIvaProvvisoriaUiAdapter.test.js` (5/5 OK)
+  - `node --test tests/liquidazioneIvaAggregator.test.js` (9/9 OK)
+- **Build**: `npm run build` eseguito con successo (408 moduli trasformati, compilazione completata).
+- **Working Tree Finale**: Modificato solo `src/modules/contabilita/views/TaxComplianceView.jsx` e `REPORT/REPORT_CODEX.md`. Nessun commit effettuato.

@@ -29,6 +29,8 @@ import {
 } from '../application/liquidazioneIvaClient.js'
 import { getLiquidazioneIvaProvvisoriaProspetto } from '../application/iva/liquidazioneIvaProvvisoriaUiAdapter.js'
 
+const EMPTY_CELL = '\u2014'
+
 export default function TaxComplianceView({
   contTab,
   societaAttiva,
@@ -210,13 +212,13 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
   };
 
   const fmt = fmtNumber;
-  const periodoLabel=l=>l.tipo_periodo==='trimestrale'?`${l.periodo}Â° Trim ${l.anno}`:`${l.periodo}/${l.anno}`;
+  const periodoLabel=l=>l.tipo_periodo==='trimestrale'?`${l.periodo}° Trim ${l.anno}`:`${l.periodo}/${l.anno}`;
 
   return(
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸ’° Liquidazioni IVA</div>
+          <div style={{fontSize:'1.1rem',fontWeight:700}}>Liquidazioni IVA</div>
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Calcolo periodico IVA a debito/credito</div>
         </div>
         <button className="btn" onClick={()=>setModalNuova(true)}>+ Nuova Liquidazione</button>
@@ -227,7 +229,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
         <div className="card-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: '0.75rem' }}>
           <div className="card-title-wrap">
             <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>📊 Liquidazione IVA provvisoria</span>
+              <span>Liquidazione IVA provvisoria</span>
               <span className="bdg bdg-warn" style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(200, 164, 94, 0.2)', color: 'var(--gold, #c8a45e)' }}>
                 Prospetto non definitivo
               </span>
@@ -293,7 +295,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
               disabled={loadingProvvisoria}
               style={{ height: '36px' }}
             >
-              🔄 Aggiorna anteprima
+              Aggiorna anteprima
             </button>
           </div>
         </div>
@@ -375,7 +377,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
             {provvisoriaData.warnings && provvisoriaData.warnings.length > 0 && (
               <div style={{ padding: '1rem', borderTop: '1px solid var(--bd)', background: 'rgba(200, 164, 94, 0.05)' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <span>⚠️ Informazioni e Warning:</span>
+                  <span>Informazioni e warning:</span>
                 </div>
                 <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--mu)' }}>
                   {provvisoriaData.warnings.map((w, idx) => (
@@ -392,7 +394,6 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
         <div className="loading">Caricamento...</div>
       ):liquidazioni.length===0?(
         <div className="card" style={{padding:'2rem',textAlign:'center'}}>
-          <div style={{fontSize:'2rem',marginBottom:'.5rem'}}>ðŸ“Š</div>
           <div style={{color:'var(--mu)'}}>Nessuna liquidazione IVA. Clicca "Nuova Liquidazione" per iniziare.</div>
         </div>
       ):(
@@ -415,8 +416,8 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                     <td><strong>{periodoLabel(l)}</strong></td>
                     <td style={{textAlign:'right'}}>{fmt(l.iva_vendite)}</td>
                     <td style={{textAlign:'right'}}>{fmt(l.iva_acquisti)}</td>
-                    <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):'â€”'}</td>
-                    <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):'â€”'}</td>
+                    <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):EMPTY_CELL}</td>
+                    <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):EMPTY_CELL}</td>
                     <td><span className={'bdg '+getLiquidazioneBadgeClass(l.stato)}>{l.stato}</span></td>
                   </tr>
                 ))}
@@ -432,9 +433,9 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:550}}>
             <div className="modal-hdr">
               <div className="modal-drag"/>
-              <div className="modal-title">ðŸ’° Nuova Liquidazione IVA</div>
+              <div className="modal-title">Nuova Liquidazione IVA</div>
               <div className="modal-sub">{societa?.denominazione}</div>
-              <button className="modal-close" onClick={()=>setModalNuova(false)}>âœ•</button>
+              <button className="modal-close" onClick={()=>setModalNuova(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -469,7 +470,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                 </div>
                 <div className="fg">
                   <label>&nbsp;</label>
-                  <button className="btn-sec" onClick={calcolaDaRegistri} style={{width:'100%'}}>ðŸ”„ Calcola da Registri IVA</button>
+                  <button className="btn-sec" onClick={calcolaDaRegistri} style={{width:'100%'}}>Calcola da Registri IVA</button>
                 </div>
                 <div className="fg">
                   <label>IVA Vendite (debito)</label>
@@ -508,7 +509,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
             </div>
             <div className="modal-foot">
               <button className="btn-sec" onClick={()=>setModalNuova(false)}>Annulla</button>
-              <button className="btn" onClick={salvaLiquidazione}>ðŸ’¾ Salva Liquidazione</button>
+              <button className="btn" onClick={salvaLiquidazione}>Salva Liquidazione</button>
             </div>
           </div>
         </div>
@@ -598,7 +599,7 @@ function LIPEView({societa}){
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸ“¤ LIPE - Comunicazione Liquidazioni Periodiche</div>
+          <div style={{fontSize:'1.1rem',fontWeight:700}}>LIPE - Comunicazione Liquidazioni Periodiche</div>
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Genera file XML per l'invio telematico all'Agenzia delle Entrate</div>
         </div>
       </div>
@@ -614,14 +615,14 @@ function LIPEView({societa}){
           <div className="fg" style={{minWidth:150}}>
             <label>Trimestre</label>
             <select value={selectedTrimestre} onChange={e=>setSelectedTrimestre(parseInt(e.target.value))}>
-              <option value={1}>1Â° Trimestre (Gen-Mar)</option>
-              <option value={2}>2Â° Trimestre (Apr-Giu)</option>
-              <option value={3}>3Â° Trimestre (Lug-Set)</option>
-              <option value={4}>4Â° Trimestre (Ott-Dic)</option>
+              <option value={1}>1° Trimestre (Gen-Mar)</option>
+              <option value={2}>2° Trimestre (Apr-Giu)</option>
+              <option value={3}>3° Trimestre (Lug-Set)</option>
+              <option value={4}>4° Trimestre (Ott-Dic)</option>
             </select>
           </div>
           <button className="btn" onClick={generaFileLIPE} disabled={generando}>
-            {generando?'â³ Generazione...':'ðŸ“¥ Genera File XML'}
+            {generando?'⏳ Generazione...':'📥 Genera File XML'}
           </button>
         </div>
       </div>
@@ -631,11 +632,11 @@ function LIPEView({societa}){
         <div className="loading">Caricamento...</div>
       ):liquidazioni.length===0?(
         <div className="alert alert-warn">
-          âš ï¸ Nessuna liquidazione IVA trimestrale disponibile. Vai su "Liquidazioni IVA" per creare le liquidazioni periodiche.
+          ⚠️ Nessuna liquidazione IVA trimestrale disponibile. Vai su "Liquidazioni IVA" per creare le liquidazioni periodiche.
         </div>
       ):(
         <div className="card">
-          <div style={{fontWeight:600,marginBottom:'.75rem'}}>ðŸ“Š Liquidazioni disponibili per LIPE</div>
+          <div style={{fontWeight:600,marginBottom:'.75rem'}}>Liquidazioni disponibili per LIPE</div>
           <div className="tbl-wrap">
             <table className="tbl">
               <thead>
@@ -649,9 +650,9 @@ function LIPEView({societa}){
               <tbody>
                 {liquidazioni.map(l=>(
                   <tr key={l.id} style={{background:l.anno===selectedAnno&&l.periodo===selectedTrimestre?'rgba(200,164,94,.1)':''}}>
-                    <td><strong>{l.periodo}Â° Trim {l.anno}</strong></td>
-                    <td style={{textAlign:'right',color:'var(--rd)'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):'â€”'}</td>
-                    <td style={{textAlign:'right',color:'var(--gr)'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):'â€”'}</td>
+                    <td><strong>{l.periodo}° Trim {l.anno}</strong></td>
+                    <td style={{textAlign:'right',color:'var(--rd)'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):EMPTY_CELL}</td>
+                    <td style={{textAlign:'right',color:'var(--gr)'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):EMPTY_CELL}</td>
                     <td><span className={'bdg '+getLipeBadgeClass(l.stato)}>{l.stato}</span></td>
                   </tr>
                 ))}
@@ -662,7 +663,7 @@ function LIPEView({societa}){
       )}
 
       <div className="alert alert-info" style={{marginTop:'1rem'}}>
-        ðŸ’¡ Il file XML generato puÃ² essere caricato sul portale Entratel o Fisconline per l'invio telematico. Scadenze: entro l'ultimo giorno del secondo mese successivo al trimestre.
+        💡 Il file XML generato può essere caricato sul portale Entratel o Fisconline per l'invio telematico. Scadenze: entro l'ultimo giorno del secondo mese successivo al trimestre.
       </div>
     </div>
   );
@@ -746,7 +747,7 @@ function CorrispettiviView({societa}){
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸ§¾ Corrispettivi Giornalieri</div>
+          <div style={{fontSize:'1.1rem',fontWeight:700}}>Corrispettivi Giornalieri</div>
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Registrazione incassi giornalieri da registratore di cassa</div>
         </div>
         <button className="btn" onClick={()=>setModalNuovo(true)}>+ Nuovo Corrispettivo</button>
@@ -780,7 +781,7 @@ function CorrispettiviView({societa}){
         <div className="loading">Caricamento...</div>
       ):corrispettivi.length===0?(
         <div className="card" style={{padding:'2rem',textAlign:'center'}}>
-          <div style={{fontSize:'2rem',marginBottom:'.5rem'}}>ðŸ“‹</div>
+          <div style={{fontSize:'2rem',marginBottom:'.5rem'}}>📋</div>
           <div style={{color:'var(--mu)'}}>Nessun corrispettivo per {mesi[meseSel]} {annoSel}</div>
         </div>
       ):(
@@ -822,9 +823,9 @@ function CorrispettiviView({societa}){
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:500}}>
             <div className="modal-hdr">
               <div className="modal-drag"/>
-              <div className="modal-title">ðŸ§¾ Nuovo Corrispettivo</div>
+              <div className="modal-title">Nuovo Corrispettivo</div>
               <div className="modal-sub">{societa?.denominazione}</div>
-              <button className="modal-close" onClick={()=>setModalNuovo(false)}>âœ•</button>
+              <button className="modal-close" onClick={()=>setModalNuovo(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -865,7 +866,7 @@ function CorrispettiviView({societa}){
             </div>
             <div className="modal-foot">
               <button className="btn-sec" onClick={()=>setModalNuovo(false)}>Annulla</button>
-              <button className="btn" onClick={salvaCorrispettivo}>ðŸ’¾ Salva</button>
+              <button className="btn" onClick={salvaCorrispettivo}>💾 Salva</button>
             </div>
           </div>
         </div>
@@ -1015,7 +1016,7 @@ function Modello770View({societa}){
                         <div style={{fontWeight:600}}>{row.percipiente}</div>
                         <div style={{fontSize:'.7rem',color:'var(--mu)'}}>{row.movimenti.length} pagamenti collegati</div>
                       </td>
-                      <td style={{fontFamily:'monospace'}}>{row.codiceFiscale || '—'}</td>
+                      <td style={{fontFamily:'monospace'}}>{row.codiceFiscale || EMPTY_CELL}</td>
                       <td>{row.causaleReddituale ? `${row.causaleReddituale} - ${row.causaleLabel}` : 'Da definire'}</td>
                       <td style={{textAlign:'right'}}>{fmtNumber(row.baseCompensi || 0)}</td>
                       <td style={{textAlign:'right'}}>{fmtNumber(row.ritenuteMaturate || 0)}</td>
@@ -1170,7 +1171,7 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸŒ Intrastat</div>
+          <div style={{fontSize:'1.1rem',fontWeight:700}}>Intrastat</div>
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Operazioni intracomunitarie cessioni/acquisti</div>
         </div>
         <button className="btn" onClick={()=>setModalNuova(true)}>+ Nuova Operazione</button>
@@ -1180,8 +1181,8 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
       <div className="card" style={{marginBottom:'1rem'}}>
         <div style={{display:'flex',gap:'1rem',alignItems:'flex-end',flexWrap:'wrap'}}>
           <div style={{display:'flex',gap:'.5rem'}}>
-            <button className={'pill '+(tipoSel==='cessioni'?'active':'')} onClick={()=>setTipoSel('cessioni')}>ðŸ“¤ Cessioni (Vendite)</button>
-            <button className={'pill '+(tipoSel==='acquisti'?'active':'')} onClick={()=>setTipoSel('acquisti')}>ðŸ“¥ Acquisti</button>
+            <button className={'pill '+(tipoSel==='cessioni'?'active':'')} onClick={()=>setTipoSel('cessioni')}>📤 Cessioni (Vendite)</button>
+            <button className={'pill '+(tipoSel==='acquisti'?'active':'')} onClick={()=>setTipoSel('acquisti')}>📥 Acquisti</button>
           </div>
           <div className="fg" style={{minWidth:100}}>
             <label>Mese</label>
@@ -1195,7 +1196,7 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
               {[2024,2025,2026].map(a=><option key={a} value={a}>{a}</option>)}
             </select>
           </div>
-          <button className="btn-sec" onClick={generaFileIntrastat} disabled={operazioni.length===0}>ðŸ“¥ Esporta File</button>
+          <button className="btn-sec" onClick={generaFileIntrastat} disabled={operazioni.length===0}>📥 Esporta File</button>
           <div style={{marginLeft:'auto',textAlign:'right'}}>
             <div style={{fontSize:'.7rem',color:'var(--mu)'}}>Totale periodo</div>
             <div style={{fontSize:'1.1rem',fontWeight:700,color:'var(--gold)'}}>{fmt(totalePeriodo)}</div>
@@ -1208,7 +1209,6 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
         <div className="loading">Caricamento...</div>
       ):operazioni.length===0?(
         <div className="card" style={{padding:'2rem',textAlign:'center'}}>
-          <div style={{fontSize:'2rem',marginBottom:'.5rem'}}>ðŸŒ</div>
           <div style={{color:'var(--mu)'}}>Nessuna operazione {tipoSel} per {mesi[periodoSel.mese]} {periodoSel.anno}</div>
         </div>
       ):(
@@ -1230,10 +1230,10 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
                   <tr key={o.id}>
                     <td>{new Date(o.data).toLocaleDateString('it-IT')}</td>
                     <td><strong>{o.paese_ue}</strong></td>
-                    <td style={{fontFamily:'monospace',fontSize:'.75rem'}}>{o.partita_iva_ue||'â€”'}</td>
+                    <td style={{fontFamily:'monospace',fontSize:'.75rem'}}>{o.partita_iva_ue||EMPTY_CELL}</td>
                     <td style={{textAlign:'right',fontWeight:600}}>{fmt(o.valore)}</td>
                     <td>{o.natura_transazione}</td>
-                    <td>{o.nomenclatura||'â€”'}</td>
+                    <td>{o.nomenclatura||EMPTY_CELL}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1248,9 +1248,9 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:600}}>
             <div className="modal-hdr">
               <div className="modal-drag"/>
-              <div className="modal-title">ðŸŒ Nuova Operazione Intrastat</div>
+              <div className="modal-title">Nuova Operazione Intrastat</div>
               <div className="modal-sub">{tipoSel==='cessioni'?'Cessione (vendita)':'Acquisto'} intracomunitario</div>
-              <button className="modal-close" onClick={()=>setModalNuova(false)}>âœ•</button>
+              <button className="modal-close" onClick={()=>setModalNuova(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -1313,7 +1313,7 @@ VALORE TOTALE: EUR ${totale.toFixed(2)}
             </div>
             <div className="modal-foot">
               <button className="btn-sec" onClick={()=>setModalNuova(false)}>Annulla</button>
-              <button className="btn" onClick={salvaOperazione}>ðŸ’¾ Salva</button>
+              <button className="btn" onClick={salvaOperazione}>💾 Salva</button>
             </div>
           </div>
         </div>
@@ -1392,42 +1392,42 @@ function IvaAnnualeView({societa,scritture,causaliIva}){
     setGenerando(true);
     
     const contenuto=`
-â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-â•‘                    DICHIARAZIONE IVA ANNUALE ${annoSel}                    â•‘
-â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£
-â•‘ CONTRIBUENTE                                                               â•‘
-â•‘ Denominazione: ${(societa?.denominazione||'').padEnd(55)}â•‘
-â•‘ P.IVA: ${(societa?.partita_iva||'').padEnd(63)}â•‘
-â•‘ C.F.: ${(societa?.codice_fiscale||'').padEnd(64)}â•‘
-â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£
-â•‘ QUADRO VE - OPERAZIONI ATTIVE                                              â•‘
-â• â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•£
-â•‘ VE50 - Totale imponibile operazioni attive     â‚¬  ${fmt(datiIva.operazioni_attive).padStart(18)}  â•‘
-â•‘ VE26 - Totale IVA operazioni attive            â‚¬  ${fmt(datiIva.iva_esigibile).padStart(18)}  â•‘
-â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£
-â•‘ QUADRO VF - OPERAZIONI PASSIVE                                             â•‘
-â• â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•£
-â•‘ VF27 - Totale imponibile operazioni passive    â‚¬  ${fmt(datiIva.operazioni_passive).padStart(18)}  â•‘
-â•‘ VF27 - Totale IVA detraibile                   â‚¬  ${fmt(datiIva.iva_detratta).padStart(18)}  â•‘
-â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£
-â•‘ QUADRO VL - LIQUIDAZIONE ANNUALE                                           â•‘
-â• â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•£
-â•‘ VL1  - IVA a debito (VE26)                     â‚¬  ${fmt(datiIva.iva_esigibile).padStart(18)}  â•‘
-â•‘ VL2  - IVA detraibile (VF27)                   â‚¬  ${fmt(datiIva.iva_detratta).padStart(18)}  â•‘
-â•‘ VL3  - Differenza (VL1 - VL2)                  â‚¬  ${fmt(datiIva.iva_esigibile-datiIva.iva_detratta).padStart(18)}  â•‘
-â•‘ VL30 - Credito anno precedente                 â‚¬  ${fmt(datiIva.credito_anno_prec).padStart(18)}  â•‘
-â•‘ VL32 - IVA versata (acconti + liquidazioni)    â‚¬  ${fmt(datiIva.acconti_versati).padStart(18)}  â•‘
-â• â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•£
-â•‘ ${datiIva.totale_dovuto>0?'VL38 - IVA DA VERSARE':'VL33 - CREDITO IVA'}                          â‚¬  ${fmt(datiIva.totale_dovuto>0?datiIva.totale_dovuto:datiIva.credito_risultante).padStart(18)}  â•‘
-â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
++-----------------------------------------------------------------------------+
+|                    DICHIARAZIONE IVA ANNUALE ${annoSel}                    |
++-----------------------------------------------------------------------------+
+| CONTRIBUENTE                                                                |
+| Denominazione: ${(societa?.denominazione||'').padEnd(55)}|
+| P.IVA: ${(societa?.partita_iva||'').padEnd(63)}|
+| C.F.: ${(societa?.codice_fiscale||'').padEnd(64)}|
++-----------------------------------------------------------------------------+
+| QUADRO VE - OPERAZIONI ATTIVE                                               |
++-----------------------------------------------------------------------------+
+| VE50 - Totale imponibile operazioni attive     €  ${fmt(datiIva.operazioni_attive).padStart(18)}  |
+| VE26 - Totale IVA operazioni attive            €  ${fmt(datiIva.iva_esigibile).padStart(18)}  |
++-----------------------------------------------------------------------------+
+| QUADRO VF - OPERAZIONI PASSIVE                                              |
++-----------------------------------------------------------------------------+
+| VF27 - Totale imponibile operazioni passive    €  ${fmt(datiIva.operazioni_passive).padStart(18)}  |
+| VF27 - Totale IVA detraibile                   €  ${fmt(datiIva.iva_detratta).padStart(18)}  |
++-----------------------------------------------------------------------------+
+| QUADRO VL - LIQUIDAZIONE ANNUALE                                            |
++-----------------------------------------------------------------------------+
+| VL1  - IVA a debito (VE26)                     €  ${fmt(datiIva.iva_esigibile).padStart(18)}  |
+| VL2  - IVA detraibile (VF27)                   €  ${fmt(datiIva.iva_detratta).padStart(18)}  |
+| VL3  - Differenza (VL1 - VL2)                  €  ${fmt(datiIva.iva_esigibile-datiIva.iva_detratta).padStart(18)}  |
+| VL30 - Credito anno precedente                 €  ${fmt(datiIva.credito_anno_prec).padStart(18)}  |
+| VL32 - IVA versata (acconti + liquidazioni)    €  ${fmt(datiIva.acconti_versati).padStart(18)}  |
++-----------------------------------------------------------------------------+
+| ${datiIva.totale_dovuto>0?'VL38 - IVA DA VERSARE':'VL33 - CREDITO IVA'}                          €  ${fmt(datiIva.totale_dovuto>0?datiIva.totale_dovuto:datiIva.credito_risultante).padStart(18)}  |
++-----------------------------------------------------------------------------+
 
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+=============================================================================
                     DETTAGLIO LIQUIDAZIONI PERIODICHE ${annoSel}
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+=============================================================================
 Periodo      IVA Vendite    IVA Acquisti   IVA Dovuta      Credito
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-${liquidazioni.length>0?liquidazioni.map(l=>`${(l.tipo_periodo==='trimestrale'?`${l.periodo}Â° Trim`:l.periodo.toString().padStart(2,'0')+'/'+l.anno).padEnd(12)} ${fmt(l.iva_vendite).padStart(14)} ${fmt(l.iva_acquisti).padStart(14)} ${fmt(l.iva_dovuta).padStart(14)} ${fmt(l.credito_da_riportare).padStart(14)}`).join('\n'):'Nessuna liquidazione periodica registrata'}
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-----------------------------------------------------------------------------
+${liquidazioni.length>0?liquidazioni.map(l=>`${(l.tipo_periodo==='trimestrale'?`${l.periodo}° Trim`:l.periodo.toString().padStart(2,'0')+'/'+l.anno).padEnd(12)} ${fmt(l.iva_vendite).padStart(14)} ${fmt(l.iva_acquisti).padStart(14)} ${fmt(l.iva_dovuta).padStart(14)} ${fmt(l.credito_da_riportare).padStart(14)}`).join('\n'):'Nessuna liquidazione periodica registrata'}
+-----------------------------------------------------------------------------
 TOTALE       ${fmt(datiIva.iva_esigibile).padStart(14)} ${fmt(datiIva.iva_detratta).padStart(14)} ${fmt(datiIva.iva_dovuta).padStart(14)} ${fmt(datiIva.credito_risultante).padStart(14)}
 
 Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new Date().toLocaleTimeString('it-IT')}
@@ -1448,7 +1448,7 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>ðŸ“Š Dichiarazione IVA Annuale</div>
+          <div style={{fontSize:'1.1rem',fontWeight:700}}>Dichiarazione IVA Annuale</div>
           <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Riepilogo e generazione dichiarazione IVA</div>
         </div>
         <div style={{display:'flex',gap:'.5rem',alignItems:'center'}}>
@@ -1456,7 +1456,7 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
             {[2023,2024,2025].map(a=><option key={a} value={a}>{a}</option>)}
           </select>
           <button className="btn" onClick={generaDichiarazione} disabled={generando}>
-            {generando?'â³...':'ðŸ“¥ Genera Report'}
+            {generando?'⏳...':'📥 Genera Report'}
           </button>
         </div>
       </div>
@@ -1468,22 +1468,22 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
           {/* Riepilogo */}
           <div className="stats-grid" style={{marginBottom:'1rem'}}>
             <div className="stat-card">
-              <div className="stat-ico">ðŸ“¤</div>
+              <div className="stat-ico">📤</div>
               <div className="stat-val">{fmt(datiIva.operazioni_attive)}</div>
               <div className="stat-lbl">Operazioni attive</div>
             </div>
             <div className="stat-card">
-              <div className="stat-ico">ðŸ“¥</div>
+              <div className="stat-ico">📥</div>
               <div className="stat-val">{fmt(datiIva.operazioni_passive)}</div>
               <div className="stat-lbl">Operazioni passive</div>
             </div>
             <div className="stat-card">
-              <div className="stat-ico">ðŸ’°</div>
+              <div className="stat-ico">💰</div>
               <div className="stat-val" style={{color:'var(--rd)'}}>{fmt(datiIva.iva_esigibile)}</div>
               <div className="stat-lbl">IVA esigibile</div>
             </div>
             <div className="stat-card">
-              <div className="stat-ico">ðŸ’¸</div>
+              <div className="stat-ico" aria-hidden="true">CR</div>
               <div className="stat-val" style={{color:'var(--gr)'}}>{fmt(datiIva.iva_detratta)}</div>
               <div className="stat-lbl">IVA detratta</div>
             </div>
@@ -1491,7 +1491,7 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
 
           {/* Quadro riepilogativo */}
           <div className="card" style={{marginBottom:'1rem'}}>
-            <div style={{fontWeight:600,marginBottom:'1rem',borderBottom:'1px solid var(--bd)',paddingBottom:'.5rem'}}>ðŸ“‹ Quadro Riepilogativo {annoSel}</div>
+            <div style={{fontWeight:600,marginBottom:'1rem',borderBottom:'1px solid var(--bd)',paddingBottom:'.5rem'}}>Quadro Riepilogativo {annoSel}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'.5rem'}}>
               <span>Totale IVA a debito (operazioni attive)</span>
               <span style={{textAlign:'right',fontWeight:600}}>{fmt(datiIva.iva_esigibile)}</span>
@@ -1523,10 +1523,10 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
 
           {/* Dettaglio liquidazioni */}
           <div className="card">
-            <div style={{fontWeight:600,marginBottom:'.75rem'}}>ðŸ“… Liquidazioni Periodiche {annoSel}</div>
+            <div style={{fontWeight:600,marginBottom:'.75rem'}}>Liquidazioni Periodiche {annoSel}</div>
             {liquidazioni.length===0?(
               <div className="alert alert-warn">
-                âš ï¸ Nessuna liquidazione periodica registrata per il {annoSel}. Vai su "Liquidazioni IVA" per registrare le liquidazioni.
+                ⚠️ Nessuna liquidazione periodica registrata per il {annoSel}. Vai su "Liquidazioni IVA" per registrare le liquidazioni.
               </div>
             ):(
               <div className="tbl-wrap">
@@ -1543,11 +1543,11 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
                   <tbody>
                     {liquidazioni.map(l=>(
                       <tr key={l.id}>
-                        <td><strong>{l.tipo_periodo==='trimestrale'?`${l.periodo}Â° Trimestre`:`${l.periodo}/${l.anno}`}</strong></td>
+                        <td><strong>{l.tipo_periodo==='trimestrale'?`${l.periodo}° Trimestre`:`${l.periodo}/${l.anno}`}</strong></td>
                         <td style={{textAlign:'right'}}>{fmt(l.iva_vendite)}</td>
                         <td style={{textAlign:'right'}}>{fmt(l.iva_acquisti)}</td>
-                        <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):'â€”'}</td>
-                        <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):'â€”'}</td>
+                        <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):EMPTY_CELL}</td>
+                        <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):EMPTY_CELL}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1566,7 +1566,7 @@ Documento generato da FiscoSim - ${new Date().toLocaleDateString('it-IT')} ${new
           </div>
 
           <div className="alert alert-info" style={{marginTop:'1rem'}}>
-            ðŸ’¡ La dichiarazione IVA annuale deve essere presentata entro il 30 aprile dell'anno successivo. Il report generato Ã¨ un riepilogo interno, per la presentazione ufficiale usare il software dell'Agenzia delle Entrate.
+            💡 La dichiarazione IVA annuale deve essere presentata entro il 30 aprile dell'anno successivo. Il report generato è un riepilogo interno, per la presentazione ufficiale usare il software dell'Agenzia delle Entrate.
           </div>
         </>
       )}
@@ -2020,8 +2020,8 @@ function PercipientiView({societa,onRefresh}){
                           <div style={{fontSize:'.75rem',color:'var(--mu)',marginTop:4}}>{p.issues[0]}</div>
                         )}
                       </td>
-                      <td style={{fontFamily:'monospace',fontSize:'.75rem'}}>{p.codice_fiscale||'—'}</td>
-                      <td style={{fontFamily:'monospace',fontSize:'.75rem'}}>{p.partita_iva||'—'}</td>
+                      <td style={{fontFamily:'monospace',fontSize:'.75rem'}}>{p.codice_fiscale||EMPTY_CELL}</td>
+                      <td style={{fontFamily:'monospace',fontSize:'.75rem'}}>{p.partita_iva||EMPTY_CELL}</td>
                       <td>{p.tipoLabel}</td>
                       <td>{p.ritenutaLabel}</td>
                       <td>{renderStatusBadge(p)}</td>
@@ -2492,9 +2492,9 @@ function RitenuteView({societa}){
                       <div style={{fontWeight:600}}>{row.percipiente}</div>
                       <div style={{fontSize:'.7rem',color:'var(--mu)'}}>{row.codiceFiscale || 'CF mancante'}</div>
                     </td>
-                    <td style={{fontSize:'.75rem'}}>{row.sourceParcella || '—'}</td>
-                    <td>{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString('it-IT') : '—'}</td>
-                    <td>{row.dueDate ? new Date(row.dueDate).toLocaleDateString('it-IT') : '—'}</td>
+                    <td style={{fontSize:'.75rem'}}>{row.sourceParcella || EMPTY_CELL}</td>
+                    <td>{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString('it-IT') : EMPTY_CELL}</td>
+                    <td>{row.dueDate ? new Date(row.dueDate).toLocaleDateString('it-IT') : EMPTY_CELL}</td>
                     <td>{row.codiceTributo}</td>
                     <td style={{textAlign:'right',color:'var(--rd)'}}>{fmt(row.withholdingAmount)}</td>
                     <td>
@@ -2503,8 +2503,8 @@ function RitenuteView({societa}){
                       </span>
                     </td>
                     <td style={{fontSize:'.7rem'}}>
-                      <div>Parcella: {row.primaNotaParcellaId || '—'}</div>
-                      <div>Pagamento: {row.primaNotaPagamentoId || '—'}</div>
+                      <div>Parcella: {row.primaNotaParcellaId || EMPTY_CELL}</div>
+                      <div>Pagamento: {row.primaNotaPagamentoId || EMPTY_CELL}</div>
                     </td>
                     <td>
                       <button className="bdg bdg-green" onClick={()=>setModalAudit(row.sourceRitenuta)} style={{border:'none',cursor:'pointer'}}>
@@ -2513,7 +2513,7 @@ function RitenuteView({societa}){
                     </td>
                     <td style={{display:'flex',gap:'.35rem',justifyContent:'flex-end'}}>
                       <button className="btn-icon" onClick={()=>setModalAudit(row.sourceRitenuta)} title="Diff">i</button>
-                      <button className="btn-icon" onClick={()=>eliminaRitenuta(row.id)} title="Elimina">Ã—</button>
+                      <button className="btn-icon" onClick={()=>eliminaRitenuta(row.id)} title="Elimina">×</button>
                     </td>
                   </tr>
                 ))}
@@ -2533,7 +2533,7 @@ function RitenuteView({societa}){
             <div className="modal-hdr">
               <div className="modal-drag"/>
               <div className="modal-title">Conferma parcella e ritenuta</div>
-              <button className="modal-close" onClick={()=>setModalNuova(false)}>Ã—</button>
+              <button className="modal-close" onClick={()=>setModalNuova(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -2651,7 +2651,7 @@ function RitenuteView({societa}){
             <div className="modal-hdr">
               <div className="modal-drag"/>
               <div className="modal-title">Audit fiscale parcella</div>
-              <button className="modal-close" onClick={()=>setModalAudit(null)}>Ã—</button>
+              <button className="modal-close" onClick={()=>setModalAudit(null)}>×</button>
             </div>
             <div className="modal-body">
               <div style={{display:'flex',gap:'.5rem',alignItems:'center',marginBottom:'1rem'}}>
@@ -2702,7 +2702,7 @@ function RitenuteView({societa}){
   );
 }
 
-// â”€â”€â”€ MODULO PIANO DEI CONTI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- MODULO PIANO DEI CONTI ----------------------------------
 
 
 
