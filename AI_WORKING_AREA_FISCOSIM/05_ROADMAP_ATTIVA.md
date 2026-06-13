@@ -38,5 +38,5 @@ L'attività corrente si concentra sul completamento del modulo **Liquidazione IV
    * Esportate le funzioni dal client API contabile per uniformare l'interfaccia.
    * Suite di test in `tests/liquidazioneIvaDefinitivaOrchestrator.test.js` creata con successo.
 
-5. **Integrazione UI React (PROSSIMO STEP ⏳)**:
-   * Modifica di `TaxComplianceView.jsx` per esibire il badge di stato consolidato, i campi storici e bloccare le azioni.
+5. **Integrazione UI React (COMPLETATO ✔)**:
+   * Collegamento dell'orchestratore in `TaxComplianceView.jsx` con visualizzazione controllata, anteprima dei totali, gestione dell'errore RPC e suite di test automatica per l'adapter UI.

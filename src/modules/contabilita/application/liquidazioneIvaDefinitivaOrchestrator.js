@@ -108,6 +108,7 @@ export async function preparaConsolidamentoLiquidazioneIvaDefinitiva({
     debitoDaVersare: risultatoCalcolo.debitoDaVersare,
     creditoPeriodo: risultatoCalcolo.creditoPeriodo,
     creditoDaRiportare: risultatoCalcolo.creditoDaRiportare,
+    saldoPeriodo: risultatoCalcolo.saldoPeriodo,
     righe: mappedRighe
   }
 

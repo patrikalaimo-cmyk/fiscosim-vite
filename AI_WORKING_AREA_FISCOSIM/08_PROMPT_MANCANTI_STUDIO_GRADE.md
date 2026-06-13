@@ -66,4 +66,5 @@ I prompt devono restare compatti ma corposi: un prompt deve chiudere un blocco f
 | 3 | 12/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F1 | OK | `4387bb3` | Schema & Dominio |
 | 4 | 12/06/2026 | Working Area | Audit | AI Working Area + Audit | OK | - | Setup iniziale working area AI |
 | 5 | 12/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2A | OK | - | RPC transazionale, patch guards, repo/client e test |
-| 6 | 12/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2B | OK | - | Orchestratore applicativo, client facade e test |
+| 6 | 12/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2B | OK | `5da6dad` | Orchestratore applicativo, client facade e test |
+| 7 | 13/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2C | OK | - | UI controllata con anteprima e blocco in TaxComplianceView.jsx |

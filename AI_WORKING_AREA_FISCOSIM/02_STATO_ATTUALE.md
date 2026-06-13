@@ -20,9 +20,13 @@ Il punto nave sulle funzionalità contabili e fiscali implementate in FiscoSim:
   * Creati test unitari in `tests/liquidazioneIvaDefinitivaRpcClient.test.js` (7 scenari coperti).
 * **Fase 2B (Orchestrazione Application)**: Completato.
   * Creato l'orchestratore applicativo `liquidazioneIvaDefinitivaOrchestrator.js` con contratto payload consolidato esplicito.
-  * Collegate ed esportate le funzioni dal client API contabile `liquidazioneIvaClient.js`.
   * Creata suite di test dedicata in `tests/liquidazioneIvaDefinitivaOrchestrator.test.js` (11 scenari coperti).
-* **Fase 3 (UI React)**: Previsto il collegamento in `TaxComplianceView.jsx` per esibire il badge di stato definitivo e procedere al consolidamento.
+* **Fase 2C (UI React & Anteprima)**: Completato (Fase 3).
+  * Cablata la UI definitiva controllata con anteprima e blocco in `TaxComplianceView.jsx`.
+  * Creato `tests/liquidazioneIvaDefinitivaUiAdapter.test.js` (9 scenari coperti).
+  * Gestito l'errore di database per RPC non applicata senza crash.
+  * Build e test di regressione passati con successo.
+
 
 ## 3. Moduli da Sviluppare / Completare
 * **LIPE**: Comunicazioni Periodiche IVA (prospetti ed export XML).

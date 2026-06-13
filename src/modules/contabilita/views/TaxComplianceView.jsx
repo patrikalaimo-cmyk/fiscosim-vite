@@ -20,12 +20,15 @@ import {
   build770RowsFromPayments,
 } from '../application/paymentDrivenFiscalViews.js'
 import { buildRitenuteScadenzarioRows } from '../application/ritenute/ritenuteScadenzarioService.js'
+import { sb } from '../../../lib/supabase.js'
 import {
   aggregateRegistriIvaRows,
   buildLiquidazionePayload,
   mapLiquidazioneForUi,
   boundsMensile,
   boundsTrimestrale,
+  preparaConsolidamentoLiquidazioneIvaDefinitiva,
+  consolidaLiquidazioneIvaDefinitivaDaPeriodo,
 } from '../application/liquidazioneIvaClient.js'
 import { getLiquidazioneIvaProvvisoriaProspetto } from '../application/iva/liquidazioneIvaProvvisoriaUiAdapter.js'
 
@@ -97,9 +100,133 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
   const [provvisoriaData, setProvvisoriaData] = useState(null);
   const [loadingProvvisoria, setLoadingProvvisoria] = useState(false);
 
+  // States for Liquidazione IVA Definitiva (Fase 2C)
+  const [definitivaData, setDefinitivaData] = useState(null);
+  const [loadingDefinitiva, setLoadingDefinitiva] = useState(false);
+  const [definitivaStatus, setDefinitivaStatus] = useState('Non consolidata');
+  const [definitivaError, setDefinitivaError] = useState(null);
+  const [operatori, setOperatori] = useState([]);
+  const [operatoreSel, setOperatoreSel] = useState('');
+  const [motivoConsolidamento, setMotivoConsolidamento] = useState('Consolidamento liquidazione IVA definitiva');
+
   useEffect(()=>{
-    if(societa?.id)caricaLiquidazioni();
+    if(societa?.id) {
+      caricaLiquidazioni();
+      caricaOperatori();
+    }
   },[societa]);
+
+  const caricaOperatori = async () => {
+    try {
+      const { data, error } = await sb.from('utenti_studio').select('id, nome, cognome, auth_user_id').eq('attivo', true).order('nome');
+      if (!error && data) {
+        setOperatori(data);
+        const { data: { user } } = await sb.auth.getUser();
+        if (user) {
+          const profile = data.find(u => u.auth_user_id === user.id);
+          if (profile) {
+            setOperatoreSel(profile.id);
+          } else if (data.length > 0) {
+            setOperatoreSel(data[0].id);
+          }
+        } else if (data.length > 0) {
+          setOperatoreSel(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Errore caricamento operatori:', err);
+    }
+  };
+
+  const preparaAnteprimaDefinitiva = async () => {
+    if (!operatoreSel) {
+      setDefinitivaError('Selezionare l\'operatore prima di procedere.');
+      setDefinitivaStatus('Errore');
+      return;
+    }
+    setLoadingDefinitiva(true);
+    setDefinitivaError(null);
+    try {
+      const anno = provvisoriaPeriod.anno;
+      const periodo = provvisoriaPeriod.periodo;
+      const isTrimestrale = provvisoriaPeriod.tipo_periodo === 'trimestrale';
+      const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
+
+      const prepResult = await preparaConsolidamentoLiquidazioneIvaDefinitiva({
+        societaId: societa.id,
+        periodoInizio: bounds.periodo_inizio,
+        periodoFine: bounds.periodo_fine,
+        tipoPeriodicita: provvisoriaPeriod.tipo_periodo,
+        operatoreStudioId: operatoreSel,
+        motivo: motivoConsolidamento
+      });
+
+      setDefinitivaData(prepResult);
+      setDefinitivaStatus('Pronta per consolidamento');
+    } catch (err) {
+      console.error(err);
+      setDefinitivaError(err.message || 'Errore durante la preparazione dell\'anteprima.');
+      setDefinitivaStatus('Errore');
+    } finally {
+      setLoadingDefinitiva(false);
+    }
+  };
+
+  const consolidaDefinitivamente = async () => {
+    if (!definitivaData) return;
+    if (!window.confirm(
+      `La liquidazione IVA sarà consolidata come definitiva per il periodo selezionato.\n` +
+      `Le registrazioni IVA del periodo saranno soggette a blocchi/warning di modifica.`
+    )) {
+      return;
+    }
+
+    setLoadingDefinitiva(true);
+    setDefinitivaStatus('Consolidamento in corso');
+    setDefinitivaError(null);
+
+    try {
+      const { data, error } = await consolidaLiquidazioneIvaDefinitivaDaPeriodo({
+        societaId: definitivaData.societaId,
+        periodoInizio: definitivaData.periodoInizio,
+        periodoFine: definitivaData.periodoFine,
+        tipoPeriodicita: definitivaData.tipoPeriodicita,
+        operatoreStudioId: definitivaData.operatoreStudioId,
+        motivo: definitivaData.motivo
+      });
+
+      if (error) {
+        if (error.code === '42883' || error.message?.includes('function') || error.message?.includes('RPC') || error.message?.includes('does not exist')) {
+          setDefinitivaError(
+            'La funzione di consolidamento definitivo non è ancora disponibile nel database.\n' +
+            'Applicare prima la migration RPC Fase 2A in ambiente controllato.'
+          );
+        } else {
+          setDefinitivaError(error.message || 'Errore durante il consolidamento definitivo.');
+        }
+        setDefinitivaStatus('Errore');
+        return;
+      }
+
+      if (data && data.success === false) {
+        setDefinitivaError(data.error || 'Errore durante il consolidamento definitivo.');
+        setDefinitivaStatus('Errore');
+        return;
+      }
+
+      setDefinitivaStatus('Consolidata');
+      alert('Consolidamento definitivo completato con successo!');
+      caricaLiquidazioni();
+      caricaProvvisoria();
+      setDefinitivaData(null);
+    } catch (err) {
+      console.error(err);
+      setDefinitivaError(err.message || 'Errore imprevisto durante il consolidamento.');
+      setDefinitivaStatus('Errore');
+    } finally {
+      setLoadingDefinitiva(false);
+    }
+  };
 
   useEffect(() => {
     if (societa?.id) {
@@ -382,6 +509,201 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
                 <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--mu)' }}>
                   {provvisoriaData.warnings.map((w, idx) => (
                     <li key={idx} style={{ marginBottom: '2px' }}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Sezione Liquidazione IVA Definitiva (Fase 2C) */}
+      <div className="card" style={{ marginBottom: '2rem', borderLeft: '4px solid #3498db' }}>
+        <div className="card-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: '0.75rem' }}>
+          <div className="card-title-wrap">
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>Liquidazione IVA definitiva</span>
+              <span className={`bdg ${
+                definitivaStatus === 'Consolidata' ? 'bdg-success' : 
+                definitivaStatus === 'Errore' ? 'bdg-danger' : 'bdg-warn'
+              }`} style={{ fontSize: '0.7rem', padding: '2px 6px', background: definitivaStatus === 'Consolidata' ? 'rgba(46, 204, 113, 0.2)' : definitivaStatus === 'Errore' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(200, 164, 94, 0.2)', color: definitivaStatus === 'Consolidata' ? '#2ecc71' : definitivaStatus === 'Errore' ? '#e74c3c' : '#c8a45e' }}>
+                {definitivaStatus}
+              </span>
+            </div>
+            <div className="card-subtitle" style={{ fontSize: '0.75rem', color: 'var(--mu)', marginTop: '2px' }}>
+              Consolidamento definitivo e blocco del periodo IVA per finalità di audit studio-grade
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '1rem', borderBottom: '1px solid var(--bd)' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'end', flexWrap: 'wrap' }}>
+            <div className="fg" style={{ marginBottom: 0, minWidth: '200px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Operatore Studio *</label>
+              <select 
+                value={operatoreSel} 
+                onChange={e => setOperatoreSel(e.target.value)} 
+                style={{ width: '100%', height: '36px' }}
+              >
+                <option value="">Seleziona operatore...</option>
+                {operatori.map(op => (
+                  <option key={op.id} value={op.id}>{op.nome} {op.cognome}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="fg" style={{ marginBottom: 0, minWidth: '250px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Motivo consolidamento</label>
+              <input 
+                type="text" 
+                value={motivoConsolidamento} 
+                onChange={e => setMotivoConsolidamento(e.target.value)} 
+                style={{ width: '100%', height: '36px' }}
+                placeholder="Motivo della chiusura..."
+              />
+            </div>
+
+            <button 
+              className="btn-sec" 
+              onClick={preparaAnteprimaDefinitiva} 
+              disabled={loadingDefinitiva || !operatoreSel}
+              style={{ height: '36px' }}
+            >
+              Prepara anteprima definitiva
+            </button>
+          </div>
+
+          {definitivaError && (
+            <div className="alert alert-danger" style={{ marginTop: '1rem', whiteSpace: 'pre-line' }}>
+              {definitivaError}
+            </div>
+          )}
+        </div>
+
+        {loadingDefinitiva && (
+          <div className="loading" style={{ padding: '2rem' }}>Elaborazione in corso...</div>
+        )}
+
+        {definitivaData && !loadingDefinitiva && (
+          <div>
+            <div className="stats-grid" style={{ padding: '1rem', borderBottom: '1px solid var(--bd)', gap: '1rem' }}>
+              <div className="stat-card">
+                <div className="stat-val">{fmt(definitivaData.payloadCalcoloRpc.ivaVenditeLorda)}</div>
+                <div className="stat-lbl">IVA vendite lorda</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-val" style={{ color: 'var(--mu)' }}>{fmt(definitivaData.payloadCalcoloRpc.ivaSplitEsclusa)}</div>
+                <div className="stat-lbl">IVA split payment esclusa</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-val">{fmt(definitivaData.payloadCalcoloRpc.ivaDebitoEffettiva)}</div>
+                <div className="stat-lbl">IVA debito effettiva</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-val" style={{ color: 'var(--gr, #2ecc71)' }}>{fmt(definitivaData.payloadCalcoloRpc.ivaAcquistiDetraibile)}</div>
+                <div className="stat-lbl">IVA acquisti detraibile</div>
+              </div>
+            </div>
+
+            <div style={{ padding: '1rem', borderBottom: '1px solid var(--bd)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.8rem' }}>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>IVA indetraibile:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaAcquistiIndetraibile)}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>IVA per cassa differita (esclusa):</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaPerCassaDifferita)}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>IVA per cassa rilasciata:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaPerCassaRilasciata)}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>Reverse charge debito:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaReverseDebito)}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>Reverse charge credito:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaReverseCredito)}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>Credito prec. / anno prec:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.creditoPeriodoPrecedente)} / {fmt(definitivaData.payloadCalcoloRpc.creditoAnnoPrecedente)}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--mu)' }}>Compensato F24 / Acconto:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.creditoCompensatoF24)} / {fmt(definitivaData.payloadCalcoloRpc.accontoIvaVersato)}</strong>
+              </div>
+              {definitivaData.payloadCalcoloRpc.interessiTrimestrali > 0 && (
+                <div>
+                  <span style={{ color: 'var(--mu)' }}>Interessi trimestrali (1%):</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.interessiTrimestrali)}</strong>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', padding: '1rem', background: 'var(--s2)', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  Esito liquidazione consolidata
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.4rem', fontWeight: 700, color: definitivaData.payloadCalcoloRpc.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
+                    {fmt(definitivaData.payloadCalcoloRpc.saldoPeriodo)}
+                  </span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: definitivaData.payloadCalcoloRpc.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
+                    {definitivaData.payloadCalcoloRpc.saldoPeriodo > 0 ? 'IVA periodo a debito' : 'IVA periodo a credito'}
+                  </span>
+                </div>
+                {definitivaData.payloadCalcoloRpc.debitoDaVersare > 0 && (
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--rd)' }}>
+                    Debito da versare (con interessi/acconti): <strong>{fmt(definitivaData.payloadCalcoloRpc.debitoDaVersare)}</strong>
+                  </div>
+                )}
+                {definitivaData.payloadCalcoloRpc.creditoDaRiportare > 0 && (
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--gr)' }}>
+                    Credito da riportare: <strong>{fmt(definitivaData.payloadCalcoloRpc.creditoDaRiportare)}</strong>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  Analisi Righe Snapshot
+                </div>
+                <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '0.5rem' }}>
+                  <div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                      {definitivaData.payloadCalcoloRpc.righe.filter(r => r.inclusa_in_liquidazione).length}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe incluse</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: definitivaData.payloadCalcoloRpc.righe.filter(r => !r.inclusa_in_liquidazione).length > 0 ? 'var(--gold)' : 'inherit' }}>
+                      {definitivaData.payloadCalcoloRpc.righe.filter(r => !r.inclusa_in_liquidazione).length}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe escluse</div>
+                  </div>
+                </div>
+                {definitivaData.payloadCalcoloRpc.righe.some(r => !r.inclusa_in_liquidazione) && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>
+                    Motivi: {Array.from(new Set(definitivaData.payloadCalcoloRpc.righe.filter(r => !r.inclusa_in_liquidazione).map(r => r.motivo_esclusione))).join(', ')}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button 
+                  className="btn" 
+                  onClick={consolidaDefinitivamente}
+                  disabled={loadingDefinitiva}
+                  style={{ background: '#3498db', color: '#fff' }}
+                >
+                  Consolida definitivamente
+                </button>
+              </div>
+            </div>
+
+            {definitivaData.risultatoCalcolo.warnings && definitivaData.risultatoCalcolo.warnings.length > 0 && (
+              <div style={{ padding: '1rem', borderTop: '1px solid var(--bd)', background: 'rgba(200, 164, 94, 0.05)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '0.25rem' }}>
+                  Warning calcolatore:
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--mu)' }}>
+                  {definitivaData.risultatoCalcolo.warnings.map((w, idx) => (
+                    <li key={idx}>{w}</li>
                   ))}
                 </ul>
               </div>

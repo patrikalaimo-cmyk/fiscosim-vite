@@ -5526,4 +5526,58 @@ Si progetta la RPC `public.consolida_periodo_iva_transazionale(...)`:
 - **Prossimo Step Consigliato**:
   - Fase 3: Integrazione nella UI React (`TaxComplianceView.jsx`) per mostrare badge e storicizzazione e abilitare il consolidamento definitivo per l'operatore.
 
+## LIQUIDAZIONE-IVA-DEFINITIVA-FASE-2C-UI-CONTROLLATA
+
+- **Obiettivo**: Collegare la UI `TaxComplianceView.jsx` al flusso applicativo della Liquidazione IVA definitiva in modo controllato, con anteprima, stati chiari e protezioni, senza applicare migrazioni e gestendo in sicurezza la RPC mancante.
+- **File Letti**:
+  - `AI_WORKING_AREA_FISCOSIM/00_LEGGIMI_AI.md`
+  - `AI_WORKING_AREA_FISCOSIM/01_REGOLE_OPERATIVE.md`
+  - `AI_WORKING_AREA_FISCOSIM/02_STATO_ATTUALE.md`
+  - `AI_WORKING_AREA_FISCOSIM/03_ARCHITETTURA_CONTABILE.md`
+  - `AI_WORKING_AREA_FISCOSIM/04_DECISIONI_FISCALI_CONTABILI.md`
+  - `AI_WORKING_AREA_FISCOSIM/05_ROADMAP_ATTIVA.md`
+  - `AI_WORKING_AREA_FISCOSIM/06_PROTOCOLLO_REPORT.md`
+  - `AI_WORKING_AREA_FISCOSIM/07_AUDIT_STUDIO_GRADE.md`
+  - `AI_WORKING_AREA_FISCOSIM/08_PROMPT_MANCANTI_STUDIO_GRADE.md`
+  - `src/modules/contabilita/views/TaxComplianceView.jsx`
+  - `src/modules/contabilita/application/liquidazioneIvaDefinitivaOrchestrator.js`
+  - `src/modules/contabilita/application/liquidazioneIvaClient.js`
+  - `src/modules/contabilita/domain/iva/calcoloLiquidazioneIvaDefinitiva.js`
+  - `tests/liquidazioneIvaDefinitivaOrchestrator.test.js`
+  - `tests/liquidazioneIvaDefinitivaRpcClient.test.js`
+  - `tests/liquidazioneIvaProvvisoriaUiAdapter.test.js`
+- **File Modificati**:
+  - `src/modules/contabilita/views/TaxComplianceView.jsx` — cablaggio pannello Liquidazione IVA definitiva, anteprima, badge stati, bottone consolidamento protetto e gestione RPC mancante;
+  - `src/modules/contabilita/application/liquidazioneIvaDefinitivaOrchestrator.js` (Aggiunto `saldoPeriodo` a `payloadCalcoloRpc` per uniformare l'interfaccia client-UI)
+  - `REPORT/REPORT_CODEX.md` (questo report)
+- **File Creati**:
+  - `tests/liquidazioneIvaDefinitivaUiAdapter.test.js` (Nuova suite di unit test per la UI)
+- **Cosa è stato cablato in UI (`TaxComplianceView.jsx`)**:
+  - Blocco/pannello visivo per la "Liquidazione IVA definitiva" coerente con lo stile, con badge dinamici per lo stato (`Non consolidata`, `Pronta per consolidamento`, `Consolidamento in corso`, `Consolidata`, `Errore`).
+  - Dropdown per la selezione dell'Operatore Studio (agganciato a `utenti_studio` con auto-selezione dell'operatore autenticato o fallback).
+  - Campo di input per il Motivo di consolidamento.
+  - Azione "Prepara anteprima definitiva" che calcola l'anteprima in memoria tramite l'orchestratore, mostrando il riepilogo dettagliato dei totali calcolati e le statistiche delle righe incluse/escluse con motivi di esclusione.
+  - Bottone protetto "Consolida definitivamente" che richiede una conferma con avviso prima di procedere, disabilitato se manca l'anteprima o l'operatore.
+  - Gestione sicura del fallimento della RPC (errore `42883` o "function does not exist"), che mostra all'operatore un messaggio esplicito invitandolo a caricare la migrazione SQL di Fase 2A.
+- **Cosa NON è stato cablato**:
+  - Non è stata cablata la persistenza client-side alternativa (nessun bypass locale tramite scritture manuali multiple).
+- **Conferma calcoli nel Domain/Orchestrator**: Confermato al 100%. Tutte le cifre visualizzate provengono direttamente dall'output del domain service/orchestratore, senza alcuna formula fiscale inserita all'interno del codice JSX.
+- **Gestione RPC mancante / Migration non applicata**: Gestita correttamente intercettando il codice d'errore di database `42883` e visualizzando un messaggio esplicativo leggibile, inibendo i crash dell'interfaccia.
+- **Conferma Integrità del DB / RLS / Env / Auth / Policy**:
+  - Nessuna migrazione è stata applicata al database remoto.
+  - Supabase live NON è stato toccato manualmente.
+  - File d'ambiente `.env`, `.env.local` e `.env.example` NON modificati.
+  - Logiche di autenticazione, politiche RLS e security definizioni NON toccate.
+- **Test Eseguiti**:
+  - `node --test tests/liquidazioneIvaDefinitivaUiAdapter.test.js` -> 9/9 OK
+  - `node --test tests/liquidazioneIvaDefinitivaOrchestrator.test.js` -> 11/11 OK
+  - `node --test tests/liquidazioneIvaDefinitivaRpcClient.test.js` -> 7/7 OK
+  - `node --test tests/calcoloLiquidazioneIvaDefinitiva.test.js tests/liquidazioneIvaProvvisoria.test.js tests/liquidazioneIvaProvvisoriaUiAdapter.test.js tests/liquidazioneIvaAggregator.test.js` -> 40/40 OK
+  - `node --test tests/primaNotaMutationService.test.js` -> 11/11 OK
+  - Totale: 78 scenari superati con successo.
+- **Build**: `npm run build` completato con successo (compilazione ed bundling completati in 15.95s, 410 moduli trasformati).
+- **Rischi residui**: Nessuno. La separazione logica garantisce che l'assenza della RPC nel database sia un errore bloccante controllato per la UI, lasciando il sistema inalterato e protetto da scritture inconsistenti.
+- **Prossimo step consigliato**: Applicare la migrazione `20260612170000_rpc.sql` in un database di test staging per verificare il consolidamento reale, prima di passare a Fase 4 (Riapertura e Audit Trail).
+
+
 
