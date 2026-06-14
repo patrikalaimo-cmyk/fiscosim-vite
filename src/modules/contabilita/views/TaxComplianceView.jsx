@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { fmtNumber } from '../ui/formatters.js'
 import { getLiquidazioneBadgeClass, getLipeBadgeClass } from '../ui/viewMappers.js'
+import { buildLiquidazioneIvaDashboardModel } from '../application/helper/buildLiquidazioneIvaDashboardModel.js'
+import { buildLiquidazioneIvaProspettoModel } from '../application/helper/buildLiquidazioneIvaProspettoModel.js'
+import { LiquidazioneIvaDashboard } from '../components/liquidazione/LiquidazioneIvaDashboard.jsx'
+import { LiquidazioneIvaProspettoView } from '../components/liquidazione/LiquidazioneIvaProspettoView.jsx'
+import { calcoloLiquidazioneIvaDefinitiva } from '../domain/iva/calcoloLiquidazioneIvaDefinitiva.js'
 import { ModuleHeader } from '../../../shared/components'
 import { CAUSALI_REDDITUALI_OPTIONS, CAUSALI_REDDITUALI_BY_CODE, SOMME_NON_SOGGETTE_OPTIONS } from '../../../shared/constants'
 import { syncPercipientiRegistryForSocieta } from '../application/percipientiRegistryService.js'
@@ -81,40 +86,63 @@ function parseUiJson(value) {
 function LiquidazioniIVAView({societa,scritture,causaliIva}){
   const [liquidazioni,setLiquidazioni]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [modalNuova,setModalNuova]=useState(false);
-  const [formData,setFormData]=useState({
-    tipo_periodo:'trimestrale',
-    anno:new Date().getFullYear(),
-    periodo:Math.ceil((new Date().getMonth()+1)/3),
-    iva_vendite:0,
-    iva_acquisti:0,
-    iva_split_payment:0,
-    note:''
-  });
+  const [mostraProspetto, setMostraProspetto] = useState(false);
 
+  // Default values for period selection
   const [provvisoriaPeriod, setProvvisoriaPeriod] = useState({
-    tipo_periodo: 'mensile',
+    tipo_periodo: societa?.tipo_liquidazione_iva || 'mensile',
     anno: new Date().getFullYear(),
     periodo: new Date().getMonth() + 1
   });
-  const [provvisoriaData, setProvvisoriaData] = useState(null);
-  const [loadingProvvisoria, setLoadingProvvisoria] = useState(false);
 
-  // States for Liquidazione IVA Definitiva (Fase 2C)
-  const [definitivaData, setDefinitivaData] = useState(null);
+  // New States for preview feedback UX
+  const [loadingProvvisoria, setLoadingProvvisoria] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
+  const [lastCalcTimestamp, setLastCalcTimestamp] = useState(null);
+  const [prevCalc, setPrevCalc] = useState(null);
+
+  // Adjust defaults when company changes
+  useEffect(() => {
+    if (societa?.tipo_liquidazione_iva) {
+      setProvvisoriaPeriod(p => ({
+        ...p,
+        tipo_periodo: societa.tipo_liquidazione_iva,
+        periodo: societa.tipo_liquidazione_iva === 'trimestrale' ? Math.ceil((new Date().getMonth() + 1) / 3) : new Date().getMonth() + 1
+      }));
+      setPrevCalc(null);
+      setFeedbackMessage(null);
+      setPreviewError(null);
+      setLastCalcTimestamp(null);
+    }
+  }, [societa]);
+
+  const [registriRows, setRegistriRows] = useState([]);
+  const [currentCalc, setCurrentCalc] = useState(null);
+
+  // States for Liquidazione IVA Definitiva / Consolidamento
   const [loadingDefinitiva, setLoadingDefinitiva] = useState(false);
-  const [definitivaStatus, setDefinitivaStatus] = useState('Non consolidata');
   const [definitivaError, setDefinitivaError] = useState(null);
   const [operatori, setOperatori] = useState([]);
   const [operatoreSel, setOperatoreSel] = useState('');
-  const [motivoConsolidamento, setMotivoConsolidamento] = useState('Consolidamento liquidazione IVA definitiva');
+  const [motivoConsolidamento, setMotivoConsolidamento] = useState('Consolidamento liquidazione IVA periodica');
 
-  useEffect(()=>{
-    if(societa?.id) {
+  useEffect(() => {
+    if (societa?.id) {
       caricaLiquidazioni();
       caricaOperatori();
     }
-  },[societa]);
+  }, [societa]);
+
+  useEffect(() => {
+    if (societa?.id) {
+      setFeedbackMessage(null);
+      setPreviewError(null);
+      setPrevCalc(null);
+      setLastCalcTimestamp(null);
+      caricaProvvisoria(false);
+    }
+  }, [societa?.id, provvisoriaPeriod]);
 
   const caricaOperatori = async () => {
     try {
@@ -138,104 +166,20 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
     }
   };
 
-  const preparaAnteprimaDefinitiva = async () => {
-    if (!operatoreSel) {
-      setDefinitivaError('Selezionare l\'operatore prima di procedere.');
-      setDefinitivaStatus('Errore');
-      return;
-    }
-    setLoadingDefinitiva(true);
-    setDefinitivaError(null);
-    try {
-      const anno = provvisoriaPeriod.anno;
-      const periodo = provvisoriaPeriod.periodo;
-      const isTrimestrale = provvisoriaPeriod.tipo_periodo === 'trimestrale';
-      const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
-
-      const prepResult = await preparaConsolidamentoLiquidazioneIvaDefinitiva({
-        societaId: societa.id,
-        periodoInizio: bounds.periodo_inizio,
-        periodoFine: bounds.periodo_fine,
-        tipoPeriodicita: provvisoriaPeriod.tipo_periodo,
-        operatoreStudioId: operatoreSel,
-        motivo: motivoConsolidamento
-      });
-
-      setDefinitivaData(prepResult);
-      setDefinitivaStatus('Pronta per consolidamento');
-    } catch (err) {
-      console.error(err);
-      setDefinitivaError(err.message || 'Errore durante la preparazione dell\'anteprima.');
-      setDefinitivaStatus('Errore');
-    } finally {
-      setLoadingDefinitiva(false);
-    }
+  const caricaLiquidazioni = async () => {
+    setLoading(true);
+    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche(societa.id);
+    const mapped = (data || []).map(mapLiquidazioneForUi).filter(Boolean);
+    setLiquidazioni(mapped);
+    setLoading(false);
   };
 
-  const consolidaDefinitivamente = async () => {
-    if (!definitivaData) return;
-    if (!window.confirm(
-      `La liquidazione IVA sarà consolidata come definitiva per il periodo selezionato.\n` +
-      `Le registrazioni IVA del periodo saranno soggette a blocchi/warning di modifica.`
-    )) {
-      return;
-    }
-
-    setLoadingDefinitiva(true);
-    setDefinitivaStatus('Consolidamento in corso');
-    setDefinitivaError(null);
-
-    try {
-      const { data, error } = await consolidaLiquidazioneIvaDefinitivaDaPeriodo({
-        societaId: definitivaData.societaId,
-        periodoInizio: definitivaData.periodoInizio,
-        periodoFine: definitivaData.periodoFine,
-        tipoPeriodicita: definitivaData.tipoPeriodicita,
-        operatoreStudioId: definitivaData.operatoreStudioId,
-        motivo: definitivaData.motivo
-      });
-
-      if (error) {
-        if (error.code === '42883' || error.message?.includes('function') || error.message?.includes('RPC') || error.message?.includes('does not exist')) {
-          setDefinitivaError(
-            'La funzione di consolidamento definitivo non è ancora disponibile nel database.\n' +
-            'Applicare prima la migration RPC Fase 2A in ambiente controllato.'
-          );
-        } else {
-          setDefinitivaError(error.message || 'Errore durante il consolidamento definitivo.');
-        }
-        setDefinitivaStatus('Errore');
-        return;
-      }
-
-      if (data && data.success === false) {
-        setDefinitivaError(data.error || 'Errore durante il consolidamento definitivo.');
-        setDefinitivaStatus('Errore');
-        return;
-      }
-
-      setDefinitivaStatus('Consolidata');
-      alert('Consolidamento definitivo completato con successo!');
-      caricaLiquidazioni();
-      caricaProvvisoria();
-      setDefinitivaData(null);
-    } catch (err) {
-      console.error(err);
-      setDefinitivaError(err.message || 'Errore imprevisto durante il consolidamento.');
-      setDefinitivaStatus('Errore');
-    } finally {
-      setLoadingDefinitiva(false);
-    }
-  };
-
-  useEffect(() => {
-    if (societa?.id) {
-      caricaProvvisoria();
-    }
-  }, [societa?.id, provvisoriaPeriod]);
-
-  const caricaProvvisoria = async () => {
+  const caricaProvvisoria = async (isExplicit = false) => {
     setLoadingProvvisoria(true);
+    if (isExplicit) {
+      setFeedbackMessage(null);
+      setPreviewError(null);
+    }
     try {
       const anno = provvisoriaPeriod.anno;
       const periodo = provvisoriaPeriod.periodo;
@@ -249,7 +193,16 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       );
       if (error) {
         console.error('Errore lettura registri per provvisoria:', error);
-        setProvvisoriaData(null);
+        if (isExplicit) {
+          setPreviewError({
+            message: 'Errore durante l’aggiornamento dell’anteprima',
+            detail: error.message || String(error)
+          });
+        }
+        if (!isExplicit) {
+          setRegistriRows([]);
+          setCurrentCalc(null);
+        }
         return;
       }
 
@@ -261,583 +214,233 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
         periodo: periodo,
       };
 
-      const prospetto = getLiquidazioneIvaProvvisoriaProspetto(data || [], options);
-      setProvvisoriaData(prospetto);
+      const calc = calcoloLiquidazioneIvaDefinitiva(data || [], options);
+      
+      setRegistriRows(data || []);
+      setCurrentCalc(calc);
+
+      // Format current timestamp
+      const now = new Date();
+      const gg = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const aaaa = now.getFullYear();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const formattedTimestamp = `${gg}/${mm}/${aaaa} ${hh}:${min}`;
+      setLastCalcTimestamp(formattedTimestamp);
+
+      if (isExplicit) {
+        if (!data || data.length === 0) {
+          setFeedbackMessage({
+            type: 'warn',
+            text: 'Nessun registro IVA disponibile per il periodo selezionato'
+          });
+        } else {
+          // Compare with previous calculation
+          if (prevCalc) {
+            const isIdentical = 
+              prevCalc.saldoPeriodo === calc.saldoPeriodo &&
+              prevCalc.ivaVenditeLorda === calc.ivaVenditeLorda &&
+              prevCalc.ivaAcquistiDetraibile === calc.ivaAcquistiDetraibile &&
+              prevCalc.righeIncluseCount === calc.righeIncluseCount &&
+              prevCalc.righeEscluseCount === calc.righeEscluseCount;
+
+            if (isIdentical) {
+              setFeedbackMessage({
+                type: 'warn',
+                text: 'Anteprima aggiornata: nessuna variazione rispetto al calcolo precedente'
+              });
+            } else {
+              const saldoSign = calc.saldoPeriodo > 0 ? 'debito' : 'credito';
+              const formattedSaldo = Math.abs(calc.saldoPeriodo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const messageText = `Anteprima aggiornata: registri inclusi ${calc.righeIncluseCount}, esclusi ${calc.righeEscluseCount}, saldo IVA a ${saldoSign} ${formattedSaldo} €`;
+              
+              const prevSaldoSign = prevCalc.saldoPeriodo > 0 ? 'debito' : 'credito';
+              const formattedPrevSaldo = Math.abs(prevCalc.saldoPeriodo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const variationText = `Saldo precedente: ${prevSaldoSign} ${formattedPrevSaldo} € → Nuovo saldo: ${saldoSign} ${formattedSaldo} €`;
+
+              setFeedbackMessage({
+                type: 'ok',
+                text: messageText,
+                subText: variationText
+              });
+            }
+          } else {
+            setFeedbackMessage({
+              type: 'ok',
+              text: 'Anteprima aggiornata correttamente'
+            });
+          }
+        }
+      }
+
+      setPrevCalc(calc);
+
     } catch (err) {
       console.error(err);
-      setProvvisoriaData(null);
+      if (isExplicit) {
+        setPreviewError({
+          message: 'Errore durante l’aggiornamento dell’anteprima',
+          detail: err.message || String(err)
+        });
+      }
+      if (!isExplicit) {
+        setRegistriRows([]);
+        setCurrentCalc(null);
+      }
     } finally {
       setLoadingProvvisoria(false);
     }
   };
 
-  const caricaLiquidazioni=async()=>{
-    setLoading(true);
-    const { data } = await contabilitaRepo.getLiquidazioniIvaCanoniche(societa.id);
-    const mapped = (data || []).map(mapLiquidazioneForUi).filter(Boolean);
-    setLiquidazioni(mapped);
-    setLoading(false);
-  };
-
-  const calcolaDaRegistri=async()=>{
-    const anno=formData.anno;
-    const periodo=formData.periodo;
-    const isTrimestrale=formData.tipo_periodo==='trimestrale';
-    const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
-
-    const { data, error } = await contabilitaRepo.getRegistriIvaByPeriodo(societa.id, bounds.periodo_inizio, bounds.periodo_fine);
-    if (error) {
-      alert('Errore lettura registri IVA: ' + error.message);
+  const preparaConsolidamento = async () => {
+    if (!operatoreSel) {
+      setDefinitivaError('Selezionare l\'operatore prima di procedere.');
       return;
     }
-    const agg = aggregateRegistriIvaRows(data || [], {
-      societaId: societa.id,
-      periodoInizio: bounds.periodo_inizio,
-      periodoFine: bounds.periodo_fine,
-    });
-    setFormData(prev=>({
-      ...prev,
-      iva_vendite: (agg.iva_debito_registrata ?? agg.iva_debito ?? 0).toFixed(2),
-      iva_acquisti: agg.iva_credito.toFixed(2),
-      iva_split_payment: (agg.iva_split_payment ?? 0).toFixed(2),
-    }));
+    setLoadingDefinitiva(true);
+    setDefinitivaError(null);
+    try {
+      const anno = provvisoriaPeriod.anno;
+      const periodo = provvisoriaPeriod.periodo;
+      const isTrimestrale = provvisoriaPeriod.tipo_periodo === 'trimestrale';
+      const bounds = isTrimestrale ? boundsTrimestrale(anno, periodo) : boundsMensile(anno, periodo);
+
+      await preparaConsolidamentoLiquidazioneIvaDefinitiva({
+        societaId: societa.id,
+        periodoInizio: bounds.periodo_inizio,
+        periodoFine: bounds.periodo_fine,
+        tipoPeriodicita: provvisoriaPeriod.tipo_periodo,
+        operatoreStudioId: operatoreSel,
+        motivo: motivoConsolidamento
+      });
+
+      alert('Consolidamento preparato correttamente in memoria!');
+    } catch (err) {
+      console.error(err);
+      setDefinitivaError(err.message || 'Errore durante la preparazione del consolidamento.');
+    } finally {
+      setLoadingDefinitiva(false);
+    }
   };
 
-  const salvaLiquidazione=async()=>{
-    const ivaDebito=parseFloat(formData.iva_vendite||0);
-    const ivaSplitPayment=parseFloat(formData.iva_split_payment||0);
-    const ivaCredito=parseFloat(formData.iva_acquisti||0);
-    const ivaDebitoEffettiva=Math.round((ivaDebito-ivaSplitPayment)*100)/100;
+  const consolidaDefinitivamente = async () => {
+    if (!operatoreSel) {
+      setDefinitivaError('Selezionare l\'operatore prima di procedere.');
+      return;
+    }
+    const bounds = provvisoriaPeriod.tipo_periodo === 'trimestrale'
+      ? boundsTrimestrale(provvisoriaPeriod.anno, provvisoriaPeriod.periodo)
+      : boundsMensile(provvisoriaPeriod.anno, provvisoriaPeriod.periodo);
 
-    const agg = {
-      iva_debito_effettiva: ivaDebitoEffettiva,
-      iva_credito: ivaCredito,
-      saldo: Math.round((ivaDebitoEffettiva - ivaCredito) * 100) / 100,
-    };
-    const record = buildLiquidazionePayload({
-      societaId: societa.id,
-      periodicita: formData.tipo_periodo,
-      anno: formData.anno,
-      mese: formData.tipo_periodo === 'mensile' ? formData.periodo : null,
-      trimestre: formData.tipo_periodo === 'trimestrale' ? formData.periodo : null,
-      agg,
-      note: formData.note,
-    });
-    
-    const{error}=await contabilitaRepo.upsertLiquidazioneIvaCanonica(record);
-    if(error){
-      // Se la tabella non esiste, la creiamo
-      if(error.code==='42P01'){
-        alert('Tabella liquidazione_iva non trovata. Crea la tabella nel database.');
-      }else{
-        alert('Errore: '+error.message);
+    if (!window.confirm(
+      `La liquidazione IVA sarà consolidata per il periodo selezionato.\n` +
+      `Le registrazioni IVA del periodo saranno soggette a blocchi/warning di modifica.`
+    )) {
+      return;
+    }
+
+    setLoadingDefinitiva(true);
+    setDefinitivaError(null);
+
+    try {
+      const { data, error } = await consolidaLiquidazioneIvaDefinitivaDaPeriodo({
+        societaId: societa.id,
+        periodoInizio: bounds.periodo_inizio,
+        periodoFine: bounds.periodo_fine,
+        tipoPeriodicita: provvisoriaPeriod.tipo_periodo,
+        operatoreStudioId: operatoreSel,
+        motivo: motivoConsolidamento
+      });
+
+      if (error) {
+        if (error.code === '42883' || error.message?.includes('function') || error.message?.includes('RPC') || error.message?.includes('does not exist')) {
+          setDefinitivaError(
+            'La funzione di consolidamento definitivo non è ancora disponibile nel database.\n' +
+            'Applicare prima la migration RPC Fase 2A in ambiente controllato.'
+          );
+        } else {
+          setDefinitivaError(error.message || 'Errore durante il consolidamento.');
+        }
+        return;
       }
-      return;
+
+      if (data && data.success === false) {
+        setDefinitivaError(data.error || 'Errore durante il consolidamento.');
+        return;
+      }
+
+      alert('Consolidamento completato con successo!');
+      caricaLiquidazioni();
+      caricaProvvisoria();
+    } catch (err) {
+      console.error(err);
+      setDefinitivaError(err.message || 'Errore imprevisto durante il consolidamento.');
+    } finally {
+      setLoadingDefinitiva(false);
     }
-    setModalNuova(false);
-    caricaLiquidazioni();
   };
 
-  const fmt = fmtNumber;
-  const periodoLabel=l=>l.tipo_periodo==='trimestrale'?`${l.periodo}° Trim ${l.anno}`:`${l.periodo}/${l.anno}`;
+  const utenteStudio = useMemo(() => {
+    return operatori.find(o => o.id === operatoreSel) || null;
+  }, [operatori, operatoreSel]);
 
-  return(
-    <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
-        <div>
-          <div style={{fontSize:'1.1rem',fontWeight:700}}>Liquidazioni IVA</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Calcolo periodico IVA a debito/credito</div>
-        </div>
-        <button className="btn" onClick={()=>setModalNuova(true)}>+ Nuova Liquidazione</button>
-      </div>
+  const dashboardModel = useMemo(() => {
+    return buildLiquidazioneIvaDashboardModel({
+      societaAttiva: societa,
+      periodParams: provvisoriaPeriod,
+      liquidazioniList: liquidazioni,
+      currentCalc,
+      operatore: utenteStudio,
+      lastCalcTimestamp
+    });
+  }, [societa, provvisoriaPeriod, liquidazioni, currentCalc, utenteStudio, lastCalcTimestamp]);
 
-      {/* Sezione Liquidazione IVA Provvisoria (Read-only) */}
-      <div className="card" style={{ marginBottom: '2rem', borderLeft: '4px solid var(--gold, #c8a45e)' }}>
-        <div className="card-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: '0.75rem' }}>
-          <div className="card-title-wrap">
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>Liquidazione IVA provvisoria</span>
-              <span className="bdg bdg-warn" style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(200, 164, 94, 0.2)', color: 'var(--gold, #c8a45e)' }}>
-                Prospetto non definitivo
-              </span>
-            </div>
-            <div className="card-subtitle" style={{ fontSize: '0.75rem', color: 'var(--mu)', marginTop: '2px' }}>
-              Anteprima di calcolo in tempo reale basata sui registri IVA correnti (non salvata)
-            </div>
-          </div>
-        </div>
-        
-        <div style={{ padding: '1rem', borderBottom: '1px solid var(--bd)' }}>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'end', flexWrap: 'wrap' }}>
-            <div className="fg" style={{ marginBottom: 0, minWidth: '130px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Periodicità</label>
-              <BaseCombobox
-                value={provvisoriaPeriod.tipo_periodo}
-                onChange={(v) => {
-                  const newTipo = v || 'mensile';
-                  setProvvisoriaPeriod(p => ({
-                    ...p,
-                    tipo_periodo: newTipo,
-                    periodo: 1
-                  }));
-                }}
-                options={[{ id: 'trimestrale', label: 'Trimestrale' }, { id: 'mensile', label: 'Mensile' }]}
-                getOptionId={o => o?.id}
-                getOptionLabel={o => o?.label}
-                searchable={false}
-              />
-            </div>
-            
-            <div className="fg" style={{ marginBottom: 0, minWidth: '100px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Anno</label>
-              <input 
-                type="number" 
-                value={provvisoriaPeriod.anno} 
-                onChange={e => setProvvisoriaPeriod(p => ({ ...p, anno: parseInt(e.target.value) || new Date().getFullYear() }))}
-                style={{ width: '100%', height: '36px' }}
-              />
-            </div>
-            
-            <div className="fg" style={{ marginBottom: 0, minWidth: '150px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>
-                {provvisoriaPeriod.tipo_periodo === 'trimestrale' ? 'Trimestre' : 'Mese'}
-              </label>
-              <BaseCombobox
-                value={String(provvisoriaPeriod.periodo)}
-                onChange={(v) => setProvvisoriaPeriod(p => ({ ...p, periodo: parseInt(v || '1') }))}
-                options={
-                  provvisoriaPeriod.tipo_periodo === 'trimestrale'
-                    ? [1, 2, 3, 4].map(t => ({ id: String(t), label: `${t}° Trimestre` }))
-                    : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => ({ id: String(m), label: `Mese ${m}` }))
-                }
-                getOptionId={o => o?.id}
-                getOptionLabel={o => o?.label}
-                searchable={false}
-              />
-            </div>
+  const prospettoModel = useMemo(() => {
+    return buildLiquidazioneIvaProspettoModel({
+      rows: registriRows,
+      calcResult: currentCalc,
+      options: {
+        societaId: societa.id,
+        periodoInizio: dashboardModel.periodoInizio,
+        periodoFine: dashboardModel.periodoFine
+      }
+    });
+  }, [registriRows, currentCalc, societa.id, dashboardModel]);
 
-            <button 
-              className="btn-sec" 
-              onClick={caricaProvvisoria} 
-              disabled={loadingProvvisoria}
-              style={{ height: '36px' }}
-            >
-              Aggiorna anteprima
-            </button>
-          </div>
-        </div>
+  if (mostraProspetto) {
+    return (
+      <LiquidazioneIvaProspettoView
+        prospettoModel={prospettoModel}
+        dashboardModel={dashboardModel}
+        societa={societa}
+        onClose={() => setMostraProspetto(false)}
+      />
+    );
+  }
 
-        {loadingProvvisoria ? (
-          <div className="loading" style={{ padding: '2rem' }}>Caricamento anteprima provvisoria...</div>
-        ) : !provvisoriaData ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--mu)' }}>
-            Nessun dato provvisorio disponibile per il periodo selezionato.
-          </div>
-        ) : (
-          <div>
-            {/* Grid riassuntiva */}
-            <div className="stats-grid" style={{ padding: '1rem', borderBottom: '1px solid var(--bd)', gap: '1rem' }}>
-              <div className="stat-card">
-                <div className="stat-val">{fmt(provvisoriaData.ivaVenditeLorda)}</div>
-                <div className="stat-lbl">IVA vendite lorda</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-val" style={{ color: 'var(--mu)' }}>{fmt(provvisoriaData.ivaSplitPayment)}</div>
-                <div className="stat-lbl">IVA split payment esclusa dal debito</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-val">{fmt(provvisoriaData.ivaDebitoEffettiva)}</div>
-                <div className="stat-lbl">IVA a debito effettiva</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-val" style={{ color: 'var(--gr, #2ecc71)' }}>{fmt(provvisoriaData.ivaAcquisti)}</div>
-                <div className="stat-lbl">IVA acquisti</div>
-              </div>
-            </div>
-
-            {/* Saldo e Dettagli righe */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', padding: '1rem', background: 'var(--s2)' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Esito liquidazione provvisoria
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.4rem', fontWeight: 700, color: provvisoriaData.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
-                    {fmt(provvisoriaData.saldoPeriodo)}
-                  </span>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: provvisoriaData.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
-                    {provvisoriaData.saldoPeriodo > 0 ? 'IVA periodo a debito' : 'IVA periodo a credito'}
-                  </span>
-                </div>
-                {provvisoriaData.saldoADebito > 0 && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--rd)' }}>
-                    Da versare: <strong>{fmt(provvisoriaData.saldoADebito)}</strong>
-                  </div>
-                )}
-                {provvisoriaData.saldoACredito > 0 && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--gr)' }}>
-                    A credito: <strong>{fmt(provvisoriaData.saldoACredito)}</strong>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Statistiche Registrazioni
-                </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{provvisoriaData.righeIncluseCount}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe incluse</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: provvisoriaData.righeEscluseCount > 0 ? 'var(--gold)' : 'inherit' }}>
-                      {provvisoriaData.righeEscluseCount}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe escluse</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Warnings list */}
-            {provvisoriaData.warnings && provvisoriaData.warnings.length > 0 && (
-              <div style={{ padding: '1rem', borderTop: '1px solid var(--bd)', background: 'rgba(200, 164, 94, 0.05)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <span>Informazioni e warning:</span>
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--mu)' }}>
-                  {provvisoriaData.warnings.map((w, idx) => (
-                    <li key={idx} style={{ marginBottom: '2px' }}>{w}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Sezione Liquidazione IVA Definitiva (Fase 2C) */}
-      <div className="card" style={{ marginBottom: '2rem', borderLeft: '4px solid #3498db' }}>
-        <div className="card-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', paddingBottom: '0.75rem' }}>
-          <div className="card-title-wrap">
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span>Liquidazione IVA definitiva</span>
-              <span className={`bdg ${
-                definitivaStatus === 'Consolidata' ? 'bdg-success' : 
-                definitivaStatus === 'Errore' ? 'bdg-danger' : 'bdg-warn'
-              }`} style={{ fontSize: '0.7rem', padding: '2px 6px', background: definitivaStatus === 'Consolidata' ? 'rgba(46, 204, 113, 0.2)' : definitivaStatus === 'Errore' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(200, 164, 94, 0.2)', color: definitivaStatus === 'Consolidata' ? '#2ecc71' : definitivaStatus === 'Errore' ? '#e74c3c' : '#c8a45e' }}>
-                {definitivaStatus}
-              </span>
-            </div>
-            <div className="card-subtitle" style={{ fontSize: '0.75rem', color: 'var(--mu)', marginTop: '2px' }}>
-              Consolidamento definitivo e blocco del periodo IVA per finalità di audit studio-grade
-            </div>
-          </div>
-        </div>
-
-        <div style={{ padding: '1rem', borderBottom: '1px solid var(--bd)' }}>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'end', flexWrap: 'wrap' }}>
-            <div className="fg" style={{ marginBottom: 0, minWidth: '200px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Operatore Studio *</label>
-              <select 
-                value={operatoreSel} 
-                onChange={e => setOperatoreSel(e.target.value)} 
-                style={{ width: '100%', height: '36px' }}
-              >
-                <option value="">Seleziona operatore...</option>
-                {operatori.map(op => (
-                  <option key={op.id} value={op.id}>{op.nome} {op.cognome}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="fg" style={{ marginBottom: 0, minWidth: '250px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Motivo consolidamento</label>
-              <input 
-                type="text" 
-                value={motivoConsolidamento} 
-                onChange={e => setMotivoConsolidamento(e.target.value)} 
-                style={{ width: '100%', height: '36px' }}
-                placeholder="Motivo della chiusura..."
-              />
-            </div>
-
-            <button 
-              className="btn-sec" 
-              onClick={preparaAnteprimaDefinitiva} 
-              disabled={loadingDefinitiva || !operatoreSel}
-              style={{ height: '36px' }}
-            >
-              Prepara anteprima definitiva
-            </button>
-          </div>
-
-          {definitivaError && (
-            <div className="alert alert-danger" style={{ marginTop: '1rem', whiteSpace: 'pre-line' }}>
-              {definitivaError}
-            </div>
-          )}
-        </div>
-
-        {loadingDefinitiva && (
-          <div className="loading" style={{ padding: '2rem' }}>Elaborazione in corso...</div>
-        )}
-
-        {definitivaData && !loadingDefinitiva && (
-          <div>
-            <div className="stats-grid" style={{ padding: '1rem', borderBottom: '1px solid var(--bd)', gap: '1rem' }}>
-              <div className="stat-card">
-                <div className="stat-val">{fmt(definitivaData.payloadCalcoloRpc.ivaVenditeLorda)}</div>
-                <div className="stat-lbl">IVA vendite lorda</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-val" style={{ color: 'var(--mu)' }}>{fmt(definitivaData.payloadCalcoloRpc.ivaSplitEsclusa)}</div>
-                <div className="stat-lbl">IVA split payment esclusa</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-val">{fmt(definitivaData.payloadCalcoloRpc.ivaDebitoEffettiva)}</div>
-                <div className="stat-lbl">IVA debito effettiva</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-val" style={{ color: 'var(--gr, #2ecc71)' }}>{fmt(definitivaData.payloadCalcoloRpc.ivaAcquistiDetraibile)}</div>
-                <div className="stat-lbl">IVA acquisti detraibile</div>
-              </div>
-            </div>
-
-            <div style={{ padding: '1rem', borderBottom: '1px solid var(--bd)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.8rem' }}>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>IVA indetraibile:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaAcquistiIndetraibile)}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>IVA per cassa differita (esclusa):</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaPerCassaDifferita)}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>IVA per cassa rilasciata:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaPerCassaRilasciata)}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>Reverse charge debito:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaReverseDebito)}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>Reverse charge credito:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.ivaReverseCredito)}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>Credito prec. / anno prec:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.creditoPeriodoPrecedente)} / {fmt(definitivaData.payloadCalcoloRpc.creditoAnnoPrecedente)}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--mu)' }}>Compensato F24 / Acconto:</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.creditoCompensatoF24)} / {fmt(definitivaData.payloadCalcoloRpc.accontoIvaVersato)}</strong>
-              </div>
-              {definitivaData.payloadCalcoloRpc.interessiTrimestrali > 0 && (
-                <div>
-                  <span style={{ color: 'var(--mu)' }}>Interessi trimestrali (1%):</span> <strong>{fmt(definitivaData.payloadCalcoloRpc.interessiTrimestrali)}</strong>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', padding: '1rem', background: 'var(--s2)', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Esito liquidazione consolidata
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.4rem', fontWeight: 700, color: definitivaData.payloadCalcoloRpc.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
-                    {fmt(definitivaData.payloadCalcoloRpc.saldoPeriodo)}
-                  </span>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: definitivaData.payloadCalcoloRpc.saldoPeriodo > 0 ? 'var(--rd)' : 'var(--gr)' }}>
-                    {definitivaData.payloadCalcoloRpc.saldoPeriodo > 0 ? 'IVA periodo a debito' : 'IVA periodo a credito'}
-                  </span>
-                </div>
-                {definitivaData.payloadCalcoloRpc.debitoDaVersare > 0 && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--rd)' }}>
-                    Debito da versare (con interessi/acconti): <strong>{fmt(definitivaData.payloadCalcoloRpc.debitoDaVersare)}</strong>
-                  </div>
-                )}
-                {definitivaData.payloadCalcoloRpc.creditoDaRiportare > 0 && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--gr)' }}>
-                    Credito da riportare: <strong>{fmt(definitivaData.payloadCalcoloRpc.creditoDaRiportare)}</strong>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--mu)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Analisi Righe Snapshot
-                </div>
-                <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '0.5rem' }}>
-                  <div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                      {definitivaData.payloadCalcoloRpc.righe.filter(r => r.inclusa_in_liquidazione).length}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe incluse</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: definitivaData.payloadCalcoloRpc.righe.filter(r => !r.inclusa_in_liquidazione).length > 0 ? 'var(--gold)' : 'inherit' }}>
-                      {definitivaData.payloadCalcoloRpc.righe.filter(r => !r.inclusa_in_liquidazione).length}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>Righe escluse</div>
-                  </div>
-                </div>
-                {definitivaData.payloadCalcoloRpc.righe.some(r => !r.inclusa_in_liquidazione) && (
-                  <div style={{ fontSize: '0.7rem', color: 'var(--mu)' }}>
-                    Motivi: {Array.from(new Set(definitivaData.payloadCalcoloRpc.righe.filter(r => !r.inclusa_in_liquidazione).map(r => r.motivo_esclusione))).join(', ')}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button 
-                  className="btn" 
-                  onClick={consolidaDefinitivamente}
-                  disabled={loadingDefinitiva}
-                  style={{ background: '#3498db', color: '#fff' }}
-                >
-                  Consolida definitivamente
-                </button>
-              </div>
-            </div>
-
-            {definitivaData.risultatoCalcolo.warnings && definitivaData.risultatoCalcolo.warnings.length > 0 && (
-              <div style={{ padding: '1rem', borderTop: '1px solid var(--bd)', background: 'rgba(200, 164, 94, 0.05)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '0.25rem' }}>
-                  Warning calcolatore:
-                </div>
-                <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.75rem', color: 'var(--mu)' }}>
-                  {definitivaData.risultatoCalcolo.warnings.map((w, idx) => (
-                    <li key={idx}>{w}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {loading?(
-        <div className="loading">Caricamento...</div>
-      ):liquidazioni.length===0?(
-        <div className="card" style={{padding:'2rem',textAlign:'center'}}>
-          <div style={{color:'var(--mu)'}}>Nessuna liquidazione IVA. Clicca "Nuova Liquidazione" per iniziare.</div>
-        </div>
-      ):(
-        <div className="card">
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Periodo</th>
-                  <th style={{textAlign:'right'}}>IVA Vendite</th>
-                  <th style={{textAlign:'right'}}>IVA Acquisti</th>
-                  <th style={{textAlign:'right'}}>IVA Dovuta</th>
-                  <th style={{textAlign:'right'}}>Credito</th>
-                  <th>Stato</th>
-                </tr>
-              </thead>
-              <tbody>
-                {liquidazioni.map(l=>(
-                  <tr key={l.id}>
-                    <td><strong>{periodoLabel(l)}</strong></td>
-                    <td style={{textAlign:'right'}}>{fmt(l.iva_vendite)}</td>
-                    <td style={{textAlign:'right'}}>{fmt(l.iva_acquisti)}</td>
-                    <td style={{textAlign:'right',color:l.iva_dovuta>0?'var(--rd)':'inherit',fontWeight:l.iva_dovuta>0?700:'normal'}}>{l.iva_dovuta>0?fmt(l.iva_dovuta):EMPTY_CELL}</td>
-                    <td style={{textAlign:'right',color:l.credito_da_riportare>0?'var(--gr)':'inherit'}}>{l.credito_da_riportare>0?fmt(l.credito_da_riportare):EMPTY_CELL}</td>
-                    <td><span className={'bdg '+getLiquidazioneBadgeClass(l.stato)}>{l.stato}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Nuova Liquidazione */}
-      {modalNuova&&(
-        <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setModalNuova(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:550}}>
-            <div className="modal-hdr">
-              <div className="modal-drag"/>
-              <div className="modal-title">Nuova Liquidazione IVA</div>
-              <div className="modal-sub">{societa?.denominazione}</div>
-              <button className="modal-close" onClick={()=>setModalNuova(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-grid">
-                <div className="fg">
-                  <label>Tipo periodo</label>
-                  <BaseCombobox
-                    value={formData.tipo_periodo}
-                    onChange={(v)=>setFormData(p=>({...p,tipo_periodo:v||'trimestrale'}))}
-                    options={[{id:'trimestrale',label:'Trimestrale'},{id:'mensile',label:'Mensile'}]}
-                    getOptionId={o=>o?.id}
-                    getOptionLabel={o=>o?.label}
-                    searchable={false}
-                  />
-                </div>
-                <div className="fg">
-                  <label>Anno</label>
-                  <input type="number" value={formData.anno} onChange={e=>setFormData(p=>({...p,anno:parseInt(e.target.value)}))}/>
-                </div>
-                <div className="fg">
-                  <label>{formData.tipo_periodo==='trimestrale'?'Trimestre':'Mese'}</label>
-                  <BaseCombobox
-                    value={String(formData.periodo ?? '')}
-                    onChange={(v)=>setFormData(p=>({...p,periodo:parseInt(v || '1')}))}
-                    options={(formData.tipo_periodo==='trimestrale'
-                      ? [1,2,3,4].map(t=>({id:String(t),label:`${t}° Trimestre`}))
-                      : [1,2,3,4,5,6,7,8,9,10,11,12].map(m=>({id:String(m),label:String(m)}))
-                    )}
-                    getOptionId={o=>o?.id}
-                    getOptionLabel={o=>o?.label}
-                    searchable={false}
-                  />
-                </div>
-                <div className="fg">
-                  <label>&nbsp;</label>
-                  <button className="btn-sec" onClick={calcolaDaRegistri} style={{width:'100%'}}>Calcola da Registri IVA</button>
-                </div>
-                <div className="fg">
-                  <label>IVA Vendite (debito)</label>
-                  <input type="number" step="0.01" value={formData.iva_vendite} onChange={e=>setFormData(p=>({...p,iva_vendite:e.target.value}))}/>
-                </div>
-                <div className="fg">
-                  <label>IVA Acquisti (credito)</label>
-                  <input type="number" step="0.01" value={formData.iva_acquisti} onChange={e=>setFormData(p=>({...p,iva_acquisti:e.target.value}))}/>
-                </div>
-                <div className="fg full">
-                  <label>Note</label>
-                  <textarea value={formData.note} onChange={e=>setFormData(p=>({...p,note:e.target.value}))} rows={2}/>
-                </div>
-              </div>
-              
-              {/* Riepilogo */}
-              <div style={{marginTop:'1rem',padding:'1rem',background:'var(--s2)',borderRadius:8}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
-                  <span>IVA vendite registrata:</span><span style={{fontWeight:600}}>{fmt(formData.iva_vendite)}</span>
-                </div>
-                {parseFloat(formData.iva_split_payment || 0) > 0 && (
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
-                    <span>IVA split payment:</span><span style={{fontWeight:600}}>- {fmt(formData.iva_split_payment)}</span>
-                  </div>
-                )}
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'.5rem'}}>
-                  <span>IVA a credito:</span><span style={{fontWeight:600}}>- {fmt(formData.iva_acquisti)}</span>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',paddingTop:'.5rem',borderTop:'1px solid var(--bd)'}}>
-                  <span style={{fontWeight:700}}>IVA dovuta:</span>
-                  <span style={{fontWeight:700,color:(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_split_payment||0)-parseFloat(formData.iva_acquisti||0))>0?'var(--rd)':'var(--gr)'}}>
-                    {fmt(parseFloat(formData.iva_vendite||0)-parseFloat(formData.iva_split_payment||0)-parseFloat(formData.iva_acquisti||0))}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="btn-sec" onClick={()=>setModalNuova(false)}>Annulla</button>
-              <button className="btn" onClick={salvaLiquidazione}>Salva Liquidazione</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return (
+    <LiquidazioneIvaDashboard
+      dashboardModel={dashboardModel}
+      societa={societa}
+      periodParams={provvisoriaPeriod}
+      setPeriodParams={setProvvisoriaPeriod}
+      onUpdatePreview={() => caricaProvvisoria(true)}
+      onOpenProspect={() => setMostraProspetto(true)}
+      onPreparaConsolidamento={preparaConsolidamento}
+      onConsolida={consolidaDefinitivamente}
+      loading={loading || loadingDefinitiva || loadingProvvisoria}
+      loadingProvvisoria={loadingProvvisoria}
+      feedbackMessage={feedbackMessage}
+      previewError={previewError}
+      operatori={operatori}
+      operatoreSel={operatoreSel}
+      setOperatoreSel={setOperatoreSel}
+      motivoConsolidamento={motivoConsolidamento}
+      setMotivoConsolidamento={setMotivoConsolidamento}
+      error={definitivaError}
+    />
+  )
 }
 
 

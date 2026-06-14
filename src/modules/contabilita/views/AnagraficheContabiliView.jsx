@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAIStatus } from '../../../context/AIStatusContext'
 import { TagInput, ModuleHeader } from '../../../shared/components'
 import { ACCOUNTING_UI_TEXT, COMMON_UI_TEXT, deleteAllLabel, deleteSelectedLabel } from '../../../shared/constants'
@@ -34,6 +34,7 @@ export default function AnagraficheContabiliView({
   causaliContabili,
   causaliIva,
   caricaTutto,
+  onSocietaUpdate,
 }) {
   const [modalImportPDF, setModalImportPDF] = useState(null)
 
@@ -42,7 +43,7 @@ export default function AnagraficheContabiliView({
   return (
     <>
       {contTab === 'societa' && (
-        <SocietaConfigView societa={societaAttiva} onRefresh={caricaTutto} />
+        <SocietaConfigView societa={societaAttiva} onRefresh={caricaTutto} onSocietaUpdate={onSocietaUpdate} />
       )}
 
       {contTab === 'piano_conti' && (
@@ -91,7 +92,7 @@ export default function AnagraficheContabiliView({
   )
 }
 
-function SocietaConfigView({ societa, onRefresh }) {
+function SocietaConfigView({ societa, onRefresh, onSocietaUpdate }) {
   const createInitialForm = useMemo(
     () => current => ({
       ragione_sociale: current?.denominazione || '',
@@ -105,8 +106,8 @@ function SocietaConfigView({ societa, onRefresh }) {
       liquidazione_iva: current?.tipo_liquidazione_iva || 'trimestrale',
       ateco: current?.ateco || '',
       opzioni_fiscali: current?.opzioni_fiscali || '',
-      esercizio_inizio: current?.esercizio_inizio || '',
-      esercizio_fine: current?.esercizio_fine || '',
+      esercizio_inizio: current?.esercizio_da || current?.esercizio_inizio || '',
+      esercizio_fine: current?.esercizio_a || current?.esercizio_fine || '',
       valuta: current?.valuta || 'EUR',
       schema_bilancio: current?.schema_bilancio || 'civilistico',
       default_scritture: current?.default_scritture || '',
@@ -174,8 +175,8 @@ function SocietaConfigView({ societa, onRefresh }) {
       regime_iva: form.regime_iva || null,
       ateco: form.ateco.trim(),
       opzioni_fiscali: form.opzioni_fiscali.trim(),
-      esercizio_inizio: form.esercizio_inizio || null,
-      esercizio_fine: form.esercizio_fine || null,
+      esercizio_da: form.esercizio_inizio || null,
+      esercizio_a: form.esercizio_fine || null,
       valuta: form.valuta || null,
       schema_bilancio: form.schema_bilancio || null,
       default_scritture: form.default_scritture.trim(),
@@ -191,7 +192,7 @@ function SocietaConfigView({ societa, onRefresh }) {
 
     setSaving(true)
     setFeedback(null)
-    const { error } = await contabilitaRepo.updateSocieta(societa.id, updates)
+    const { data, error } = await contabilitaRepo.updateSocieta(societa.id, updates)
     setSaving(false)
 
     if (error) {
@@ -200,6 +201,9 @@ function SocietaConfigView({ societa, onRefresh }) {
     }
 
     setFeedback({ type: 'ok', message: 'Anagrafica società aggiornata correttamente.' })
+    if (data) {
+      onSocietaUpdate?.(data)
+    }
     onRefresh?.()
   }
 

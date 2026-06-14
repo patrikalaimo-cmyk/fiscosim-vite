@@ -3,22 +3,27 @@ import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { calcoloLiquidazioneIvaDefinitiva } from '../domain/iva/calcoloLiquidazioneIvaDefinitiva.js'
 
 export function boundsMensile(year, month) {
-  const from = new Date(year, month - 1, 1)
-  const to = new Date(year, month, 0)
+  const yyyy = String(year)
+  const mm = String(month).padStart(2, '0')
+  const lastDay = new Date(year, month, 0).getDate()
+  const dd = String(lastDay).padStart(2, '0')
   return {
-    periodo_inizio: from.toISOString().slice(0, 10),
-    periodo_fine: to.toISOString().slice(0, 10),
+    periodo_inizio: `${yyyy}-${mm}-01`,
+    periodo_fine: `${yyyy}-${mm}-${dd}`,
   }
 }
 
 export function boundsTrimestrale(year, trimestre) {
   const startMonth = (trimestre - 1) * 3 + 1
   const endMonth = trimestre * 3
-  const from = new Date(year, startMonth - 1, 1)
-  const to = new Date(year, endMonth, 0)
+  const yyyy = String(year)
+  const mmStart = String(startMonth).padStart(2, '0')
+  const mmEnd = String(endMonth).padStart(2, '0')
+  const lastDay = new Date(year, endMonth, 0).getDate()
+  const ddEnd = String(lastDay).padStart(2, '0')
   return {
-    periodo_inizio: from.toISOString().slice(0, 10),
-    periodo_fine: to.toISOString().slice(0, 10),
+    periodo_inizio: `${yyyy}-${mmStart}-01`,
+    periodo_fine: `${yyyy}-${mmEnd}-${ddEnd}`,
   }
 }
 

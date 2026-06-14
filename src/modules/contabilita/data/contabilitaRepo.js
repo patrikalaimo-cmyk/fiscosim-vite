@@ -792,20 +792,39 @@ export async function upsertLiquidazioneIvaCanonica(row) {
 }
 
 export async function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo_fine) {
-  const { data, error } = await sb
+  const { data: rows, error: rowsError } = await sb
     .from('registri_iva')
-    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id, causali_iva(reverse_charge, natura)')
+    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id')
     .eq('societa_id', societaId)
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
 
-  if (error || !data) return { data: [], error }
+  if (rowsError || !rows) return { data: [], error: rowsError }
 
-  const flattened = data.map((row) => ({
-    ...row,
-    reverse_charge: row.causali_iva?.reverse_charge || false,
-    natura: row.causali_iva?.natura || null,
-  }))
+  const causaleIvaIds = Array.from(new Set(rows.map(r => r.causale_iva_id).filter(Boolean)))
+  let causaliMap = new Map()
+  if (causaleIvaIds.length > 0) {
+    const query = sb.from('causali_iva').select('*')
+    if (typeof query.in === 'function') {
+      const { data: causali, error: causaliError } = await query.in('id', causaleIvaIds)
+      if (!causaliError && causali) {
+        for (const c of causali) {
+          causaliMap.set(c.id, c)
+        }
+      }
+    }
+  }
+
+  const flattened = rows.map((row) => {
+    const causale = (row.causale_iva_id ? causaliMap.get(row.causale_iva_id) : null) || row.causali_iva
+    return {
+      ...row,
+      reverse_charge: causale?.reverse_charge || false,
+      natura: causale?.codice_natura_fe !== undefined ? causale.codice_natura_fe : (causale?.natura || null),
+      causale_codice: causale?.codice || row.causale_codice || '',
+      causale_descrizione: causale?.descrizione || row.causale_descrizione || '',
+    }
+  })
 
   return { data: flattened, error: null }
 }

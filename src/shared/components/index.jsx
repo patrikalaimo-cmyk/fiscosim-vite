@@ -1,30 +1,93 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, cloneElement, useRef } from 'react'
 
 const HeaderBridgeContext = createContext(null)
 
+function areVisualPropsEqual(a, b) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (typeof a !== 'object' || typeof b !== 'object') return false
+  if (a.type !== b.type) return false
+
+  const propsA = a.props || {}
+  const propsB = b.props || {}
+
+  if (propsA.disabled !== propsB.disabled) return false
+  if (propsA.className !== propsB.className) return false
+
+  return isChildrenEqual(propsA.children, propsB.children)
+}
+
+function isChildrenEqual(a, b) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((item, idx) => isChildrenEqual(item, b[idx]))
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    return areVisualPropsEqual(a, b)
+  }
+  return false
+}
+
+function cloneWithRefClick(element, clickRef) {
+  if (!element) return null
+  return cloneElement(element, {
+    onClick: (e) => {
+      if (clickRef.current) {
+        clickRef.current(e)
+      }
+    }
+  })
+}
+
 export function HeaderBridgeProvider({ children }) {
   const [header, setHeader] = useState(null)
+  const primaryClickRef = useRef(null)
+  const secondaryClickRef = useRef(null)
 
-  const clearHeader = useCallback(() => setHeader(null), [])
+  const clearHeader = useCallback(() => {
+    setHeader(null)
+    primaryClickRef.current = null
+    secondaryClickRef.current = null
+  }, [])
 
   const setHeaderSafe = useCallback((next) => {
+    if (next?.primaryAction?.props?.onClick) {
+      primaryClickRef.current = next.primaryAction.props.onClick
+    }
+    if (next?.secondaryAction?.props?.onClick) {
+      secondaryClickRef.current = next.secondaryAction.props.onClick
+    }
+
     setHeader((prev) => {
       if (!prev && !next) return prev
       if (!prev || !next) return next
-      // Avoid infinite loops: don't update if the meaningful copy didn't change.
-      // Actions may be passed as ReactNodes and can be referentially unstable; we intentionally ignore them here.
-      if (
-        prev.sectionLabel === next.sectionLabel &&
-        prev.title === next.title &&
-        prev.context === next.context
-      ) {
+
+      const visualChange =
+        prev.sectionLabel !== next.sectionLabel ||
+        prev.title !== next.title ||
+        prev.context !== next.context ||
+        !areVisualPropsEqual(prev.primaryAction, next.primaryAction) ||
+        !areVisualPropsEqual(prev.secondaryAction, next.secondaryAction)
+
+      if (!visualChange) {
         return prev
       }
       return next
     })
   }, [])
 
-  const value = useMemo(() => ({ header, setHeader: setHeaderSafe, clearHeader }), [header, setHeaderSafe, clearHeader])
+  const bridgedHeader = useMemo(() => {
+    if (!header) return null
+    return {
+      ...header,
+      primaryAction: header.primaryAction ? cloneWithRefClick(header.primaryAction, primaryClickRef) : null,
+      secondaryAction: header.secondaryAction ? cloneWithRefClick(header.secondaryAction, secondaryClickRef) : null,
+    }
+  }, [header])
+
+  const value = useMemo(() => ({ header: bridgedHeader, setHeader: setHeaderSafe, clearHeader }), [bridgedHeader, setHeaderSafe, clearHeader])
 
   return (
     <HeaderBridgeContext.Provider value={value}>
@@ -51,11 +114,9 @@ export function ModuleHeader({
 
   useEffect(() => {
     if (!setHeader || !clearHeader) return undefined
-    // Important: depend on stable functions, not on the context object (which changes when header updates),
-    // otherwise we can trigger cleanup/re-set loops and hit "Maximum update depth exceeded".
     setHeader({ sectionLabel, title, context, primaryAction, secondaryAction })
     return () => clearHeader()
-  }, [setHeader, clearHeader, sectionLabel, title, context])
+  }, [setHeader, clearHeader, sectionLabel, title, context, primaryAction, secondaryAction])
 
   if (bridge) return null
 

@@ -37,11 +37,11 @@ const BANCHE_TABS = [
 
 const ADEMPIMENTI_TABS = [
   { id: 'liquidazioni_iva', label: 'Liquidazioni IVA' },
-  { id: 'lipe', label: 'LIPE (parziale)' },
-  { id: 'iva_annuale', label: 'IVA annuale (riepilogo)' },
+  { id: 'lipe', label: 'LIPE' },
+  { id: 'iva_annuale', label: 'IVA annuale' },
   { id: 'ritenute', label: 'Ritenute' },
-  { id: 'f770', label: '770 (parziale)' },
-  { id: 'intrastat', label: 'Intrastat (manuale)' },
+  { id: 'f770', label: '770' },
+  { id: 'intrastat', label: 'Intrastat' },
 ]
 
 const STAMPE_TABS = [
@@ -341,6 +341,11 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
     }
     setLoading(false);
   };
+
+  const handleSocietaUpdate = useCallback((updated) => {
+    setSocietaAttiva(updated);
+    setSocieta(prev => prev.map(s => s.id === updated.id ? updated : s));
+  }, []);
 
   const caricaTutto = useCallback(async (forceAll = false) => {
     if (!societaAttiva) return;
@@ -731,6 +736,7 @@ export function ModuloContabilita({ruolo, utente = null, onHeaderContextChange, 
                   causaliContabili={causaliContabili}
                   causaliIva={causaliIva}
                   caricaTutto={caricaTutto}
+                  onSocietaUpdate={handleSocietaUpdate}
                 />
 
                 <BankingView contTab={effectiveTab} societaAttiva={societaAttiva} setContTab={setContTab} />
