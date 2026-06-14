@@ -2,6 +2,11 @@ import React, { useState } from 'react'
 import { BaseCombobox } from '../../ui/BaseDropdown.jsx'
 import { LiquidazioneIvaLifecyclePanel } from './LiquidazioneIvaLifecyclePanel.jsx'
 
+const MESI_ITALIANI = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+]
+
 function fmt(n) {
   const val = Number(n || 0)
   return val.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
@@ -28,6 +33,8 @@ export function LiquidazioneIvaDashboard({
   error = null
 }) {
   const [showImpostazioni, setShowImpostazioni] = useState(false)
+  const [showPeriodicityWarning, setShowPeriodicityWarning] = useState(false)
+  const [pendingPeriodicity, setPendingPeriodicity] = useState(null)
 
   const {
     statoLiquidazione,
@@ -61,11 +68,18 @@ export function LiquidazioneIvaDashboard({
             <BaseCombobox
               value={periodParams.tipo_periodo}
               onChange={(v) => {
-                setPeriodParams(p => ({
-                  ...p,
-                  tipo_periodo: v || 'mensile',
-                  periodo: 1
-                }))
+                const targetPeriodicita = v || 'mensile'
+                const originalPeriodicita = societa?.tipo_liquidazione_iva || 'mensile'
+                if (targetPeriodicita !== originalPeriodicita) {
+                  setPendingPeriodicity(targetPeriodicita)
+                  setShowPeriodicityWarning(true)
+                } else {
+                  setPeriodParams(p => ({
+                    ...p,
+                    tipo_periodo: targetPeriodicita,
+                    periodo: 1
+                  }))
+                }
               }}
               options={[{ id: 'trimestrale', label: 'Trimestrale' }, { id: 'mensile', label: 'Mensile' }]}
               getOptionId={o => o?.id}
@@ -99,7 +113,7 @@ export function LiquidazioneIvaDashboard({
               options={
                 isTrimestrale
                   ? [1, 2, 3, 4].map(t => ({ id: String(t), label: `${t}° Trimestre` }))
-                  : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => ({ id: String(m), label: `Mese ${m}` }))
+                  : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => ({ id: String(m), label: MESI_ITALIANI[m - 1] }))
               }
               getOptionId={o => o?.id}
               getOptionLabel={o => o?.label}
@@ -217,6 +231,13 @@ export function LiquidazioneIvaDashboard({
           </div>
         )}
       </div>
+
+      {/* Alert Override Temporaneo */}
+      {periodParams.tipo_periodo !== (societa?.tipo_liquidazione_iva || 'mensile') && (
+        <div className="alert alert-warn" style={{ margin: 0, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          ⚠️ <strong>Periodicità diversa dall’anagrafica:</strong> anteprima calcolata con override temporaneo.
+        </div>
+      )}
 
       {/* Titolo di riepilogo periodo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
@@ -495,6 +516,50 @@ export function LiquidazioneIvaDashboard({
           ℹ I dati esposti sono aggiornati all'ultimo calcolo disponibile.
         </div>
       </div>
+
+      {showPeriodicityWarning && (
+        <div className="overlay" style={{ zIndex: 1000 }} onMouseDown={() => {
+          setShowPeriodicityWarning(false)
+        }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-hdr">
+              <div className="modal-drag"/>
+              <div className="modal-title">⚠️ Attenzione: Variazione Periodicità</div>
+              <button className="modal-close" onClick={() => setShowPeriodicityWarning(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ fontSize: '0.85rem', lineHeight: '1.5', padding: '1.25rem' }}>
+              <p style={{ margin: 0 }}>
+                Attenzione: la periodicità IVA selezionata non coincide con quella impostata nell’anagrafica della società. 
+                In anagrafica risulta <strong>“{String(societa?.tipo_liquidazione_iva || 'mensile').toUpperCase()}”</strong>, mentre nella liquidazione stai usando <strong>“{String(pendingPeriodicity).toUpperCase()}”</strong>. Continuare comunque con questa periodicità solo per l’anteprima corrente?
+              </p>
+            </div>
+            <div className="modal-foot" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'end' }}>
+              <button 
+                className="btn-sec" 
+                onClick={() => {
+                  setShowPeriodicityWarning(false)
+                }}
+              >
+                Annulla e torna alla periodicità anagrafica
+              </button>
+              <button 
+                className="btn" 
+                style={{ background: '#f39c12', color: '#fff', border: 'none' }}
+                onClick={() => {
+                  setPeriodParams(p => ({
+                    ...p,
+                    tipo_periodo: pendingPeriodicity,
+                    periodo: 1
+                  }))
+                  setShowPeriodicityWarning(false)
+                }}
+              >
+                Continua solo per questa anteprima
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

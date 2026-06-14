@@ -202,7 +202,7 @@ export function buildLiquidazioneIvaProspettoModel({
     variazioniPeriodiPrecedenti: 0,
     interessiTrimestrali: calcResult?.interessiTrimestrali || 0,
     risultatoFinale: calcResult?.debitoDaVersare > 0 ? calcResult.debitoDaVersare : (calcResult?.creditoDaRiportare || 0),
-    risultatoTipo: (calcResult?.debitoDaVersare > 0 || calcResult?.saldoPeriodo > 0) ? 'debito' : 'credito'
+    risultatoTipo: (calcResult?.debitoDaVersare > 0) ? 'debito' : 'credito'
   }
 
   // 5. Credito compensabile

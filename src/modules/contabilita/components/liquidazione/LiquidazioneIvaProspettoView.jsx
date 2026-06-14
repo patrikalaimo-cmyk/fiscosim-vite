@@ -35,9 +35,14 @@ export function LiquidazioneIvaProspettoView({
     controlliWarning
   } = prospettoModel
 
+const MESI_ITALIANI = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+]
+
   const periodLabel = dashboardModel.periodicita === 'trimestrale'
     ? `${dashboardModel.periodo}° Trimestre ${dashboardModel.anno}`
-    : `Mese ${dashboardModel.periodo}/${dashboardModel.anno}`
+    : `${MESI_ITALIANI[Number(dashboardModel.periodo) - 1]} ${dashboardModel.anno}`
 
   const isAnteprima = dashboardModel.statoLiquidazione === 'Anteprima'
   const isConsolidata = dashboardModel.statoLiquidazione === 'Consolidata'
@@ -68,6 +73,25 @@ export function LiquidazioneIvaProspettoView({
         }}
       >
         <div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="btn-sec"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '0.75rem',
+                height: '32px',
+                padding: '0 12px',
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
+              title="Torna alla dashboard Liquidazione IVA"
+            >
+              <span>⬅</span> Torna alla dashboard
+            </button>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700, color: 'var(--text)' }}>
               Prospetto liquidazione IVA
@@ -97,6 +121,7 @@ export function LiquidazioneIvaProspettoView({
 
         <LiquidazioneIvaExportActions
           prospettoModel={prospettoModel}
+          dashboardModel={dashboardModel}
           societa={societa}
           periodoLabel={periodLabel}
           periodicitaLabel={dashboardModel.periodicita === 'trimestrale' ? 'Trimestrale' : 'Mensile'}

@@ -16,6 +16,11 @@ function formatTimestamp(date) {
   return `${gg}/${mm}/${aaaa} ${hh}:${min}`;
 }
 
+const MESI_ITALIANI = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+]
+
 export function buildLiquidazioneIvaDashboardModel({
   societaAttiva,
   periodParams,
@@ -75,7 +80,9 @@ export function buildLiquidazioneIvaDashboardModel({
 
   // Formatta storico per la tabella
   const storico = liquidazioniList.map(l => {
-    const label = l.periodicita === 'mensile' ? `Mese ${l.mese} ${l.anno}` : `${l.trimestre}° Trimestre ${l.anno}`
+    const label = l.periodicita === 'mensile'
+      ? `${MESI_ITALIANI[Number(l.mese) - 1]} ${l.anno}`
+      : `${l.trimestre}° Trimestre ${l.anno}`
     const isDefinitiva = l.stato === 'definitiva'
     const isConsolidata = l.stato === 'provvisoria'
     const statoLabel = isDefinitiva ? 'DEFINITIVA' : (isConsolidata ? 'CONSOLIDATA' : 'ANTEPRIMA')

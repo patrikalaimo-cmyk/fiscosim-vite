@@ -5819,4 +5819,166 @@ Si progetta la RPC `public.consolida_periodo_iva_transazionale(...)`:
   4. Cliccare sul pulsante: verificare il caricamento ("Salvo...") e la comparsa del banner di successo.
   5. Controllare che il modulo "Liquidazioni IVA" si aggiorni di conseguenza a "Mensile" senza ricaricare il browser.
 
+## EXPORT-PROSPETTO-LIQUIDAZIONE-IVA-PDF-EXCEL-STAMPA
+
+- **Audit librerie export disponibili**:
+  - Trovata dipendenza `"xlsx": "^0.18.5"` (SheetJS) installata ed utilizzabile.
+  - Nessuna libreria di generazione PDF client-side (come `jspdf` o `pdfmake`) risulta presente nel `package.json`.
+- **Scelta tecnica adottata**:
+  - Excel reale: Generazione di un file Excel `.xlsx` multi-foglio client-side usando SheetJS con valori numerici passati come tipo `number` (permettendo calcoli e formule dell'utente).
+  - PDF & Stampa reale: Poiché non è consentito installare pacchetti aggiuntivi e non ci sono librerie PDF, è stato implementato un layout HTML stampabile ad hoc ottimizzato per fogli A4 orizzontali (landscape) che viene renderizzato in una nuova finestra ed invoca `window.print()`. Questo attiva il dialogo nativo del browser che consente all'utente sia la stampa fisica ("Stampa") sia il salvataggio in formato PDF ("Esporta PDF").
+- **Cosa è stato implementato realmente**:
+  - **Excel reale**: Un workbook multi-scheda con fogli: `Riepilogo`, `Registro vendite`, `Registro acquisti`, `IVA per cassa`, `Crediti`, `Controlli`. I totali e i dettagli includono tutti i campi e registri.
+  - **PDF reale / Stampa**: Layout pulito (senza sidebar e intestazioni dell'app) in formato A4 landscape, con testata societaria, Kpis, registri e controlli. Attivazione immediata del gestore di stampa nativo.
+  - **Interfaccia Utente (UI)**: Pulsanti con feedback visuale durante l'esportazione (`Esportazione PDF...`, `Esportazione Excel...`, `Stampa in corso...`), gestione dello stato di disabilitazione per prevenire doppi click ed evidenziazione di errori tramite banner.
+- **File modificati**:
+  * [buildLiquidazioneIvaExportModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/helper/buildLiquidazioneIvaExportModel.js) — Esteso per definire `buildLiquidazioneIvaExportModel` (struttura unica di export) e `buildLiquidazioneIvaExportXlsx` (costruttore SheetJS multi-foglio).
+  * [LiquidazioneIvaExportActions.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaExportActions.jsx) — Cablato con le nuove azioni reali, gestori asincroni, stati di loading/disabilitazione ed errori visibili.
+- **File creati**:
+  * [liquidazioneIvaExport.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/liquidazioneIvaExport.test.js) — Test suite dedicata per gli export.
+- **Test eseguiti**:
+  - Eseguita l'intera pipeline di test IVA ed export (73/73 test superati con successo):
+    `node --test tests/liquidazioneIvaUxHelpers.test.js tests/liquidazioneIvaProvvisoriaRealFix.test.js tests/liquidazioneIvaProvvisoria.test.js tests/liquidazioneIvaProvvisoriaUiAdapter.test.js tests/liquidazioneIvaAggregator.test.js tests/liquidazioneIvaDefinitivaUiAdapter.test.js tests/liquidazioneIvaDefinitivaOrchestrator.test.js tests/anagraficaSocietaConfig.test.js tests/liquidazioneIvaExport.test.js`
+- **Build**:
+  - `npm run build` completato con successo (419 moduli).
+- **Conferma nessuna migration applicata**: Confermato, nessuna migrazione database eseguita.
+- **Conferma nessun dato Supabase modificato**: Confermato, nessun dato Supabase modificato.
+- **Conferma env/auth/RLS/policy non toccati**: Confermato, intatti.
+- **Prossimo test manuale utente**:
+  1. Accedere al modulo "Liquidazioni IVA" ed aprire il "Prospetto dettagliato" di un periodo calcolato.
+  2. Cliccare su "Esporta Excel": verificare il download di `prospetto_iva_[societa]_[periodo].xlsx` e controllare la presenza dei 6 fogli con i valori numerici editabili.
+  3. Cliccare su "Esporta PDF" / "Stampa": verificare l'apertura della pagina di anteprima pulita in formato orizzontale e l'attivazione della finestra di stampa del browser.
+
+## RIFINITURE-LIQUIDAZIONE-IVA-MESI-WARNING-PROSPETTO-CLIENTE
+
+- **File letti**:
+  * `src/modules/contabilita/views/TaxComplianceView.jsx`
+  * `src/modules/contabilita/components/liquidazione/LiquidazioneIvaDashboard.jsx`
+  * `src/modules/contabilita/components/liquidazione/LiquidazioneIvaProspettoView.jsx`
+  * `src/modules/contabilita/components/liquidazione/LiquidazioneIvaExportActions.jsx`
+  * `src/modules/contabilita/application/helper/buildLiquidazioneIvaDashboardModel.js`
+  * `src/modules/contabilita/application/helper/buildLiquidazioneIvaProspettoModel.js`
+  * `src/modules/contabilita/application/helper/buildLiquidazioneIvaExportModel.js`
+  * `tests/liquidazioneIvaExport.test.js`
+- **File modificati/creati**:
+  * [buildLiquidazioneIvaExportModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/helper/buildLiquidazioneIvaExportModel.js) — Aggiunte le funzioni pure di tributi (`resolveLiquidazioneIvaTributo`), date scadenza (`resolveLiquidazioneIvaDueDate`), modello client (`buildLiquidazioneIvaClienteModel`), layout di stampa HTML (`buildLiquidazioneIvaClienteHtml`) e foglio Excel (`buildLiquidazioneIvaClienteXlsx`).
+  * [buildLiquidazioneIvaDashboardModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/helper/buildLiquidazioneIvaDashboardModel.js) — Aggiornata la formattazione dei periodi storici con i nomi dei mesi in italiano.
+  * [LiquidazioneIvaDashboard.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaDashboard.jsx) — Inserite le opzioni dei mesi in italiano, l'intercettore per cambio manuale periodicità discrepante con anagrafica, la modale popup di warning e il banner di alert override temporaneo.
+  * [LiquidazioneIvaProspettoView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaProspettoView.jsx) — Passato `dashboardModel` al componente azioni export ed allineate le intestazioni periodi con i mesi reali.
+  * [LiquidazioneIvaExportActions.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaExportActions.jsx) — Cablata l'azione "Prospetto cliente" che apre la modale di preview della comunicazione cliente e dell'F24 con i relativi export PDF portrait ed Excel dedicati.
+  * [liquidazioneIvaExport.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/liquidazioneIvaExport.test.js) — Estesa la suite di test con 6 scenari dedicati alle rifiniture.
+- **Correzione label mesi**:
+  * Sostituiti tutti i riferimenti numerici nei selettori (ad es. "Mese 1", "Mese 2") e storici contabili con i corrispondenti nomi dei mesi in italiano (Gennaio, Febbraio, ..., Dicembre).
+- **Logica warning periodicità diversa da anagrafica**:
+  * Quando l'utente seleziona una periodicità diversa da quella ufficiale impostata nell'anagrafica della società, viene mostrata una modale overlay con due opzioni: "Continua solo per questa anteprima" (applica l'override temporaneo visuale senza toccare il DB, mostra un banner alert sulla dashboard) ed "Annulla e torna alla periodicità anagrafica" (mantiene la periodicità originaria dell'anagrafica).
+- **Struttura prospetto cliente implementata**:
+  * Una lettera di comunicazione ad uso studio/cliente che sposa il formato reale di `ILCORIAND_05.26.pdf`, composta da: testata con operatore/data, dettaglio esigibilità (debito), dettaglio acquisti detraibili (credito), saldo esito finale e prospetto di compilazione delega F24 sezione Erario.
+- **Regole codici tributo e scadenze**:
+  * Risoluzione automatica dei codici tributo in base a periodo e periodicità (mensili: 6001-6012, trimestrali: 6031-6034).
+  * Calcolo scadenze fiscali: per i mensili il giorno 16 del mese successivo; per i trimestrali date dedicate (Q1: 16 Maggio, Q2: 20 Agosto, Q3: 16 Novembre, Q4: 16 Marzo del successivo).
+- **Cosa resta da validare fiscalmente**:
+  * L'adattamento delle scadenze in corrispondenza di sabati, domeniche e giorni festivi nazionali dinamici (calendario festività completo non implementato in questa fase).
+- **Test eseguiti**:
+  * Eseguita l'intera pipeline di test IVA ed export (78/78 test superati con successo).
+- **Build**:
+  * `npm run build` completato con successo (418 moduli minificati).
+- **Conferma nessuna migration applicata**: Confermato, nessuna migrazione database eseguita.
+- **Conferma nessun dato Supabase modificato**: Confermato, nessun dato database Supabase modificato direttamente.
+- **Conferma env/auth/RLS/policy non toccati**: Confermato, intatti.
+- **Prossimo test manuale utente**:
+  1. Aprire la dashboard Liquidazioni IVA e verificare che i mesi compaiano come "Gennaio", "Febbraio", etc.
+  2. Provare a cambiare la periodicità per una società da mensile a trimestrale: verificare la comparsa del popup di warning, provando sia ad annullare (torna a mensile) sia a confermare (mostra il banner di override).
+  3. Cliccare su "Visualizza prospetto dettagliato" e poi su "Prospetto cliente": verificare l'apertura della modale con la simulazione del foglio di comunicazione e il box Erario F24 compilato (con tributo 6005 e scadenza 16 Giugno 2026 per Maggio 2026).
+  4. Cliccare su "Stampa / Salva PDF" o "Esporta Excel" all'interno del Prospetto Cliente e verificare i documenti generati.
+
+
+## FIX-LIQUIDAZIONE-IVA-EXPORT-SCELTA-PROSPETTO-CREDITO-LEGGIBILITA-TORNA-DASHBOARD
+
+### 1. Causa dei Problemi Rilevati
+* **Scelta Prospetto**: Mancava una selezione esplicita per permettere all'utente di scegliere tra il "Prospetto sintetico cliente" e il "Prospetto dettagliato interno" durante le esportazioni o la stampa.
+* **Leggibilità Prospetto Sintetico**: I colori ereditati dal tema globale (come grigio chiaro su sfondo bianco) rendevano il testo e i dati del prospetto cliente quasi illeggibili.
+* **Bug Credito (0,00 €)**: Il calcolo di `risultatoTipo` nel modello del prospetto conteneva un controllo errato su `calcResult.saldoPeriodo > 0` (l'imposta del periodo prima dell'applicazione del credito), con la conseguenza che una liquidazione a credito finale (ma con imponibile di periodo a debito prima dell'applicazione del credito precedente) veniva classificata come `'debito'`. Di conseguenza, `differenzaCredito` veniva impostato a `0.00` e veniva visualizzato il box di pagamento a debito o credito zero.
+* **Pulsante "Torna alla dashboard"**: Il prospetto dettagliato non consentiva una facile navigazione all'indietro per tornare alla dashboard principale senza ricalcolare o chiudere bruscamente.
+
+### 2. File Modificati/Creati
+* [buildLiquidazioneIvaProspettoModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/helper/buildLiquidazioneIvaProspettoModel.js) (Modificato: corretto il calcolo di `risultatoTipo` basandolo esclusivamente su `calcResult.debitoDaVersare > 0`).
+* [LiquidazioneIvaProspettoView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaProspettoView.jsx) (Modificato: aggiunto pulsante "Torna alla dashboard" ben visibile in alto a sinistra).
+* [LiquidazioneIvaExportActions.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaExportActions.jsx) (Modificato: aggiornato il pulsante "Chiudi" in "Torna alla dashboard" e cablati i comportamenti della tendina "Tipo prospetto" per PDF, Excel e Stampa).
+* [liquidazioneIvaExport.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/liquidazioneIvaExport.test.js) (Modificato: aggiunto Test 14 per coprire il corretto calcolo del credito e la soppressione dell'F24 in Excel/HTML).
+
+### 3. Funzionamento della Scelta tra Sintetico e Dettagliato
+* Nella barra delle azioni in alto a destra è presente una tendina "Tipo prospetto" con opzioni "Dettagliato interno" (predefinito) e "Sintetico cliente".
+* Le azioni "Esporta PDF", "Esporta Excel" e "Stampa" leggono questo stato ed esportano/stampano dinamicamente il tipo di prospetto corrispondente.
+* L'export Excel per il sintetico genera un file a scheda singola con la comunicazione formale, mentre per il dettagliato genera una cartella di lavoro multi-scheda con tutti i registri e i diagnostici.
+* Il PDF e la Stampa usano rispettivamente il layout portrait A4 pulito (sintetico) o landscape A4 (dettagliato).
+
+### 4. Fix Leggibilità e F24 a Credito
+* Impostati esplicitamente i colori `#111827` (principale) e `#374151` (secondario) e `#cbd5e1` (bordi) su tutti gli elementi della comunicazione cliente per inibire l'ereditarietà di classi CSS chiare dell'app (dark mode).
+* Se il saldo finale è a credito, F24 non viene compilato (le celle e i totali della delega sono omessi nell'Excel e sostituiti da un unico messaggio "Nessun importo da esporre in delega F24" nel PDF/HTML/stampa).
+
+### 5. Pulsante "Torna alla Dashboard"
+* Inserito un pulsante `⬅ Torna alla dashboard` in alto a sinistra del prospetto per consentire all'operatore di chiudere la vista di dettaglio e ritornare alla dashboard mantenendo i dati di anteprima/periodo in memoria.
+
+### 6. Test Eseguiti e Build
+* Eseguita l'intera test suite con Node.js (`79 / 79 test passati`).
+* Eseguito `npm run build` con successo (compilazione ed bundling completati in 14.56s).
+
+### 7. Conferme Sicurezza
+* Nessuna migrazione applicata sul DB.
+* Nessun dato Supabase modificato o eliminato.
+* File di configurazione, ambiente (`.env`, `.env.local`), auth, policy RLS e policy di tenancy non toccati.
+
+### 8. Prossimo Test Manuale Utente
+1. Accedere al portale con la società "SIRIA SRL", periodicità "Mensile", Giugno 2026.
+2. Cliccare su "Aggiorna anteprima" (dovrebbe risultare a credito di 914,98 €).
+3. Cliccare su "Visualizza prospetto dettagliato".
+4. Verificare che compaia il pulsante "Torna alla dashboard" in alto a sinistra.
+5. Nel selettore "Tipo prospetto", selezionare "Sintetico cliente".
+6. Cliccare su "Esporta PDF", "Esporta Excel" o "Stampa" e verificarne la corretta formattazione della lettera di comunicazione con F24 non compilato e testo "Nessun importo da esporre in delega F24".
+
+
+## FIX-PROSPETTO-CLIENTE-F24-CONTRASTO-TABELLA
+
+### 1. Causa del Problema Rilevato
+* **Sfondo e Testo Scuro nella Tabella F24**: Nel prospetto cliente dell'interfaccia utente (React preview modal), i tag `td` e `th` della tabella F24 non avevano uno sfondo esplicitamente dichiarato in linea. In modalità dark mode dell'applicazione, le regole CSS globali assegnavano a `th` e `td` una colorazione di sfondo scura (ereditata o esplicita). Tuttavia, il testo in questi elementi era stilizzato in linea con un colore molto scuro (`color: '#111827'` o `#374151`), con il risultato di avere testo nero/scuro su sfondo nero/scuro.
+
+### 2. File Modificati/Creati
+* [LiquidazioneIvaExportActions.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaExportActions.jsx) (Modificato: aggiunti stili `background` in linea espliciti per ciascun tag `td` e `th` nella tabella di delega F24).
+
+### 3. Soluzione Applicata
+* Ciascun header `th` ha ora in linea `background: '#f8fafc'`.
+* I `td` della riga del tributo a debito hanno in linea `background: '#ffffff'`.
+* I `td` delle righe dei totali `TOTALE A` e `TOTALE B` hanno in linea `background: '#f8fafc'`.
+* I `td` della riga finale `SALDO FINALE` hanno in linea `background: '#cbd5e1'`.
+* In caso di periodo a credito, il `td` del messaggio "Nessun importo da esporre in delega F24" ha in linea `background: '#ffffff'`.
+Questo garantisce un contrasto perfetto ed elevatissimo indipendentemente dalle classi CSS globali o dal tema attivo (dark mode/light mode).
+
+### 4. Test Eseguiti e Build
+* Eseguita l'intera test suite (`79 / 79 test passati`).
+* Eseguito `npm run build` con successo (compilato in 12.91s).
+
+### 5. Conferme Sicurezza
+* Nessuna migrazione applicata sul DB.
+* Nessun dato Supabase modificato o eliminato.
+* File di configurazione, ambiente (`.env`, `.env.local`), auth, policy RLS e policy di tenancy non toccati.
+
+### 6. Prossimo Test Manuale Utente
+1. Accedere a FiscoSim con la società "SIRIA SRL", periodicità "Mensile", elaborare un periodo a debito (es. Maggio 2026).
+2. Aprire il "Prospetto dettagliato" e cliccare su "Prospetto cliente".
+3. Verificare che la tabella della delega F24 nella sezione Erario mostri ora uno sfondo bianco/grigio chiaro pulito con testi neri e rossi ad alto contrasto ben leggibili.
+4. Elaborare un periodo a credito (es. Giugno 2026), aprire il prospetto cliente e verificare che continui a comparire unicamente la dicitura "Nessun importo da esporre in delega F24." su sfondo bianco ad alto contrasto.
+
+
+## VALIDAZIONE-MANUALE-LIQUIDAZIONE-IVA-EXPORT-PROSPETTO-CLIENTE
+
+* **Test manuale utente positivo**: validato interamente il comportamento del modulo Liquidazione IVA periodica.
+* **F24 cliente leggibile**: contrasto della tabella F24 sezione Erario ottimizzato con sfondi chiari inline e testi scuri ad alto contrasto.
+* **Caso debito OK**: tributo, scadenza, interessi e importo a debito calcolati e compilati correttamente sia nel PDF/stampa che nell'Excel.
+* **Caso credito OK**: credito reale riportato a nuovo correttamente e sezione F24 non compilata (visualizza messaggio "Nessun importo da esporre in delega F24").
+* **Scelta prospetto sintetico/dettagliato OK**: l'utente sceglie dinamicamente quale documento stampare/esportare senza ambiguità.
+* **Torna alla dashboard OK**: pulsante di ritorno alla dashboard dal prospetto dettagliato implementato e funzionante per una navigazione circolare fluida.
+
+
+
+
 
