@@ -80,6 +80,14 @@ export function buildLiquidazioneIvaExportCsv(model, meta = {}) {
   lines.push(`# Stato: ${testata.stato}`)
   lines.push(`# Operatore: ${testata.operatore}`)
   lines.push(`# Data elaborazione: ${testata.dataElaborazione}`)
+  
+  const hasNoDetails = (registroVendite.dettaglio || []).length === 0 && 
+                       (registroAcquisti.dettaglio || []).length === 0 && 
+                       (ivaPerCassa || []).length === 0;
+  if (hasNoDetails) {
+    lines.push(`# Nota operativa: il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati.`)
+  }
+
   lines.push('')
 
   // 1. Riepilogo
@@ -189,6 +197,16 @@ export function buildLiquidazioneIvaExportHtml(model, meta = {}) {
   const exportModel = buildLiquidazioneIvaExportModel(model, meta)
   const { testata, riepilogoKpi, registroVendite, registroAcquisti, ivaPerCassa, creditoCompensabile, controlliWarning } = exportModel
 
+  const hasNoDetails = (registroVendite.dettaglio || []).length === 0 && 
+                       (registroAcquisti.dettaglio || []).length === 0 && 
+                       (ivaPerCassa || []).length === 0;
+  const warningBanner = hasNoDetails
+    ? `<div style="background: rgba(243, 156, 18, 0.08); border: 1px solid rgba(243, 156, 18, 0.2); color: #e67e22; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-weight: bold; font-size: 11px;">
+         ⚠️ Nota operativa: il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati.
+       </div>`
+    : '';
+
+
   const vRows = registroVendite.dettaglio.map(g => `
     <tr>
       <td>${g.codiceIva}</td>
@@ -266,7 +284,7 @@ export function buildLiquidazioneIvaExportHtml(model, meta = {}) {
       <div><strong>Operatore Studio:</strong> ${testata.operatore}</div>
     </div>
   </div>
-
+  ${warningBanner}
   <div class="grid-2">
     <div>
       <div class="section-title">1. Riepilogo Contabile</div>
@@ -411,6 +429,9 @@ export function buildLiquidazioneIvaExportXlsx(model, meta = {}) {
   const { testata, riepilogoKpi, registroVendite, registroAcquisti, ivaPerCassa, creditoCompensabile, controlliWarning } = exportModel
 
   const wb = XLSX.utils.book_new()
+  const hasNoDetails = (registroVendite.dettaglio || []).length === 0 && 
+                       (registroAcquisti.dettaglio || []).length === 0 && 
+                       (ivaPerCassa || []).length === 0;
 
   // 1. Riepilogo Sheet
   const riepAoa = [
@@ -421,7 +442,14 @@ export function buildLiquidazioneIvaExportXlsx(model, meta = {}) {
     ["Periodicità", testata.periodicita],
     ["Stato", testata.stato],
     ["Operatore Studio", testata.operatore],
-    ["Data elaborazione", testata.dataElaborazione],
+    ["Data elaborazione", testata.dataElaborazione]
+  ]
+  if (hasNoDetails) {
+    riepAoa.push(["Nota operativa", "il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati."])
+  }
+
+
+  riepAoa.push(
     [],
     ["VOCE LIQUIDAZIONE", "IMPORTO"],
     ["IVA a debito (da registro vendite)", riepilogoKpi.ivaVendite],
@@ -433,7 +461,8 @@ export function buildLiquidazioneIvaExportXlsx(model, meta = {}) {
     ["Credito IVA periodo precedente", riepilogoKpi.creditoIvaPrecedente],
     ["Credito compensabile usato", riepilogoKpi.creditoCompensabileUsato],
     ["Acconto IVA versato", riepilogoKpi.accontoIva]
-  ]
+  );
+
   if (riepilogoKpi.interessiTrimestrali > 0) {
     riepAoa.push(["Interessi liquidazione trimestrale (1%)", riepilogoKpi.interessiTrimestrali])
   }
@@ -622,6 +651,8 @@ function formatDueDate(year, month, day) {
 
 export function buildLiquidazioneIvaClienteModel(prospettoModel, meta = {}) {
   const {
+    dettaglioVendite = [],
+    dettaglioAcquisti = [],
     riepilogoLiquidazione = {},
     totaliVendite = {},
     totaliAcquisti = {},
@@ -631,6 +662,10 @@ export function buildLiquidazioneIvaClienteModel(prospettoModel, meta = {}) {
   const periodicita = String(meta.periodicita || 'mensile').toLowerCase()
   const periodoNum = Number(meta.periodoNum || 1)
   const anno = Number(meta.anno || new Date().getFullYear())
+
+  const hasNoDetails = (dettaglioVendite || []).length === 0 && 
+                       (dettaglioAcquisti || []).length === 0 && 
+                       (ivaPerCassa || []).length === 0;
 
   // A. Testata
   const testata = {
@@ -709,19 +744,26 @@ export function buildLiquidazioneIvaClienteModel(prospettoModel, meta = {}) {
       scadenza,
       tributo
     },
-    sezioneErario
+    sezioneErario,
+    hasNoDetails
   }
 }
 
 export function buildLiquidazioneIvaClienteHtml(clienteModel) {
-  const { testata, ivaEsigibile, ivaDetraitta, risultato, versamento, sezioneErario } = clienteModel
+  const { testata, ivaEsigibile, ivaDetraitta, risultato, versamento, sezioneErario, hasNoDetails } = clienteModel
 
   const formatEuro = (n) => {
     return Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
   }
 
-  const isDebito = versamento.isDebito
+  const warningBanner = hasNoDetails
+    ? `<div style="background: #fffbeb; border: 1px solid #fef3c7; color: #d97706; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-weight: bold; font-size: 11px;">
+         ⚠️ Nota operativa: il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati.
+       </div>`
+    : '';
 
+
+  const isDebito = versamento.isDebito
   const f24Row = isDebito ? `
     <tr>
       <td><strong>IMPOSTE DIRETTE - IVA</strong></td>
@@ -786,7 +828,7 @@ export function buildLiquidazioneIvaClienteHtml(clienteModel) {
     ${testata.partitaIva !== '—' ? `Partita IVA: ${testata.partitaIva}` : ''}
     ${testata.codiceFiscale !== '—' && testata.codiceFiscale !== testata.partitaIva ? ` · Codice Fiscale: ${testata.codiceFiscale}` : ''}
   </div>
-
+  ${warningBanner}
   <div class="title">Comunicazione Risultato Liquidazione IVA</div>
 
   <p>
@@ -923,7 +965,7 @@ export function buildLiquidazioneIvaClienteHtml(clienteModel) {
 }
 
 export function buildLiquidazioneIvaClienteXlsx(clienteModel) {
-  const { testata, ivaEsigibile, ivaDetraitta, risultato, versamento, sezioneErario } = clienteModel
+  const { testata, ivaEsigibile, ivaDetraitta, risultato, versamento, sezioneErario, hasNoDetails } = clienteModel
   const wb = XLSX.utils.book_new()
 
   const isDebito = versamento.isDebito
@@ -948,7 +990,12 @@ export function buildLiquidazioneIvaClienteXlsx(clienteModel) {
     ["Codice Fiscale", testata.codiceFiscale],
     ["Periodo", testata.periodoLabel],
     ["Periodicità", testata.periodicitaLabel],
-    ["Data elaborazione", testata.dataElaborazione],
+    ["Data elaborazione", testata.dataElaborazione]
+  ]
+  if (hasNoDetails) {
+    aoa.push(["Nota operativa", "il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati."])
+  }
+  aoa.push(
     [],
     ["A. IVA ESIGIBILE NEL PERIODO"],
     ["Fatture emesse / corrispettivi", ivaEsigibile.fattureEmesse],
@@ -973,9 +1020,10 @@ export function buildLiquidazioneIvaClienteXlsx(clienteModel) {
     ["Importo da versare (con interessi)", isDebito ? versamento.impostaArrotondata : 0],
     [],
     ...f24Rows
-  ]
+  )
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   XLSX.utils.book_append_sheet(wb, ws, "Prospetto Cliente")
   return wb
 }
+

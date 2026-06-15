@@ -6132,6 +6132,126 @@ Questo garantisce un contrasto perfetto ed elevatissimo indipendentemente dalle 
     `git commit -m "fix: risolve errore FK consolidamento liquidazione iva e allinea query snapshot"`
 
 
+## COMMIT-LIQUIDAZIONE-IVA-SCHEMA-ALIGNED
+
+* **Hash commit**: `4de2794`
+* **Messaggio commit**: `fix: allinea consolidamento liquidazione iva allo schema reale`
+* **File inclusi**:
+  * `AI_WORKING_AREA_FISCOSIM/08_PROMPT_MANCANTI_STUDIO_GRADE.md`
+  * `REPORT/REPORT_CODEX.md`
+  * `supabase/migrations/20260615110000_fix_liquidazione_iva_schema_alignment_completo.sql`
+  * `src/modules/contabilita/application/liquidazioneIvaClient.js`
+  * `src/modules/contabilita/components/liquidazione/LiquidazioneIvaDashboard.jsx`
+  * `src/modules/contabilita/data/contabilitaRepo.js`
+  * `src/modules/contabilita/views/TaxComplianceView.jsx`
+  * `tests/liquidazioneIvaDefinitivaOrchestrator.test.js`
+  * `tests/liquidazioneIvaDefinitivaRpcClient.test.js`
+* **Conferma test automatici**: 86/86 test passati con successo (100% green).
+* **Conferma build**: Eseguita ed andata a buon fine (`npm run build` OK).
+* **Verifica manuale**: SQL per la stored procedure `consolida_periodo_iva_transazionale` applicato manualmente in Supabase Studio; test UI manuale su SIRIA SRL (Giugno 2026) completato con successo ("ok andato").
+* **Rischio residuo**: Lo snapshot delle righe è disattivato (`righeSnapshot = 0`) a causa della FK legacy `liquidazioni_iva_righe` → `liquidazioni_iva`, mentre la testata risiede su `liquidazione_iva`. La risoluzione richiederà una fase dedicata per allineare le tabelle e la FK nel DB.
+
+
+## LIQUIDAZIONE-IVA-CHIUSURA-OPERATIVA-STORICO-STATI-EXPORT
+
+1. **Path verificato**: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **File modificati**:
+   * [buildLiquidazioneIvaExportModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/helper/buildLiquidazioneIvaExportModel.js)
+   * [buildLiquidazioneIvaProspettoModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/helper/buildLiquidazioneIvaProspettoModel.js)
+   * [LiquidazioneIvaProspettoView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/liquidazione/LiquidazioneIvaProspettoView.jsx)
+   * [TaxComplianceView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/TaxComplianceView.jsx)
+   * [REPORT/REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+3. **Cosa è stato corretto/implementato**:
+   * **Messaggio operativo blocco definitiva**: Modificato il controllo in `TaxComplianceView.jsx` sia per il consolidamento provvisorio che definitivo per verificare se la liquidazione ha stato `definitiva`. In tal caso, si blocca l'elaborazione con il messaggio operativo: `“Liquidazione definitiva: il periodo è bloccato e non può essere riconsolidato.”`.
+   * **Conferma sovrascrittura provvisoria**: Integrato un popup di avviso/conferma `window.confirm` quando si tenta di sovrascrivere o riconsolidare una liquidazione provvisoria già salvata.
+   * **Fallback `savedRecord` condizionato**: Modificato il modulo `buildLiquidazioneIvaProspettoModel.js` in modo che la copia di salvataggio del database (`savedRecord`) intervenga per popolare i totali della liquidazione esclusivamente se:
+     * `calcResult` non contiene dettagli reali (non ci sono transazioni/righe IVA o `calcResult` è vuoto/null);
+     * `savedRecord` esiste in database per lo specifico periodo;
+     * Si sta visualizzando o esportando un record già salvato (`options.isSaved === true`).
+     Questo impedisce al fallback di sovrascrivere un'anteprima pulita del periodo se `calcResult` possiede dati reali calcolati ma non consolidati.
+   * **Nota operativa prospetto/export**: Inserita la nota informativa `"Nota operativa: il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati."` nei seguenti output se il dettaglio analitico delle righe è vuoto:
+     * Vista prospetto (`LiquidazioneIvaProspettoView.jsx`)
+     * Export CSV (`buildLiquidazioneIvaExportCsv`)
+     * Export HTML (`buildLiquidazioneIvaExportHtml`)
+     * Export XLSX (`buildLiquidazioneIvaExportXlsx`)
+     * Export Cliente HTML (`buildLiquidazioneIvaClienteHtml`)
+     * Export Cliente XLSX (`buildLiquidazioneIvaClienteXlsx`)
+   * **Riparazione sintassi export**: Corretto un blocco di sintassi rotto a causa di un inserimento incompleto della chiamata `aoa.push(...)` nel file `buildLiquidazioneIvaExportModel.js`.
+4. **Analisi del flusso definitiva**:
+   * La UI espone il pulsante "Consolida liquidazione" collegato alla funzione `consolidaDefinitivamente` in `TaxComplianceView.jsx`. Questa richiama la funzione client `consolidaLiquidazioneIvaDefinitivaDaPeriodo` (che esegue l'RPC `consolida_periodo_iva_transazionale`).
+   * Non è attualmente presente un flusso isolato "Rendi definitiva" che alteri lo stato di una liquidazione precedentemente consolidata come provvisoria a definitiva senza eseguire il riconsolidamento da zero. Lo stato `definitiva` viene gestito o tramite l'impostazione manuale/RPC o ereditando i tag del modulo (es. `note` e `[stato:definitiva]`).
+5. **Cosa NON è stato toccato**:
+   * Nessuna modifica apportata alla foreign key `liquidazioni_iva_righe_liquidazione_id_fkey`.
+   * Nessuna scrittura o riattivazione dello snapshot righe.
+   * Nessuna modifica a `.env`, bypass RLS, policy Supabase o tabelle di database.
+   * Nessuna esecuzione SQL in ambiente live.
+6. **Test eseguiti**:
+   * Eseguita la suite di test completa per la liquidazione IVA: `101 / 101` test passati con successo (100% green).
+   * Verificato che sia `liquidazioneIvaUxHelpers.test.js` che `liquidazioneIvaExport.test.js` (comprese le nuove regole di fallback e le note operative di export) passino senza errori.
+7. **Build eseguita**:
+   * `npm run build` completata con successo (419 moduli trasformati e compilati senza errori).
+8. **Rischi residui**:
+   * La memorizzazione delle righe di snapshot resta sospesa a livello DB a causa del mismatch strutturale della FK legacy su `liquidazioni_iva_righe` (che punta a `liquidazioni_iva` mentre la testata risiede in `liquidazione_iva`). Ciò limita la visualizzazione storica ai soli totali consolidati, come esplicitato dalla nota operativa.
+   * La mancanza di un flusso UI nativo di sblocco/sblocco-definitiva rende necessario intervenire sul DB in caso di sblocco manuale di un periodo definitivo bloccato.
+
+
+## ROADMAP-TO-100-FISCOSIM-NUOVE-DECISIONI-UTENTE
+
+1. **Path verificato**: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Data**: 16 Giugno 2026
+3. **File modificati**:
+   * [02_STATO_ATTUALE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/02_STATO_ATTUALE.md)
+   * [05_ROADMAP_ATTIVA.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/05_ROADMAP_ATTIVA.md)
+   * [07_AUDIT_STUDIO_GRADE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/07_AUDIT_STUDIO_GRADE.md)
+   * [08_PROMPT_MANCANTI_STUDIO_GRADE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/08_PROMPT_MANCANTI_STUDIO_GRADE.md)
+   * [ROADMAP_FISCOSIM_STUDIO_GRADE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md)
+   * [REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+4. **Cosa è stato aggiornato/recepito**:
+   * **F24 Semplificato**: Rimosso lo sviluppo di un compilatore F24 completo (demandato a TeamSystem). Mantenute le righe finali F24 in liquidazione IVA e lo scadenzario F24 per clienti Entratel con storico ricorrenze evidenziato in verde.
+   * **Controllo Ritenute da Import F24**: Inserito in roadmap (Fase 18) per incrociare data pagamento parcella, scadenza e ritenute maturate con il versato da F24 (cod. 1040) indicando stati Verde (tutto versato), Giallo (versato in ritardo/verifica ravvedimento) e Rosso (differenze residue).
+   * **Reverse Charge / Estero Limato**: Riduzione del perimetro. Doppia rilevazione acquisti/vendite con IVA neutrale governata da policy causali (es. A17/FF5) senza hardcode. Partitario solo all'imponibile. Gestione note credito estere semplificata a segno opposto.
+   * **Modifiche, Annulli, Storni e Cancellazioni**: Modello pragmatico con alert graduati (leggero per prima nota semplice, forte per fatture/documenti, doppia conferma per impatti su IVA/ritenute/partitario, blocco totale per azioni destabilizzanti, backup/ripristino preventivo).
+   * **Periodi Chiusi e Stampa Definitiva**: Riconfigurato "periodo chiuso" come stampa definitiva dei registri. Riapertura straordinaria solo per Admin/Owner con motivazione obbligatoria, log completo, backup, ripristino, riconferma e ristampa. Alert di invio LIPE se si modificano liquidazioni consolidate ma provvisorie.
+   * **Libro Cespiti Leggero**: Integrazione su Inserimento Manuale ed Import. Alert di proposta inserimento cespite (Sì / No / Ricorda dopo) che genera notifica persistente in dashboard o tab cespiti. Suggerimento aliquote/durata da storico.
+   * **Import Contabilità & Riconciliazione Bancaria**: Allineati come canali primari di ingresso che generano draft canoniche coerenti con il manuale (senza logiche contabili separate).
+   * **Scarico Massivo AdE**: Rimosso dai moduli di ingresso principali; distaccato come modulo strumentale studio per generare file Entratel, mentre l'import ZIP passa da Import Contabilità.
+   * **Nuova Stima Prompt**: Ricalcolata in 38–50 prompt compatti per lo sviluppo studio-grade interno, e 50–60 prompt per lo scenario prudente con bug/schema/legacy cleanup (resizing delle vecchie stime che contenevano F24/AdE completi).
+   * **Nuovo Ordine Roadmap**: Sequenza riordinata per le fasi 12-27.
+5. **Test eseguiti**:
+   * Nessun test applicativo eseguito, in conformità alle direttive del task (non sono state apportate modifiche al codice applicativo o al DB).
+6. **Conferma Perimetro**:
+   * Nessun codice applicativo modificato.
+   * Nessun database, migration, configurazione Supabase, Auth, RLS, o env toccato.
+   * Nessun commit eseguito.
+7. **Prossimo step consigliato**:
+   * Procedere alla FASE 13: Registri IVA e stampe definitive.
+
+
+## ROADMAP-FISCOSIM-STUDIO-GRADE-ALLINEAMENTO-ROADMAP-TO-100
+
+1. **Path verificato**: `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+2. **Data**: 16 Giugno 2026
+3. **File modificati**:
+   * [ROADMAP_FISCOSIM_STUDIO_GRADE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md)
+   * [REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+4. **Cosa è stato allineato/recepito**:
+   * Allineato il file `ROADMAP_FISCOSIM_STUDIO_GRADE.md` inserendo espliciti avvisi (`[!WARNING]`) e modifiche nei capitoli perimetrali.
+   * **Reverse/Estero**: Inserito avviso di ricalibrazione del perimetro ridotto (causali/policy esplicite come A17/FF5, partitario all'imponibile, doppia annotazione registro acquisti/vendite per IVA neutrale, gestione note di credito estere semplice).
+   * **F24**: Inserito avviso di delega ministeriale esclusa (compilatore autonomo rimosso dal perimetro, mantenendo solo scadenzario Entratel con storico codici tributo ricorrenti e liquidazione finale).
+   * **Periodo Chiuso**: Inserito avviso di ridefinizione del "periodo chiuso" come stampa definitiva dei registri, con blocco modifiche e riapertura eccezionale Owner/Admin protetta.
+   * **Cespiti Semplificati**: Inserito avviso sul perimetro leggero (alert di proposta cespite, rinvio con notifica dashboard, suggestion aliquote da storico) escludendo moduli di classe enterprise.
+   * **Storni/Annulli Pragmatici**: Inserito avviso sul modello di sicurezza basato su alert graduati anziché sul divieto teorico assoluto di cancellazione/modifica.
+   * **Matrice Fiscale-Contabile**: Allineate le righe relative a `Cespite`, `Ammortamento`, `Dismissione cespite` per fare riferimento alla corretta fase della roadmap (`16`), e le righe relative a `F24` e `Versamento ritenuta F24` per fare riferimento alle fasi `24` e `18` con i relativi test minimi semplificati.
+5. **Test eseguiti**:
+   * Nessuno (solo modifiche documentali/roadmap, nessun codice modificato).
+6. **Conferma Perimetro**:
+   * Nessun codice applicativo modificato.
+   * Nessun database, migration, configurazione Supabase, Auth, RLS, o env toccato.
+   * Nessun commit eseguito.
+
+
+
+
 
 
 

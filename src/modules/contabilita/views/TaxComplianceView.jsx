@@ -325,6 +325,32 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       setDefinitivaError('Selezionare l\'operatore prima di procedere.');
       return;
     }
+
+    const savedRecord = liquidazioni.find(l => {
+      const p = l.periodicita || l.tipo_periodo;
+      const lPeriodo = l.periodicita === 'mensile' ? l.mese : l.trimestre;
+      return (
+        String(p).toLowerCase() === String(provvisoriaPeriod.tipo_periodo).toLowerCase() &&
+        Number(l.anno) === Number(provvisoriaPeriod.anno) &&
+        Number(lPeriodo) === Number(provvisoriaPeriod.periodo)
+      );
+    });
+
+    const mesi = [
+      'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+    ];
+    const periodLabel = provvisoriaPeriod.tipo_periodo === 'trimestrale'
+      ? `${provvisoriaPeriod.periodo}° Trimestre ${provvisoriaPeriod.anno}`
+      : `${mesi[provvisoriaPeriod.periodo - 1]} ${provvisoriaPeriod.anno}`;
+
+    if (savedRecord && savedRecord.stato === 'definitiva') {
+      const errMsg = 'Liquidazione definitiva: il periodo è bloccato e non può essere riconsolidato.';
+      setDefinitivaError(errMsg);
+      alert(errMsg);
+      return;
+    }
+
     setLoadingDefinitiva(true);
     setDefinitivaError(null);
     try {
@@ -360,7 +386,7 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       ? boundsTrimestrale(provvisoriaPeriod.anno, provvisoriaPeriod.periodo)
       : boundsMensile(provvisoriaPeriod.anno, provvisoriaPeriod.periodo);
 
-    const isAlreadySaved = liquidazioni.some(l => {
+    const savedRecord = liquidazioni.find(l => {
       const p = l.periodicita || l.tipo_periodo;
       const lPeriodo = l.periodicita === 'mensile' ? l.mese : l.trimestre;
       return (
@@ -378,10 +404,16 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       ? `${provvisoriaPeriod.periodo}° Trimestre ${provvisoriaPeriod.anno}`
       : `${mesi[provvisoriaPeriod.periodo - 1]} ${provvisoriaPeriod.anno}`;
 
-    if (isAlreadySaved) {
+    if (savedRecord) {
+      if (savedRecord.stato === 'definitiva') {
+        const errMsg = 'Liquidazione definitiva: il periodo è bloccato e non può essere riconsolidato.';
+        setDefinitivaError(errMsg);
+        alert(errMsg);
+        return;
+      }
       if (!window.confirm(
-        `ATTENZIONE: Esiste già una liquidazione consolidata/definitiva salvata per il periodo ${periodLabel}.\n` +
-        `Il riconsolidamento sovrascriverà i dati correnti ed aggiornerà lo storico. Sei assolutamente sicuro di voler procedere con il riconsolidamento?`
+        `Attenzione: Esiste già una liquidazione consolidata provvisoriamente per il periodo ${periodLabel}.\n` +
+        `Il riconsolidamento sovrascriverà i dati esistenti. Vuoi procedere?`
       )) {
         return;
       }
@@ -450,16 +482,28 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
   }, [societa, provvisoriaPeriod, liquidazioni, currentCalc, utenteStudio, lastCalcTimestamp]);
 
   const prospettoModel = useMemo(() => {
+    const savedRecord = liquidazioni.find(l => {
+      const p = l.periodicita || l.tipo_periodo;
+      const lPeriodo = l.periodicita === 'mensile' ? l.mese : l.trimestre;
+      return (
+        String(p).toLowerCase() === String(provvisoriaPeriod.tipo_periodo).toLowerCase() &&
+        Number(l.anno) === Number(provvisoriaPeriod.anno) &&
+        Number(lPeriodo) === Number(provvisoriaPeriod.periodo)
+      );
+    });
+
     return buildLiquidazioneIvaProspettoModel({
       rows: registriRows,
       calcResult: currentCalc,
+      savedRecord,
       options: {
         societaId: societa.id,
         periodoInizio: dashboardModel.periodoInizio,
-        periodoFine: dashboardModel.periodoFine
+        periodoFine: dashboardModel.periodoFine,
+        isSaved: dashboardModel.statoLiquidazione !== 'Anteprima'
       }
     });
-  }, [registriRows, currentCalc, societa.id, dashboardModel]);
+  }, [registriRows, currentCalc, societa.id, dashboardModel, liquidazioni, provvisoriaPeriod]);
 
   if (mostraProspetto) {
     return (

@@ -148,6 +148,13 @@ const MESI_ITALIANI = [
         </div>
       )}
 
+      {(dettaglioVendite.length === 0 && dettaglioAcquisti.length === 0 && ivaPerCassa.length === 0) && (
+        <div className="alert alert-warn" style={{ margin: 0, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(243, 156, 18, 0.08)', color: '#e67e22', border: '1px solid rgba(243, 156, 18, 0.2)' }}>
+          ⚠️ <strong>Nota operativa:</strong> il dettaglio analitico delle righe non è disponibile in questa versione. La liquidazione è esposta sui totali consolidati.
+        </div>
+      )}
+
+
       {/* Tab bar */}
       <div className="cont-settings-tabs" role="tablist" style={{ borderBottom: '1px solid var(--bd)', marginBottom: '0.5rem' }}>
         {tabs.map(tab => (

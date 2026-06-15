@@ -5,6 +5,7 @@ function round2(val) {
 export function buildLiquidazioneIvaProspettoModel({
   rows = [],
   calcResult,
+  savedRecord = null,
   options = {}
 }) {
   const venditeGroups = new Map()
@@ -81,14 +82,6 @@ export function buildLiquidazioneIvaProspettoModel({
     operazioniNonImponibili: round2(gr.operazioniNonImponibili)
   }))
 
-  // Totali Vendite
-  const totaliVendite = {
-    imponibile: round2(dettaglioVendite.reduce((s, g) => s + g.imponibile, 0)),
-    ivaDebitoLorda: round2(dettaglioVendite.reduce((s, g) => s + g.ivaDebitoLorda, 0)),
-    ivaSplitEsclusa: round2(dettaglioVendite.reduce((s, g) => s + g.ivaSplitEsclusa, 0)),
-    ivaDebitoEffettiva: round2(dettaglioVendite.reduce((s, g) => s + g.ivaDebitoEffettiva, 0))
-  }
-
   // 2. Dettaglio Registro Acquisti
   const acquistiRows = calcResult?.righeIncluse?.filter(r => String(r.tipo).toLowerCase() === 'acquisto') || []
   for (const row of acquistiRows) {
@@ -153,12 +146,27 @@ export function buildLiquidazioneIvaProspettoModel({
     }
   })
 
+  const hasDetails = venditeRows.length > 0 || acquistiRows.length > 0
+  const useFallback = !hasDetails && savedRecord && options.isSaved
+
+  const fallbackIvaDebito = useFallback ? Number(savedRecord.iva_debito || 0) : 0
+  const fallbackIvaCredito = useFallback ? Number(savedRecord.iva_credito || 0) : 0
+  const fallbackSaldo = useFallback ? Number(savedRecord.saldo || 0) : 0
+
+  // Totali Vendite
+  const totaliVendite = {
+    imponibile: useFallback ? 0 : round2(dettaglioVendite.reduce((s, g) => s + g.imponibile, 0)),
+    ivaDebitoLorda: useFallback ? fallbackIvaDebito : round2(dettaglioVendite.reduce((s, g) => s + g.ivaDebitoLorda, 0)),
+    ivaSplitEsclusa: useFallback ? 0 : round2(dettaglioVendite.reduce((s, g) => s + g.ivaSplitEsclusa, 0)),
+    ivaDebitoEffettiva: useFallback ? fallbackIvaDebito : round2(dettaglioVendite.reduce((s, g) => s + g.ivaDebitoEffettiva, 0))
+  }
+
   // Totali Acquisti
   const totaliAcquisti = {
-    imponibile: round2(dettaglioAcquisti.reduce((s, g) => s + g.imponibile, 0)),
-    ivaAcquisti: round2(dettaglioAcquisti.reduce((s, g) => s + g.ivaAcquisti, 0)),
-    ivaDetraibile: round2(dettaglioAcquisti.reduce((s, g) => s + g.ivaDetraibile, 0)),
-    ivaIndetraibile: round2(dettaglioAcquisti.reduce((s, g) => s + g.ivaIndetraibile, 0))
+    imponibile: useFallback ? 0 : round2(dettaglioAcquisti.reduce((s, g) => s + g.imponibile, 0)),
+    ivaAcquisti: useFallback ? fallbackIvaCredito : round2(dettaglioAcquisti.reduce((s, g) => s + g.ivaAcquisti, 0)),
+    ivaDetraibile: useFallback ? fallbackIvaCredito : round2(dettaglioAcquisti.reduce((s, g) => s + g.ivaDetraibile, 0)),
+    ivaIndetraibile: useFallback ? 0 : round2(dettaglioAcquisti.reduce((s, g) => s + g.ivaIndetraibile, 0))
   }
 
   // 3. IVA per cassa / esigibilità differita
@@ -193,7 +201,7 @@ export function buildLiquidazioneIvaProspettoModel({
     ivaAcquistiDetraibile: totaliAcquisti.ivaDetraibile,
     ivaAcquistiIndetraibile: totaliAcquisti.ivaIndetraibile,
     totaleImpostaDetraibile: totaliAcquisti.ivaDetraibile,
-    ivaDebitoPeriodo: calcResult?.debitoPeriodo || 0,
+    ivaDebitoPeriodo: useFallback ? (fallbackSaldo > 0 ? fallbackSaldo : 0) : (calcResult?.debitoPeriodo || 0),
     creditoIvaPrecedente: calcResult?.creditoPeriodoPrecedente || 0,
     debitoPrecedenteNonVersato: 0,
     creditoCompensabileUsato: calcResult?.creditoAnnoPrecedenteNetto || 0,
@@ -201,8 +209,12 @@ export function buildLiquidazioneIvaProspettoModel({
     accontoIva: calcResult?.accontoIvaVersato || 0,
     variazioniPeriodiPrecedenti: 0,
     interessiTrimestrali: calcResult?.interessiTrimestrali || 0,
-    risultatoFinale: calcResult?.debitoDaVersare > 0 ? calcResult.debitoDaVersare : (calcResult?.creditoDaRiportare || 0),
-    risultatoTipo: (calcResult?.debitoDaVersare > 0) ? 'debito' : 'credito'
+    risultatoFinale: useFallback 
+      ? Math.abs(fallbackSaldo)
+      : (calcResult?.debitoDaVersare > 0 ? calcResult.debitoDaVersare : (calcResult?.creditoDaRiportare || 0)),
+    risultatoTipo: useFallback
+      ? (fallbackSaldo > 0 ? 'debito' : 'credito')
+      : ((calcResult?.debitoDaVersare > 0) ? 'debito' : 'credito')
   }
 
   // 5. Credito compensabile
@@ -210,18 +222,18 @@ export function buildLiquidazioneIvaProspettoModel({
     inizioPeriodo: calcResult?.creditoAnnoPrecedente || 0,
     usatoInLiquidazione: calcResult?.creditoPeriodoPrecedente || 0,
     usatoF24: calcResult?.creditoCompensatoF24 || 0,
-    finale: calcResult?.creditoDaRiportare || 0,
-    daRiportare: calcResult?.creditoDaRiportare || 0
+    finale: useFallback ? (fallbackSaldo < 0 ? Math.abs(fallbackSaldo) : 0) : (calcResult?.creditoDaRiportare || 0),
+    daRiportare: useFallback ? (fallbackSaldo < 0 ? Math.abs(fallbackSaldo) : 0) : (calcResult?.creditoDaRiportare || 0)
   }
 
   // 6. Controlli e Warning
   const controlliWarning = {
-    registriInclusi: calcResult?.righeIncluseCount > 0 ? 'Tutti i registri IVA' : 'Nessuno',
-    registriEsclusi: calcResult?.righeEscluse?.filter(r => r.motivo === 'societa' || r.motivo === 'periodo').length > 0 ? 'Esclusi per società/periodo' : 'Nessuno',
-    righeEscluse: calcResult?.righeEscluse?.length || 0,
+    registriInclusi: useFallback ? 'Dettaglio non disponibile (totali consolidati)' : (calcResult?.righeIncluseCount > 0 ? 'Tutti i registri IVA' : 'Nessuno'),
+    registriEsclusi: useFallback ? 'Nessuno' : (calcResult?.righeEscluse?.filter(r => r.motivo === 'societa' || r.motivo === 'periodo').length > 0 ? 'Esclusi per società/periodo' : 'Nessuno'),
+    righeEscluse: useFallback ? 0 : (calcResult?.righeEscluse?.length || 0),
     righeEscluseCassa: righeEscluseDifferita.length,
-    operazioniSplit: list.filter(r => r.split_payment === true || r.splitPayment === true).length,
-    operazioniReverse: list.filter(r => r.reverse_charge === true || r.reverseCharge === true || /^N6/i.test(r.natura)).length,
+    operazioniSplit: useFallback ? 0 : list.filter(r => r.split_payment === true || r.splitPayment === true).length,
+    operazioniReverse: useFallback ? 0 : list.filter(r => r.reverse_charge === true || r.reverseCharge === true || /^N6/i.test(r.natura)).length,
     ivaIndetraibileRilevata: totaliAcquisti.ivaIndetraibile,
     squadrature: 'Nessuna anomalia bloccante rilevata.',
     statoControlli: 'OK'

@@ -1,42 +1,35 @@
-# ROADMAP ATTIVA — SVILUPPO LIQUIDAZIONE IVA DEFINITIVA
+# ROADMAP ATTIVA — SVILUPPO LIQUIDAZIONE IVA DEFINITIVA E REGISTRI IVA
 
-L'attività corrente si concentra sul completamento del modulo **Liquidazione IVA Definitiva Studio-Grade**.
+L'attività corrente ha completato con successo il modulo **Liquidazione IVA Definitiva / Chiusura UX / Export** ed ha avviato la preparazione per la fase successiva.
 
 ## Stato dei Lavori
 
 ```
 +------------------------------------------------------------+
-| FASE 1: Schema DB e Dominio Service (COMPLETATO ✔)         |
+| FASE 12: Liquidazione IVA Chiusura UX & Export (COMPLETATO ✔) |
 +------------------------------------------------------------+
                               |
                               v
 +------------------------------------------------------------+
-| FASE 2: Repository, RPC PostgreSQL e Chiusura Periodo (IN CORSO ⏳) |
-+------------------------------------------------------------+
-                              |
-                              v
-+------------------------------------------------------------+
-| FASE 3: Interfaccia Utente React e Storico Chiusure        |
+| FASE 13: Registri IVA e stampe definitive (PROSSIMO STEP ⏳)  |
 +------------------------------------------------------------+
 ```
 
-## Dettaglio dei Prossimi Step (Fase 2)
+## Dettaglio dell'Ultima Fase Completata (Fase 12)
 
-1. **Implementazione Query Repository (COMPLETATO ✔)**:
-   * Scritte le funzioni in `contabilitaRepo.js` per interrogare lo stato della liquidazione consolidata (`liquidazione_iva` con campo `stato = 'definitiva'`).
-   * Adattato `isIvaPeriodLiquidated` affinché legga dalla tabella canonica `liquidazione_iva` al posto di `liquidazioni_iva_societa`.
+1. **Blocco e Protezione Periodi Definitivi (COMPLETATO ✔)**:
+   * Implementata la protezione rigida dei periodi contabili con stato `definitiva`. I consolidamenti e i riconsolidamenti vengono bloccati con avviso operativo: `“Liquidazione definitiva: il periodo è bloccato e non può essere riconsolidato.”`.
+   * Aggiunti alert per il riconsolidamento delle provvisorie e verifica preventiva per l'eventuale invio LIPE già effettuato.
 
-2. **Creazione Procedura Memorizzata (RPC Supabase) (COMPLETATO ✔)**:
-   * Sviluppata la funzione database `consolida_periodo_iva_transazionale` che inserisce l'header della liquidazione in stato `'definitiva'` e copia le righe dei registri IVA in `liquidazioni_iva_righe` in modo transazionale e ACID.
+2. **Logica di Fallback `savedRecord` (COMPLETATO ✔)**:
+   * Modificato `buildLiquidazioneIvaProspettoModel.js` in modo da abilitare il fallback sui totali consolidati solo se il calcolo non ha dettagli reali e si sta visualizzando/esportando un record già salvato (`options.isSaved === true`).
 
-3. **Integrazione del Blocco di Sicurezza (COMPLETATO ✔)**:
-   * Patchata la funzione `rpc_get_prima_nota_operation_guards` per considerare solo liquidazioni in stato `'definitiva'`.
-   * Scritti i relativi test unitari con mock Supabase per verificare il comportamento e le esclusioni in `tests/liquidazioneIvaDefinitivaRpcClient.test.js`.
+3. **Nota Operativa in Tutti gli Export (COMPLETATO ✔)**:
+   * Cablata la nota operativa ministeriale/diagnostica per l'assenza di dettagli righe su Prospetto, CSV, HTML, XLSX ed export del cliente.
 
-4. **Orchestrazione Applicativa (COMPLETATO ✔)**:
-   * Creato `liquidazioneIvaDefinitivaOrchestrator.js` per preparare il payload completo di snapshot e delegare il salvataggio atomico.
-   * Esportate le funzioni dal client API contabile per uniformare l'interfaccia.
-   * Suite di test in `tests/liquidazioneIvaDefinitivaOrchestrator.test.js` creata con successo.
+4. **Correzione Sintassi Export XLSX (COMPLETATO ✔)**:
+   * Risolti gli errori di compilazione relativi alla troncature sintattiche in `buildLiquidazioneIvaExportModel.js`.
 
-5. **Integrazione UI React (COMPLETATO ✔)**:
-   * Collegamento dell'orchestratore in `TaxComplianceView.jsx` con visualizzazione controllata, anteprima dei totali, gestione dell'errore RPC e suite di test automatica per l'adapter UI.
+5. **Passaggio Test e Compilazione Build (COMPLETATO ✔)**:
+   * Eseguiti con successo tutti i 101 test relativi alla liquidazione IVA.
+   * Compilata la build di produzione (`npm run build`) con successo.

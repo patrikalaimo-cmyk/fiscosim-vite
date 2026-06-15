@@ -312,6 +312,14 @@ IVA per cassa non puo essere gestita solo dalla fattura. Deve essere governata d
 
 ## 7. Reverse charge, acquisti UE/extra UE e autofatture estere
 
+> [!WARNING]
+> **SEZIONE RICALIBRATA / PERIMETRO SEMPLIFICATO (Roadmap to 100)**
+> Il perimetro di gestione del reverse charge e delle operazioni estere è stato significativamente ridotto per evitare complessità eccessive e hardcoding delle logiche nel codice. Le nuove direttive stabiliscono che:
+> 1. La logica deve derivare interamente dalle configurazioni delle causali contabili/IVA e dalle policy, senza codifica hardcoded. Si utilizzeranno causali dedicate (es. A17 per servizi esteri, FF5 per beni esteri).
+> 2. Il partitario registrerà esclusivamente l'imponibile dell'operazione.
+> 3. L'IVA sarà neutrale e rilevata tramite doppia registrazione simultanea sul Registro Acquisti e sul Registro Vendite.
+> 4. Le note di credito estere sono considerate casi rari e verranno gestite in modo semplice tramite fattura/autofattura a segni opposti o causali dedicate, senza investire tempo in implementazioni edge complesse.
+
 ### Cosa serve e perche
 Queste aree devono essere trattate come casi distinti, non come una sola regola "doppia rilevazione". Serve sapere dove nasce l'IVA, dove viene registrata, quali registri la vedono e come entra in liquidazione.
 
@@ -376,73 +384,60 @@ Queste aree devono essere trattate come casi distinti, non come una sola regola 
 - Doppia rilevazione incompleta.
 - Classificazione interna non persistita.
 
-## 8. Ritenute, percipienti, CU, 770 e F24
+## 8. Ritenute, percipienti, CU, 770 e F24 (Riorientato)
+
+> [!WARNING]
+> **PERIMETRO RIDEFINITO / DELEGA MINISTERIALE ESCLUSA (Roadmap to 100)**
+> Si conferma che lo sviluppo di un compilatore o modulo completo per l'F24 ministeriale/dichiarativo autonomo è escluso dal perimetro di FiscoSim (le deleghe sono gestite esternamente su Entratel/TeamSystem dallo studio). FiscoSim mantiene esclusivamente:
+> 1. Il calcolo delle righe finali di liquidazione dell'imposta IVA con compensazioni ed eventuale saldo F24.
+> 2. Lo scadenzario F24 Entratel per monitorare i versamenti inviati dallo studio per conto dei clienti, con evidenziazione grafica (in verde) dello storico dei codici tributo ricorrenti usati nei mesi precedenti.
+> 3. Il controllo ritenute d'acconto incrociato con i versamenti F24 importati per il codice tributo 1040.
 
 ### Cosa serve e perche
-Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> CU -> 770. Il percipiente deve essere identificato con fortezza, non con testo libero fragile.
+Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> CU -> 770. Il percipiente deve essere identificato con forza, non con testo libero fragile. FiscoSim non sostituisce TeamSystem per la compilazione ed invio del modello F24 (gestito dallo studio su Entratel/TeamSystem). FiscoSim gestisce lo scadenzario F24 per i clienti con storico ricorrenze (evidenziato in verde) e il controllo ritenute da import F24.
 
 ### Flussi da coprire
-- Parcella professionista con ritenuta.
-- Parcella con cassa previdenziale.
-- Rivalsa INPS 4%.
-- Contributi previdenziali.
-- Spese anticipate non imponibili.
-- Bollo.
-- Pagamento parcella.
-- Data pagamento come evento fiscale rilevante.
-- Generazione debito ritenuta.
-- Scadenza versamento.
-- F24 ritenute.
-- CU.
-- 770.
+- Parcella professionista con ritenuta, cassa previdenziale, rivalsa INPS, spese anticipate, bollo.
+- Pagamento parcella (evento fiscale rilevante) che genera il debito ritenuta.
+- Scadenzario F24 clienti studio e storico ricorrenze.
+- Controllo ritenute da import F24 (confronto mese pagamento parcella, scadenza ritenuta, ritenute maturate, e importo versato da F24 importato con codice tributo 1040).
+
+### Stati di Controllo Ritenute (da Import F24)
+- **Verde**: Tutto versato regolarmente entro la scadenza.
+- **Giallo**: Differenza zero, ma quota versata in ritardo rispetto alla scadenza (verifica ravvedimento).
+- **Rosso**: Differenza residua ancora da versare o da ravvedere.
 
 ### Dati usa e produce
-- Usa: percipiente, CF, imponibile, ritenuta, tipo ritenuta, data pagamento, cassa previdenziale, bollo, scadenza, tributo.
-- Produce: scrittura contabile, debito ritenuta, scadenza F24, dati CU, dati 770, audit.
+- Usa: percipiente, CF, imponibile, ritenuta, data pagamento, codice tributo 1040, scadenze, F24 importati.
+- Produce: scadenza F24 in scadenzario clienti, storico ricorrenze, esito controllo ritenute (Verde/Giallo/Rosso), dati CU e 770.
 
 ### Regole
-- La parcella deve essere identificata come professionista quando il flusso lo richiede.
-- La ritenuta deve essere coerente con il percipiente e con la data rilevante.
-- Il pagamento e spesso l'evento che rende concreta la scadenza del versamento.
-- CU e 770 devono derivare dalla stessa base dati, non da reinserimenti separati.
+- Il versamento F24 reale viene importato (ZIP scaricati passano da Import Contabilità) e riconciliato con le ritenute del codice 1040.
+- La liquidazione IVA mantiene comunque le righe di calcolo F24 finali nel prospetto.
 
 ### Blocchi
 - Percipiente mancante o CF incoerente.
-- Ritenuta prevista ma non calcolata.
-- Pagamento parcella senza scadenza F24 dove richiesta.
-- CU/770 con dati non quadrati rispetto alla contabilita.
+- Ritenute previste ma non calcolate.
+- CU/770 non quadrati con prima nota.
 
 ### Warning
-- Cassa previdenziale presente ma regime non chiarissimo.
-- Rivalsa INPS o bollo presenti ma non chiaramente classificati.
-- Percipiente estero solo se previsto dalla politica dati.
+- Cassa previdenziale o rivalsa presenti ma non classificati correttamente.
 
 ### Impostazioni servono
-- Conti ritenute.
-- Conti percipienti.
-- Causali professionisti.
-- Regole di calcolo per cassa previdenziale e bollo.
-- Codici tributo F24.
+- Conti ritenute, percipienti, causali professionisti, codici tributo F24.
 
 ### Test minimo
 - Parcella con ritenuta.
-- Parcella con cassa previdenziale.
 - Pagamento parcella.
-- F24 ritenuta.
-- CU generata dalla stessa base dati.
-- 770 quadrato con CU e ritenute.
+- Incrocio con F24 importato e assegnazione dello stato di controllo (Verde/Giallo/Rosso).
+- CU e 770 generati dalla stessa base dati.
 
 ### Fase
-- FASE 16.
+- FASE 18.
 
 ### Vietato
 - Usare dati manuali separati per CU e 770.
-- Slegare il pagamento dal versamento.
-
-### Rischi regressione
-- Percipiente non allineato.
-- F24 con importo sbagliato.
-- CU e 770 non quadrati.
+- Sviluppare un compilatore F24 completo e autonomo.
 
 ## 9. Regimi contabili gestiti
 
@@ -525,6 +520,10 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 
 ## 11. Bilancio, situazioni e chiusura esercizio
 
+> [!WARNING]
+> **REVISIONATO CON VALENZA DEFINITIVA (Roadmap to 100)**
+> Per "periodo chiuso" si intende formalmente il periodo per cui è stata eseguita la stampa definitiva dei registri. La riapertura di un periodo chiuso per registrazioni o rettifiche retroattive è preclusa per l'operatore ordinario e accessibile eccezionalmente solo a figure Admin/Owner tramite un workflow protetto (motivazione obbligatoria, log completo, backup preventivo con ripristino, riconsolidamento dei periodi a cascata e ristampa definitiva obbligatoria). Modifiche su liquidazioni consolidate provvisorie mostrano alert di verifica per eventuale LIPE inviata.
+
 ### Cosa deve coprire
 - Bilancio di verifica.
 - Situazione contabile provvisoria.
@@ -572,60 +571,55 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 ### Fase
 - FASE 17, FASE 18, FASE 19, FASE 20, FASE 21.
 
-## 12. Cespiti e ammortamenti
+## 12. Cespiti e ammortamenti (Semplificato)
+
+> [!WARNING]
+> **SEZIONE INTEGRATA / FLUSSO SEMPLIFICATO E OPERATIVO (Roadmap to 100)**
+> Per evitare la complessità di un modulo cespiti di classe enterprise in questa fase, si adotta un approccio leggero e operativo basato su suggerimenti e promemoria dashboard ("Sì / No / Ricorda dopo") agganciati direttamente all'Import Contabilità e all'Inserimento Manuale, con aliquote suggerite a partire dallo storico.
 
 ### Cosa deve coprire
-- Acquisto cespite da fattura.
-- Anagrafica cespite.
-- Categoria.
-- Coefficiente.
-- Data entrata in funzione.
-- Costo storico.
-- Fondo ammortamento.
-- Quota civilistica.
-- Quota fiscale.
-- Ammortamento ordinario.
-- Ammortamento parziale primo anno se previsto.
-- Dismissione.
-- Vendita.
-- Plusvalenza/minusvalenza.
-- Stampa registro cespiti.
-- Collegamento con bilancio e prima nota.
-- Simulazione quote future.
-- Audit.
+- Acquisto cespite da fattura / Import Contabilità.
+- Inserimento Libro Cespiti attivato da alert guidato su prima nota: *“È stato registrato un cespite. Procedere con inserimento nel libro cespiti? [Sì] / [No] / [Ricorda dopo]”*.
+- Gestione della notifica di promemoria in dashboard o tab Libro Cespiti se l'operatore seleziona *“Ricorda dopo”*.
+- Suggerimento automatico di durata/aliquota ammortamento basato sullo storico generale.
+- Stampa registro cespiti e raccordo quota di ammortamento annuale.
 
 ### Regole
-- Il cespite deve essere un oggetto con vita propria, non un semplice conto di costo.
-- L'ammortamento deve essere calcolabile, auditabile e collegato al bilancio.
-- La dismissione deve produrre una storia chiara tra costo storico, fondo e plus/minus.
+- Il modulo deve rimanere leggero ed operativo, evitando logiche enterprise complesse (es. rivalutazioni, superammortamenti complessi) in questa prima fase.
+- Integrazione nativa con Import Contabilità e Inserimento Manuale.
 
 ### Blocchi
-- Categoria assente.
+- Categoria o cespite non compilato.
 - Coefficiente mancante.
-- Fondo ammortamento incoerente.
-- Dismissione senza collegamento al cespite originario.
 
 ### Warning
-- Ammortamento parziale primo anno.
-- Costo storico con dati incompleti ma recuperabili.
+- Quote ammortamento parziali o durate anomale rispetto sullo storico.
 
 ### Test minimo
-- Acquisto cespite.
-- Ammortamento annuale.
-- Dismissione.
-- Stampa registro cespiti.
-- Raccordo bilancio.
+- Registrazione cespite, alert di proposta inserimento Libro Cespiti, notifica "Ricorda dopo", e calcolo quota di ammortamento consigliata.
 
 ### Fase
 - FASE 17.
 
-## 13. Gestione modifiche, annulli, storni e cancellazioni
+### Vietato
+- Modulo cespiti troppo enterprise o scollegato da prima nota/import.
+
+## 13. Gestione modifiche, annulli, storni e cancellazioni (Pragmatico)
+
+> [!WARNING]
+> **SEZIONE ALLINEATA / APPROCCIO PRAGMATICO (Roadmap to 100)**
+> In contrasto con approcci teorici iper-rigidi che vietano qualsiasi modifica diretta o cancellazione fisica imponendo storni sistematici per ogni minima correzione, FiscoSim adotta un modello pragmatico di sicurezza basato su alert graduati in base all'impatto (leggero per prima nota semplice, forte per fatture, doppia conferma per moduli IVA/ritenute/partitario). Le cancellazioni sono permesse ma guidate e protette da salvaguardie di backup/ripristino per prevenire regressioni, bloccando solo le operazioni realmente destabilizzanti per il bilancio o i periodi chiusi (stampa definitiva).
 
 ### Regola base
-- Inserimento Manuale e il solo contratto canonico per creare, modificare, annullare, stornare, rettificare e salvare.
-- Consultazione non deve modificare direttamente.
-- Le scritture contabilizzate devono essere modificate solo tramite workflow controllato.
-- La cancellazione fisica di scritture contabilizzate e da evitare; preferire annullo, storno o rettifica tracciata.
+- Inserimento Manuale è il solo contratto canonico per creare, modificare, annullare, stornare, rettificare e salvare.
+- La cancellazione è sempre guidata. Le modifiche sono protette da alert graduati per prevenire disallineamenti di saldi storici e proteggere l'integrità dei dati.
+
+### Alert Graduati
+- **Leggero**: per la modifica o la cancellazione di scritture contabili semplici (Dare/Avere senza IVA).
+- **Forte**: per scritture associate a fatture o documenti IVA.
+- **Conferma & Riconferma**: per operazioni che impattano direttamente liquidazioni IVA, ritenute d'acconto, partitari o altri moduli.
+- **Blocco**: impedimento assoluto per operazioni che destabilizzano il sistema, compromettono i clienti dello studio o rompono le funzioni principali di bilancio.
+- **Sicurezza**: predisposizione di un backup preventivo e possibilità di ripristino per cancellazioni accidentali o operazioni critiche.
 
 ### Azioni
 | Azione | Quando ammessa | Chi puo farla | Cosa produce | Cosa vieta | Audit |
@@ -634,30 +628,15 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 | Annulla | scrittura da neutralizzare | Operatore autorizzato, Admin | annullo tracciato | perdita della storia | evento annullo obbligatorio |
 | Storna | quando serve contro-scrittura | Sistema o Operatore autorizzato | scrittura opposta collegata | cancellazione silente | legame con originaria obbligatorio |
 | Rettifica | correzione puntuale | Operatore autorizzato | nuova scrittura correttiva | riscrittura del passato | collegamento alla originaria |
-| Cancellazione | quasi mai su contabilizzate | solo casi tecnici di staging | rimozione tecnica | perdita del dato contabile canonico | audit tecnico obbligatorio |
-
-### Effetti obbligatori
-- IVA.
-- Partitario.
-- Scadenze.
-- Bilancio.
-- Stampe.
-- Audit.
+| Cancellazione | guidata, previa conferma/backup | Operatore autorizzato | rimozione con tracciamento | cancellazione silente senza alert | audit tecnico obbligatorio |
 
 ### Blocchi
-- Periodo chiuso.
+- Periodo chiuso (stampa definitiva registri).
 - Scrittura gia stampata definitiva.
-- Scrittura gia consumata da liquidazioni chiuse senza riapertura autorizzata.
-
-### Test minimo
-- Modifica in periodo aperto.
-- Annulla con audit.
-- Storno con contro scrittura.
-- Rettifica collegata.
-- Blocchi su periodo chiuso e stampe definitive.
+- Scrittura gia consumata da liquidazioni chiuse senza riapertura guidata.
 
 ### Fase
-- FASE 7, FASE 12, FASE 20.
+- FASE 7, FASE 22, FASE 26.
 
 ## 14. Impostazioni personalizzabili ma controllate
 
@@ -704,8 +683,8 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 | Incasso IVA per cassa | per cassa | incasso cliente | cash release | vendite | banca, cliente, IVA rilascio | rilascio IVA | chiude/riduce partita | incasso | no | liquidita cresce | partita collegata | rilascio errato | cash event | 14 |
 | Pagamento IVA per cassa | per cassa | pagamento fornitore | cash release | acquisti | banca, fornitore, IVA rilascio | rilascio IVA | chiude/riduce partita | pagamento | no | liquidita diminuisce | partita collegata | rilascio errato | cash event | 14 |
 | Parcella professionista con ritenuta | professionisti | parcella | ordinaria o esente | acquisti + ritenute | costo, netto, ritenuta, eventuale cassa | IVA se prevista | partita percipiente | scadenza pagamento e ritenuta | si, base CU/770 | costo + debito ritenuta | percipiente obbligatorio | dati incompleti | parcella con ritenuta | 16 |
-| Pagamento parcella | professionisti | pagamento parcella | n/a | n/a o cash | banca, debito fornitore, debito ritenuta | nessun effetto diretto o cash event | chiude partita | scadenza F24 ritenuta | si, alimenta scadenza | riduce debiti | coerenza pagamento + ritenuta | differenza importo | pagamento completo | 16 |
-| Versamento ritenuta F24 | professionisti | F24 ritenuta | n/a | n/a | banca, debito ritenuta, F24 | nessuno | chiude debito ritenuta | scadenza 16 mese successivo | si, consuntivo | riduce debiti fiscali | tributo e periodo | importo errato | F24 completo | 16 |
+| Pagamento parcella | professionisti | pagamento parcella | n/a | n/a o cash | banca, debito fornitore, debito ritenuta | nessun effetto diretto o cash event | chiude partita | scadenza F24 ritenuta | si, alimenta scadenza | riduce debiti | coerenza pagamento + ritenuta | differenza importo | pagamento completo | 18 |
+| Versamento ritenuta F24 | professionisti | F24 ritenuta | n/a | n/a | banca, debito ritenuta, F24 | nessuno | chiude debito ritenuta | scadenza 16 mese successivo | si, consuntivo | riduce debiti fiscali | tributo e periodo | importo errato | Controllo ritenuta da F24 importato | 18 |
 | Reverse charge interno | ordinaria | acquisto soggetto | reverse charge | acquisti + vendite/integrazione | costo, IVA credito, IVA debito, fornitore | doppia rilevazione | partita fornitore | scadenza normale | no | costo + IVA speculare | doppia rilevazione obbligatoria | registro incoerente | doppia riga IVA | 15 |
 | Acquisto UE beni | ordinaria | acquisto UE beni | integrazione UE | acquisti + vendite/integrazione | costo, IVA credito, IVA debito, fornitore estero | doppia rilevazione | partita fornitore estero | scadenza normale | no | costo + debito | soggetto estero, natura corretta | paese incoerente | acquisto UE beni | 15 |
 | Acquisto UE servizi | ordinaria | acquisto UE servizi | integrazione UE | acquisti + vendite/integrazione | costo, IVA credito, IVA debito, fornitore estero | doppia rilevazione | partita fornitore estero | scadenza normale | no | costo + debito | soggetto estero, natura corretta | classificazione incerta | acquisto UE servizi | 15 |
@@ -723,12 +702,12 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 | Banca/cassa | tutti | movimento finanziario | n/a | n/a | banca, cassa, contropartita | nessuno o cash event | partitario se controparte presente | eventuale | no | liquidita | movimento non spiegato | classificazione bassa | banca/cassa | 9-14 |
 | Commissioni bancarie | tutti | costo bancario | eventuale | acquisti servizi | commissioni, IVA, banca | impatto se imponibile | eventuale fornitore banca | no | no | costo finanziario | causale banca | duplicato commissioni | commissioni | 9-14 |
 | Mutui/finanziamenti | tutti | mutuo/finanziamento | n/a | n/a | banca, debiti finanziari, interessi | nessuno | scadenze rate | rate mensili | no | debito finanziario | piano ammortamento coerente | quota interesse | rata mutuo | 11-12 |
-| Stipendi | tutti | costo personale | n/a | n/a | salari, debiti INPS, erario, banca | nessuno | partitario se previsto | scadenze contributi/fiscali | si, se rilevante | costo personale | cedolino/paghe coerenti | dati incompleti | scrittura paghe | 10-16 |
-| F24 | tutti | pagamento tributo | n/a | n/a | banca, debiti tributari, F24 | nessuno | chiude debito | scadenza tributo | si | debiti fiscali ridotti | tributo e periodo | importo non valido | F24 completo | 16 |
+| Stipendi | tutti | costo personale | n/a | n/a | salari, debiti INPS, erario, banca | nessuno | partitario se previsto | scadenze contributi/fiscali | si, se rilevante | costo personale | cedolino/paghe coerenti | dati incompleti | scrittura paghe | 18 |
+| F24 | tutti | pagamento tributo | n/a | n/a | banca, debiti tributari, F24 | nessuno | chiude debito | scadenza tributo | si | debiti fiscali ridotti | tributo e periodo | importo non valido | Visualizzazione storico ed Entratel | 24 |
 | Ritenute | professionisti | accantonamento/versamento | n/a | n/a | debito ritenuta, banca, percipiente | nessuno | scadenza percipiente | 16 mese successivo | si | debito fiscale | percipiente e tributo | periodo incoerente | ritenuta | 16 |
-| Cespite | ordinaria | acquisto cespite | eventuale | acquisti | cespite, IVA, debiti | effetto normale | eventuale partita fornitore | pagamento | no | incremento attivo | categoria obbligatoria | utile residua incoerente | cespite | 17 |
-| Ammortamento | ordinaria | ammortamento | n/a | n/a | fondo ammortamento, costo ammortamento | nessuno | no | no | no | riduce utile | piano ammortamento coerente | quota anomala | ammortamento | 17 |
-| Dismissione cespite | ordinaria | dismissione | eventuale | acquisti o vendite secondo caso | cespite, fondo, plus/minus | eventuale IVA se vendita | eventuale partita cliente | scadenza se vendita | no | plus/minus | costo storico e fondo coerenti | valore residuo | dismissione | 17 |
+| Cespite | ordinaria | acquisto cespite | eventuale | acquisti | cespite, IVA, debiti | effetto normale | eventuale partita fornitore | pagamento | no | incremento attivo | categoria obbligatoria | utile residua incoerente | cespite | 16 |
+| Ammortamento | ordinaria | ammortamento | n/a | n/a | fondo ammortamento, costo ammortamento | nessuno | no | no | no | riduce utile | piano ammortamento coerente | quota anomala | ammortamento | 16 |
+| Dismissione cespite | ordinaria | dismissione | eventuale | acquisti o vendite secondo caso | cespite, fondo, plus/minus | eventuale IVA se vendita | eventuale partita cliente | scadenza se vendita | no | plus/minus | costo storico e fondo coerenti | valore residuo | dismissione | 16 |
 | Rateo | tutti | assestamento rateo | n/a | n/a | ratei attivi/passivi, costo/ricavo | nessuno | no | no | no | competenza corretta | data competenza | periodo errato | rateo | 18 |
 | Risconto | tutti | assestamento risconto | n/a | n/a | risconti, costo/ricavo | nessuno | no | no | no | competenza corretta | competenza temporale | calcolo giorni | risconto | 18 |
 | Assestamento | tutti | assestamento | n/a | n/a | conti competenza, assestamenti | nessuno | no | no | no | rettifica risultato | causale assestamento | doppio assestamento | assestamento | 18 |
@@ -776,20 +755,22 @@ Serve un ciclo completo e coerente: parcella -> ritenuta -> pagamento -> F24 -> 
 | FASE 9 - Riconciliazione Bancaria come generatore scritture canoniche | match -> commit canonico | FASE 1-8 | banca, manuale, partitario | matching, proposta, conferma, audit | linguaggio bancario proprio | matching, duplicate, commit tests | conferma = scrittura identica al manuale | alto | equivalenza confermata |
 | FASE 10 - Partitario evoluto e scadenze clienti/fornitori | controllo partite e residui | FASE 3-9 | partitario, banca | aging, parziali, insoluti, abbuoni | partitario separato dal manuale | partitario tests | residui e partite coerenti | medio-alto | partite quadrate |
 | FASE 11 - Registri IVA base e protocolli/sezionali | consolidare i registri | FASE 4-10 | IVA, stampe | acquisti, vendite, corrispettivi, protocolli | registro inventato in UI | registry tests | registri coerenti e numerati | alto | registri base verdi |
-| FASE 12 - Liquidazioni IVA ordinarie | produrre output periodico | FASE 11 | IVA, stampe | liquidazione periodica, annuale base | liquidazione non quadrata | liquidazione tests | liquidazioni coerenti | alto | liquidazioni verdi |
-| FASE 13 - Split payment | separare IVA split dal debito ordinario | FASE 12 | manuale, IVA, liquidazioni | flag cliente, registri, stampa, partitario | trattarlo come IVA ordinaria | split tests | split chiaro e bloccato se incoerente | alto | split certificato |
-| FASE 14 - IVA per cassa | gestire sospensione e rilascio | FASE 12-13 | manuale, banca, IVA | documento+partita+cash event | gestirla solo nella fattura | cash event tests | rilascio corretto al pagamento/incasso | alto | regime cassa verde |
-| FASE 15 - Reverse charge, UE, extra UE, autofatture | distinguere i casi esteri | FASE 12-14 | manuale, import, IVA | doppia rilevazione, classificazione interna | una sola regola generica | reverse/UE/autofattura tests | casi distinti e coerenti | alto | esteri validati |
-| FASE 16 - Ritenute, percipienti, CU, 770, F24 | chiudere il ciclo professionisti | FASE 3-15 | ritenute, CU, 770, F24 | percipienti, scadenze, export, quadrature | dati manuali separati | ritenute/CU/770/F24 tests | quadratura parcella -> pagamento -> F24 -> CU -> 770 | alto | adempimenti verdi |
-| FASE 17 - Cespiti e ammortamenti | blindare immobilizzazioni | FASE 11-16 | cespiti, bilancio | anagrafica cespite, quote, dismissioni | cespite come semplice costo | asset tests | registro cespiti e bilancio coerenti | medio-alto | cespiti verdi |
-| FASE 18 - Ratei, risconti, assestamenti | completare fine periodo | FASE 11-17 | bilancio, manuale | competenza, assestamenti, giroconti | assestamenti senza link | accrual tests | assestamenti coerenti | medio-alto | assestamenti verdi |
-| FASE 19 - Bilancio, situazioni, mastrini, libro giornale | output contabile completo | FASE 11-18 | bilancio, stampe | bilanci, situazioni, mastrini, giornale | stampare con saldi incoerenti | bilancio tests | output contabile pronto per studio | alto | bilancio e giornale verdi |
-| FASE 20 - Stampe definitive e blocco periodo | fermare le modifiche quando serve | FASE 19 | stampe, periodi | definitive, checksum, blocco modifiche | modifiche silenti dopo stampa definitiva | lock/print tests | stampato definitivo = protetto | alto | print lock verde |
-| FASE 21 - Apertura nuovo esercizio/anno IVA e chiusura esercizio | governare il ciclo annuale | FASE 19-20 | admin, periodi, IVA | chiusura, riapertura, anno IVA, audit | riapertura senza autorizzazione | close/open tests | solo Admin/Owner riapre | molto alto | chiusura approvata |
-| FASE 22 - Scadenzario unico e task studio | unificare le scadenze operative | FASE 10-21 | agenda, F24, ritenute, liquidazioni | task, priorita, reminder, follow-up | task non legati a eventi canonici | schedule tests | un solo calendario studio | medio | scadenzario verde |
-| FASE 23 - Export/interoperabilita | produrre output per software esterni | FASE 8-22 | export, report | csv/xlsx/pdf, checksum, mapping esterno | export che altera il canonico | export contract tests | export ripetibile e riconciliabile | medio | export validato |
-| FASE 24 - Test suite fiscale-contabile italiana | consolidare copertura | FASE 1-23 | tutti | suite integrata per casi italiani | test solo smoke | unit/contract/integration/UI/fiscal/regression/perf | casi critici coperti | alto | suite verde |
-| FASE 25 - Hardening anti-regressione e audit finale studio-grade | stabilizzare il sistema | FASE 1-24 | tutti | observability, performance, RLS, quality gate, report update | nuove eccezioni silenti | perf/load/audit/resilience tests | sistema pronto per uso interno stabile | medio-alto | release checklist approvata |
+| FASE 12 - Liquidazione IVA chiusura storico/export/stati | Completare adempimento IVA | FASE 11 | IVA, views, helper | Blocco periodi definitiva, popup provvisorie, fallback savedRecord, note operative | Riconsolidare periodi definitivi | liquidazione tests, export tests | periodi definitivi bloccati con alert | medio | LIPE UX verde (COMPLETATO ✅) |
+| FASE 13 - Registri IVA e stampe definitive | Numerazione e blocco registri | FASE 12 | IVA, stampe | Progressivo di pagina, marca temporale, blocco contabile in prima nota | Modifiche silenti post-stampa | lock/print tests | stampa definitiva protegge il periodo | alto | print lock verde |
+| FASE 14 - Import Contabilità audit + riallineamento al manuale | Verificare stato reale import | FASE 3 | import, manuale | Audit e riallineamento import per generare solo draft canonici | Usare legacy come base contabile | scan legacy, draft tests | import riallineato ad Inserimento Manuale | alto | audit import superato |
+| FASE 15 - Import Contabilità operativo | Pipeline operativa FE | FASE 14 | import | Matching, suggerimento causali e precompilazione draft | Scritture fuori contratto canonico | integration, parity tests | import produce bozze canoniche | alto | import operativo verde |
+| FASE 16 - Cespiti leggeri agganciati a Import/Manuale | Ammortamenti operativi | FASE 15 | cespiti | Inserimento cespiti guidato da alert, notifica dashboard, suggerimento rate dallo storico | Modulo cespiti troppo enterprise | cespiti tests, dashboard tests | prompt inserimento e notifiche operative | medio | cespiti verdi |
+| FASE 17 - Partitario + pagamenti/incassi | Controllo partite e residui | FASE 3 | partitario | Aging, parziali, insoluti, abbuoni nel contratto canonico | Partitario separato | partitario tests | partite quadrate e allineate | medio-alto | partitario verde |
+| FASE 18 - Ritenute/CU/770 + controllo F24 importati | Ciclo ritenute professionisti | FASE 17 | ritenute | Percipienti, scadenze, CU/770 e controllo ritenute da F24 tributo 1040 | Dati manuali slegati | ritenute/CU/770/F24 tests | quadratura versato F24 e ritenute (Verde/Giallo/Rosso) | alto | ritenute e F24 verdi |
+| FASE 19 - Riconciliazione bancaria | Match transazioni estratti conto | FASE 17 | banca | Riconciliazione e generazione scritture canoniche identiche al manuale | Scritture non canoniche | bank match tests | match genera prima nota corretta | alto | riconciliazione verde |
+| FASE 20 - Reverse/estero limato | Gestione flussi esteri ridotti | FASE 13 | manuale, IVA | Doppia annotazione acquisti/vendite, IVA neutrale, partitario all'imponibile | Hardcode logiche di reverse | reverse/UE/autofattura tests | causali UE/estere coerenti | alto | estero validato |
+| FASE 21 - Note credito edge | Note credito estere | FASE 20 | manuale | Note credito a segno opposto o causali dedicate semplici | Investimenti edge eccessivi | note credito tests | storni note credito corretti | basso | note credito verdi |
+| FASE 22 - Modifiche/annulli/storni pragmatici e sicuri | Modifica controllata delle scritture | FASE 7 | manuale | Alert graduati (leggeri/forti/doppia conferma) e backup/ripristino per cancellazioni | Cancellazioni silenti | storno/annullo tests | modifiche protette e tracciate | alto | storno sicuro |
+| FASE 23 - Bilancio/mastrini/situazioni | Output contabili ordinari | FASE 19 | bilancio | Mastrini e bilancio di verifica a sezioni contrapposte | Stampa saldi sbilanciati | bilancio tests | bilanci e mastrini pronti per studio | alto | bilancio verde |
+| FASE 24 - Scadenzario F24 clienti Entratel | Controllo visuale deleghe | FASE 18 | scadenze | Scadenzario F24 Entratel con storico ricorrenze evidenziato in verde | Modulo F24 ministeriale completo | schedule tests | visualizzazione F24 ricorrenti ed evidenziati | medio | scadenzario F24 verde |
+| FASE 25 - Stampe/export/fascicolo cliente | Consegna fine periodo | FASE 23 | stampe | Generazione del PDF unico di fine periodo (fascicolo cliente) | PDF non conformi | export tests | fascicolo cliente generato correttamente | medio | fascicolo cliente verde |
+| FASE 26 - Admin/impostazioni/regole | Riapertura periodi chiusi | FASE 13 | admin | Workflow riapertura con motivazione, log, backup preventivo e ristampa | Riaperture ordinarie senza log | lock/reopen tests | solo Owner/Admin riapre con log completo | molto alto | controlli admin verdi |
+| FASE 27 - Audit finale + legacy cleanup | Pulizia e stabilizzazione | FASE 25 | tutti | Rimozione `DISUSO` e tabelle deprecate, test di regressione globale | Nuove regressioni | final regression tests | workspace pulito e 100% green | medio-alto | release checklist verde |
 
 ## 17. Test suite finale
 
@@ -863,6 +844,8 @@ Una funzione e completa solo se:
 - Conservazione sostitutiva.
 - Dichiarativi completi con invio.
 - Sostituzione totale dei software esterni per gli adempimenti finali.
+- Modulo di compilazione/elaborazione delega F24 ministeriale completa (gestito esternamente su TeamSystem).
+- Modulo di scarico massivo AdE come canale di ingresso principale (solo utilità strumentale distaccata, gli ZIP passano per l'importazione da Import Contabilità).
 
 ### Regola finale
-FiscoSim e studio-grade solo quando i 4 moduli core parlano la stessa lingua, i casi fiscali italiani principali sono coperti da contratto + test + audit, i periodi sono governati da lock/riapertura autorizzata e il legacy non guida piu alcuna nuova logica.
+FiscoSim è studio-grade solo quando i 4 moduli core parlano la stessa lingua, i casi fiscali italiani principali sono coperti da contratto + test + audit, i periodi sono governati da lock/riapertura autorizzata e il legacy non guida più alcuna nuova logica.
