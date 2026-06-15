@@ -81,7 +81,7 @@ test('Liquidazione IVA Definitiva — Persistenza & RPC client suite', async (t)
           data: {
             success: true,
             liquidazioneId: 'liq-999',
-            stato: 'definitiva',
+            stato: 'provvisoria',
             periodoInizio: '2026-06-01',
             periodoFine: '2026-06-30',
             righeSnapshot: 1,
@@ -106,7 +106,7 @@ test('Liquidazione IVA Definitiva — Persistenza & RPC client suite', async (t)
     assert.strictEqual(rpcCalled, true)
     assert.strictEqual(res.data.success, true)
     assert.strictEqual(res.data.liquidazioneId, 'liq-999')
-    assert.strictEqual(res.data.stato, 'definitiva')
+    assert.strictEqual(res.data.stato, 'provvisoria')
     
     // Verifichiamo che i parametri dell'RPC siano corretti
     assert.strictEqual(rpcArgs.p_societa_id, 'soc-123')
@@ -205,6 +205,7 @@ test('Liquidazione IVA Definitiva — Persistenza & RPC client suite', async (t)
     let tableQueried = ''
     let queryEqs = {}
 
+    // 1. Caso in cui non ci sono record
     sb.from = (table) => {
       tableQueried = table
       const chain = {
@@ -215,26 +216,39 @@ test('Liquidazione IVA Definitiva — Persistenza & RPC client suite', async (t)
         },
         lte: () => chain,
         gte: () => chain,
-        limit: () => Promise.resolve({ data: [], error: null }),
         then: (resolve) => Promise.resolve({ data: [], error: null }).then(resolve)
       }
       return chain
     }
 
-    const resFalse = await isIvaPeriodLiquidated('soc-123', '2026-06-15')
+    const resFalseEmpty = await isIvaPeriodLiquidated('soc-123', '2026-06-15')
     assert.strictEqual(tableQueried, 'liquidazione_iva')
-    assert.strictEqual(queryEqs.stato, 'definitiva') // Criterio fondamentale!
-    assert.strictEqual(resFalse, false)
+    assert.strictEqual(queryEqs.societa_id, 'soc-123')
+    assert.strictEqual(resFalseEmpty, false)
 
-    // Simuliamo che esista un record con stato=definitiva
+    // 2. Caso in cui esiste un record ma con stato provvisoria in note
     sb.from = (table) => {
       const chain = {
         select: () => chain,
         eq: () => chain,
         lte: () => chain,
         gte: () => chain,
-        limit: () => Promise.resolve({ data: [{ id: 'liq-123' }], error: null }),
-        then: (resolve) => Promise.resolve({ data: [{ id: 'liq-123' }], error: null }).then(resolve)
+        then: (resolve) => Promise.resolve({ data: [{ id: 'liq-123', note: 'Consolidamento [stato:provvisoria]' }], error: null }).then(resolve)
+      }
+      return chain
+    }
+
+    const resFalseProv = await isIvaPeriodLiquidated('soc-123', '2026-06-15')
+    assert.strictEqual(resFalseProv, false)
+
+    // 3. Caso in cui esiste un record con stato definitiva in note
+    sb.from = (table) => {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        lte: () => chain,
+        gte: () => chain,
+        then: (resolve) => Promise.resolve({ data: [{ id: 'liq-123', note: 'Chiusura [stato:definitiva]' }], error: null }).then(resolve)
       }
       return chain
     }

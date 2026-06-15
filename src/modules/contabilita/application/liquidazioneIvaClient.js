@@ -63,6 +63,17 @@ export function mapLiquidazioneForUi(l) {
   if (!l) return null
   const periodo = l.periodicita === 'mensile' ? l.mese : l.trimestre
   const saldo = Number(l.saldo || 0)
+  
+  // Normalizzazione stato dal campo note o fallback a provvisoria per record salvati
+  let derivedStato = 'provvisoria'
+  if (l.note && l.note.includes('[stato:definitiva]')) {
+    derivedStato = 'definitiva'
+  } else if (l.note && l.note.includes('[stato:riaperta]')) {
+    derivedStato = 'riaperta'
+  } else if (l.stato) {
+    derivedStato = l.stato
+  }
+
   return {
     ...l,
     tipo_periodo: l.periodicita,
@@ -71,7 +82,7 @@ export function mapLiquidazioneForUi(l) {
     iva_acquisti: l.iva_credito,
     iva_dovuta: saldo > 0 ? saldo : 0,
     credito_da_riportare: saldo < 0 ? Math.abs(saldo) : 0,
-    stato: l.stato || 'calcolata',
+    stato: derivedStato,
   }
 }
 

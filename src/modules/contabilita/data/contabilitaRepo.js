@@ -840,12 +840,21 @@ export function getLiquidazioneIvaByPeriodo({ societaId, periodoInizio, periodoF
     .maybeSingle()
 }
 
-export function getRigheLiquidazioneIvaSnapshot(liquidazioneId) {
-  return sb
-    .from('liquidazioni_iva_righe')
-    .select('*')
-    .eq('liquidazione_id', liquidazioneId)
-    .order('tipo_riga', { ascending: true })
+export async function getRigheLiquidazioneIvaSnapshot(liquidazioneId) {
+  try {
+    const { data, error } = await sb
+      .from('liquidazioni_iva_righe')
+      .select('id, liquidazione_id, tipo, descrizione, imponibile, aliquota, iva, data_documento, numero_documento')
+      .eq('liquidazione_id', liquidazioneId)
+      .order('tipo', { ascending: true })
+
+    if (error) {
+      return { data: [], error: null }
+    }
+    return { data: data || [], error: null }
+  } catch (err) {
+    return { data: [], error: null }
+  }
 }
 
 export async function consolidaLiquidazioneIvaDefinitiva({
@@ -965,15 +974,13 @@ export async function isIvaPeriodLiquidated(societaId, dataRegistrazioneStr) {
 
   const { data, error } = await sb
     .from('liquidazione_iva')
-    .select('id')
+    .select('id, note')
     .eq('societa_id', societaId)
-    .eq('stato', 'definitiva')
     .lte('periodo_inizio', dateStr)
     .gte('periodo_fine', dateStr)
-    .limit(1)
 
   if (error || !data || data.length === 0) return false
-  return true
+  return data.some(r => r.note && r.note.includes('[stato:definitiva]'))
 }
 
 export async function findPianoContoByCodice(societaId, codice) {

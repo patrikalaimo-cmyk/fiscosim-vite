@@ -242,7 +242,7 @@ test('Liquidazione IVA Definitiva Orchestrator Suite', async (t) => {
         data: {
           success: true,
           liquidazioneId: 'liq-456',
-          stato: 'definitiva',
+          stato: 'provvisoria',
           periodoInizio: '2026-06-01',
           periodoFine: '2026-06-30'
         },
@@ -261,7 +261,7 @@ test('Liquidazione IVA Definitiva Orchestrator Suite', async (t) => {
     assert.strictEqual(res.error, null)
     assert.strictEqual(res.data.success, true)
     assert.strictEqual(res.data.liquidazioneId, 'liq-456')
-    assert.strictEqual(res.data.stato, 'definitiva')
+    assert.strictEqual(res.data.stato, 'provvisoria')
   })
 
   await t.test('8. split payment escluso dal debito resta nel payload come evidenza separata', async () => {

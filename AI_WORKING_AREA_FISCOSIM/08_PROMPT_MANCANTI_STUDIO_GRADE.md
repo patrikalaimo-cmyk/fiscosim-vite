@@ -68,3 +68,4 @@ I prompt devono restare compatti ma corposi: un prompt deve chiudere un blocco f
 | 5 | 12/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2A | OK | - | RPC transazionale, patch guards, repo/client e test |
 | 6 | 12/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2B | OK | `5da6dad` | Orchestratore applicativo, client facade e test |
 | 7 | 13/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2C | OK | - | UI controllata con anteprima e blocco in TaxComplianceView.jsx |
+| 8 | 13/06/2026 | Liquidazione IVA | Dev | Liquidazione IVA Definitiva F2D | OK | - | Preparazione manuale migration RPC e test manuali |

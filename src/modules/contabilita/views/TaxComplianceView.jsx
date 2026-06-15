@@ -180,6 +180,27 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       setFeedbackMessage(null);
       setPreviewError(null);
     }
+
+    const savedRecord = liquidazioni.find(l => {
+      const p = l.periodicita || l.tipo_periodo
+      const lPeriodo = l.periodicita === 'mensile' ? l.mese : l.trimestre
+      return (
+        String(p).toLowerCase() === String(provvisoriaPeriod.tipo_periodo).toLowerCase() &&
+        Number(l.anno) === Number(provvisoriaPeriod.anno) &&
+        Number(lPeriodo) === Number(provvisoriaPeriod.periodo)
+      )
+    });
+
+    if (isExplicit && savedRecord) {
+      const labelStato = savedRecord.stato === 'definitiva' ? 'definitiva' : 'consolidata';
+      if (!window.confirm(
+        `Attenzione: esiste già una liquidazione ${labelStato} per questo periodo. L’anteprima ricalcolata potrebbe differire dal consolidato salvato. Continuare?`
+      )) {
+        setLoadingProvvisoria(false);
+        return;
+      }
+    }
+
     try {
       const anno = provvisoriaPeriod.anno;
       const periodo = provvisoriaPeriod.periodo;
@@ -229,7 +250,13 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       const formattedTimestamp = `${gg}/${mm}/${aaaa} ${hh}:${min}`;
       setLastCalcTimestamp(formattedTimestamp);
 
-      if (isExplicit) {
+      if (savedRecord) {
+        const labelStato = savedRecord.stato === 'definitiva' ? 'definitiva' : 'consolidata';
+        setFeedbackMessage({
+          type: 'warn',
+          text: `Attenzione: esiste già una liquidazione ${labelStato} per questo periodo. L’anteprima ricalcolata potrebbe differire dal consolidato salvato.`
+        });
+      } else if (isExplicit) {
         if (!data || data.length === 0) {
           setFeedbackMessage({
             type: 'warn',
@@ -333,11 +360,37 @@ function LiquidazioniIVAView({societa,scritture,causaliIva}){
       ? boundsTrimestrale(provvisoriaPeriod.anno, provvisoriaPeriod.periodo)
       : boundsMensile(provvisoriaPeriod.anno, provvisoriaPeriod.periodo);
 
-    if (!window.confirm(
-      `La liquidazione IVA sarà consolidata per il periodo selezionato.\n` +
-      `Le registrazioni IVA del periodo saranno soggette a blocchi/warning di modifica.`
-    )) {
-      return;
+    const isAlreadySaved = liquidazioni.some(l => {
+      const p = l.periodicita || l.tipo_periodo;
+      const lPeriodo = l.periodicita === 'mensile' ? l.mese : l.trimestre;
+      return (
+        String(p).toLowerCase() === String(provvisoriaPeriod.tipo_periodo).toLowerCase() &&
+        Number(l.anno) === Number(provvisoriaPeriod.anno) &&
+        Number(lPeriodo) === Number(provvisoriaPeriod.periodo)
+      );
+    });
+
+    const mesi = [
+      'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+    ];
+    const periodLabel = provvisoriaPeriod.tipo_periodo === 'trimestrale'
+      ? `${provvisoriaPeriod.periodo}° Trimestre ${provvisoriaPeriod.anno}`
+      : `${mesi[provvisoriaPeriod.periodo - 1]} ${provvisoriaPeriod.anno}`;
+
+    if (isAlreadySaved) {
+      if (!window.confirm(
+        `ATTENZIONE: Esiste già una liquidazione consolidata/definitiva salvata per il periodo ${periodLabel}.\n` +
+        `Il riconsolidamento sovrascriverà i dati correnti ed aggiornerà lo storico. Sei assolutamente sicuro di voler procedere con il riconsolidamento?`
+      )) {
+        return;
+      }
+    } else {
+      if (!window.confirm(
+        `Stai consolidando la liquidazione IVA del periodo ${periodLabel}. La liquidazione sarà salvata come riferimento per LIPE/prospetti e modifiche successive al periodo richiederanno attenzione. Continuare?`
+      )) {
+        return;
+      }
     }
 
     setLoadingDefinitiva(true);

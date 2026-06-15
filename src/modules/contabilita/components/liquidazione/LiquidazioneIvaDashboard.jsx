@@ -371,7 +371,7 @@ export function LiquidazioneIvaDashboard({
             <button
               onClick={onUpdatePreview}
               className="btn"
-              disabled={loading}
+              disabled={loading || statoLiquidazione === 'Definitiva'}
               style={{ width: '100%', height: '36px', background: '#f39c12', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
             >
               {loadingProvvisoria ? 'Aggiornamento...' : '🔄 Aggiorna anteprima'}
@@ -388,7 +388,7 @@ export function LiquidazioneIvaDashboard({
             <button
               onClick={onPreparaConsolidamento}
               className="btn-sec"
-              disabled={loading || !operatoreSel}
+              disabled={loading || statoLiquidazione === 'Definitiva' || !operatoreSel}
               style={{ width: '100%', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
             >
               📥 Prepara consolidamento
