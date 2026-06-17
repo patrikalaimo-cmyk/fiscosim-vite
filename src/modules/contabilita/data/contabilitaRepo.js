@@ -1562,3 +1562,111 @@ export function updateScritturaHeaderById(id, updates) {
   return sb.from('prima_nota').update(updates).eq('id', id)
 }
 
+export async function getRegistriIvaPerStampa(societaId, dataDa, dataA, tipoRegistro) {
+  let query = sb
+    .from('registri_iva')
+    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id, numero_documento, data_documento, soggetto_piva, soggetto_denominazione, documento_contabilita_id')
+    .eq('societa_id', societaId)
+    .gte('data', dataDa)
+    .lte('data', dataA)
+
+  if (tipoRegistro === 'acquisti') {
+    query = query.eq('tipo', 'acquisto')
+  } else if (tipoRegistro === 'vendite' || tipoRegistro === 'corrispettivi') {
+    query = query.eq('tipo', 'vendita')
+  }
+
+  query = query
+    .order('data', { ascending: true })
+    .order('data_documento', { ascending: true })
+    .order('numero_documento', { ascending: true })
+    .order('id', { ascending: true })
+
+  const { data: rows, error: rowsError } = await query
+  if (rowsError || !rows) return { data: [], error: rowsError }
+
+  const causaleIvaIds = Array.from(new Set(rows.map(r => r.causale_iva_id).filter(Boolean)))
+  const causaliMap = new Map()
+  if (causaleIvaIds.length > 0) {
+    const { data: causali, error: causaliError } = await sb
+      .from('causali_iva')
+      .select('*')
+      .in('id', causaleIvaIds)
+    if (!causaliError && causali) {
+      for (const c of causali) {
+        causaliMap.set(c.id, c)
+      }
+    }
+  }
+
+  const flattened = rows.map((row) => {
+    const causale = row.causale_iva_id ? causaliMap.get(row.causale_iva_id) : null
+    return {
+      ...row,
+      causale_codice: causale?.codice || '',
+      causale_descrizione: causale?.descrizione || '',
+    }
+  })
+
+  if (tipoRegistro === 'corrispettivi' || tipoRegistro === 'vendite') {
+    const pnIds = Array.from(new Set(flattened.map(r => r.prima_nota_id).filter(Boolean)))
+    if (pnIds.length > 0) {
+      const { data: pns, error: pnError } = await sb
+        .from('prima_nota')
+        .select('id, tipo_registrazione')
+        .in('id', pnIds)
+      if (!pnError && pns) {
+        const pnMap = new Map(pns.map(p => [p.id, p.tipo_registrazione]))
+        if (tipoRegistro === 'corrispettivi') {
+          return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) === 'corrispettivo'), error: null }
+        } else {
+          return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) !== 'corrispettivo'), error: null }
+        }
+      }
+    }
+  }
+
+  return { data: flattened, error: null }
+}
+
+export async function getLibroGiornalePerStampa(societaId, dataDa, dataA) {
+  try {
+    const { data: headers, error: headersError } = await sb
+      .from('prima_nota')
+      .select('id, societa_id, numero_registrazione, data_registrazione, data_documento, numero_documento, causale_codice, descrizione, cliente_fornitore_nome, totale_dare, totale_avere, stato')
+      .eq('societa_id', societaId)
+      .gte('data_registrazione', dataDa)
+      .lte('data_registrazione', dataA)
+      .order('numero_registrazione', { ascending: true })
+
+    if (headersError) throw headersError
+    if (!headers || !headers.length) return { data: [], error: null }
+
+    const pnIds = headers.map(h => h.id).filter(Boolean)
+    const { data: rows, error: rowsError } = await sb
+      .from('prima_nota_righe')
+      .select('id, prima_nota_id, riga_numero, conto_id, conto_codice, conto_descrizione, descrizione_riga, importo_dare, importo_avere')
+      .in('prima_nota_id', pnIds)
+      .order('riga_numero', { ascending: true })
+
+    if (rowsError) throw rowsError
+
+    const rowsByPnId = new Map()
+    for (const r of rows || []) {
+      const key = String(r.prima_nota_id)
+      if (!rowsByPnId.has(key)) rowsByPnId.set(key, [])
+      rowsByPnId.get(key).push(r)
+    }
+
+    const result = headers.map(h => ({
+      ...h,
+      righe: rowsByPnId.get(String(h.id)) || []
+    }))
+
+    return { data: result, error: null }
+  } catch (error) {
+    console.error('[getLibroGiornalePerStampa] Error:', error)
+    return { data: [], error }
+  }
+}
+

@@ -1,4 +1,10 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
+import * as contabilitaRepo from '../data/contabilitaRepo.js'
+import { buildRegistroIvaRowsModel } from '../application/stampe/buildRegistroIvaRowsModel.js'
+import { buildLibroGiornaleModel } from '../application/stampe/buildLibroGiornaleModel.js'
+
+const fmt = (n) => n != null ? Number(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString('it-IT') : '—';
 
 export default function StampeView({ contTab, societaAttiva, scritture, pianoConti, causaliIva }) {
   if (!societaAttiva) return null
@@ -23,6 +29,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const [partitarioTipo,setPartitarioTipo]=useState('clienti');
   const [situazioneTipo,setSituazioneTipo]=useState('patrimoniale');
   const [previewHtml,setPreviewHtml]=useState('');
+  const [registroModel,setRegistroModel]=useState(null);
+  const [giornaleModel,setGiornaleModel]=useState(null);
   const [error,setError]=useState('');
 
   const titoli={
@@ -37,129 +45,39 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     setLoading(true);
     setError('');
     setPreviewHtml('');
+    setRegistroModel(null);
+    setGiornaleModel(null);
     
     try{
-      let tipo='',dati={};
-      const periodo=`Dal ${new Date(periodoInizio).toLocaleDateString('it-IT')} al ${new Date(periodoFine).toLocaleDateString('it-IT')}`;
-      
-      // Filtra scritture per periodo
-      const scrittureFiltrate=scritture.filter(s=>{
-        const dataReg=new Date(s.data_registrazione);
-        return dataReg>=new Date(periodoInizio)&&dataReg<=new Date(periodoFine);
-      });
-
       if(tipoStampa==='registri_iva'){
-        tipo='registro_iva';
-        // Filtra per tipo registro (vendite/acquisti hanno causali diverse)
-        const movimenti=scrittureFiltrate.filter(s=>{
-          if(registroTipo==='vendite')return s.causale_codice?.startsWith('VE')||s.tipo==='vendita';
-          if(registroTipo==='acquisti')return s.causale_codice?.startsWith('AC')||s.tipo==='acquisto';
-          return s.tipo==='corrispettivo';
-        }).map((s,i)=>({
-          protocollo:i+1,
-          data_registrazione:s.data_registrazione,
-          data_documento:s.data_documento||s.data_registrazione,
-          numero_documento:s.numero_documento,
-          cliente_fornitore_nome:s.descrizione||s.cliente_fornitore_nome||'—',
-          causale_iva_codice:s.causale_iva_codice||'22',
-          imponibile:s.imponibile||s.totale_dare||0,
-          imposta:s.imposta||0
-        }));
-        dati={registroTipo,movimenti};
+        const { data: rawRows, error: fetchError } = await contabilitaRepo.getRegistriIvaPerStampa(societa.id, periodoInizio, periodoFine, registroTipo);
+        if(fetchError) throw fetchError;
+        
+        const model = buildRegistroIvaRowsModel(rawRows);
+        if (!model.rows || model.rows.length === 0) {
+          setError('Nessuna riga IVA trovata per il periodo selezionato.');
+          setLoading(false);
+          return;
+        }
+        setRegistroModel(model);
       }
       else if(tipoStampa==='giornale'){
-        tipo='giornale';
-        dati={scritture:scrittureFiltrate.map(s=>({
-          numero_registrazione:s.numero_registrazione,
-          data_registrazione:s.data_registrazione,
-          causale_codice:s.causale_codice||'GEN',
-          descrizione:s.descrizione,
-          cliente_fornitore_nome:s.cliente_fornitore_nome,
-          numero_documento:s.numero_documento,
-          totale_dare:s.totale_dare||0,
-          totale_avere:s.totale_avere||0
-        }))};
-      }
-      else if(tipoStampa==='mastrini'){
-        tipo='mastrino';
-        if(!selectedConto){
-          setError('Seleziona un conto per visualizzare il mastrino');
+        const { data: rawEntries, error: fetchError } = await contabilitaRepo.getLibroGiornalePerStampa(societa.id, periodoInizio, periodoFine);
+        if(fetchError) throw fetchError;
+        
+        const model = buildLibroGiornaleModel(rawEntries);
+        if (!model.entries || model.entries.length === 0) {
+          setError('Nessuna scrittura trovata per il periodo selezionato.');
           setLoading(false);
           return;
         }
-        const conto=pianoConti.find(c=>c.id===selectedConto);
-        if(!conto){
-          setError('Conto non trovato');
-          setLoading(false);
-          return;
-        }
-        // Simula movimenti per il conto (in produzione questi verrebbero dalle righe prima nota)
-        const movimenti=scrittureFiltrate.filter(s=>s.conto_id===selectedConto).map(s=>({
-          data_registrazione:s.data_registrazione,
-          causale_codice:s.causale_codice||'GEN',
-          descrizione_riga:s.descrizione,
-          descrizione:s.descrizione,
-          importo_dare:s.totale_dare||0,
-          importo_avere:s.totale_avere||0
-        }));
-        if(!movimenti.length){
-          setError('Nessun movimento disponibile per il conto selezionato.');
-          setLoading(false);
-          return;
-        }
-        const saldoIniziale=movimenti.reduce((acc,m)=>acc+(m.importo_dare-m.importo_avere),0);
-        dati={conto:{codice:conto.codice,descrizione:conto.descrizione,saldo_iniziale:saldoIniziale},movimenti};
+        setGiornaleModel(model);
       }
-      else if(tipoStampa==='bilancio'){
-        tipo='bilancio_verifica';
-        // Aggrega per conto
-        const aggregati=pianoConti.map(c=>({
-          ...c,
-          saldo_dare:0,
-          saldo_avere:0
-        }));
-        scrittureFiltrate.forEach(s=>{
-          const index=aggregati.findIndex(c=>c.id===s.conto_id);
-          if(index===-1)return;
-          aggregati[index].saldo_dare += s.totale_dare||0;
-          aggregati[index].saldo_avere += s.totale_avere||0;
-        });
-        dati={conti:aggregati};
+      else if(['partitari', 'mastrini', 'bilancio'].includes(tipoStampa)){
+        setError('Funzione in preparazione.');
       }
-      else if(tipoStampa==='partitari'){
-        tipo='partitario';
-        const partite=scrittureFiltrate
-          .filter(s=>partitarioTipo==='clienti' ? !!s.cliente_fornitore_nome : !!s.fornitore_nome)
-          .map(s=>({
-            data_documento:s.data_documento||s.data_registrazione,
-            numero_documento:s.numero_documento||'',
-            conto_descrizione:s.cliente_fornitore_nome||s.fornitore_nome||s.descrizione||'Cliente/Fornitore',
-            importo_originale:s.totale_dare||s.totale_avere||0,
-            importo_pagato:s.pagato||0,
-            importo_residuo:(s.totale_dare||s.totale_avere||0)-(s.pagato||0),
-            data_scadenza:s.scadenza||s.data_documento,
-            stato:s.stato_partitario||'aperta'
-          }));
-        if(!partite.length){
-          setError('Nessuna partita aperta disponibile per il tipo selezionato.');
-          setLoading(false);
-          return;
-        }
-        dati={partite,tipoPartitario:partitarioTipo};
-      }
-
-      const resp=await fetch('/api/stampe',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({tipo,societa,dati,periodo})
-      });
-
-      const result=await resp.json();
-      if(!resp.ok)throw new Error(result.error||'Errore generazione');
-      
-      setPreviewHtml(result.html);
     }catch(err){
-      setError(err.message);
+      setError(err.message || String(err));
     }finally{
       setLoading(false);
     }
@@ -246,7 +164,211 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
 
       {error&&<div className="alert alert-err" style={{marginBottom:'1rem'}}>{error}</div>}
 
-      {/* Anteprima */}
+      {/* Anteprima Registri IVA */}
+      {registroModel && (
+        <div className="card" style={{ marginTop: '1rem', padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>📋 Registro IVA {registroTipo === 'vendite' ? 'Vendite' : registroTipo === 'acquisti' ? 'Acquisti' : 'Corrispettivi'}</span>
+              <span className="badge" style={{ background: '#f59e0b', color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Anteprima provvisoria</span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn-sec" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>💾 Salva HTML (Disattivato)</button>
+              <button className="btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>🖨️ Stampa / PDF (Disattivato)</button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.5rem', background: 'var(--bg-surface)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Numero Righe</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{registroModel.rows.length}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Numero Documenti</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{new Set(registroModel.rows.map(r => r.numero_documento + '_' + r.soggetto_denominazione)).size}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Totale Imponibile</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>€ {fmt(registroModel.totaleImponibile)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Totale Imposta (IVA)</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>€ {fmt(registroModel.totaleIva)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Tot. IVA Detraibile</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#10b981' }}>€ {fmt(registroModel.totaleDetraibile)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Tot. IVA Indetraibile</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ef4444' }}>€ {fmt(registroModel.totaleIndetraibile)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Split Payment</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{registroModel.rows.filter(r => r.split_payment).length > 0 ? 'Sì' : 'No'}</div>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+                  <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.8rem' }}>Prot.</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem' }}>Data Reg.</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem' }}>Data Doc.</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem' }}>N° Doc.</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem' }}>Cliente/Fornitore</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.8rem' }}>Cod. IVA</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.8rem' }}>Imponibile</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.8rem' }}>Imposta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registroModel.rows.map((r, index) => (
+                  <tr key={r.id || index} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>{r.progressivoProvvisorio}</td>
+                    <td style={{ padding: '0.75rem' }}>{fmtDate(r.data_registrazione)}</td>
+                    <td style={{ padding: '0.75rem' }}>{fmtDate(r.data_documento)}</td>
+                    <td style={{ padding: '0.75rem' }}>{r.numero_documento}</td>
+                    <td style={{ padding: '0.75rem' }}>
+                      {r.soggetto_denominazione}
+                      {r.soggetto_piva && r.soggetto_piva !== '—' && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--mu)', display: 'block' }}>P.IVA: {r.soggetto_piva}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.75rem', textAlign: 'center' }}><code>{r.causale_iva_codice}</code></td>
+                    <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(r.imponibile)}</td>
+                    <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(r.iva)}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: 'var(--bg-surface)', fontWeight: 'bold' }}>
+                  <td colSpan="6" style={{ padding: '0.75rem', textAlign: 'right' }}>TOTALI</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(registroModel.totaleImponibile)}</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(registroModel.totaleIva)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', background: 'var(--bg-surface)', padding: '0.75rem', borderRadius: '6px', borderLeft: '4px solid #f59e0b' }}>
+            ℹ️ <strong>Anteprima provvisoria.</strong> I progressivi visualizzati non costituiscono protocollo definitivo.
+          </div>
+        </div>
+      )}
+
+      {/* Anteprima Giornale */}
+      {giornaleModel && (
+        <div className="card" style={{ marginTop: '1rem', padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyStyle: 'space-between', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>📰 Libro Giornale</span>
+              <span className="badge" style={{ background: '#f59e0b', color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Anteprima provvisoria</span>
+              {Math.abs(giornaleModel.totaleDare - giornaleModel.totaleAvere) < 0.01 ? (
+                <span className="badge" style={{ background: '#10b981', color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Quadrato</span>
+              ) : (
+                <span className="badge" style={{ background: '#ef4444', color: '#fff', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Sbilanciato</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn-sec" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>💾 Salva HTML (Disattivato)</button>
+              <button className="btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>🖨️ Stampa / PDF (Disattivato)</button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.5rem', background: 'var(--bg-surface)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Registrazioni</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{giornaleModel.entries.length}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Numero Righe</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{giornaleModel.righeCount}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Totale Dare</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#10b981' }}>€ {fmt(giornaleModel.totaleDare)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Totale Avere</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ef4444' }}>€ {fmt(giornaleModel.totaleAvere)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--mu)' }}>Sbilancio</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: Math.abs(giornaleModel.totaleDare - giornaleModel.totaleAvere) < 0.01 ? 'var(--text-main)' : '#ef4444' }}>
+                € {fmt(giornaleModel.totaleDare - giornaleModel.totaleAvere)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+                  <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.8rem', width: '50px' }}>N°</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem', width: '90px' }}>Data</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem', width: '80px' }}>Causale</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem' }}>Descrizione</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8rem', width: '90px' }}>N° Doc.</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.8rem', width: '110px' }}>Dare</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.8rem', width: '110px' }}>Avere</th>
+                </tr>
+              </thead>
+              <tbody>
+                {giornaleModel.entries.map((entry, eIdx) => {
+                  return (
+                    <Fragment key={'entry_frag_' + (entry.id || eIdx)}>
+                      {/* Riga principale registrazione */}
+                      <tr key={'entry_' + (entry.id || eIdx)} style={{ background: 'var(--bg-surface)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>{entry.numero_registrazione}</td>
+                        <td style={{ padding: '0.5rem 0.75rem' }}>{fmtDate(entry.data_registrazione)}</td>
+                        <td style={{ padding: '0.5rem 0.75rem' }}><code>{entry.causale_codice}</code></td>
+                        <td style={{ padding: '0.5rem 0.75rem' }} colSpan="2">
+                          {entry.descrizione}
+                          {entry.cliente_fornitore_nome && <span style={{ color: 'var(--mu)', fontStyle: 'italic', fontSize: '0.8rem' }}> — {entry.cliente_fornitore_nome}</span>}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                          {entry.totale_dare > 0 ? fmt(entry.totale_dare) : ''}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                          {entry.totale_avere > 0 ? fmt(entry.totale_avere) : ''}
+                        </td>
+                      </tr>
+                      {/* Righe dei conti (mastrini) associati */}
+                      {entry.righe && entry.righe.map((r, rIdx) => (
+                        <tr key={'riga_' + (r.id || rIdx)} style={{ borderBottom: '1px dashed var(--border-subtle)', opacity: 0.9 }}>
+                          <td colSpan="3"></td>
+                          <td style={{ padding: '0.4rem 0.75rem', paddingLeft: '2rem', fontSize: '0.85rem' }}>
+                            <strong>{r.conto_codice}</strong> — {r.conto_descrizione}
+                            {r.descrizione_riga && <span style={{ color: 'var(--mu)', display: 'block', fontSize: '0.75rem' }}>{r.descrizione_riga}</span>}
+                          </td>
+                          <td></td>
+                          <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                            {r.importo_dare > 0 ? fmt(r.importo_dare) : ''}
+                          </td>
+                          <td style={{ padding: '0.4rem 0.75rem', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                            {r.importo_avere > 0 ? fmt(r.importo_avere) : ''}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  )
+                })}
+                <tr style={{ background: 'var(--bg-surface)', fontWeight: 'bold', borderTop: '2px solid var(--border-subtle)' }}>
+                  <td colSpan="5" style={{ padding: '0.75rem', textAlign: 'right' }}>TOTALI GIORNALE</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace', color: '#10b981' }}>{fmt(giornaleModel.totaleDare)}</td>
+                  <td style={{ padding: '0.75rem', textAlign: 'right', fontFamily: 'monospace', color: '#ef4444' }}>{fmt(giornaleModel.totaleAvere)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', background: 'var(--bg-surface)', padding: '0.75rem', borderRadius: '6px', borderLeft: '4px solid #f59e0b' }}>
+            ℹ️ <strong>Anteprima provvisoria.</strong> I progressivi visualizzati non costituiscono protocollo definitivo.
+          </div>
+        </div>
+      )}
+
+      {/* Vecchio Iframe (non usato) */}
       {previewHtml&&(
         <div className="card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
@@ -266,7 +388,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
         </div>
       )}
 
-      {!previewHtml&&!loading&&(
+      {!previewHtml&&!registroModel&&!giornaleModel&&!loading&&(
         <div className="card" style={{padding:'2rem',textAlign:'center'}}>
           <div style={{fontSize:'2rem',marginBottom:'.5rem'}}>🖨️</div>
           <div style={{color:'var(--mu)'}}>Seleziona il periodo e clicca "Genera Anteprima" per visualizzare il documento</div>
