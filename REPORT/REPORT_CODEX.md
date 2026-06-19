@@ -7089,3 +7089,90 @@ npm run build
 
 *(i file ?? sono untracked preesistenti non toccati da questa sessione)*
 
+
+## FASE-13C-EXPORT-STAMPA-PROVVISORIA-REGISTRI-GIORNALE
+
+**Data**: 2026-06-19
+**Perimetro**: StampeView.jsx, exportStampeProvvisorie.js, registriIvaStampeModel.test.js
+
+---
+
+### File modificati e creati
+
+| File | Tipo | Descrizione |
+|---|---|---|
+| `src/modules/contabilita/application/stampe/exportStampeProvvisorie.js` | Nuovo file | Helper per la generazione dei file CSV/XLSX e dell'HTML per la stampa provvisoria |
+| `src/modules/contabilita/views/StampeView.jsx` | Modificato | Collegamento dei bottoni di stampa ed export ed abilitazione condizionale |
+| `tests/registriIvaStampeModel.test.js` | Modificato | Aggiunta di 5 nuovi unit test per validare l'export e la stampa provvisoria |
+| `REPORT/REPORT_CODEX.md` | Modificato | Documentazione aggiornata (questa sezione) |
+
+---
+
+### Cosa è stato implementato per Registri IVA
+- **CSV/Excel**: Generato client-side in formato CSV (con BOM UTF-8 e separatore `;`) ed Excel (usando `xlsx`).
+- **Stampa Provvisoria / PDF**: Generato HTML stampabile (A4 orizzontale) contenente intestazioni corrette, dati ordinati, totali (imponibile, IVA, complessivo, detraibile, indetraibile, split payment e numero righe/documenti) e la nota obbligatoria:
+  `Stampa provvisoria di controllo. I progressivi visualizzati non costituiscono protocollo definitivo e il periodo non risulta chiuso.`
+
+### Cosa è stato implementato per Libro Giornale
+- **Pulsanti di Azione**: Aggiunti i pulsanti PDF, Excel e CSV all'anteprima del Libro Giornale (coerentemente con i Registri IVA).
+- **CSV/Excel**: Generato client-side in formato CSV ed Excel basandosi sulla lista flatRows visualizzata in tabella.
+- **Stampa Provvisoria / PDF**: Generato HTML stampabile (A4 orizzontale) contenente intestazioni corrette, totali (Dare, Avere, Sbilancio e quadratura) e la nota obbligatoria:
+  `Stampa provvisoria di controllo. Il libro giornale definitivo sarà disponibile solo dopo la fase di chiusura e stampa definitiva.`
+
+### Cosa resta disabilitato per Partitari/Mastrini/Bilancio
+- I pulsanti di export/stampa per Partitari e Mastrini sono disabilitati (opacity: 0.5) ed emettono il toast/alert informativo:
+  `Disponibile dopo attivazione della funzione contabile reale.`
+- Non viene esportato alcun dato fac-simile come documento reale.
+
+### Conferme e Vincoli Rispettati
+- **Nessuna chiamata a `/api/stampe`**: L'intera generazione è client-side.
+- **Nessuna stampa definitiva o blocco periodo**: Nessun trigger di salvataggio di stato definitivo o di blocco delle scritture contabili.
+- **Nessun commit**: Nessun commit effettuato nel repository.
+
+---
+
+### Test eseguiti
+
+```
+node --test tests/registriIvaStampeModel.test.js tests/calcoloLiquidazioneIvaDefinitiva.test.js
+
+ℹ tests 35
+ℹ pass 35
+ℹ fail 0
+```
+
+### Stato Build
+
+```
+npm run build
+✓ 423 modules transformed.
+✓ built in 8.60s — 0 errori
+```
+
+---
+
+### Test manuali richiesti per l'operatore
+
+1. **Registri IVA**:
+   - Generare anteprima. Cliccare su **CSV**, **Excel** e **Stampa / PDF** e verificare la corretta esportazione e il layout di stampa con la nota provvisoria.
+   - Prima di generare l'anteprima, verificare che i pulsanti siano disabilitati (opacity: 0.5).
+2. **Libro Giornale**:
+   - Generare anteprima. Cliccare su **CSV**, **Excel** e **Stampa / PDF** e verificare il layout orizzontale e la nota provvisoria.
+3. **Partitari/Mastrini**:
+   - Cliccare su "Esporta" o "Esporta in Excel" e verificare la visualizzazione del messaggio `Disponibile dopo attivazione della funzione contabile reale.`.
+
+---
+
+### Rischi residui
+Nessuno rilevato. La generazione client-side isola completamente le stampe provvisorie da qualsiasi alterazione dei dati persistiti sul DB.
+
+---
+
+### git status --short
+
+```
+ M src/modules/contabilita/views/StampeView.jsx
+ M tests/registriIvaStampeModel.test.js
+?? src/modules/contabilita/application/stampe/exportStampeProvvisorie.js
+```
+

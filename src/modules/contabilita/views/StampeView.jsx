@@ -3,6 +3,17 @@ import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { buildRegistroIvaRowsModel } from '../application/stampe/buildRegistroIvaRowsModel.js'
 import { buildLibroGiornaleModel } from '../application/stampe/buildLibroGiornaleModel.js'
 import {
+  buildRegistroIvaCsv,
+  buildRegistroIvaXlsx,
+  buildGiornaleCsv,
+  buildGiornaleXlsx,
+  buildRegistroIvaPrintHtml,
+  buildGiornalePrintHtml,
+  downloadCsv,
+  downloadXlsx,
+  openPrintWindow
+} from '../application/stampe/exportStampeProvvisorie.js'
+import {
   ContPageHeader,
   ContFilterBar,
   ContKpiGrid,
@@ -1152,7 +1163,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                       </button>
 
                       <button
-                        onClick={() => setInfoAlert("Esportazione disattivata nell'anteprima fac-simile.")}
+                        onClick={() => setInfoAlert("Disponibile dopo attivazione della funzione contabile reale.")}
                         style={{
                           background: 'var(--bg-surface)',
                           border: '1px solid var(--bd)',
@@ -1165,6 +1176,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
+                          opacity: 0.5,
                           transition: 'background 0.2s'
                         }}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
@@ -1589,8 +1601,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                   badgeText="Fac-simile UX"
                   actions={
                     <button
-                      onClick={() => setInfoAlert("Esportazione Excel disponibile nella versione operativa del mastrino.")}
-                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '8px', color: 'var(--tx)', padding: '6px 14px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'background 0.2s' }}
+                      onClick={() => setInfoAlert("Disponibile dopo attivazione della funzione contabile reale.")}
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '8px', color: 'var(--tx)', padding: '6px 14px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: 0.5, transition: 'background 0.2s' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
                     >
@@ -2153,7 +2165,12 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
           actions={
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <button
-                onClick={() => setInfoAlert("Esportazione PDF disattivata nell'anteprima provvisoria. La stampa ufficiale sarà generata con protocollo definitivo.")}
+                onClick={() => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    openPrintWindow(buildRegistroIvaPrintHtml(registroModel, { registroTipo, periodoInizio, periodoFine, societa }));
+                  }
+                }}
+                disabled={!registroModel || registroModel.rows.length === 0 || !!error}
                 style={{
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--bd)',
@@ -2165,17 +2182,34 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  cursor: 'pointer',
+                  cursor: (!registroModel || registroModel.rows.length === 0 || !!error) ? 'not-allowed' : 'pointer',
+                  opacity: (!registroModel || registroModel.rows.length === 0 || !!error) ? 0.5 : 1,
                   transition: 'background 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                onMouseEnter={e => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    e.currentTarget.style.background = 'var(--bg-card)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    e.currentTarget.style.background = 'var(--bg-surface)';
+                  }
+                }}
               >
                 <PdfIcon />
-                PDF
+                Stampa / PDF
               </button>
               <button
-                onClick={() => setInfoAlert("Esportazione Excel disattivata nell'anteprima provvisoria. I prospetti finali saranno disponibili in configurazione registri.")}
+                onClick={() => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    downloadXlsx(
+                      buildRegistroIvaXlsx(registroModel, { registroTipo, periodoInizio, periodoFine, societa }),
+                      `registro_iva_${registroTipo}_${societa?.denominazione || 'stampa'}_${periodoFine}.xlsx`
+                    );
+                  }
+                }}
+                disabled={!registroModel || registroModel.rows.length === 0 || !!error}
                 style={{
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--bd)',
@@ -2187,17 +2221,34 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  cursor: 'pointer',
+                  cursor: (!registroModel || registroModel.rows.length === 0 || !!error) ? 'not-allowed' : 'pointer',
+                  opacity: (!registroModel || registroModel.rows.length === 0 || !!error) ? 0.5 : 1,
                   transition: 'background 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                onMouseEnter={e => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    e.currentTarget.style.background = 'var(--bg-card)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    e.currentTarget.style.background = 'var(--bg-surface)';
+                  }
+                }}
               >
                 <ExcelIcon />
                 Excel
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    downloadCsv(
+                      buildRegistroIvaCsv(registroModel, { registroTipo, periodoInizio, periodoFine, societa }),
+                      `registro_iva_${registroTipo}_${societa?.denominazione || 'stampa'}_${periodoFine}.csv`
+                    );
+                  }
+                }}
+                disabled={!registroModel || registroModel.rows.length === 0 || !!error}
                 style={{
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--bd)',
@@ -2209,14 +2260,22 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  cursor: 'pointer',
+                  cursor: (!registroModel || registroModel.rows.length === 0 || !!error) ? 'not-allowed' : 'pointer',
+                  opacity: (!registroModel || registroModel.rows.length === 0 || !!error) ? 0.5 : 1,
                   transition: 'background 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                onMouseEnter={e => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    e.currentTarget.style.background = 'var(--bg-card)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (registroModel && registroModel.rows.length > 0 && !error) {
+                    e.currentTarget.style.background = 'var(--bg-surface)';
+                  }
+                }}
               >
-                <PrinterIcon />
-                Stampa
+                📥 CSV
               </button>
               <button
                 onClick={() => setInfoAlert("Opzioni aggiuntive disponibili per registri IVA consolidati.")}
@@ -2513,6 +2572,119 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
             actions={
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--mu)', fontSize: '0.8rem' }}>
                 <span>{giornaleUltimoAggiornamento}</span>
+                <button
+                  onClick={() => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      openPrintWindow(buildGiornalePrintHtml(flatRows, { periodoInizio, periodoFine, societa }));
+                    }
+                  }}
+                  disabled={!giornaleModel || flatRows.length === 0 || !!error}
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--bd)',
+                    borderRadius: '8px',
+                    color: 'var(--tx)',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: (!giornaleModel || flatRows.length === 0 || !!error) ? 'not-allowed' : 'pointer',
+                    opacity: (!giornaleModel || flatRows.length === 0 || !!error) ? 0.5 : 1,
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      e.currentTarget.style.background = 'var(--bg-card)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      e.currentTarget.style.background = 'var(--bg-surface)';
+                    }
+                  }}
+                >
+                  <PdfIcon />
+                  Stampa / PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      downloadXlsx(
+                        buildGiornaleXlsx(flatRows, { periodoInizio, periodoFine, societa }),
+                        `libro_giornale_${societa?.denominazione || 'stampa'}_${periodoFine}.xlsx`
+                      );
+                    }
+                  }}
+                  disabled={!giornaleModel || flatRows.length === 0 || !!error}
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--bd)',
+                    borderRadius: '8px',
+                    color: 'var(--tx)',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: (!giornaleModel || flatRows.length === 0 || !!error) ? 'not-allowed' : 'pointer',
+                    opacity: (!giornaleModel || flatRows.length === 0 || !!error) ? 0.5 : 1,
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      e.currentTarget.style.background = 'var(--bg-card)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      e.currentTarget.style.background = 'var(--bg-surface)';
+                    }
+                  }}
+                >
+                  <ExcelIcon />
+                  Excel
+                </button>
+                <button
+                  onClick={() => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      downloadCsv(
+                        buildGiornaleCsv(flatRows, { periodoInizio, periodoFine, societa }),
+                        `libro_giornale_${societa?.denominazione || 'stampa'}_${periodoFine}.csv`
+                      );
+                    }
+                  }}
+                  disabled={!giornaleModel || flatRows.length === 0 || !!error}
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--bd)',
+                    borderRadius: '8px',
+                    color: 'var(--tx)',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: (!giornaleModel || flatRows.length === 0 || !!error) ? 'not-allowed' : 'pointer',
+                    opacity: (!giornaleModel || flatRows.length === 0 || !!error) ? 0.5 : 1,
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      e.currentTarget.style.background = 'var(--bg-card)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (giornaleModel && flatRows.length > 0 && !error) {
+                      e.currentTarget.style.background = 'var(--bg-surface)';
+                    }
+                  }}
+                >
+                  📥 CSV
+                </button>
                 <button
                   onClick={generaStampa}
                   disabled={loading}

@@ -3,6 +3,13 @@ import assert from 'node:assert'
 import { buildRegistroIvaRowsModel } from '../src/modules/contabilita/application/stampe/buildRegistroIvaRowsModel.js'
 import { buildLibroGiornaleModel } from '../src/modules/contabilita/application/stampe/buildLibroGiornaleModel.js'
 import { generateStampeHandler } from '../services/api/document/stampe.js'
+import {
+  buildRegistroIvaCsv,
+  buildGiornaleCsv,
+  buildRegistroIvaPrintHtml,
+  buildGiornalePrintHtml,
+  escHtml
+} from '../src/modules/contabilita/application/stampe/exportStampeProvvisorie.js'
 
 test('VAT Register Model Builder - Ordinary multi-rate billing lines', () => {
   // Scenario: A single registration (prima_nota_id: 'pn-1') has two VAT rows with different aliquote (22% and 10%)
@@ -290,3 +297,65 @@ test('Banner contestuale - Partitari/Mastrini/Bilancio devono essere fac-simile,
   assert.ok(!BANNER_PARTITARI.includes('dati reali estratti'), 'Banner Partitari non deve riferirsi a dati reali');
   assert.ok(!BANNER_BILANCIO.includes('dati estratti dalla contabilità alla data'), 'Banner Bilancio non deve usare testo generico vecchio');
 });
+
+// ─── FASE 13C EXPORT E STAMPA PROVVISORIA ───────────────────────────────────
+
+test('FASE 13C - export CSV Registro IVA con header corretti', () => {
+  const model = {
+    totaleImponibile: 100,
+    totaleIva: 22,
+    rows: [
+      { id: '1', imponibile: 100, iva: 22, aliquota: 22, data_documento: '2026-06-01', numero_documento: 'FT-01', soggetto_denominazione: 'Cliente Alfa' }
+    ]
+  };
+  const csv = buildRegistroIvaCsv(model, { registroTipo: 'vendite', periodoInizio: '2026-01-01', periodoFine: '2026-12-31', societa: { denominazione: 'Studio Test' } });
+  
+  assert.ok(csv.includes('Data;Protocollo provvisorio;Numero documento;Cliente/Controparte;Imponibile;IVA;Aliquota;Totale'), 'Deve includere gli header corretti');
+  assert.ok(csv.includes('Cliente Alfa'), 'Deve includere la riga con il soggetto');
+  assert.ok(csv.includes('100,00 €'), 'Deve formattare imponibile in euro');
+});
+
+test('FASE 13C - export CSV Giornale con header corretti', () => {
+  const flatRows = [
+    { data: '2026-06-01', numero_pn: 45, causale: 'PD', descrizione: 'Pagamento diverso', conto: '10.10.01', descrizione_conto: 'Cassa', dare: 100, avere: 0, stato: 'confermata' }
+  ];
+  const csv = buildGiornaleCsv(flatRows, { periodoInizio: '2026-01-01', periodoFine: '2026-12-31', societa: { denominazione: 'Studio Test' } });
+  
+  assert.ok(csv.includes('Data;N. PN;Causale;Descrizione;Conto;Descrizione conto;Dare;Avere;Stato'), 'Deve includere gli header corretti del giornale');
+  assert.ok(csv.includes('Pagamento diverso'), 'Deve includere la descrizione');
+  assert.ok(csv.includes('10.10.01'), 'Deve includere il conto');
+});
+
+test('FASE 13C - modello stampa Registro IVA con totali corretti e nota provvisoria', () => {
+  const model = {
+    totaleImponibile: 100,
+    totaleIva: 22,
+    totaleDetraibile: 22,
+    totaleIndetraibile: 0,
+    rows: [
+      { id: '1', imponibile: 100, iva: 22, aliquota: 22, data_documento: '2026-06-01', numero_documento: 'FT-01', soggetto_denominazione: 'Cliente Alfa' }
+    ]
+  };
+  const html = buildRegistroIvaPrintHtml(model, { registroTipo: 'vendite', periodoInizio: '2026-01-01', periodoFine: '2026-12-31', societa: { denominazione: 'Studio Test' } });
+  
+  assert.ok(html.includes('100,00 €'), 'Deve contenere totale imponibile');
+  assert.ok(html.includes('22,00 €'), 'Deve contenere totale iva');
+  assert.ok(html.includes('Stampa provvisoria di controllo. I progressivi visualizzati non costituiscono protocollo definitivo e il periodo non risulta chiuso.'), 'Deve contenere nota provvisoria obbligatoria');
+});
+
+test('FASE 13C - modello stampa Giornale con Dare/Avere/Sbilancio corretti e nota provvisoria', () => {
+  const flatRows = [
+    { data: '2026-06-01', numero_pn: 45, causale: 'PD', descrizione: 'Pagamento diverso', conto: '10.10.01', descrizione_conto: 'Cassa', dare: 100, avere: 0, stato: 'confermata' }
+  ];
+  const html = buildGiornalePrintHtml(flatRows, { periodoInizio: '2026-01-01', periodoFine: '2026-12-31', societa: { denominazione: 'Studio Test' } });
+  
+  assert.ok(html.includes('100,00 €'), 'Deve contenere totale Dare');
+  assert.ok(html.includes('Sbilancio'), 'Deve contenere etichetta sbilancio');
+  assert.ok(html.includes('Stampa provvisoria di controllo. Il libro giornale definitivo sarà disponibile solo dopo la fase di chiusura e stampa definitiva.'), 'Deve contenere la nota obbligatoria');
+});
+
+test('FASE 13C - HTML escaping di testi dinamici', () => {
+  const escaped = escHtml('Test <script>alert("xss")</script> & "quotes"');
+  assert.strictEqual(escaped, 'Test &lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; &amp; &quot;quotes&quot;', 'Deve fare escape di tag e virgolette');
+});
+
