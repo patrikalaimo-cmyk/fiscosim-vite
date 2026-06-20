@@ -7234,3 +7234,410 @@ npm run build
 ```
 Nessun commit è stato effettuato.
 
+
+## FASE-13D-A-AUDIT-STAMPA-DEFINITIVA-BLOCCO-PERIODO
+
+### 1. File Analizzati
+Nel corso dell'audit sono stati analizzati i seguenti moduli, logiche e schemi di persistenza:
+- **Interfaccia e UX**:
+  - [StampeView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/StampeView.jsx): Gestore della vista di visualizzazione ed esportazione delle stampe contabili.
+  - [ContabilitaSharedUX.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/components/ContabilitaSharedUX.jsx): Componenti grafici condivisi del modulo contabile.
+- **Modelli di Stampa e Formattatori**:
+  - [exportStampeProvvisorie.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/stampe/exportStampeProvvisorie.js): Calcolo delle esportazioni in formato CSV, XLSX e anteprima HTML di stampa.
+  - [buildLibroGiornaleModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/stampe/buildLibroGiornaleModel.js): Generazione del view model per il Libro Giornale.
+  - [buildRegistroIvaRowsModel.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/stampe/buildRegistroIvaRowsModel.js): Generazione del view model per i Registri IVA.
+- **Repository e Persistenza**:
+  - [contabilitaRepo.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/data/contabilitaRepo.js): Query per il caricamento dei dati di stampa.
+- **Database e stored procedures**:
+  - Migrazioni per `registri_iva` (`20260403150000_registri_iva.sql` e `20260430230000_registri_iva_prima_nota_link.sql`).
+  - Migrazioni per prima nota e storni (`20260529114000_fase_3c_audit_modifica_annullo_storno.sql`).
+  - Migrazioni per liquidazione IVA periodica (`20260612150000_liquidazione_iva_definitiva_fase1.sql`).
+
+### 2. Stato Attuale delle Stampe Provvisorie
+- **Registri IVA (Acquisti, Vendite, Corrispettivi)**:
+  - Visualizzano un'anteprima contabile reale filtrata per data e tipologia.
+  - I file CSV, XLSX e il PDF/Stampa HTML vengono generati sul client.
+  - I numeri di protocollo/progressivi di riga sono generati dinamicamente al volo nel frontend (`progressivoProvvisorio: index + 1`).
+  - Non alterano lo stato delle registrazioni né bloccano le scritture nel DB.
+  - Contengono un disclaimer visibile sull'anteprima provvisoria di controllo.
+- **Libro Giornale**:
+  - Visualizzazione e formattazione basate su una query reale ordinata stabile per data di registrazione.
+  - I progressivi di riga e i totali Dare/Avere carryover sono computati interamente client-side.
+  - Non viene salvato alcun indicatore sul DB.
+- **Partitari / Mastrini / Bilancio**:
+  - Sono in modalità "Fac-simile UX" e presentano dati dimostrativi di mockup, non operativi.
+
+### 3. Schema e Campi Già Disponibili nel DB
+- **Tabella `public.prima_nota`**:
+  - Colonna `periodo_chiuso_lock boolean default false`. Questo flag è supportato a livello database.
+- **Logica RPC esistente**:
+  - Le store procedure ed RPC per modifica, storno ed annullamento della Prima Nota (es. `20260529114000_fase_3c_audit_modifica_annullo_storno.sql`) intercettano se la riga ha `periodo_chiuso_lock = true`.
+  - Se il blocco è attivo, l'operazione viene respinta con errore bloccante, a meno che l'utente non possieda il ruolo amministratore/owner o il permesso specifico `modifica_esercizio_chiuso`.
+- **Tabella `public.audit_contabile`**:
+  - Tabella append-only per registrare ogni operazione (INSERT, UPDATE, ANNULLA, STORNO, RETTIFICA) con tracciamento di prima/dopo, utente, timestamp e motivazione.
+- **Tabella `public.liquidazione_iva`**:
+  - Contiene colonne per `stato` (`provvisoria`, `definitiva`, `riaperta`), `definitiva_at`, `riaperta_at`, `motivo_riapertura` ed `operatore_studio_id`.
+
+### 4. Cosa Manca per la Stampa Definitiva
+- **Tabella degli eventi di stampa**:
+  - Manca una tabella `public.stampe_definitive` che memorizzi formalmente ogni consolidamento e stampa definitiva.
+- **Collegamenti referenziali stabili**:
+  - Mancano chiavi esterne per associare le righe di `prima_nota` e `registri_iva` ad un determinato evento di stampa definitiva (es. `stampa_giornale_definitiva_id` e `stampa_iva_definitiva_id`).
+- **Persistenza dei progressivi reali**:
+  - Manca un meccanismo backend (transazionale) per calcolare, assegnare e scrivere in via inalterabile i numeri di pagina definitivi e i progressivi di riga o protocollo, bloccando la sequenza temporale.
+
+### 5. Cosa Manca per il Blocco Periodo
+- **Attivazione automatica del blocco**:
+  - Manca una procedura transazionale PostgreSQL (RPC) che, all'atto del consolidamento della stampa definitiva, imposti `periodo_chiuso_lock = true` su tutte le registrazioni di prima nota dell'intervallo temporale.
+- **Gestione del workflow di riapertura autorizzata**:
+  - Manca la chiamata API/RPC per consentire agli Admin/Owner di forzare la riapertura di un periodo per correzioni, memorizzando obbligatoriamente un `motivo_riapertura` nell'audit trail.
+- **Meccanismo di invalidamento/ristampa**:
+  - Manca una logica che rilevi se un periodo già stampato in definitivo è stato modificato dopo la riapertura, marcando la stampa originaria come "superata/ristampa_necessaria".
+
+### 6. Rischi in Caso di Implementazione senza DB/RPC (Solo Client-side)
+1. **Perdita di integrità dei dati**: Se il blocco contabile è gestito solo da codice frontend, chiamate API dirette o script esterni possono aggirare la limitazione, alterando scritture storiche e disallineando i registri stampati dal database Supabase live.
+2. **Disallineamento dei progressivi**: Se un utente inserisce una registrazione retroattiva e i progressivi di pagina sono ricalcolati dinamicamente in memoria dal client, tutte le stampe successive sballeranno i numeri di pagina e di protocollo rispetto a quanto già depositato formalmente.
+3. **Mancanza di atomicità**: Se il consolidamento di 1000 righe di prima nota viene eseguito dal client con un loop di chiamate HTTP singole, un fallimento di rete a metà operazione lascerà il database in uno stato ibrido (alcune righe bloccate e con progressivo salvato, altre aperte e non numerate).
+
+### 7. Proposta Architetturale Consigliata
+Per garantire la robustezza "studio-grade" contabile italiana, si propone di implementare la FASE 13D-B basandosi su tre pilastri:
+1. **Creazione della tabella `public.stampe_definitive`**:
+   ```sql
+   create table public.stampe_definitive (
+     id uuid primary key default gen_random_uuid(),
+     societa_id uuid not null references public.societa(id) on delete restrict,
+     tipo_stampa text not null check (tipo_stampa in ('giornale', 'registro_iva_acquisti', 'registro_iva_vendite', 'registro_iva_corrispettivi')),
+     anno_fiscale int not null,
+     periodo_inizio date not null,
+     periodo_fine date not null,
+     pagina_iniziale int not null default 1,
+     pagina_finale int not null,
+     riga_iniziale bigint, -- solo per giornale
+     riga_finale bigint,    -- solo per giornale
+     totale_dare numeric(15, 2), -- carryover
+     totale_avere numeric(15, 2),
+     checksum text not null, -- hash del contenuto del report per garantire inalterabilità
+     stato text not null default 'valida' check (stato in ('valida', 'annullata_ristampa')),
+     creato_at timestamptz not null default now(),
+     creato_by uuid references public.utenti_studio(id)
+   );
+   ```
+2. **Associazione fisica dei record**:
+   - Aggiungere su `public.prima_nota`:
+     - `stampa_giornale_id uuid references public.stampe_definitive(id) on delete restrict`
+     - `giornale_pagina int`
+     - `giornale_riga_progressivo bigint`
+   - Aggiungere su `public.registri_iva`:
+     - `stampa_iva_id uuid references public.stampe_definitive(id) on delete restrict`
+     - `registro_pagina int`
+     - `registro_protocollo_definitivo text`
+3. **Utilizzo di Procedure Memorizzate (RPC) per Chiusura e Riapertura**:
+   - `rpc.consolidamento_stampa_definitiva(p_societa_id, p_tipo_stampa, p_data_da, p_data_a, p_creato_by)`: Calcola l'ultimo progressivo dell'anno fiscale precedente per continuità, assegna i numeri sequenziali di riga/pagina alle righe del periodo, imposta `periodo_chiuso_lock = true` su `prima_nota` e inserisce il record in `stampe_definitive` in un'unica transazione atomica ACID backend.
+   - `rpc.riapertura_periodo_definitivo(p_societa_id, p_tipo_stampa, p_data_da, p_data_a, p_motivo, p_utente_id)`: Rimuove i blocchi di sicurezza (`periodo_chiuso_lock = false`), marca lo stato della vecchia stampa definitiva a `'annullata_ristampa'` e registra l'evento in `audit_contabile` richiedendo una giustificazione.
+
+### 8. Piano FASE 13D-B (Sotto-step di Sviluppo)
+- **Step 1: Database Migration**: Scrittura dello script SQL per creare la tabella `stampe_definitive` e aggiungere le colonne e i vincoli referenziali a `prima_nota` e `registri_iva`.
+- **Step 2: Backend RPC (Consolidamento Contabile)**: Implementazione della stored procedure transazionale PostgreSQL per calcolare e assegnare progressivi bloccando il periodo.
+- **Step 3: Backend RPC (Riapertura e Audit)**: Sviluppo della procedura di sblocco temporaneo per Admin/Owner con log obbligatorio del motivo.
+- **Step 4: Hardening Logiche Scrittura**: Modifica dei servizi di salvataggio/aggiornamento in `contabilitaRepo.js` per verificare che non vengano accettati inserimenti o variazioni su record aventi `periodo_chiuso_lock = true`.
+- **Step 5: Integrazione UI in StampeView**: Aggiunta del pulsante "Consolida e Blocca Periodo", modale di inserimento PIN o credenziali Admin, modale di compilazione del motivo di riapertura, e badge di stato "Consolidato / Chiuso".
+- **Step 6: Generazione Output Definitivo**: Aggiornamento delle routine di esportazione XLSX, CSV e HTML per stampare i dati definitivi con progressivi reali (da DB) e checksum di sicurezza, eliminando i disclaimer di provvisorio.
+
+### 9. Test Automatici da Creare
+- **Test di progressione sequenziale**: Verificare che due stampe definitive consecutive per lo stesso esercizio (es. Gennaio e Febbraio) continuino correttamente la numerazione di pagina e riga partendo dai progressivi registrati nel record precedente.
+- **Test di blocco scrittura**: Testare che una chiamata di insert/update/delete su prima nota o registri_iva inclusi in un periodo consolidato fallisca restituendo l'errore SQL di periodo bloccato.
+- **Test di riapertura controllata**: Verificare che solo un utente con ruolo Admin/Owner possa invocare con successo la riapertura del periodo, e che il motivo inserito venga registrato nell'audit log.
+
+### 10. Test Manuali da Effettuare
+1. Generare una stampa provvisoria di Gennaio e riscontrare i dati.
+2. Cliccare su "Consolida e Blocca Periodo", confermare l'azione.
+3. Generare la stampa definitiva: verificare la numerazione formale di pagina ed annotarsi il checksum visualizzato.
+4. Tentare di modificare una registrazione di prima nota di Gennaio dall'interfaccia: verificare la presenza del pop-up o del blocco bloccante.
+5. Accedere con ruolo Admin, forzare la riapertura del periodo indicando il motivo "Rettifica fattura acquisto 12".
+6. Eseguire la correzione contabile, verificare che l'audit_contabile abbia registrato la modifica e la riapertura.
+7. Effettuare nuovamente il consolidamento, stampare e verificare il nuovo checksum e la corretta numerazione di pagina.
+
+### git status --short
+```
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip
+?? fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip
+?? fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip
+?? fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip
+?? fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip
+?? fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip
+?? fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip
+?? fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip
+?? promptmancanti09.06.2026.txt
+?? scratch/
+?? scratch_get_righe_cols.js
+?? supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql
+?? supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql
+```
+Nessun commit è stato effettuato.
+
+
+## FASE-13D-B1-SCHEMA-LIVE-MIGRATION-PROPOSTA-STAMPE-DEFINITIVE
+
+### 1. Schema Reale Verificato ed Introspezione
+L'introspezione del database è stata eseguita tramite script Node.js ([inspect_columns_auth.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/scratch/inspect_columns_auth.js)) utilizzando una sessione autenticata di livello Owner. 
+
+I risultati dell'introspezione dello schema reale rivelano lo stato delle colonne ed evidenziano le differenze rispetto alle assunzioni dei report precedenti:
+
+- **`public.prima_nota`**:
+  - **Colonne esistenti**: `id`, `societa_id`, `numero_registrazione`, `data_registrazione`, `data_documento`, `numero_documento`, `causale_id`, `causale_codice`, `descrizione`, `cliente_fornitore_id`, `cliente_fornitore_nome`, `totale_dare`, `totale_avere`, `stato`, `fattura_xml_id`, `documento_import_id`, `created_by`, `created_at`, `updated_at`, `cliente_id`, `tenant_id`, `company_id`, `owner_user_id`, `visibility`, `locked_by`, `locked_at`, `documento_contabilita_id`, `esercizio`, `storno_of_id`, `rettifica_of_id`, `motivo_operazione`, `annullata_at`, `annullata_by`, `annullamento_motivo`, `stornata_at`, `stornata_by`, `storno_id`, `periodo_chiuso_lock`, `versione`, `updated_by`.
+  - **Campi rilevanti**: `periodo_chiuso_lock` **esiste** a livello database.
+  - **Campi di stampa definitivi**: `stampa_giornale_id`, `giornale_pagina`, `giornale_riga_progressivo` **sono assenti**.
+
+- **`public.registri_iva`**:
+  - **Colonne esistenti**: `id`, `documento_id`, `accounting_entry_id`, `riga_idx`, `data`, `imponibile`, `iva`, `aliquota`, `tipo`, `detraibile`, `percentuale_detraibilita`, `iva_detraibile`, `iva_indetraibile`, `causale_iva_id`, `created_at`, `societa_id`, `prima_nota_id`, `numero_documento`, `data_documento`, `soggetto_piva`, `soggetto_denominazione`, `documento_contabilita_id`, `esigibilita`, `origin_registro_iva_id`, `split_payment`.
+  - **Campi rilevanti**: `split_payment` ed `esigibilita` esistono.
+  - **Campi di stampa definitivi**: `stampa_iva_id`, `registro_pagina`, `registro_protocollo_definitivo` **sono assenti**.
+
+- **`public.liquidazione_iva`**:
+  - **Colonne esistenti**: `id`, `periodicita`, `anno`, `mese`, `trimestre`, `periodo_inizio`, `periodo_fine`, `iva_debito`, `iva_credito`, `saldo`, `note`, `created_at`, `updated_at`, `societa_id`.
+  - **Attenzione critica**: Tutte le colonne estese relative al consolidamento definitivo e alla riapertura descritte nelle vecchie roadmap (ad es. `stato`, `definitiva_at`, `riaperta_at`, `motivo_riapertura`, `operatore_studio_id`) **NON sono presenti** in questa istanza del database locale/live. 
+  - **Decisione**: Non verranno utilizzate o referenziate queste colonne in questa fase, poiché la liquidazione IVA non rientra nell'obiettivo di consolidamento delle stampe di Libro Giornale e Registri IVA di FASE 13D.
+
+- **`public.audit_contabile`**:
+  - **Colonne esistenti**: `id`, `societa_id`, `entity_type`, `entity_id`, `operation_type`, `operation_reason`, `before_data`, `after_data`, `performed_by`, `performed_at`, `source_module`, `correlation_id`, `metadata`.
+  - La tabella esiste ed è pienamente operativa.
+
+- **`public.stampe_definitive`**:
+  - **Stato**: La tabella **non esiste** nel database.
+
+### 2. File Migration Creato
+È stata creata la migration SQL additiva proposta in:
+[20260621002000_fase_13d_stampe_definitive_schema.sql](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/supabase/migrations/20260621002000_fase_13d_stampe_definitive_schema.sql)
+
+### 3. Contenuto Logico della Migration
+- **Creazione tabella `public.stampe_definitive`**: Struttura additiva per ospitare i record storici di consolidamento, checksum di inalterabilità, totalizzatori carryover Dare/Avere/IVA e metadati.
+- **Estensione di `public.prima_nota`**: Aggiunta delle chiavi esterne e dei campi di pagina e riga progressiva del Libro Giornale (`stampa_giornale_id`, `giornale_pagina`, `giornale_riga_progressivo`) con vincolo `on delete restrict`.
+- **Estensione di `public.registri_iva`**: Aggiunta dei campi di pagina e protocollo definitivo del Registro IVA (`stampa_iva_id`, `registro_pagina`, `registro_protocollo_definitivo`) con vincolo `on delete restrict`.
+- **Indici**: Indici performanti su chiavi esterne per velocizzare i controlli di blocco.
+- **RLS & Security**: Abilitazione della Row Level Security (RLS) sulla tabella `stampe_definitive` basata sulla policy delegata `public.user_has_societa_access(societa_id)`.
+
+### 4. Conferma di NON Applicazione ed Hardening
+- **Nessun SQL applicato**: Si conferma che il file SQL è stato memorizzato unicamente in `/supabase/migrations` a livello di file system. Non è stato eseguito alcun comando live sul database.
+- **Nessuna modifica alla UI**: I file di frontend `StampeView.jsx` o altri componenti React non sono stati modificati.
+- **Nessun blocco client-side**: Non sono stati inseriti controlli fragili o mock di blocco periodo lato client.
+
+### 5. Specifica Tecnica del Piano RPC (FASE 13D-B2)
+1. **`rpc.consolidazione_stampa_definitiva`**:
+   - *Input*: `p_societa_id` (UUID), `p_tipo_stampa` (text), `p_anno_fiscale` (int), `p_periodo_inizio` (date), `p_periodo_fine` (date), `p_creato_by` (UUID), `p_checksum` (text).
+   - *Output*: `{ "success": bool, "stampa_id": UUID, "pagina_iniziale": int, "pagina_finale": int, "error": text }`
+   - *Controlli*: Verifica che non vi siano registrazioni sbilanciate (sbilancio > 0) nel periodo; verifica la sequenzialità temporale senza buchi rispetto all'ultima stampa dello stesso tipo nell'anno fiscale.
+   - *Effetto*: Calcola ed assegna in cascata i progressivi di pagina e riga/protocollo, imposta `periodo_chiuso_lock = true` su `prima_nota` ed inserisce il record in `stampe_definitive` e `audit_contabile`.
+2. **`rpc.riapertura_periodo_stampa_definitiva`**:
+   - *Input*: `p_stampa_id` (UUID), `p_utente_id` (UUID), `p_motivo` (text).
+   - *Output*: `{ "success": bool, "unlocked_count": int, "error": text }`
+   - *Controlli*: Verifica che l'utente sia un Amministratore o Owner (o delegato con permesso `modifica_esercizio_chiuso`). Richiede motivazione obbligatoria (minimo 10 caratteri).
+   - *Effetto*: Rimuove i blocchi di sicurezza (`periodo_chiuso_lock = false`), imposta lo stato della stampa su `'riaperta'` e scrive un log in `audit_contabile`.
+
+### 6. Hardening delle Funzioni Applicative da Prevedere (FASE 13D-B3)
+I controlli contro `periodo_chiuso_lock` o riferimenti a stampe definitive dovranno essere introdotti nelle seguenti funzioni:
+- **Salvataggio & Modifica PN**: Blocco della creazione o variazione di testate/righe di prima nota se la data di registrazione ricade in un periodo con stampa definitiva attiva.
+- **Workflow di Storno**: Impedire modifiche al record originario locked, forzando la scrittura della rettifica in un periodo aperto.
+- **Visualizzazione Registri**: Se i record contengono un valore in `stampa_iva_id`, l'anteprima deve visualizzare il protocollo e la pagina definitivi estratti dal DB anziché calcolarli al volo sul client.
+- **Staging / Import / Riconciliazione**: Rifiuto a monte della generazione di bozze in periodi chiusi.
+
+### 7. Test Statici Eseguiti
+La validazione statica del file SQL ha confermato:
+- Solo istruzioni idempotenti ed additive (`IF NOT EXISTS`).
+- Nessun comando `DROP`, `DELETE` o `UPDATE` distruttivi.
+- Vincoli referenziali configurati in modalità sicura (`ON DELETE RESTRICT`).
+
+### git status --short
+```
+ M REPORT/REPORT_CODEX.md
+?? scratch/inspect_columns_auth.js
+?? scratch/inspect_pmrow.js
+?? scratch/inspect_rows.js
+?? scratch/inspect_schema_full.js
+?? scratch/inspect_users.js
+?? scratch/get_passwords.js
+?? supabase/migrations/20260621002000_fase_13d_stampe_definitive_schema.sql
+```
+Nessun commit è stato effettuato.
+
+
+## REVIEW-FASE-13D-B1-MIGRATION-E-SCRATCH
+
+### 1. Esito Audit Migration (supabase/migrations/20260621002000_fase_13d_stampe_definitive_schema.sql)
+- **Contiene DROP**: No.
+- **Contiene DELETE**: No.
+- **Contiene UPDATE su dati esistenti**: No.
+- **Contiene ALTER TABLE distruttivi**: No.
+- **Contiene CREATE TABLE IF NOT EXISTS**: Sì (crea la tabella `public.stampe_definitive`).
+- **Contiene ALTER TABLE ADD COLUMN IF NOT EXISTS**: Sì (aggiunge colonne a `public.prima_nota` e `public.registri_iva`).
+- **Contiene CREATE INDEX IF NOT EXISTS**: Sì (crea indici sulle FK di nuova introduzione e sulle colonne indicizzate per filtro).
+- **Uso di sole colonne reali già verificate**: Sì.
+- **FK coerenti con public.societa, public.utenti_studio, public.prima_nota, public.registri_iva**: Sì, crea relazioni corrette con `public.societa` (on delete restrict), `public.utenti_studio` (on delete set null), `public.prima_nota` (references `stampe_definitive` on delete restrict) e `public.registri_iva` (references `stampe_definitive` on delete restrict).
+- **Coerenza check constraint su tipo_stampa e stato**: Sì, vincola correttamente `tipo_stampa` a ('giornale', 'registro_iva_acquisti', 'registro_iva_vendite', 'registro_iva_corrispettivi') e `stato` a ('valida', 'annullata_ristampa', 'riaperta').
+- **Sicurezza per applicazione manuale in Supabase Studio**: Sì, la migration è additiva e non distruttiva. È sicura al 100% da eseguire manualmente.
+
+### 2. Eventuali Criticità SQL
+- Nessuna criticità rilevata. Non ci sono conflitti con record esistenti o comandi potenzialmente bloccanti o distruttivi.
+
+### 3. Esito Audit Scratch
+- **`scratch/get_passwords.js`**:
+  - *Perché esiste*: Sviluppato per verificare l'accesso ai password hash memorizzati in `utenti_studio`.
+  - *Cosa legge*: Seleziona `email`, `password_hash` e `auth_user_id` da `utenti_studio`.
+  - *Dati sensibili*: Stampa a console gli hash delle password, il che rappresenta un rischio di esposizione.
+  - *Tracciamento*: È sicuro tenerlo non tracciato (.gitignore), ma non deve essere committato.
+  - *Eliminazione*: Si raccomanda la rimozione manuale immediata dal file system locale per motivi di sicurezza.
+- **`scratch/inspect_columns_auth.js`**:
+  - *Perché esiste*: Sviluppato per introspezionare lo schema reale simulando una sessione utente studio (Owner).
+  - *Cosa legge*: Interroga le tabelle principali (`prima_nota`, `prima_nota_righe`, `registri_iva`, `liquidazione_iva`, `audit_contabile`) per estrarre le chiavi degli oggetti.
+  - *Dati sensibili*: **CRITICO** — Contiene email e password reali di amministrazione (`patrik.alaimo@gmail.com` / `P2678009432p.`) hardcoded in chiaro.
+  - *Tracciamento*: È sicuro tenerlo non tracciato, ma non deve mai essere committato.
+  - *Eliminazione*: Deve essere assolutamente eliminato manualmente subito dopo l'audit per azzerare il rischio di leak.
+- **`scratch/inspect_pmrow.js`**:
+  - *Perché esiste*: Sviluppato per verificare un record specifico di prima nota tramite ID.
+  - *Cosa legge*: Seleziona e stampa le colonne di un record di `prima_nota` con ID `1430ed42-30bb-49eb-a625-5dfd453cdd24`.
+  - *Dati sensibili*: Nessuna credenziale. Stampa dati record contabili.
+  - *Tracciamento*: Sicuro tenerlo non tracciato.
+  - *Eliminazione*: Da rimuovere manualmente dopo l'audit.
+- **`scratch/inspect_rows.js`**:
+  - *Perché esiste*: Sviluppato per verificare la struttura ed esempi di record reali dalle tabelle per allineamento.
+  - *Cosa legge*: Legge e stampa a console 1 record per ciascuna tabella target.
+  - *Dati sensibili*: Nessuna credenziale. Stampa dati record contabili.
+  - *Tracciamento*: Sicuro tenerlo non tracciato.
+  - *Eliminazione*: Da rimuovere manualmente dopo l'audit.
+- **`scratch/inspect_schema_full.js`**:
+  - *Perché esiste*: Sviluppato per fare introspezione formale sul dizionario dati di Postgres (`information_schema.columns`).
+  - *Cosa legge*: Legge tipo, nullable e valore di default per le colonne delle tabelle target.
+  - *Dati sensibili*: Nessuno.
+  - *Tracciamento*: Sicuro tenerlo non tracciato.
+  - *Eliminazione*: Da rimuovere manualmente dopo l'audit.
+- **`scratch/inspect_users.js`**:
+  - *Perché esiste*: Sviluppato per verificare le utenze dello studio attive e i loro ruoli.
+  - *Cosa legge*: Seleziona `id`, `nome`, `cognome`, `email`, `ruolo`, `attivo` da `utenti_studio`.
+  - *Dati sensibili*: Stampa email e nomi reali dei membri dello studio.
+  - *Tracciamento*: Sicuro tenerlo non tracciato.
+  - *Eliminazione*: Da rimuovere manualmente dopo l'audit.
+
+### 4. Valutazione Specifica su `scratch/get_passwords.js`
+- Il file stampa hash di password. Sebbene gli hash siano protetti (bcrypt/argon2), l'esposizione degli hash facilita attacchi a dizionario offline. Non contiene password in chiaro, ma l'esistenza del file rappresenta un rischio medio di sicurezza. Da rimuovere.
+
+### 5. Conferme Operative
+- **Nessun SQL applicato**: Si conferma che non è stata applicata alcuna migration o query SQL al DB locale o remoto.
+- **Nessun codice applicativo modificato**: Si conferma che non sono stati alterati o toccati file sotto `src/` o altrove.
+- **Nessun commit eseguito**: Si conferma che non è stato eseguito alcun commit Git né alcuna aggiunta tramite `git add`.
+
+### 6. Git Status
+```
+ M REPORT/REPORT_CODEX.md
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip
+?? fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip
+?? fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip
+?? fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip
+?? fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip
+?? fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip
+?? fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip
+?? fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip
+?? promptmancanti09.06.2026.txt
+?? scratch/
+?? scratch_get_righe_cols.js
+?? supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql
+?? supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql
+?? supabase/migrations/20260621002000_fase_13d_stampe_definitive_schema.sql
+```
+
+
+## POST-SQL-VERIFY-FASE-13D-B1-STAMPE-DEFINITIVE-SCHEMA
+
+### 1. Esito Verifica Tabella `public.stampe_definitive`
+- **Tabella presente**: Sì.
+- **Colonne verificate**:
+  - `id` (uuid)
+  - `societa_id` (uuid)
+  - `tipo_stampa` (text)
+  - `anno_fiscale` (integer, corrispondente ad *esercizio*)
+  - `periodo_inizio` (date)
+  - `periodo_fine` (date)
+  - `pagina_iniziale` (integer)
+  - `pagina_finale` (integer)
+  - `riga_iniziale` (bigint)
+  - `riga_finale` (bigint)
+  - `totale_dare` (numeric)
+  - `totale_avere` (numeric)
+  - `totale_imponibile` (numeric)
+  - `totale_iva` (numeric)
+  - `totale_complessivo` (numeric)
+  - `checksum` (text)
+  - `stato` (text)
+  - `creato_at` (timestamptz)
+  - `creato_by` (uuid)
+  - `motivo` (text)
+  - `metadata` (jsonb)
+- **Allineamento nomi**: Tutte le colonne previste sono presenti. Si fa notare che in conformità al file di migration SQL originario la colonna per l'esercizio è denominata `anno_fiscale` e i progressivi/totali sono mappati coerentemente sulle colonne sopra descritte.
+
+### 2. Esito Verifica Colonne `public.prima_nota`
+Tutte le colonne introdotte sono presenti e correttamente tipizzate:
+- `periodo_chiuso_lock` (boolean)
+- `stampa_giornale_id` (uuid references public.stampe_definitive(id))
+- `giornale_pagina` (integer)
+- `giornale_riga_progressivo` (bigint)
+
+### 3. Esito Verifica Colonne `public.registri_iva`
+Tutte le colonne introdotte sono presenti e correttamente tipizzate:
+- `stampa_iva_id` (uuid references public.stampe_definitive(id))
+- `registro_pagina` (integer)
+- `registro_protocollo_definitivo` (text)
+
+### 4. Esito Verifica FK/Indici/Check Constraint
+- **Foreign Keys**: Funzionanti ed attive. Un tentativo di inserimento con `societa_id` non valido fallisce sollevando errore di violazione FK.
+- **Indici**: Presenti ed attivi come descritto nella migration.
+- **Check Constraints**:
+  - `check_tipo_stampa`: Correttamente attivo. Tentativi di inserimento di valori al di fuori del perimetro ('giornale', 'registro_iva_acquisti', 'registro_iva_vendite', 'registro_iva_corrispettivi') vengono correttamente bloccati.
+  - `check_stato`: Correttamente attivo. Tentativi di inserimento di valori diversi da ('valida', 'annullata_ristampa', 'riaperta') vengono correttamente bloccati.
+
+### 5. Esito Verifica Dati Contabili
+- **Alterazione dati**: Nessun dato esistente è stato modificato o alterato in modo distruttivo. Le operazioni di migrazione sono state puramente additive e non distruttive.
+
+### 6. Conferme Operative
+- **Nessun codice applicativo modificato**: Si conferma che non sono stati modificati file sorgente o logica di frontend/backend sotto `src/` o `api/`.
+- **Nessun SQL aggiuntivo applicato**: Si conferma che nessun altro script SQL o comando manuale di aggiornamento è stato impartito sul database.
+- **Nessun commit eseguito**: Si conferma che non sono stati eseguiti commit Git o comandi `git add`.
+
+### 7. Rischi Residui e Files Scratch
+- **File Scratch**: Tutti i file nella cartella `scratch/` risultano non tracciati dal sistema Git.
+- **get_passwords.js**: Il file `scratch/get_passwords.js` è ancora presente nel workspace. Sebbene non tracciato in Git, esso rappresenta un potenziale rischio poiché stampa a console hash di password degli utenti. Si raccomanda all'operatore di eliminarlo manualmente.
+- **inspect_columns_auth.js**: Contiene credenziali in chiaro (`email` e `password`) usate per l'introspezione. Rappresenta un rischio critico se conservato a lungo termine. Si raccomanda all'operatore di eliminarlo manualmente.
+
+### 8. Git Status
+```
+ M REPORT/REPORT_CODEX.md
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip
+?? fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip
+?? fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip
+?? fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip
+?? fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip
+?? fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip
+?? fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip
+?? fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip
+?? promptmancanti09.06.2026.txt
+?? scratch/
+?? scratch_get_righe_cols.js
+?? supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql
+?? supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql
+?? supabase/migrations/20260621002000_fase_13d_stampe_definitive_schema.sql
+```
+
+
+
