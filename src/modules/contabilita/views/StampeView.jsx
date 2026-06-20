@@ -2372,7 +2372,14 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                           <td style={{ padding: '0.75rem 1rem' }}>{fmtDate(r.data_documento)}</td>
                           <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', color: 'var(--mu)' }}>{protocollo}</td>
                           <td style={{ padding: '0.75rem 1rem' }}>{r.numero_documento}</td>
-                          <td style={{ padding: '0.75rem 1rem' }}>{r.soggetto_denominazione}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            <div>{r.soggetto_denominazione}</div>
+                            {r.soggetto_piva && r.soggetto_piva !== '—' && (
+                              <div style={{ fontSize: '0.7rem', color: 'var(--mu)', marginTop: '2px' }}>
+                                P.IVA/CF: {r.soggetto_piva}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(r.imponibile)} €</td>
                           <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(r.iva)} €</td>
                           <td style={{ padding: '0.75rem 1rem', textAlign: 'center', fontFamily: 'monospace' }}>{r.aliquota != null ? `${r.aliquota}%` : '—'}</td>

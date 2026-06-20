@@ -226,6 +226,11 @@ export function buildVatRegisterEntriesFromCanonicalPayload(payload = {}, option
       ? normalizeKey(row.esigibilita)
       : 'immediata'
 
+    const subjectsList = Array.isArray(payload?.subjects) ? payload.subjects : []
+    const subj = subjectsList.find(s => s.role === 'primary') || subjectsList.find(s => s.role === 'counterparty')
+    const resolvedPiva = subj ? (subj.partitaIva || subj.codiceFiscale || '') : ''
+    const resolvedDenom = (subj ? subj.denominazione : '') || context.cliente_fornitore_nome || null
+
     return {
       documento_id: context.numero_documento || payload?.document?.numeroDocumento || 'manual-reg-doc',
       riga_idx: index,
@@ -246,7 +251,8 @@ export function buildVatRegisterEntriesFromCanonicalPayload(payload = {}, option
       societa_id: context.societa_id || payload?.company?.societaId || null,
       numero_documento: context.numero_documento || payload?.document?.numeroDocumento || null,
       data_documento: context.data_documento || payload?.document?.dataDocumento || null,
-      soggetto_denominazione: context.cliente_fornitore_nome || null,
+      soggetto_denominazione: resolvedDenom,
+      soggetto_piva: resolvedPiva || null,
       esigibilita,
       origin_registro_iva_id: normalizeText(row?.origin_registro_iva_id || row?.originRegistroIvaId) || null,
     }

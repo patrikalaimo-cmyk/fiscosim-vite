@@ -359,3 +359,54 @@ test('FASE 13C - HTML escaping di testi dinamici', () => {
   assert.strictEqual(escaped, 'Test &lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; &amp; &quot;quotes&quot;', 'Deve fare escape di tag e virgolette');
 });
 
+test('FASE 13C-BIS - mapping controparte, soggetto_piva, fallback e export', () => {
+  const rows = [
+    {
+      id: 'r-1',
+      data: '2026-06-01',
+      imponibile: 100,
+      iva: 22,
+      aliquota: 22,
+      tipo: 'vendita',
+      // No P.IVA / name
+    },
+    {
+      id: 'r-2',
+      data: '2026-06-02',
+      data_documento: '2026-05-30',
+      numero_documento: 'FT-99',
+      soggetto_denominazione: 'Cliente Beta',
+      soggetto_piva: '12345678901',
+      imponibile: 200,
+      iva: 44,
+      aliquota: 22,
+      tipo: 'vendita'
+    }
+  ];
+
+  const model = buildRegistroIvaRowsModel(rows);
+
+  // Fallback checks
+  assert.strictEqual(model.rows[0].numero_documento, '—');
+  assert.strictEqual(model.rows[0].soggetto_denominazione, '—');
+  assert.strictEqual(model.rows[0].soggetto_piva, '—');
+  assert.strictEqual(model.rows[0].data_documento, '2026-06-01'); // Falls back to registration date
+
+  // Present values checks
+  assert.strictEqual(model.rows[1].numero_documento, 'FT-99');
+  assert.strictEqual(model.rows[1].soggetto_denominazione, 'Cliente Beta');
+  assert.strictEqual(model.rows[1].soggetto_piva, '12345678901');
+  assert.strictEqual(model.rows[1].data_documento, '2026-05-30');
+
+  // CSV export contains P.IVA/CF and number doc
+  const csv = buildRegistroIvaCsv(model, { registroTipo: 'vendite', periodoInizio: '2026-01-01', periodoFine: '2026-12-31', societa: { denominazione: 'Studio Test' } });
+  assert.ok(csv.includes('FT-99'), 'CSV must contain document number');
+  assert.ok(csv.includes('Cliente Beta (P.IVA/CF: 12345678901)'), 'CSV must format P.IVA/CF inline');
+
+  // HTML print contains P.IVA/CF and number doc
+  const html = buildRegistroIvaPrintHtml(model, { registroTipo: 'vendite', periodoInizio: '2026-01-01', periodoFine: '2026-12-31', societa: { denominazione: 'Studio Test' } });
+  assert.ok(html.includes('FT-99'), 'HTML print must contain document number');
+  assert.ok(html.includes('Cliente Beta'), 'HTML print must contain subject denomination');
+  assert.ok(html.includes('P.IVA/CF: 12345678901'), 'HTML print must contain P.IVA/CF label');
+});
+

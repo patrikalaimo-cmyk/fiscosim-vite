@@ -164,3 +164,22 @@ test('casi IVA speciali restano fuori dal motore ordinario', () => {
   assert.equal(result.handled, false)
   assert.equal(result.reason, 'special_vat_posting')
 })
+
+test('mappatura soggetto_piva e soggetto_denominazione da subjects', () => {
+  const payload = buildPayload({
+    operazioneGestita: 'Fattura attiva',
+  })
+  payload.subjects = [
+    {
+      role: 'primary',
+      tipoSoggetto: 'controparte',
+      denominazione: 'Cliente Test S.p.A.',
+      partitaIva: '09876543210',
+    }
+  ]
+
+  const result = buildVatRegisterEntriesFromCanonicalPayload(payload)
+  assert.equal(result.handled, true)
+  assert.equal(result.entries[0].soggetto_denominazione, 'Cliente Test S.p.A.')
+  assert.equal(result.entries[0].soggetto_piva, '09876543210')
+})

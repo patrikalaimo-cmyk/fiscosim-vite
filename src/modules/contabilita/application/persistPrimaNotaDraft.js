@@ -308,6 +308,13 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
 
   const origin_registro_iva_id = normalizeDbText(row.origin_registro_iva_id || row.originRegistroIvaId) || null
 
+  const headerObj = resolvedDraft.innerDraft?.header || {}
+  const partitarioDraft = resolvedDraft.innerDraft?.partitarioDraft || {}
+  const cfcf = headerObj.clienteFornitoreCodice || headerObj.cliente_fornitore_codice || partitarioDraft.codiceFiscale || ''
+  const cfpi = headerObj.clienteFornitorePartitaIva || headerObj.cliente_fornitore_partita_iva || partitarioDraft.partitaIva || partitarioDraft.selectedContropartePartitaIva || ''
+  const resolvedPiva = cfpi || cfcf || null
+  const resolvedDenom = headerObj.clienteFornitoreNome || headerObj.cliente_fornitore_nome || partitarioDraft.soggettoNome || partitarioDraft.selectedControparteNome || pnPayload.cliente_fornitore_nome || null
+
   const mapped = {
     documento_id: pnPayload.numero_documento || 'manual-reg-doc',
     riga_idx: index,
@@ -324,7 +331,8 @@ function mapRegistriIvaRowForDb(row = {}, index = 0, pnPayload = {}, ivaDraft = 
     societa_id: pnPayload.societa_id || null,
     numero_documento: pnPayload.numero_documento || null,
     data_documento: pnPayload.data_documento || null,
-    soggetto_denominazione: pnPayload.cliente_fornitore_nome || null,
+    soggetto_denominazione: resolvedDenom,
+    soggetto_piva: resolvedPiva,
     esigibilita,
     origin_registro_iva_id,
   }

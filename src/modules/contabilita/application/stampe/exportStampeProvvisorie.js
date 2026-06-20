@@ -70,12 +70,15 @@ export function buildRegistroIvaCsv(registroModel, { registroTipo, periodoInizio
       const anno = r.data_registrazione ? new Date(r.data_registrazione).getFullYear() : new Date().getFullYear();
       const protocollo = `${prefix}/${anno}/${String(r.progressivoProvvisorio).padStart(6, '0')}`;
       const totaleRiga = (r.imponibile || 0) + (r.iva || 0);
+      const controparteFormatted = r.soggetto_piva && r.soggetto_piva !== '—'
+        ? `${r.soggetto_denominazione || '—'} (P.IVA/CF: ${r.soggetto_piva})`
+        : (r.soggetto_denominazione || '—');
 
       lines.push([
         fmtDateIT(r.data_documento),
         protocollo,
         r.numero_documento || '—',
-        r.soggetto_denominazione || '—',
+        controparteFormatted,
         fmtEur(r.imponibile),
         fmtEur(r.iva),
         r.aliquota != null ? `${r.aliquota}%` : '—',
@@ -122,12 +125,15 @@ export function buildRegistroIvaXlsx(registroModel, { registroTipo, periodoInizi
       const anno = r.data_registrazione ? new Date(r.data_registrazione).getFullYear() : new Date().getFullYear();
       const protocollo = `${prefix}/${anno}/${String(r.progressivoProvvisorio).padStart(6, '0')}`;
       const totaleRiga = (r.imponibile || 0) + (r.iva || 0);
+      const controparteFormatted = r.soggetto_piva && r.soggetto_piva !== '—'
+        ? `${r.soggetto_denominazione || '—'} (P.IVA/CF: ${r.soggetto_piva})`
+        : (r.soggetto_denominazione || '—');
 
       infoAoa.push([
         fmtDateIT(r.data_documento),
         protocollo,
         r.numero_documento || '—',
-        r.soggetto_denominazione || '—',
+        controparteFormatted,
         r.imponibile || 0,
         r.iva || 0,
         r.aliquota != null ? `${r.aliquota}%` : '—',
@@ -255,12 +261,17 @@ export function buildRegistroIvaPrintHtml(registroModel, { registroTipo, periodo
       const protocollo = `${prefix}/${anno}/${String(r.progressivoProvvisorio).padStart(6, '0')}`;
       const totaleRiga = (r.imponibile || 0) + (r.iva || 0);
 
+      const controparteFormatted = escHtml(r.soggetto_denominazione || '—') +
+        (r.soggetto_piva && r.soggetto_piva !== '—'
+          ? `<br/><span style="font-size: 8px; color: #64748b;">P.IVA/CF: ${escHtml(r.soggetto_piva)}</span>`
+          : '');
+
       rowsHtml += `
         <tr>
           <td>${fmtDateIT(r.data_documento)}</td>
           <td class="mono">${escHtml(protocollo)}</td>
           <td>${escHtml(r.numero_documento || '—')}</td>
-          <td>${escHtml(r.soggetto_denominazione || '—')}</td>
+          <td>${controparteFormatted}</td>
           <td class="num">${fmtEur(r.imponibile)}</td>
           <td class="num">${fmtEur(r.iva)}</td>
           <td class="center">${r.aliquota != null ? escHtml(r.aliquota) + '%' : '—'}</td>

@@ -7176,3 +7176,61 @@ Nessuno rilevato. La generazione client-side isola completamente le stampe provv
 ?? src/modules/contabilita/application/stampe/exportStampeProvvisorie.js
 ```
 
+
+## FASE-13C-BIS-MAPPING-DOCUMENTO-CONTROPARTE-REGISTRI-IVA
+
+### Causa dei campi `—`
+I campi `soggetto_piva` e `soggetto_denominazione` venivano ritornati come em dashes (`—`) poiché:
+1. Nella query di `getRegistriIvaPerStampa` in `contabilitaRepo.js` venivano selezionati correttamente dal database, ma non venivano mai valorizzati/scritti nel database al momento del salvataggio.
+2. In `buildVatRegisterEntriesFromCanonicalPayload.js` (per inserimenti ordinari via payload canonico), `soggetto_piva` non veniva mappato a partire dai soggetti in `payload.subjects`, e `soggetto_denominazione` non eseguiva il corretto fallback.
+3. In `persistPrimaNotaDraft.js` (nella funzione `mapRegistriIvaRowForDb` usata per flussi speciali o fallback manuale), non venivano recuperati né mappati né `soggetto_piva` né `soggetto_denominazione` a partire dai dati disponibili in `resolvedDraft`.
+
+### File modificati
+- `src/modules/contabilita/application/iva/buildVatRegisterEntriesFromCanonicalPayload.js`: Estratto `soggetto_piva` e `soggetto_denominazione` da `payload.subjects` (ruoli `primary` o `counterparty`).
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`: Estratto `soggetto_piva` e `soggetto_denominazione` all'interno di `mapRegistriIvaRowForDb` risolvendo i dati da `resolvedDraft.innerDraft.header`, `partitarioDraft` e `pnPayload` con i giusti fallback.
+- `src/modules/contabilita/application/stampe/exportStampeProvvisorie.js`: Aggiornati gli esportatori CSV, Excel (XLSX) e la stampa HTML per includere la partita IVA/CF controparte (`soggetto_piva`) in formato inline `Cliente (P.IVA/CF: ...)` o su riga dedicata.
+- `src/modules/contabilita/views/StampeView.jsx`: Aggiornato il rendering dell'anteprima a video del Registro IVA per mostrare il sub-text con la P.IVA/CF sotto il nome del cliente/controparte.
+- `tests/registriIvaStampeModel.test.js`: Aggiunto unit test dedicato per verificare il corretto funzionamento del mapping, dei fallback di visualizzazione e degli export per `soggetto_piva` e controparte.
+- `tests/vatRegisterEntriesFromCanonicalPayload.test.js`: Aggiunto unit test per testare l'estrazione di `soggetto_piva` e `soggetto_denominazione` dal payload canonico in `buildVatRegisterEntriesFromCanonicalPayload.js`.
+
+### Dati trovati nello schema/query
+Tutti i campi utili come `soggetto_piva`, `soggetto_denominazione`, `numero_documento` e `data_documento` sono regolarmente definiti nello schema della tabella `registri_iva` ed erano già selezionati e ordinati nella query `getRegistriIvaPerStampa` in `contabilitaRepo.js`.
+
+### Fix applicato
+Il mapping è stato reso bidirezionale e completo sia in fase di scrittura su database (inserimenti automatici e salvataggi manuali) sia in fase di rendering client-side e di export (CSV, XLSX, HTML provvisori).
+
+### Cosa resta eventualmente mancante a monte
+Tutti i dati necessari a monte sono ora mappati e coerenti. Non si segnalano mancanze strutturali residue sulle anagrafiche dei registri IVA.
+
+### Test eseguiti
+Esecuzione positiva della test suite del model e dei calcoli IVA:
+```bash
+node --test tests/registriIvaStampeModel.test.js tests/calcoloLiquidazioneIvaDefinitiva.test.js
+node --test tests/vatRegisterEntriesFromCanonicalPayload.test.js
+```
+Tutti i test passano con successo (36 test per la prima suite, 10 per la seconda).
+
+### Build
+Esecuzione della build di produzione di Vite completata con successo:
+```bash
+npm run build
+```
+
+### Test manuali richiesti
+1. Registrare una scrittura contabile con IVA (es. fattura di vendita o acquisto) valorizzando i dettagli del cliente/fornitore (inclusi denominazione e partita IVA/CF).
+2. Andare nella vista "Stampe", selezionare il relativo registro IVA ed il periodo, e generare l'anteprima.
+3. Verificare che l'anteprima a video mostri correttamente il numero del documento e il cliente con la sua P.IVA/CF sotto la denominazione.
+4. Esportare in CSV e XLSX e verificare la presenza del campo controparte completo con la partita IVA.
+5. Cliccare su Stampa / PDF e verificare il layout della pagina di stampa generata.
+
+### git status --short
+```
+ M src/modules/contabilita/application/iva/buildVatRegisterEntriesFromCanonicalPayload.js
+ M src/modules/contabilita/application/persistPrimaNotaDraft.js
+ M src/modules/contabilita/application/stampe/exportStampeProvvisorie.js
+ M src/modules/contabilita/views/StampeView.jsx
+ M tests/registriIvaStampeModel.test.js
+ M tests/vatRegisterEntriesFromCanonicalPayload.test.js
+```
+Nessun commit è stato effettuato.
+
