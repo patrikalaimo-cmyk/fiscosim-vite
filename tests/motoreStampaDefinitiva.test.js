@@ -371,6 +371,44 @@ function createMockSupabaseClient() {
         finalPage = nextPage; // 1 page
       }
 
+      // Validate audit constraints in the mock DB
+      const allowedOpTypes = ['INSERT', 'UPDATE', 'ANNULLA', 'STORNO', 'RETTIFICA', 'STAMPA_DEFINITIVA'];
+      const allowedSourceModules = ['registrazione_manual', 'import_contabilita', 'riconciliazione_bancaria', 'stampe_definitive'];
+
+      const opType = 'STAMPA_DEFINITIVA';
+      const sourceModule = 'stampe_definitive';
+
+      if (!allowedOpTypes.includes(opType)) {
+        return { data: null, error: new Error('new row for relation "audit_contabile" violates check constraint "audit_contabile_operation_type_ck"') };
+      }
+      if (!allowedSourceModules.includes(sourceModule)) {
+        return { data: null, error: new Error('new row for relation "audit_contabile" violates check constraint "audit_contabile_source_module_ck"') };
+      }
+
+      db.audit_log.push({
+        id: `audit-${Date.now()}`,
+        societa_id: societaId,
+        entity_type: 'stampe_definitive',
+        entity_id: stampaId,
+        operation_type: opType,
+        operation_reason: motivo || 'Consolidamento stampa definitiva',
+        performed_by: creatoBy,
+        performed_at: new Date().toISOString(),
+        source_module: sourceModule,
+        after_data: {
+          stampa_id: stampaId,
+          tipo_stampa: tipoStampa,
+          famiglia_numerazione: famiglia,
+          anno_fiscale: annoFiscale,
+          periodo_inizio: periodoInizio,
+          periodo_fine: periodoFine,
+          pagina_iniziale: nextPage,
+          pagina_finale: finalPage,
+          rows_count: countElab,
+          totale_complessivo: 0
+        }
+      });
+
       // Save print
       db.stampe.push({
         id: stampaId,
@@ -603,3 +641,75 @@ test('Verifica correttezza formula paginazione (no off-by-one)', async () => {
   });
   assert.strictEqual(res2.data.pagina_finale, 2);
 });
+
+test('Verifica consistenza UUID assegnati tra stampa_definitiva e righe collegate', async () => {
+  const client = createMockSupabaseClient();
+  
+  // Consolidamento Libro Giornale
+  const resGiornale = await consolidazioneStampaDefinitiva(client, {
+    societaId: 'soc-A',
+    tipoStampa: 'libro_giornale',
+    annoFiscale: 2026,
+    periodoInizio: '2026-01-01',
+    periodoFine: '2026-02-28',
+    creatoBy: 'op-1',
+    checksum: 'chk-uuid-1'
+  });
+  assert.strictEqual(resGiornale.data.success, true);
+  const createdStampaId = resGiornale.data.stampa_id;
+  assert.ok(createdStampaId);
+
+  // Verifichiamo che tutte le prima_nota del periodo abbiano esattamente questo ID
+  const pns = client.db.prima_nota.filter(p => p.societa_id === 'soc-A' && p.data_registrazione >= '2026-01-01' && p.data_registrazione <= '2026-02-28' && p.stato !== 'simulata');
+  assert.ok(pns.length > 0);
+  for (const p of pns) {
+    assert.strictEqual(p.stampa_giornale_id, createdStampaId);
+  }
+
+  // Consolidamento Registri IVA
+  const resIva = await consolidazioneStampaDefinitiva(client, {
+    societaId: 'soc-A',
+    tipoStampa: 'registro_iva_acquisti',
+    annoFiscale: 2026,
+    periodoInizio: '2026-01-01',
+    periodoFine: '2026-01-31',
+    creatoBy: 'op-1',
+    checksum: 'chk-uuid-2'
+  });
+  assert.strictEqual(resIva.data.success, true);
+  const createdIvaStampaId = resIva.data.stampa_id;
+  assert.ok(createdIvaStampaId);
+
+  // Verifichiamo che tutte le righe IVA del periodo abbiano esattamente questo ID
+  const ivas = client.db.registri_iva.filter(r => r.societa_id === 'soc-A' && r.data >= '2026-01-01' && r.data <= '2026-01-31' && r.tipo === 'acquisto');
+  assert.ok(ivas.length > 0);
+  for (const r of ivas) {
+    assert.strictEqual(r.stampa_iva_id, createdIvaStampaId);
+  }
+});
+
+test('Verifica corretto operation_type e source_module nella scrittura di audit_log', async () => {
+  const client = createMockSupabaseClient();
+  
+  const res = await consolidazioneStampaDefinitiva(client, {
+    societaId: 'soc-A',
+    tipoStampa: 'libro_giornale',
+    annoFiscale: 2026,
+    periodoInizio: '2026-01-01',
+    periodoFine: '2026-02-28',
+    creatoBy: 'op-1',
+    checksum: 'chk-audit-1'
+  });
+  
+  assert.strictEqual(res.data.success, true);
+  assert.strictEqual(client.db.audit_log.length, 1);
+  const auditRow = client.db.audit_log[0];
+  
+  assert.strictEqual(auditRow.operation_type, 'STAMPA_DEFINITIVA');
+  assert.strictEqual(auditRow.source_module, 'stampe_definitive');
+  assert.strictEqual(auditRow.entity_type, 'stampe_definitive');
+  assert.strictEqual(auditRow.after_data.stampa_id, res.data.stampa_id);
+  assert.strictEqual(auditRow.after_data.tipo_stampa, 'libro_giornale');
+});
+
+

@@ -1,4 +1,5 @@
 import { useState, Fragment } from 'react'
+import StampaDefinitivaPanel from '../components/stampe/StampaDefinitivaPanel.jsx'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { buildRegistroIvaRowsModel } from '../application/stampe/buildRegistroIvaRowsModel.js'
 import { buildLibroGiornaleModel } from '../application/stampe/buildLibroGiornaleModel.js'
@@ -817,6 +818,16 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
             )}
           </button>
         </ContFilterBar>
+      )}
+
+      {isOperativo && (
+        <StampaDefinitivaPanel
+          societa={societa}
+          tipoStampa={tipoStampa}
+          registroTipo={registroTipo}
+          periodoInizio={periodoInizio}
+          periodoFine={periodoFine}
+        />
       )}
 
       {/* Barra filtri e placeholder per schede non operative */}
