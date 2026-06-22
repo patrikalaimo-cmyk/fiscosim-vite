@@ -6,17 +6,26 @@ import {
 } from '../src/modules/contabilita/application/stampe/stampaDefinitivaUiHelpers.js';
 
 test('Verifica mapping UI -> Tipi Canonici', () => {
-  // giornale -> libro_giornale
+  // 10. Libro Giornale continua a mappare libro_giornale
   assert.strictEqual(mapUiTypeToCanonical('giornale'), 'libro_giornale');
   assert.strictEqual(mapUiTypeToCanonical('libro_giornale'), 'libro_giornale');
 
-  // registri_iva + subtypes
+  // 1. mapping Registro IVA Acquisti -> registro_iva_acquisti
   assert.strictEqual(mapUiTypeToCanonical('registri_iva', 'acquisti'), 'registro_iva_acquisti');
+  
+  // 2. mapping Registro IVA Vendite -> registro_iva_vendite
   assert.strictEqual(mapUiTypeToCanonical('registri_iva', 'vendite'), 'registro_iva_vendite');
+  
+  // 9. corrispettivi non bypassati
   assert.strictEqual(mapUiTypeToCanonical('registri_iva', 'corrispettivi'), 'registro_iva_corrispettivi');
 
-  // liquidazione_iva_periodica
+  // 3. Liquidazione IVA periodica -> liquidazione_iva_periodica
   assert.strictEqual(mapUiTypeToCanonical('liquidazione_iva_periodica'), 'liquidazione_iva_periodica');
+
+  // 4. nessuna label UI grezza inviata alla RPC (es. 'acquisti', 'vendite', 'liquidazione' devono essere escluse o preservate nel mapping)
+  assert.notStrictEqual(mapUiTypeToCanonical('registri_iva', 'acquisti'), 'acquisti');
+  assert.notStrictEqual(mapUiTypeToCanonical('registri_iva', 'vendite'), 'vendite');
+  assert.notStrictEqual(mapUiTypeToCanonical('liquidazione_iva_periodica'), 'liquidazione');
 });
 
 test('Generazione Checksum deterministico non vuoto', async () => {
@@ -31,6 +40,7 @@ test('Generazione Checksum deterministico non vuoto', async () => {
     totaleComplessivo: 1000.50
   };
 
+  // 6. checksum non vuoto
   const checksum1 = await generateStampaChecksum(params);
   const checksum2 = await generateStampaChecksum(params);
 
@@ -44,3 +54,4 @@ test('Generazione Checksum deterministico non vuoto', async () => {
   });
   assert.notStrictEqual(checksum1, checksumDifferent);
 });
+

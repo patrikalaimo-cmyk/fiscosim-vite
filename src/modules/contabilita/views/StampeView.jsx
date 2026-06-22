@@ -346,7 +346,7 @@ const GiornaleEmptyState = ({ periodoInizio, periodoFine }) => (
 
 export default function StampeView({ contTab, societaAttiva, scritture, pianoConti, causaliIva }) {
   if (!societaAttiva) return null
-  if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio'].includes(contTab)) return null
+  if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio', 'liquidazione_iva_periodica'].includes(contTab)) return null
   return (
     <StampeDetailView
       tipoStampa={contTab}
@@ -600,7 +600,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     giornale: 'Giornale Contabile',
     partitari: 'Partitari',
     mastrini: 'Mastrini',
-    bilancio: 'Bilancio'
+    bilancio: 'Bilancio',
+    liquidazione_iva_periodica: 'Liquidazione IVA Periodica'
   };
 
   const sottotitoli = {
@@ -608,10 +609,11 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     giornale: 'Consulta e genera il Libro Giornale delle scritture contabili',
     partitari: 'Stampa schede e prospetti partitari per clienti e fornitori',
     mastrini: 'Visualizza le schede di mastro per i singoli conti del piano dei conti',
-    bilancio: 'Prospetti di bilancio di verifica, situazione economica e patrimoniale'
+    bilancio: 'Prospetti di bilancio di verifica, situazione economica e patrimoniale',
+    liquidazione_iva_periodica: 'Visualizzazione e consolidamento definitivo della Liquidazione IVA del periodo'
   };
 
-  const isOperativo = ['registri_iva', 'giornale'].includes(tipoStampa);
+  const isOperativo = ['registri_iva', 'giornale', 'liquidazione_iva_periodica'].includes(tipoStampa);
   const badgeText = isOperativo ? 'Anteprima provvisoria' : 'Fac-simile UX';
 
   return (
@@ -2847,10 +2849,22 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
       })()}
 
       {/* Spazio per card iniziale quando non è ancora stata generata la stampa per le schede operative */}
-      {isOperativo && !registroModel && !giornaleModel && !loading && (
+      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !loading && (
         <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '.5rem' }}>🖨️</div>
           <div style={{ color: 'var(--mu)' }}>Seleziona il periodo e clicca "Genera Anteprima" per visualizzare il documento</div>
+        </div>
+      )}
+      {tipoStampa === 'liquidazione_iva_periodica' && (
+        <div className="card" style={{ padding: '1.5rem', marginTop: '1rem', border: '1px solid var(--bd)' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--tx)', marginBottom: '0.5rem' }}>Liquidazione IVA Periodica</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--mu)', lineHeight: '1.5', margin: 0 }}>
+            Utilizza la sezione sottostante per eseguire la verifica ed il consolidamento definitivo della liquidazione IVA.
+            La periodicità IVA e la presenza del calcolo della liquidazione per il periodo selezionato sono convalidate direttamente dal database.
+          </p>
+          <div style={{ fontSize: '0.8rem', color: 'var(--mu)', background: 'var(--bg-surface)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--bd)', marginTop: '1rem' }}>
+            ℹ️ <strong>Nota Informativa:</strong> La periodicità IVA è verificata dal controllo definitivo lato database. Il precheck bloccherà l'operazione in caso di discrepanze o in assenza della liquidazione calcolata.
+          </div>
         </div>
       )}
     </div>
