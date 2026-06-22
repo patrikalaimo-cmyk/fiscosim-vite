@@ -8651,8 +8651,8 @@ La struttura del modulo `import_contabilita` è così articolata:
 - **Vite Build**: `npm run build` ➔ **Successo** (compilazione ed bundling completati senza errori).
 
 ### 5. Informazioni di Rilascio
-- **Backup ZIP**: [Nome del file ZIP provvisorio da aggiornare]
-- **Commit Hash**: [Hash commit provvisorio da aggiornare]
+- **Backup ZIP**: `fiscosim-checkpoint-post-prompt-1-audit-import-fix-periodi-stampati-2026-06-22-2356.zip`
+- **Commit Hash**: `5940f46aed26241c1c0d1b44f460d7507d686258`
 - **Messaggio Commit**: `checkpoint: audit import e blocco periodi stampati`
 - **File Committati**:
   * `REPORT/REPORT_CODEX.md`
@@ -8671,6 +8671,34 @@ La struttura del modulo `import_contabilita` è così articolata:
 
 ### 8. Prossimo Step Consigliato
 - Prompt n. 3: Implementazione della Fase 14B per implementare la pipeline di commit reale e transazionale del modulo Import Contabilità.
+
+### 9. Git Status Finale
+```text
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-13d-b2b3-rpc-stampe-definitive-post-sql-2026-06-21-2242.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-0002.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-1348.zip
+?? fiscosim-checkpoint-fase-13d-b5-ui-stampe-definitive-iva-liquidazione-validata-2026-06-22-2252.zip
+?? fiscosim-checkpoint-fase-13e-blocco-periodi-stampati-definitivi-validato-2026-06-22-2334.zip
+?? fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip
+?? fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip
+?? fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip
+?? fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip
+?? fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip
+?? fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip
+?? fiscosim-checkpoint-post-prompt-1-audit-import-fix-periodi-stampati-2026-06-22-2356.zip
+?? fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip
+?? fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip
+?? promptmancanti09.06.2026.txt
+?? scratch/
+?? supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql
+?? supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql
+```
+
 
 
 
