@@ -1670,3 +1670,21 @@ export async function getLibroGiornalePerStampa(societaId, dataDa, dataA) {
   }
 }
 
+/**
+ * Recupera l'elenco delle stampe definitive valide per una determinata società.
+ * @param {string} societaId 
+ * @returns {Promise<{data: object[] | null, error: any}>}
+ */
+export async function getStampeDefinitiveValide(societaId) {
+  try {
+    const { data, error } = await sb
+      .from('stampe_definitive')
+      .select('*')
+      .eq('societa_id', societaId)
+      .eq('stato', 'valida')
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+

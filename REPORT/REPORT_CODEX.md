@@ -8381,6 +8381,299 @@ L'operatore ha completato con successo la validazione manuale della FASE 13E.
 ### 7. Prossimo Step Consigliato
 - Consolidare e blindare le logiche fiscali residue o procedere con le fasi successive del modulo adempimenti.
 
+## FASE-13F-BLOCCO-NUOVE-REGISTRAZIONI-PERIODO-STAMPATO-DEFINITIVO
+
+### 1. Audit Iniziale
+- **Contesto**: La FASE 13E bloccava le operazioni su record esistenti già marcati come definitivi. La FASE 13F impedisce la creazione di nuove scritture e modifiche o storni ordinari se la data di registrazione ricade all'interno di un periodo consolidato e marcato come valido nella tabella `stampe_definitive`.
+- **File Letti**:
+  - `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/contabilita/data/contabilitaRepo.js`
+  - `tests/fase13eClosedPeriodBlock.test.js`
+
+### 2. File Modificati/Creati
+- `src/modules/contabilita/data/contabilitaRepo.js` (Modificato: aggiunta query read-only `getStampeDefinitiveValide` filtrata per tenant e stato valida)
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx` (Modificato: implementata logica `useEffect` per fetch, `isPeriodoStampaDefinita` tramite `useMemo` per intercettare la data registrazione, e blocco preventivo prima del save/operazioni con visualizzazione banner e disabilitazione bottoni)
+- `tests/fase13fClosedPeriodBlock.test.js` (Creato: suite di test unitari a copertura di date in/out periodo, stati non validi e no dipendenza da causali)
+- `REPORT/REPORT_CODEX.md` (questo report)
+
+### 3. Logica Implementata
+- **Query Read-Only**: In `contabilitaRepo.js`, `getStampeDefinitiveValide(societaId)` estrae solo i record con `stato = 'valida'` e lo specifico `societa_id`.
+- **Controllo Data**: La view calcola `isPeriodoStampaDefinita` verificando se la data inserita ricade tra `periodo_inizio` e `periodo_fine` di una delle stampe definitive di tipo `libro_giornale`, `registro_iva_acquisti`, `registro_iva_vendite`, or `liquidazione_iva_periodica`.
+- **Blocco pre-save**:
+  - Impedisce il salvataggio ordinario mostrando: *“Periodo stampato definitivo. Non è possibile registrare nuove scritture ordinarie in un periodo già consolidato. Eventuali rettifiche richiedono workflow amministrativo.”*
+  - Rende `computedRealSaveBlocked` attivo impedendo `persistPrimaNotaDraft`.
+  - Disabilita il pulsante di salvataggio nella UI ed espone il banner dorato di blocco sia in modifica che per nuovi inserimenti.
+  - Blocca le operazioni di storno o annullamento con errore descrittivo.
+
+### 4. Cosa resta fuori perimetro
+- Flussi amministrativi di storno/rettifica straordinaria o riapertura dei periodi da parte di Owner/Admin.
+- Moduli Import Contabilità e Riconciliazione Bancaria legacy o non attinenti all'Inserimento Manuale.
+
+### 5. Conferme importanti
+- Nessun SQL o migrazione toccato o applicato.
+- Nessuna modifica a env/auth/RLS/policy/credenziali.
+- Nessun commit o stage (`git add`) effettuato da Antigravity.
+
+### 6. Test e Build
+- **Unit Test Eseguiti**:
+  - `node --test tests/fase13fClosedPeriodBlock.test.js` ➔ 🟢 **5 / 5 test superati**.
+  - Intera suite regressione: `node --test tests/fase13eClosedPeriodBlock.test.js tests/motoreStampaDefinitiva.test.js tests/resolveStampaDefinitivaOperatore.test.js tests/stampaDefinitivaUiHelpers.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneMutationWorkflow.test.js tests/consultazioneOperationsHardening.test.js` ➔ 🟢 **55 / 55 test superati**.
+- **Build di Produzione**: `npm run build` completata con successo.
+
+### 7. Rischi Residui
+- Se l'utente modifica la data dopo aver premuto un pulsante con latenza di rete prima che le stampe siano ricaricate. Mitigato dal controllo sincrono locale basato sullo stato reattivo e rinfrescato a ogni aggiornamento della società o refresh partite.
+
+### 8. Test Manuali Richiesti
+1. Tentare nuova registrazione con data `21/05/2026`. Deve mostrare il banner dorato di blocco e disabilitare il pulsante Salva.
+2. Cambiare data a una fuori periodo (es. `01/07/2026`). Il banner deve sparire e il pulsante Salva tornare attivo.
+3. Aprire una PN già stampata da Consultazione. Il badge FASE 13E deve continuare a comparire regolarmente.
+4. Verificare che nessuna azione in sola lettura scriva a DB da Consultazione.
+5. Verificare che non sia possibile rieseguire consolidamenti definitivi sullo stesso periodo.
+
+## FASE-14A-AUDIT-IMPORT-CONTABILITA-RIALLINEAMENTO-MOTORE-MANUALE
+
+### 1. Path Verificato
+- `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity`
+
+### 2. Git Status Iniziale
+```text
+ M REPORT/REPORT_CODEX.md
+ M src/modules/contabilita/data/contabilitaRepo.js
+ M src/modules/contabilita/views/RegistrazioneManualeView.jsx
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-13d-b2b3-rpc-stampe-definitive-post-sql-2026-06-21-2242.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-0002.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-1348.zip
+?? fiscosim-checkpoint-fase-13d-b5-ui-stampe-definitive-iva-liquidazione-validata-2026-06-22-2252.zip
+?? fiscosim-checkpoint-fase-13e-blocco-periodi-stampati-definitivi-validato-2026-06-22-2334.zip
+?? fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip
+?? fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip
+?? fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip
+?? fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip
+?? fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip
+?? fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip
+?? fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip
+?? fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip
+?? promptmancanti09.06.2026.txt
+?? scratch/
+?? supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql
+?? supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql
+?? tests/fase13fClosedPeriodBlock.test.js
+```
+
+### 3. File Letti
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/data/importContabilitaRepo.js`
+- `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+- `src/modules/import_contabilita/application/importContabilitaParser.js`
+- `src/modules/import_contabilita/application/importContabilitaInputNormalizer.js`
+- `src/modules/import_contabilita/application/importContabilitaBuilders.js`
+- `src/modules/import_contabilita/application/buildInvoicePreviewModel.js`
+- `src/modules/import_contabilita/domain/buildImportContabilitaCommitInput.js`
+- `src/modules/import_contabilita/domain/buildImportContabilitaCommitPayload.js`
+- `src/modules/import_contabilita/domain/commitContract.js`
+- `src/modules/import_contabilita/domain/parserContract.js`
+- `src/modules/import_contabilita/domain/reportContract.js`
+- `src/modules/import_contabilita/domain/stagingContract.js`
+- `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+- `src/modules/import_contabilita/components/working_view/WorkingViewPrimaNotaTable.jsx`
+- `src/modules/import_contabilita/components/working_view/WorkingViewInvoicePreviewTabs.jsx`
+- `src/modules/import_contabilita/components/working_view/WorkingViewApplyActionsPopover.jsx`
+- `src/modules/import_contabilita/components/working_view/WorkingViewCommitDryRunPanel.jsx`
+- `src/modules/import_contabilita/components/invoice_preview/ImportContabilitaPreviewDrawerContent.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaAnagraficheDetail.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaHeader.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaKpiBar.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaOverviewCards.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaPreviewDrawer.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaReportDetail.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx`
+- `src/modules/import_contabilita/components/ImportContabilitaWorkingTableToolbar.jsx`
+- `src/modules/import_contabilita/tests/buildImportContabilitaCommitPayload.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaBuilders.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaInputNormalizer.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaParser.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaReportContract.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+- `src/modules/import_unificato/application/importWorkflow.js`
+- `src/utils/autoPipeline.js`
+- `src/App.jsx`
+
+### 4. File Modificati
+- `REPORT/REPORT_CODEX.md` (questo report)
+
+### 5. Mappa File Import
+La struttura del modulo `import_contabilita` è così articolata:
+- `src/modules/import_contabilita/index.jsx`: Entry point primario del modulo UI, gestisce gli stati di vista, il caricamento batch, e la sincronizzazione dello staging locale (`sessionStorage` / `localStorage`).
+- **Application Services**:
+  - `application/importContabilitaWorkflow.js`: Orchestratore principale del flusso di importazione. Implementa `runImportWorkflow` (normalizzazione, parsing, dedup e reportistica) e definisce lo stub `runCommitWorkflow` (attualmente lancia eccezione).
+  - `application/importContabilitaParser.js`: Effettua il parsing sintattico dei file XML e PDF delle fatture.
+  - `application/importContabilitaInputNormalizer.js`: Valida ed estrae file da formati compressi (.zip) o cifrati (.p7m).
+  - `application/importContabilitaBuilders.js`: Helper per la generazione dei record di staging (`stagingRows`) e report finali.
+  - `application/buildInvoicePreviewModel.js`: Costruisce il modello dati per l'anteprima visuale del documento.
+- **Domain Models**:
+  - `domain/buildImportContabilitaCommitPayload.js`: Generatore formale del payload di commit del modulo import (specifica `P7B-v3`).
+  - `domain/buildImportContabilitaCommitInput.js`: Normalizzatore input per il payload generator.
+  - `domain/commitContract.js`, `parserContract.js`, `reportContract.js`, `stagingContract.js`: Contratti e definizioni d'interfaccia.
+- **Components**:
+  - `components/working_view/ImportContabilitaWorkingView.jsx`: Area operativa principale di validazione, mapping e riconciliazione pre-registrazione.
+  - `components/working_view/WorkingViewPrimaNotaTable.jsx`: Griglia di anteprima della scrittura contabile Dare/Avere.
+  - `components/working_view/WorkingViewInvoicePreviewTabs.jsx`: Vista a schede con dettaglio XML, PDF e riepilogo dati.
+  - `components/working_view/WorkingViewApplyActionsPopover.jsx`: Pannello popover per modifiche in blocco di conti e causali.
+  - `components/working_view/WorkingViewCommitDryRunPanel.jsx`: Visualizzazione dello stato di quadratura e degli errori prima dell'invio.
+- **Data Layer**:
+  - `data/importContabilitaRepo.js`: Modulo di integrazione Supabase. Implementa il caricamento di dedup candidates, l'inserimento/ricerca percipienti e la creazione/aggiornamento conti nel piano dei conti. I metodi `saveBatch`, `saveReport`, e `commitRows` sono dei placeholder/not implemented.
+
+### 6. Flusso Attuale Import
+1. **Caricamento File**: I file vengono passati in UI e normalizzati tramite `normalizeImportContabilitaInputFiles` (.xml, .pdf, .p7m, .zip).
+2. **Parsing & Staging**: Viene eseguito `parseFatturaFile` per estrarre anagrafiche, totali, IVA e righe articolo.
+3. **Deduplicazione**: Tramite `loadImportContabilitaDedupCandidatesBySocieta`, vengono recuperate le fatture in staging (`documenti_import`) e contabilità (`documenti_contabilita`) per la società corrente.
+4. **Classificazione**: Si calcola una chiave di hashing composita (Tipo + Numero + Data + Totale + Partita IVA / CF) confrontandola con quelle esistenti a DB per classificare ciascun file come `importable`, `duplicateInStaging`, `duplicateInAccounting`, `deletedInStaging` o `deletedInAccounting`.
+5. **Staging & Local Storage**: Solo le righe classificate come `importable` o ri-importabili vengono caricate nella griglia UI ed elaborate localmente. Il progresso viene serializzato sotto la chiave `import_contabilita.last_result.{societaId}` nel `sessionStorage` per evitare perdite di sessione.
+6. **Contabilizzazione (Stato Attuale)**: L'utente esegue le decisioni (scelta del conto di costo/ricavo, causale contabile, abbinamento controparte). La persistenza a DB e la scrittura in Prima Nota di queste bozze non è cablata a livello di transazione nel modulo `import_contabilita` (la funzione `runCommitWorkflow` in `importContabilitaWorkflow.js` è interrotta).
+
+### 7. Contratto Dati Prodotto da Import
+- L'importazione produce un payload strutturato conforme a `buildImportContabilitaCommitPayload.js` (`P7B-v3`).
+- Questo payload viene tradotto nel payload canonico del modulo Prima Nota mediante la funzione `mapImportContabilitaCommitPayloadToCanonical` definita in `src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js`.
+- **Divergenze & Rischi**: 
+  - Il payload `P7B-v3` è mappato correttamente e supera la validazione di `validateCanonicalAccountingPayload`.
+  - Tuttavia, poiché `runCommitWorkflow` non è implementato, la persistenza a DB dei record di prima nota, righe, IVA e partitario deve essere agganciata chiamando il modulo di transazione atomica `persistPrimaNotaDraft` (opportunamente esteso).
+
+### 8. Dipendenze Legacy
+- **`import_unificato`**: Modulo ancora referenziato in `App.jsx` sotto il tab `import_unificato`. Attualmente esegue l'importazione ed inserimento fisico in `documenti_import` e chiama `triggerAutoPipeline` (/api/document) per la classificazione OCR.
+- **`import_fatture`**: Riferimenti legacy nel codice, ma in fase di totale isolamento e dismissione.
+- **`import_nuovo`**: Sostituito e redirezionato in `App.jsx` verso `import_contabilita`.
+- **`DISUSO`**: Cartella inattiva contenente copie orfane di vecchi parser.
+- **Proposta**: Sostituire completamente `import_unificato` in `App.jsx` redirezionando il routing della shell verso `import_contabilita`, ed eliminare progressivamente gli import incrociati verso le anagrafiche di `import_unificato`.
+
+### 9. Tabelle DB Coinvolte
+- **`documenti_import`** [SELECT / INSERT / UPDATE]: Staging iniziale dei file e risposte AI/OCR.
+- **`documenti_contabilita`** [SELECT / INSERT / UPDATE]: Testata del documento contabile validato.
+- **`societa`** [SELECT]: Per caricamento anagrafica società attiva.
+- **`piano_conti`** [SELECT / INSERT / UPDATE]: Ricerca conti, autogenerazione sottoconti e scrittura partita IVA/CF su clienti/fornitori esistenti.
+- **`percipienti`** [SELECT / INSERT]: Ricerca e creazione dei professionisti associati a ritenute.
+- **`causali_contabili`** [SELECT]: Lettura causali disponibili.
+- **`causali_iva`** [SELECT]: Lettura causali IVA per il calcolo dell'imposta.
+
+### 10. Anagrafiche da Verificare
+- Il modulo esegue un match stretto basato su P.IVA/CF.
+- Se il soggetto viene identificato in anagrafica ma privo di conto nel piano dei conti, l'interfaccia propone la creazione del conto sottoconto associato.
+- I mastrini consentiti per la creazione automatica sono rigidamente bloccati a:
+  - Clienti: `1.02.20`, `1.02.21`
+  - Fornitori: `2.03.08`, `2.03.09`, `2.03.10`
+  - Percipienti: `2.03.10`
+- È presente un preflight di controllo in `createImportContabilitaPercipiente` per evitare l'inserimento di duplicati con lo stesso codice fiscale, in linea con le regole FiscoSim.
+
+### 11. IVA / Partitario / Ritenute / Casi Speciali
+- **Fattura passiva ordinaria**: Supportata 🟢
+- **Fattura attiva ordinaria**: Supportata 🟢
+- **Split payment**: Supportata (classificata ed abilitata) 🟢
+- **Reverse charge / acquisti esteri**: Riconosciuta ma non supportata (bloccata in dry-run/staging) ⚠️
+- **IVA per cassa**: Riconosciuta ma non supportata (bloccata in dry-run/staging) ⚠️
+- **Ritenute d'acconto (professionisti)**: Riconosciuta ma non supportata (bloccata in dry-run/staging) ⚠️
+
+### 12. Rischi di Regressione & Bypass Periodi Stampati
+- Poiché l'importazione scrive scritture di prima nota massive, se la data di registrazione ricade all'interno di un periodo con stampe definitive consolidate (`stampe_definitive`), vi è il rischio teorico di bypassare i blocchi se i controlli di Phase 13 non vengono cablati direttamente prima del salvataggio del batch di commit.
+- **Soluzione per Fase 14B**: Integrare `getStampeDefinitiveValide` all'interno della pipeline di commit dell'import per invalidare e bloccare a monte qualsiasi transazione su date chiuse.
+
+### 13. Test Eseguiti
+- Eseguiti con successo tutti i 45 unit test nativi del modulo `import_contabilita`:
+  - `node --test src/modules/import_contabilita/tests/*.js` ➔ 🟢 **45 / 45 test superati**.
+- Eseguiti i test di Phase 13 per la protezione dei periodi:
+  - `node --test tests/fase13eClosedPeriodBlock.test.js tests/fase13fClosedPeriodBlock.test.js` ➔ 🟢 **11 / 11 test superati**.
+- Eseguito `npm run build` per verificare la corretta compilazione visuale ed assenza di errori sintattici.
+
+### 14. Piano Chirurgico Fase 14B
+1. **Unificazione Entry Point**: Sostituire `ModuloImportUnificato` con `ModuloImportContabilita` nel tab `import_unificato` in `App.jsx` per centralizzare la lavorazione sul nuovo modulo.
+2. **Implementazione Transazionale del Commit**: Implementare `runCommitWorkflow` all'interno di `importContabilitaWorkflow.js` agganciandolo a `persistPrimaNotaDraft` (usando il mapper canonico `mapImportContabilitaCommitPayloadToCanonical`).
+3. **Hardening Periodi Chiusi**: Aggiungere il pre-check delle stampe definitive (`getStampeDefinitiveValide`) al pre-commit dell'import contabilità per bloccare scritture in periodi storici blindati.
+4. **Scenari Speciali / Ritenute**: Gestire ed isolare le esclusioni per ritenute/estero ed IVA per cassa, esponendo chiari alert diagnostici all'utente.
+5. **Unit Test di Integrazione**: Sviluppare una suite di test dedicata per validare la catena di commit e persistenza a DB del modulo import.
+
+### 15. Conferme di Sicurezza
+- Nessun codice applicativo, DB, migration, auth, credentials, o env modificato.
+- Nessun commit o stage (`git add`) effettuato.
+
+### 16. Git Status Finale
+```text
+ M REPORT/REPORT_CODEX.md
+ M src/modules/contabilita/data/contabilitaRepo.js
+ M src/modules/contabilita/views/RegistrazioneManualeView.jsx
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-13d-b2b3-rpc-stampe-definitive-post-sql-2026-06-21-2242.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-0002.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-1348.zip
+?? fiscosim-checkpoint-fase-13d-b5-ui-stampe-definitive-iva-liquidazione-validata-2026-06-22-2252.zip
+?? fiscosim-checkpoint-fase-13e-blocco-periodi-stampati-definitivi-validato-2026-06-22-2334.zip
+?? fiscosim-checkpoint-fase-1a-2-pn-semplice-canonico-save-2026-05-29-0013.zip
+?? fiscosim-checkpoint-fase-3-inserimento-manuale-stati-modifica-storno-2026-05-30-0023.zip
+?? fiscosim-checkpoint-fase-7-workflow-modifica-storno-performance-consultazione-2026-06-02-2340.zip
+?? fiscosim-checkpoint-fase-8-manuale-iva-ordinaria-ff-fc-note-credito-base-2026-06-03-1402.zip
+?? fiscosim-checkpoint-motore-policy-causali-condiviso-2026-06-03-1416.zip
+?? fiscosim-checkpoint-partitario-documenti-iva-da-impostazioni-causale-2026-06-03-2204.zip
+?? fiscosim-checkpoint-registrazione-manuale-partitario-chiusura-incassi-pagamenti-2026-06-05.zip
+?? fiscosim-checkpoint-split-payment-manuale-validato-2026-06-08.zip
+?? promptmancanti09.06.2026.txt
+?? scratch/
+?? supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql
+?? supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql
+?? tests/fase13fClosedPeriodBlock.test.js
+```
+
+## CHECKPOINT-FIX-BLOCCO-PERIODI-STAMPATI-E-AUDIT-14A
+
+### 1. Riferimento
+- Completamento della sessione di lavoro avviata con il Prompt n. 1 (Fase 14A).
+
+### 2. Riepilogo FASE 14A Audit
+- Il modulo **Import Contabilità** è stato completamente auditato.
+- Identificato il punto d'aggancio transazionale `runCommitWorkflow` in `src/modules/import_contabilita/application/importContabilitaWorkflow.js` come placeholder da implementare in Fase 14B.
+- Mappato il contratto dati `P7B-v3` di importazione e validata la traduzione tramite `mapImportContabilitaCommitPayloadToCanonical` verso il payload contabile canonico.
+- Tracciate le dipendenze legacy e pianificata la rimozione del modulo `import_unificato` in favore di `import_contabilita`.
+
+### 3. Dettagli Tecnici sul Fix Residuo
+- Le modifiche in `src/modules/contabilita/data/contabilitaRepo.js` (`getStampeDefinitiveValide`) e `src/modules/contabilita/views/RegistrazioneManualeView.jsx` (`isPeriodoStampaDefinita` e controlli associati) completano il blocco delle nuove registrazioni su periodi stampati definitivi.
+- Questa modifica impedisce la creazione o la modifica di bozze manuali le cui date ricadono all'interno di intervalli consolidati e marcati come validi in `stampe_definitive`.
+- Il controllo è al 100% read-only, non altera lo schema del DB, non tocca credenziali/auth o policy di sicurezza RLS, e non influisce sui moduli di importazione o riconciliazione.
+
+### 4. Test e Build Eseguiti
+- **Unit Test Import Contabilità**: `node --test src/modules/import_contabilita/tests/*.js` ➔ 🟢 **45 / 45 test superati**.
+- **Unit Test Blocchi Periodo**: `node --test tests/fase13eClosedPeriodBlock.test.js tests/fase13fClosedPeriodBlock.test.js` ➔ 🟢 **11 / 11 test superati**.
+- **Vite Build**: `npm run build` ➔ **Successo** (compilazione ed bundling completati senza errori).
+
+### 5. Informazioni di Rilascio
+- **Backup ZIP**: [Nome del file ZIP provvisorio da aggiornare]
+- **Commit Hash**: [Hash commit provvisorio da aggiornare]
+- **Messaggio Commit**: `checkpoint: audit import e blocco periodi stampati`
+- **File Committati**:
+  * `REPORT/REPORT_CODEX.md`
+  * `src/modules/contabilita/data/contabilitaRepo.js`
+  * `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+  * `tests/fase13fClosedPeriodBlock.test.js`
+
+### 6. Conferme di Sicurezza
+- Nessun SQL o migrazione applicato o modificato.
+- Nessuna modifica ad auth, RLS, credenziali o `.env`.
+- Nessun `git add .` utilizzato; i file sono committati in modo selettivo.
+- File ZIP e file temporanei di scratch esclusi dal commit.
+
+### 7. Rischi Residui
+- Latenza sul caricamento a freddo delle stampe definitive all'avvio della Registrazione Manuale mitigata da caricamento immediato guidato dalla selezione della società.
+
+### 8. Prossimo Step Consigliato
+- Prompt n. 3: Implementazione della Fase 14B per implementare la pipeline di commit reale e transazionale del modulo Import Contabilità.
+
+
+
 
 
 

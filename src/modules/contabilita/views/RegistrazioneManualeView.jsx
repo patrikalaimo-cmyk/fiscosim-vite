@@ -400,6 +400,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const [state, setState] = useState(() => makeInitialState(String(currentYear)))
   const [draftStarted, setDraftStarted] = useState(false)
   const [partiteRefreshKey, setPartiteRefreshKey] = useState(0)
+  const [stampeDefinitive, setStampeDefinitive] = useState([])
 
   // Stati aggiuntivi per flussi di modifica/storno controllati
   const [operationGuards, setOperationGuards] = useState(null)
@@ -469,7 +470,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       const confirmed = window.confirm("Sei sicuro di voler generare la contro-scrittura speculare di storno per questa registrazione?")
       if (!confirmed) return
     }
-    const isPeriodoChiuso = Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id);
+    const isPeriodoChiuso = Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id || isPeriodoStampaDefinita);
     if (isPeriodoChiuso) {
       setError("Operazione non consentita: il periodo di questa registrazione è chiuso o stampato definitivo.");
       return
@@ -765,14 +766,37 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
   const templateRowsDraft = draftModel.templateRowsDraft || null
   const realSaveEnabled = canUseRealSaveForSimplePrimaNota(draftModel, selectedCausaleConfig)
   const isReadOnlyMode = Boolean(state.meta?.primaNotaId && ['annullata', 'stornata', 'storno'].includes(state.meta?.stato))
+
+  // Calcolo dinamico se la data selezionata cade in un periodo stampato definitivo
+  const isPeriodoStampaDefinita = useMemo(() => {
+    if (!state.header?.dataRegistrazione || !stampeDefinitive.length) return false
+    const currentRegDate = new Date(state.header.dataRegistrazione)
+    if (isNaN(currentRegDate.getTime())) return false
+
+    return stampeDefinitive.some((stampa) => {
+      if (stampa.stato !== 'valida') return false
+      // Consideriamo libro_giornale, registro_iva_acquisti, registro_iva_vendite, liquidazione_iva_periodica
+      if (!['libro_giornale', 'registro_iva_acquisti', 'registro_iva_vendite', 'liquidazione_iva_periodica'].includes(stampa.tipo_stampa)) {
+        return false
+      }
+      const start = new Date(stampa.periodo_inizio)
+      const end = new Date(stampa.periodo_fine)
+      return currentRegDate >= start && currentRegDate <= end
+    })
+  }, [state.header?.dataRegistrazione, stampeDefinitive])
+
   const computedRealSaveBlocked = isReadOnlyMode
     ? "Scrittura bloccata (Neutralizzata)"
-    : (REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled)
-  const canRunDryCommit = Boolean(draftStarted && totals?.isBalanced && draftModel.validation?.status === 'ok' && !saving)
+    : isPeriodoStampaDefinita
+      ? "Periodo stampato definitivo"
+      : (REAL_SAVE_TEMPORARILY_BLOCKED && !realSaveEnabled)
+  const canRunDryCommit = Boolean(draftStarted && totals?.isBalanced && draftModel.validation?.status === 'ok' && !saving && !isPeriodoStampaDefinita)
   const dryCommitBlockReason = String(
-    draftModel.validation?.blockers?.[0] ||
-      draftModel.validation?.warnings?.[0] ||
-      (draftStarted ? 'Bozza non ancora controllabile' : 'Avvia una nuova registrazione')
+    isPeriodoStampaDefinita
+      ? 'Periodo stampato definitivo'
+      : (draftModel.validation?.blockers?.[0] ||
+        draftModel.validation?.warnings?.[0] ||
+        (draftStarted ? 'Bozza non ancora controllabile' : 'Avvia una nuova registrazione'))
   ).trim()
 
   // ── AUDIT LOG: verifica sorgenti stato nello stesso render ──────────────────
@@ -1187,6 +1211,27 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       alive = false
     }
   }, [selectedCausaleConfig?.showIvaPerCassaPreview, selectedIvaPerCassaPartitaIds.join('|')])
+
+  useEffect(() => {
+    if (!isValidSocietaId(societaAttiva?.id)) {
+      setStampeDefinitive([])
+      return
+    }
+    let alive = true
+    contabilitaRepo.getStampeDefinitiveValide(societaAttiva.id)
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (!error && data) {
+          setStampeDefinitive(data)
+        }
+      })
+      .catch(() => {
+        if (alive) setStampeDefinitive([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [societaAttiva?.id, partiteRefreshKey])
 
   useEffect(() => {
     if (!isValidSocietaId(societaAttiva?.id)) {
@@ -2175,9 +2220,9 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
     }
     
     // Check if period is closed/locked or printed definitive
-    const isPeriodoChiuso = Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id);
+    const isPeriodoChiuso = Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id || isPeriodoStampaDefinita);
     if (isPeriodoChiuso) {
-      setError("Modifica non consentita: il periodo di questa registrazione è chiuso o stampato definitivo.");
+      setError("Periodo stampato definitivo. Non è possibile registrare nuove scritture ordinarie in un periodo già consolidato. Eventuali rettifiche richiedono workflow amministrativo.");
       return;
     }
     if (isReadOnlyMode) {
@@ -2188,7 +2233,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       setError(draftModel.validation.blockers.join(' · '))
       return
     }
-    if (computedRealSaveBlocked && !isReadOnlyMode) {
+    if (computedRealSaveBlocked && !isReadOnlyMode && !isPeriodoStampaDefinita) {
       setError('Salvataggio reale ancora non abilitato per questo caso. Usa Controlla registrazione.')
       return
     }
@@ -2481,7 +2526,7 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
               </div>
             )}
 
-            {Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id) && (
+            {Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id || isPeriodoStampaDefinita) && (
               <div
                 style={{
                   marginTop: '.6rem',
@@ -2498,9 +2543,42 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
                 }}
               >
                 <span>🔒</span>
-                <span>SCRITTURA BLOCCATA: il periodo di questa registrazione è chiuso o stampato definitivo. Modifiche e storni ordinari sono inibiti.</span>
+                <span>Periodo stampato definitivo. Non è possibile registrare nuove scritture ordinarie in un periodo già consolidato. Eventuali rettifiche richiedono workflow amministrativo.</span>
               </div>
             )}
+          </div>
+        )}
+
+        {!state.meta?.primaNotaId && isPeriodoStampaDefinita && (
+          <div
+            className="erp-flat-panel"
+            style={{
+              marginBottom: '.55rem',
+              padding: '.8rem 1.2rem',
+              borderRadius: 16,
+              background: 'rgba(232, 146, 42, 0.1)',
+              border: '1px solid rgba(232, 146, 42, 0.3)',
+              boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.1)',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <div
+              style={{
+                padding: '.6rem .8rem',
+                borderRadius: 8,
+                background: 'rgba(232, 146, 42, 0.15)',
+                border: '1px solid rgba(232, 146, 42, 0.4)',
+                color: 'var(--gold)',
+                fontSize: '.78rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.5rem',
+              }}
+            >
+              <span>🔒</span>
+              <span>Periodo stampato definitivo. Non è possibile registrare nuove scritture ordinarie in un periodo già consolidato. Eventuali rettifiche richiedono workflow amministrativo.</span>
+            </div>
           </div>
         )}
 
