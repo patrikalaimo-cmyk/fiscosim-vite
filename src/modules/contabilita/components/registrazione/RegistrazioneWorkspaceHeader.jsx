@@ -82,7 +82,7 @@ export function RegistrazioneWorkspaceHeader({
             </select>
           </div>
 
-          <button type="button" className="btn" onClick={onSave} disabled={saving || realSaveBlocked} style={{ ...REG_BUTTON_PRIMARY_STYLE, minHeight: 38 }}>
+          <button type="button" className="btn" onClick={onSave} disabled={saving || Boolean(realSaveBlocked)} style={{ ...REG_BUTTON_PRIMARY_STYLE, minHeight: 38 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '.45rem' }}>
               <span style={{ fontSize: '.92rem' }}>💾</span>
               {saveLabel}

@@ -58,6 +58,7 @@ export function ConsultazioneDetailSidebar({
   const isSimulata = scrittura?.stato === 'simulata'
   const isConfermata = scrittura?.stato === 'confermata'
   const stornoCollegatoId = scrittura?.storno_id || scrittura?.storno_of_id || scrittura?.storno_collegato_id || null
+  const isPeriodoChiuso = Boolean(scrittura?.periodo_chiuso_lock || scrittura?.stampa_giornale_id)
 
   return (
     <div
@@ -120,27 +121,62 @@ export function ConsultazioneDetailSidebar({
           <>
             {error && <div className="alert alert-warn" style={{ fontSize: '.75rem', padding: '.5rem' }}>{error}</div>}
 
+            {/* Banner Blocco Periodo Chiuso */}
+            {isPeriodoChiuso && (
+              <div
+                style={{
+                  background: 'rgba(232, 146, 42, 0.08)',
+                  border: '1px solid rgba(232, 146, 42, 0.3)',
+                  borderRadius: 10,
+                  padding: '.75rem .85rem',
+                  fontSize: '.75rem',
+                  color: 'var(--gold)',
+                  lineHeight: '1.45',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '.3rem',
+                }}
+              >
+                <div style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '.3rem' }}>
+                  <span>🔒</span> Periodo stampato definitivo
+                </div>
+                <div>
+                  Le modifiche ordinarie sono bloccate. Eventuali rettifiche richiedono workflow amministrativo.
+                </div>
+                {scrittura?.stampa_giornale_id && (
+                  <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem', fontFamily: 'monospace' }}>
+                    ID Stampa: {scrittura.stampa_giornale_id.slice(0, 8)}...
+                    {scrittura.giornale_pagina && ` | Pag: ${scrittura.giornale_pagina}`}
+                    {scrittura.giornale_riga_progressivo && ` | Progressivo: ${scrittura.giornale_riga_progressivo}`}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Metadati Header */}
             <div className="card" style={{ padding: '.8rem', background: 'rgba(255,255,255,.015)', border: '1px solid rgba(255,255,255,.035)', borderRadius: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.7rem' }}>
                 <div style={{ fontWeight: 800, fontSize: '.8rem', color: '#ffb054' }}>Intestazione</div>
                 {!isNeutralized && (
                   <button
+                    disabled={isPeriodoChiuso}
                     style={{
                       padding: '.25rem .75rem',
                       fontSize: '.75rem',
-                      background: 'linear-gradient(180deg, #E8922A, #d07e20)',
-                      color: '#08101E',
+                      background: isPeriodoChiuso ? 'rgba(255,255,255,.05)' : 'linear-gradient(180deg, #E8922A, #d07e20)',
+                      color: isPeriodoChiuso ? 'var(--mu)' : '#08101E',
                       fontWeight: 'bold',
                       border: 'none',
                       borderRadius: '6px',
-                      cursor: 'pointer',
-                      boxShadow: '0 2px 4px rgba(0,0,0,.2)',
+                      cursor: isPeriodoChiuso ? 'not-allowed' : 'pointer',
+                      boxShadow: isPeriodoChiuso ? 'none' : '0 2px 4px rgba(0,0,0,.2)',
                       transition: 'filter 0.1s',
+                      opacity: isPeriodoChiuso ? 0.5 : 1,
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
-                    onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
-                    onClick={() => onEditScrittura?.(primaNotaId, scrittura, righe, 'edit')}
+                    onMouseEnter={(e) => { if (!isPeriodoChiuso) e.currentTarget.style.filter = 'brightness(1.1)' }}
+                    onMouseLeave={(e) => { if (!isPeriodoChiuso) e.currentTarget.style.filter = 'none' }}
+                    onClick={() => { if (!isPeriodoChiuso) onEditScrittura?.(primaNotaId, scrittura, righe, 'edit') }}
+                    title={isPeriodoChiuso ? "Le modifiche ordinarie sono bloccate su periodo chiuso/stampato definitivo" : ""}
                   >
                     Modifica
                   </button>
@@ -315,7 +351,11 @@ export function ConsultazioneDetailSidebar({
                   <div style={{ fontSize: '.72rem', color: '#ff8f8f', lineHeight: 1.35 }}>
                     Questa registrazione è stata stornata o neutralizzata (stato di sola lettura). Non sono consentite ulteriori modifiche o storni.
                   </div>
-                                ) : isConfermata ? (
+                ) : isPeriodoChiuso ? (
+                  <div style={{ fontSize: '.72rem', color: 'var(--gold)', lineHeight: 1.35 }}>
+                    Questa registrazione fa parte di un periodo stampato definitivo/chiuso. Le operazioni di modifica e storno ordinari sono bloccate.
+                  </div>
+                ) : isConfermata ? (
                   <>
                     <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
                       Questa scrittura è confermata e auditata. Scegli un'operazione per aprirla in Inserimento Manuale:

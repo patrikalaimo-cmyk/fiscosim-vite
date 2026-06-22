@@ -469,6 +469,11 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       const confirmed = window.confirm("Sei sicuro di voler generare la contro-scrittura speculare di storno per questa registrazione?")
       if (!confirmed) return
     }
+    const isPeriodoChiuso = Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id);
+    if (isPeriodoChiuso) {
+      setError("Operazione non consentita: il periodo di questa registrazione è chiuso o stampato definitivo.");
+      return
+    }
     if (motivoOperazione.trim().length < 15) {
       setError('Il motivo dell\'operazione deve contenere almeno 15 caratteri per finalità di audit.')
       return
@@ -2168,6 +2173,13 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
       setError('Seleziona una società attiva prima di salvare.')
       return
     }
+    
+    // Check if period is closed/locked or printed definitive
+    const isPeriodoChiuso = Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id);
+    if (isPeriodoChiuso) {
+      setError("Modifica non consentita: il periodo di questa registrazione è chiuso o stampato definitivo.");
+      return;
+    }
     if (isReadOnlyMode) {
       setError("Modifica non consentita: questa registrazione è stata stornata o neutralizzata (stato di sola lettura).")
       return
@@ -2466,6 +2478,27 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
               >
                 <span>⚠️</span>
                 <span>SCRITTURA BLOCCATA: questa scrittura è stata già ANNULLATA, STORNATA o è uno STORNO. Nessun salvataggio consentito.</span>
+              </div>
+            )}
+
+            {Boolean(state.meta?.periodo_chiuso_lock || state.meta?.stampa_giornale_id || state.header?.periodo_chiuso_lock || state.header?.stampa_giornale_id) && (
+              <div
+                style={{
+                  marginTop: '.6rem',
+                  padding: '.6rem .8rem',
+                  borderRadius: 8,
+                  background: 'rgba(232, 146, 42, 0.15)',
+                  border: '1px solid rgba(232, 146, 42, 0.4)',
+                  color: 'var(--gold)',
+                  fontSize: '.78rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '.5rem',
+                }}
+              >
+                <span>🔒</span>
+                <span>SCRITTURA BLOCCATA: il periodo di questa registrazione è chiuso o stampato definitivo. Modifiche e storni ordinari sono inibiti.</span>
               </div>
             )}
           </div>

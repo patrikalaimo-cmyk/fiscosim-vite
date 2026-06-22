@@ -8284,7 +8284,103 @@ Nessuna label UI grezza (come `acquisti`, `vendite`, `liquidazione`) viene trasm
 Il lock DB advisory è impostato sulla coppia `societa_id + tipo_stampa`. Nel caso in cui si volesse effettuare consolidamenti paralleli per diversi registri della stessa famiglia, si potrebbe in futuro estendere il lock basandosi su `famiglia_numerazione + anno`. Allo stato attuale, il rischio è pari a zero in quanto mitigato lato UI con busy state e disabilitazione dei controlli.
 
 ### 7. Prossimo Step Consigliato
-Fase 13E: Implementazione e gestione del blocco visualizzazione/modifica scritture in Prima Nota e Registri IVA per i periodi consolidati o con `periodo_chiuso_lock = true`.
+## FASE-13E-BLOCCO-VISUALIZZAZIONE-PERIODI-STAMPATI-DEFINITIVI
+
+### 1. File Letti
+- `REGOLE_CODEX.md`
+- `REPORT/REPORT_CODEX.md`
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+- `src/modules/contabilita/views/PrimaNotaHubView.jsx`
+- `src/modules/contabilita/views/ConsultazionePrimaNotaView.jsx`
+- `src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx`
+- `src/modules/contabilita/data/contabilitaRepo.js`
+- `src/modules/contabilita/application/primaNotaMutationService.js`
+- `src/modules/contabilita/application/stampe/motoreStampaDefinitiva.js`
+
+### 2. File Modificati/Creati
+- `src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx` (Modificato per disabilitare "Modifica" ed evitare storno/modifica ordinaria su periodo chiuso o stampato definitivo)
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx` (Modificato per intercettare il blocco periodo chiuso/stampato definitivo, mostrare banner d'errore dorato bloccante ed inibire operazioni di salvataggio e storno/annullamento)
+- `src/modules/contabilita/components/registrazione/RegistrazioneWorkspaceHeader.jsx` (Modificato per supportare la disattivazione del pulsante Salva se realSaveBlocked restituisce una stringa di descrizione blocco)
+- `tests/fase13eClosedPeriodBlock.test.js` (Nuovo file di unit test creato per coprire la logica di blocco/riconoscimento dei periodi consolidati)
+
+### 3. Logica di Blocco Implementata
+- **Visualizzazione Badge/Banner**: Se la scrittura ha `periodo_chiuso_lock = true` o `stampa_giornale_id` valorizzato, viene visualizzato un banner dorato ben visibile sia in Consultazione (Sidebar) sia in Registrazione Manuale (Workspace Header) che avvisa del periodo consolidato.
+- **Inibizione Modifica/Storno Ordinario**: In Consultazione, le azioni ordinarie come "Modifica Controllata" e "Storno Contabile" vengono sostituite da un messaggio informativo di blocco e il bottone primario "Modifica" viene disabilitato.
+- **H hardening Registrazione Manuale**: Se si tenta di salvare o avviare un flusso di modifica/storno controllato su un record in un periodo bloccato, `handleSave` e `handleConfirmOperation` intercettano lo stato bloccando l'azione con un messaggio d'errore preventivo senza bypass o write residui.
+- **Coerenza**: Non viene utilizzata alcuna causale o stringa descrittiva per decidere il blocco, bensì esclusivamente le chiavi di stato referenziale `periodo_chiuso_lock` e `stampa_giornale_id`.
+
+### 4. Conferme Importanti
+- Nessun SQL/migration è stato creato o applicato.
+- Nessun commit o stage è stato eseguito da Antigravity.
+- Nessuna modifica a env/auth/RLS/policy/credenziali.
+- Piena build Vite completata con successo.
+
+### 5. Test e Build
+- Esecuzione unit test: `node --test tests/fase13eClosedPeriodBlock.test.js tests/motoreStampaDefinitiva.test.js tests/resolveStampaDefinitivaOperatore.test.js tests/stampaDefinitivaUiHelpers.test.js tests/consultazioneOperationsHardening.test.js tests/fase3c3FunctionalCorrection.test.js tests/consultazioneMutationWorkflow.test.js`.
+  - Esito: **47 / 47 test passati con successo**.
+- Compilazione: `npm run build` completata con successo (Vite built in 10.09s).
+
+### 6. Rischi Residui
+- I dati temporanei in cache della sessione dell'utente potrebbero mostrare il record come modificabile se la query non viene ri-eseguita sul DB subito dopo un consolidamento, mitigato forzando il caricamento a monte del dettaglio scrittura ad ogni apertura sidebar.
+
+### 7. Test Manuali Richiesti e da Documentare
+1. **Dettaglio Consultazione stampato**: Aprire in Consultazione una scrittura contabile collegata al Libro Giornale stampato definitivo 01/05/2026 → 30/06/2026.
+2. **Badge periodo stampato**: Verificare la comparsa del banner dorato "Periodo stampato definitivo" con ID stampa, pagina e riga progressivi.
+3. **Inibizione azioni**: Verificare che il bottone "Modifica" sia disabilitato e che le azioni di storno/modifica nella sezione operazioni contabili siano rimpiazzate dall'avviso di blocco.
+4. **Verifica scrittura ordinaria**: Aprire una scrittura ordinaria non consolidata e verificare che le azioni di modifica ed eliminazione siano normalmente accessibili.
+5. **Verifica write diretto**: Accertarsi che nessuna azione in sola lettura esegua direttamente un write a DB da Consultazione.
+
+## FASE-13E-CHECKPOINT-BLOCCO-PERIODI-STAMPATI-DEFINITIVI-VALIDATO
+
+### 1. Riepilogo Validazione Manuale
+L'operatore ha completato con successo la validazione manuale della FASE 13E. 
+
+**Riscontri del test manuale positivo**:
+- **Consultazione Prima Nota**: Selezionando una scrittura reale all'interno del periodo del Libro Giornale stampato definitivo (01/05/2026 → 30/06/2026) in stato `CONFERMATA`:
+  - Viene mostrato il badge "🔒 Periodo stampato definitivo" dorato.
+  - Viene visualizzato correttamente il messaggio: "Le modifiche ordinarie sono bloccate. Eventuali rettifiche richiedono workflow amministrativo."
+  - ID stampa visualizzato: `5f7ac3b9-b77b-4e68-87d4-eb81af52d099` (ID Stampa reale a DB).
+  - Pagina visualizzata: `4`.
+  - Riga progressivo visualizzata: `102`.
+  - Pulsante "Modifica" disabilitato (sola lettura garantito).
+  - Collegamenti fiscali e partitario restano pienamente visibili ed ispezionabili.
+  - Nessuna azione effettua write diretto da Consultazione.
+
+### 2. Cosa viene bloccato e cosa resta visualizzato
+- **Bloccato**:
+  - Il salvataggio/modifica di scritture con periodo_chiuso_lock = true o collegate a una stampa definitiva (`stampa_giornale_id` / `stampa_iva_id` non null).
+  - Lo storno contabile o l'annullamento logico ordinario per scritture con periodo bloccato.
+  - Il pulsante "Salva" nel workspace di inserimento manuale.
+- **Visualizzato**:
+  - Metadati intestazione, righe di partita doppia, quadratura, collegamenti fiscali (IVA e Partitario) e dettagli del protocollo di stampa (ID, pagine, riga).
+
+### 3. Conferme di Sicurezza
+- Nessuna modifica effettuata su SQL, tabelle o trigger.
+- Nessuna migrazione creata o applicata.
+- Nessun file `.env`, `.env.local` o anagrafiche di sicurezza RLS/auth toccato.
+- Nessun write diretto da Consultazione.
+
+### 4. File Modificati/Creati nella FASE 13E
+- `REPORT/REPORT_CODEX.md` (questo report)
+- `src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx`
+- `src/modules/contabilita/views/RegistrazioneManualeView.jsx`
+- `src/modules/contabilita/components/registrazione/RegistrazioneWorkspaceHeader.jsx`
+- `tests/fase13eClosedPeriodBlock.test.js`
+
+### 5. Dettagli di Test e Build
+- **Unit Test Eseguiti**:
+  - `node --test tests/motoreStampaDefinitiva.test.js tests/resolveStampaDefinitivaOperatore.test.js tests/stampaDefinitivaUiHelpers.test.js`
+  - `node --test tests/fase3c3FunctionalCorrection.test.js tests/consultazioneMutationWorkflow.test.js tests/consultazioneOperationsHardening.test.js`
+  - `node --test tests/fase13eClosedPeriodBlock.test.js`
+  - *Esito*: 🟢 **47 / 47 test superati con successo**.
+- **Vite Build**: `npm run build` completata con successo.
+
+### 6. Rischi Residui
+- I dati mostrati in Consultazione potrebbero non riflettere un blocco periodo se l'utente mantiene la pagina aperta per lungo tempo senza ricaricarla. Tale rischio è trascurabile in quanto mitigato dalla fetch del dettaglio eseguita puntualmente all'apertura del cassetto.
+
+### 7. Prossimo Step Consigliato
+- Consolidare e blindare le logiche fiscali residue o procedere con le fasi successive del modulo adempimenti.
+
 
 
 
