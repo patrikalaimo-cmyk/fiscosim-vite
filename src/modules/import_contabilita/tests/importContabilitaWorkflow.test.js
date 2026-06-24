@@ -141,6 +141,296 @@ test('workflow: deletedInStaging e deletedInAccounting vengono reimportati solo 
   assert.ok(String(res.report.deletedDetectionNote || '').includes('I casi cancellati'))
 })
 
-test('commit workflow stub', async () => {
-  await assert.rejects(() => runCommitWorkflow(), /Commit workflow not implemented yet/)
+class MockDbQuery {
+  constructor(table, client) {
+    this.table = table
+    this.client = client
+    this.filters = {}
+    this.insertedData = null
+    this.updatedData = null
+  }
+  select(fields = '*') {
+    this.client.log.push({ action: 'select', table: this.table, fields })
+    return this
+  }
+  insert(data) {
+    this.insertedData = data
+    this.client.log.push({ action: 'insert', table: this.table, data })
+    return this
+  }
+  update(data) {
+    this.updatedData = data
+    this.client.log.push({ action: 'update', table: this.table, data })
+    return this
+  }
+  delete() {
+    this.client.log.push({ action: 'delete', table: this.table })
+    return this
+  }
+  eq(field, value) {
+    this.filters[field] = value
+    this.client.log.push({ action: 'eq', table: this.table, field, value })
+    return this
+  }
+  maybeSingle() {
+    this.client.log.push({ action: 'maybeSingle', table: this.table })
+    return Promise.resolve(this.client.resolveSingle(this.table, this.insertedData || this.updatedData, this.filters))
+  }
+  single() {
+    this.client.log.push({ action: 'single', table: this.table })
+    return Promise.resolve(this.client.resolveSingle(this.table, this.insertedData || this.updatedData, this.filters))
+  }
+  then(resolve, reject) {
+    const isDelete = this.client.log.some(l => l.table === this.table && l.action === 'delete')
+    if (isDelete) {
+      resolve({ data: [], error: null })
+      return
+    }
+    Promise.resolve(this.client.resolveMultiple(this.table, this.insertedData || this.updatedData, this.filters))
+      .then(resolve, reject)
+  }
+}
+
+class MockDbClient {
+  constructor() {
+    this.log = []
+    this.responses = {
+      documenti_import: null,
+      stampe_definitive: [],
+      prima_nota: { id: 'prima_nota-id' },
+      prima_nota_righe: [],
+      registri_iva: [],
+      partitario: [],
+      ritenute_dacconto: []
+    }
+  }
+  from(table) {
+    return new MockDbQuery(table, this)
+  }
+  resolveSingle(table, data, filters) {
+    if (table === 'documenti_import') {
+      return { data: this.responses.documenti_import, error: null }
+    }
+    if (table === 'prima_nota') {
+      return { data: this.responses.prima_nota, error: null }
+    }
+    return { data: { id: `${table}-id` }, error: null }
+  }
+  resolveMultiple(table, data, filters) {
+    if (table === 'stampe_definitive') {
+      return { data: this.responses.stampe_definitive, error: null }
+    }
+    const dataArray = Array.isArray(data) 
+      ? data.map((row, idx) => ({ id: `${table}-id`, ...row }))
+      : [{ id: `${table}-id` }]
+    return { data: dataArray, error: null }
+  }
+}
+
+function makeValidCommitPayload() {
+  const innerPayload = {
+    handoff: {
+      sourceRowKey: 'doc-import-123',
+      sourceFileName: 'invoice.xml',
+      sourceBatchId: 'batch-test-123',
+      contractVersion: 'P7B-v3',
+      operatorId: 'op-123',
+      createdAt: '2026-04-30T10:00:00Z',
+    },
+    company: {
+      societaId: 'soc-123',
+      esercizioId: '2026',
+    },
+    document: {
+      direction: 'acquisto',
+      number: '123',
+      documentDate: '2026-04-20',
+      registrationDate: '2026-04-30',
+      totals: {
+        gross: 122.00,
+        taxable: 100.00,
+        vat: 22.00,
+      },
+      counterparty: {
+        accountId: 'acc-supplier',
+        name: 'Fornitore Spa',
+        taxCode: '11111111111',
+        vatNumber: '11111111111',
+      }
+    },
+    accounting: {
+      causaleContabile: {
+        id: 'caus-ff',
+        codice: 'FF',
+        description: 'Fattura passiva',
+        tipoCausale: 'docivanormale',
+        isDocumentoIva: true,
+        gestionePartitario: 'apertura',
+        segnoRegistroIva: '+',
+      },
+      description: 'Fattura passiva n. 123',
+      isBalanced: true,
+      totals: {
+        debit: 122.00,
+        credit: 122.00,
+      },
+      rows: [
+        { rowNumber: 1, accountId: 'acc-cost', accountCode: '6.01.001', accountDescription: 'Costo', debit: 100.00, credit: 0.00, dare: 100.00, avere: 0.00, description: 'Costo' },
+        { rowNumber: 2, accountId: 'acc-iva', accountCode: '22.01', accountDescription: 'IVA c/acquisti', debit: 22.00, credit: 0.00, dare: 22.00, avere: 0.00, description: 'IVA' },
+        { rowNumber: 3, accountId: 'acc-supplier', accountCode: '2.03.08.001', accountDescription: 'Fornitore', debit: 0.00, credit: 122.00, dare: 0.00, avere: 122.00, description: 'Debito Fornitore' },
+      ],
+    },
+    vat: {
+      enabled: true,
+      registerType: 'acquisti',
+      competencePeriod: '2026-04',
+      rows: [
+        {
+          rowNumber: 1,
+          imponibile: 100.00,
+          imposta: 22.00,
+          aliquota: 22.00,
+          causaleIvaId: 'iva-22',
+          causaleIva: 'Aliquota 22%',
+          esigibilita: 'Immediata',
+        }
+      ]
+    },
+    ledger: {
+      enabled: true,
+      accountId: 'acc-supplier',
+      rows: [
+        {
+          rowNumber: 1,
+          action: 'open',
+          amount: 122.00,
+          dueDate: '2026-05-30',
+        }
+      ]
+    },
+    validation: {
+      status: 'confermata',
+      blockers: [],
+      warnings: [],
+    },
+    automationMeta: {
+      mode: 'automatic',
+      code: 'TD01',
+    }
+  }
+
+  return {
+    societaId: 'soc-123',
+    registrationDate: '2026-04-30',
+    sourceRow: {
+      id: 'doc-import-123',
+      filename: 'invoice.xml',
+    },
+    payload: innerPayload,
+    classification: {
+      code: 'TD01',
+      label: 'Fattura passiva',
+      managed: true,
+    },
+    readiness: {
+      status: 'confermata',
+      label: 'Pronto per contabilità',
+    }
+  }
+}
+
+test('runCommitWorkflow: payload valido ordinario', async () => {
+  const db = new MockDbClient()
+  const payload = makeValidCommitPayload()
+  
+  const res = await runCommitWorkflow(payload, { db })
+  assert.equal(res.success, true)
+  assert.equal(res.primaNotaId, 'prima_nota-id')
+  assert.equal(res.documentoId, 'doc-import-123')
+  assert.equal(res.status, 'processed')
+  
+  const updates = db.log.filter(l => l.action === 'update' && l.table === 'documenti_import')
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0].data.stato, 'processed')
 })
+
+test('runCommitWorkflow: payload non valido per validatore canonico', async () => {
+  const db = new MockDbClient()
+  const payload = makeValidCommitPayload()
+  // Rendi sbilanciata la PN per fallire validazione canonica
+  payload.payload.accounting.rows[0].debit = 999.00
+
+  const res = await runCommitWorkflow(payload, { db })
+  assert.equal(res.success, false)
+  assert.ok(res.blockingReasons.length > 0)
+  
+  // Nessuna scrittura DB avvenuta
+  const inserts = db.log.filter(l => l.action === 'insert')
+  assert.equal(inserts.length, 0)
+})
+
+test('runCommitWorkflow: periodo stampato definitivo consolidato', async () => {
+  const db = new MockDbClient()
+  // Imposta stampa definitiva valida sul periodo del documento
+  db.responses.stampe_definitive = [
+    {
+      tipo_stampa: 'libro_giornale',
+      periodo_inizio: '2026-04-01',
+      periodo_fine: '2026-04-30',
+      stato: 'valida',
+      societa_id: 'soc-123'
+    }
+  ]
+  const payload = makeValidCommitPayload()
+
+  const res = await runCommitWorkflow(payload, { db })
+  assert.equal(res.success, false)
+  assert.ok(res.blockingReasons[0].includes('Periodo stampato definitivo'))
+  
+  const inserts = db.log.filter(l => l.action === 'insert')
+  assert.equal(inserts.length, 0)
+})
+
+test('runCommitWorkflow: documento già contabilizzato in staging', async () => {
+  const db = new MockDbClient()
+  db.responses.documenti_import = { stato: 'processed' }
+  const payload = makeValidCommitPayload()
+
+  const res = await runCommitWorkflow(payload, { db })
+  assert.equal(res.success, false)
+  assert.ok(res.blockingReasons[0].includes('già contabilizzato'))
+  
+  const inserts = db.log.filter(l => l.action === 'insert')
+  assert.equal(inserts.length, 0)
+})
+
+test('runCommitWorkflow: fallimento update stato causa rollback logico', async () => {
+  const db = new MockDbClient()
+  // Mock query builder eq and single/maybeSingle responses to simulate update error
+  const originalFrom = db.from;
+  db.from = function(table) {
+    const query = originalFrom.call(db, table);
+    if (table === 'documenti_import') {
+      query.then = (resolve, reject) => {
+        if (query.updatedData) {
+          resolve({ data: null, error: new Error('Simulated update error') })
+        } else {
+          resolve({ data: null, error: null })
+        }
+      }
+    }
+    return query;
+  }
+  const payload = makeValidCommitPayload()
+
+  const res = await runCommitWorkflow(payload, { db })
+  assert.equal(res.success, false)
+  assert.ok(res.blockingReasons[0].includes('aggiornamento stato documento import fallito'))
+  
+  // Controlla rollback logico (delete della prima nota creata)
+  const deletes = db.log.filter(l => l.action === 'delete')
+  assert.ok(deletes.length > 0)
+  const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
+  assert.ok(hasPnDelete)
+})
+

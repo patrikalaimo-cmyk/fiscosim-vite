@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { buildStagingRow } from './application/importContabilitaBuilders.js'
-import { runImportWorkflow } from './application/importContabilitaWorkflow.js'
+import { runImportWorkflow, runCommitWorkflow } from './application/importContabilitaWorkflow.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
 import { ImportContabilitaAnagraficheDetail } from './components/ImportContabilitaAnagraficheDetail.jsx'
 import { ImportContabilitaKpiBar } from './components/ImportContabilitaKpiBar.jsx'
@@ -4536,35 +4536,224 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     showActionBanner('info', `Selezionata riga: ${nextRow.filename || getRowKey(nextRow)}.`)
   }
 
-  const onStartAccounting = () => {
-    const rows = Array.isArray(stagingRows) ? stagingRows : []
-    const selectedWorkingViewRows = rows.filter((row) => {
+  const onStartAccounting = async () => {
+    const launchRows = stagingRows.filter((row) => {
       const key = getRowKey(row)
-      return selectedRowIds.has(key)
+      return selectedRowIds.size ? selectedRowIds.has(key) : true
     })
-    const launchRows = selectedRowIds.size ? selectedWorkingViewRows : workingViewLaunchRows
 
-    if (!launchRows.length) {
+    const eligibleRows = launchRows.filter((row) => {
+      const key = getRowKey(row)
+      return workingTableReadinessByRowId[key]?.ready && row.state !== 'registered' && row.state !== 'committed'
+    })
+
+    if (!eligibleRows.length) {
       showActionBanner(
         'warning',
-        selectedRowIds.size
-          ? 'Le righe selezionate non sono disponibili per aprire la working view locale.'
-          : 'Nessuna riga disponibile per aprire la working view locale.',
+        'Seleziona almeno una riga pronta (non registrata) per procedere con la contabilizzazione real-time.'
       )
       return
     }
 
-    const nextRow = launchRows[0]
-    if (!nextRow) {
-      showActionBanner('warning', 'Nessuna riga disponibile per aprire la working view locale.')
-      return
+    setBusy(true)
+    setBusyLabel('Contabilizzazione in corso...')
+    setErrorMsg('')
+
+    let successCount = 0
+    let failureReasons = []
+    const nextRows = stagingRows.slice()
+
+    for (const row of eligibleRows) {
+      const key = getRowKey(row)
+      const manualAccount = manualAccountByRowId[key] || null
+      const manualCausale = manualCausaleByRowId[key] || null
+      const counterpartyAccount = counterpartyAccountByRowId[key] || null
+      const registrationDate = manualRegistrationDateByRowId[key] || row?.parsedDocument?.dataDocumento || registrationDateDraft
+
+      const direction = row?.parsedDocument?.direction || 'acquisto'
+      const isProfessional = row?.parsedDocument?.flags?.isProfessional || false
+      const isReverseCharge = row?.parsedDocument?.flags?.reverseCharge || false
+      const isSplitPayment = row?.parsedDocument?.flags?.splitPayment || false
+      const hasRitenuta = row?.parsedDocument?.flags?.hasRitenuta || false
+
+      const isAcquisti = direction === 'acquisto' || direction === 'passiva'
+      const registrationDateFormatted = String(registrationDate || '').slice(0, 10)
+
+      const vatRowsMapped = (row?.parsedDocument?.ivaRows || []).map((ivaRow, idx) => {
+        const detPercent = 100
+        const imp = Number(ivaRow.iva || ivaRow.imposta || 0)
+        const detImp = Math.round(imp * (detPercent / 100) * 100) / 100
+        const indetImp = Math.round((imp - detImp) * 100) / 100
+
+        return {
+          rowNumber: ivaRow.rowNumber || idx + 1,
+          imponibile: Number(ivaRow.imponibile || 0),
+          imposta: imp,
+          aliquota: Number(ivaRow.aliquota || ivaRow.aliquotaIVA || 22),
+          causaleIvaId: ivaRow.causaleIvaId || ivaRow.causale_iva_id || '',
+          causaleIva: ivaRow.causaleIva || '',
+          detraibilePercent: detPercent,
+          detraibileImposta: detImp,
+          indetraibilePercent: 100 - detPercent,
+          indetraibileImposta: indetImp,
+          esigibilita: ivaRow.esigibilita || 'Immediata',
+        }
+      })
+
+      const innerPayload = {
+        company: {
+          societaId: selectedSocietaId,
+          esercizioId: String(new Date(registrationDateFormatted).getFullYear()),
+        },
+        document: {
+          direction: isAcquisti ? 'acquisto' : 'vendita',
+          registrationDate: registrationDateFormatted,
+          documentDate: String(row?.parsedDocument?.dataDocumento || registrationDateFormatted).slice(0, 10),
+          documentNumber: row?.parsedDocument?.numeroDocumento || '',
+          description: `Import doc. ${row?.parsedDocument?.numeroDocumento || ''}`,
+          counterparty: {
+            accountId: counterpartyAccount?.id || '',
+            code: counterpartyAccount?.codice || '',
+            description: counterpartyAccount?.descrizione || '',
+            name: row?.parsedDocument?.fornitore?.denominazione || row?.parsedDocument?.cliente?.denominazione || '',
+            taxCode: row?.parsedDocument?.fornitore?.codiceFiscale || row?.parsedDocument?.cliente?.codiceFiscale || '',
+            vatNumber: row?.parsedDocument?.fornitore?.partitaIva || row?.parsedDocument?.cliente?.partitaIva || '',
+            paese: 'IT',
+          },
+          totals: {
+            imponibile: Number(row?.parsedDocument?.imponibile || 0),
+            iva: Number(row?.parsedDocument?.iva || 0),
+            totaleDocumento: Number(row?.parsedDocument?.totale || 0),
+          },
+        },
+        accounting: {
+          causaleContabile: {
+            id: manualCausale?.id || '',
+            codice: manualCausale?.codice || '',
+            tipoCausale: isAcquisti ? 'docivanormale' : 'docivanormale',
+          },
+          rows: [
+            {
+              rowNumber: 1,
+              accountId: manualAccount?.id || '',
+              accountCode: manualAccount?.codice || '',
+              accountDescription: manualAccount?.descrizione || '',
+              debit: isAcquisti ? Number(row?.parsedDocument?.imponibile || 0) : 0,
+              credit: isAcquisti ? 0 : Number(row?.parsedDocument?.imponibile || 0),
+              description: `Costo/Ricavo doc. ${row?.parsedDocument?.numeroDocumento || ''}`,
+            },
+            {
+              rowNumber: 2,
+              accountId: isAcquisti ? 'acc-iva-credito' : 'acc-iva-debito',
+              accountCode: isAcquisti ? '1.03.01.001' : '2.04.01.001',
+              accountDescription: isAcquisti ? 'IVA a credito' : 'IVA a debito',
+              debit: isAcquisti ? Number(row?.parsedDocument?.iva || 0) : 0,
+              credit: isAcquisti ? 0 : Number(row?.parsedDocument?.iva || 0),
+              description: `IVA su doc. ${row?.parsedDocument?.numeroDocumento || ''}`,
+            },
+            {
+              rowNumber: 3,
+              accountId: counterpartyAccount?.id || '',
+              accountCode: counterpartyAccount?.codice || '',
+              accountDescription: counterpartyAccount?.descrizione || '',
+              debit: isAcquisti ? 0 : Number(row?.parsedDocument?.totale || 0),
+              credit: isAcquisti ? Number(row?.parsedDocument?.totale || 0) : 0,
+              description: `Soggetto doc. ${row?.parsedDocument?.numeroDocumento || ''}`,
+            },
+          ],
+        },
+        vat: {
+          enabled: true,
+          registerType: isAcquisti ? 'acquisti' : 'vendite',
+          competencePeriod: registrationDateFormatted.slice(0, 7),
+          rows: vatRowsMapped,
+        },
+        ledger: {
+          enabled: true,
+          accountId: counterpartyAccount?.id || '',
+          mode: 'open',
+          rows: [
+            {
+              rowNumber: 1,
+              action: 'open',
+              amount: Number(row?.parsedDocument?.totale || 0),
+              dueDate: registrationDateFormatted,
+              documentRef: row?.parsedDocument?.numeroDocumento || '',
+            },
+          ],
+        },
+        validation: {
+          status: 'confermata',
+          blockers: [],
+          warnings: [],
+        },
+        automationMeta: {
+          mode: 'automatic',
+          code: row?.parsedDocument?.tipoDocumento || 'TD01',
+        },
+      }
+
+      const commitPayload = {
+        societaId: selectedSocietaId,
+        registrationDate: registrationDateFormatted,
+        sourceRow: {
+          id: key,
+          filename: row.filename || '',
+        },
+        payload: innerPayload,
+        classification: {
+          code: row?.parsedDocument?.tipoDocumento || 'TD01',
+          label: 'Fattura',
+          managed: true,
+        },
+        readiness: {
+          status: 'confermata',
+          label: 'Pronto per contabilità',
+        },
+      }
+
+      try {
+        const commitResult = await runCommitWorkflow(commitPayload)
+        if (commitResult.success) {
+          successCount += 1
+          const idx = nextRows.findIndex((r) => getRowKey(r) === key)
+          if (idx >= 0) {
+            nextRows[idx] = {
+              ...nextRows[idx],
+              state: 'committed',
+              primaNotaId: commitResult.primaNotaId,
+              contabilizzazioneData: new Date().toISOString(),
+            }
+          }
+        } else {
+          failureReasons.push(
+            `${row.filename || key}: ${commitResult.blockingReasons.join(', ')}`
+          )
+        }
+      } catch (err) {
+        failureReasons.push(`${row.filename || key}: errore imprevisto: ${err.message}`)
+      }
     }
 
-    setWorkingViewRowIds(launchRows.map((row) => getRowKey(row)).filter(Boolean))
-    setWorkingViewRowId(getRowKey(nextRow))
-    setWorkingViewOpen(true)
-    setWorkingViewTab('prima_nota')
-    showActionBanner('info', 'Working view aperta in modalità locale.')
+    persistRowsChange(nextRows, new Set())
+    setBusy(false)
+
+    if (successCount > 0 && failureReasons.length === 0) {
+      showActionBanner('success', `Contabilizzazione completata: registrate con successo ${successCount} fatture.`)
+      if (workingViewOpen) {
+        closeWorkingView()
+      }
+    } else if (successCount > 0 && failureReasons.length > 0) {
+      showActionBanner(
+        'warning',
+        `Contabilizzazione parziale: registrate ${successCount} fatture, ${failureReasons.length} fallite. Dettagli: ${failureReasons.slice(0, 3).join('; ')}`
+      )
+    } else {
+      showActionBanner(
+        'warning',
+        `Nessun documento contabilizzato. Errori: ${failureReasons.slice(0, 3).join('; ')}`
+      )
+    }
   }
 
   const onGoToPreviousWorkingViewRow = () => {

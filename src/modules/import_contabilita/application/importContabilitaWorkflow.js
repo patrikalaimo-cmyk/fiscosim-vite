@@ -541,6 +541,226 @@ export async function runImportWorkflow(files = [], options = {}) {
   }
 }
 
-export async function runCommitWorkflow() {
-  throw new Error('Commit workflow not implemented yet')
+import { mapImportContabilitaCommitPayloadToCanonical } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
+import { validateCanonicalAccountingPayload } from '../../contabilita/canonical/validateCanonicalAccountingPayload.js'
+import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRepo.js'
+import { persistPrimaNotaDraft } from '../../contabilita/application/persistPrimaNotaDraft.js'
+import { sb } from '../../../lib/supabase.js'
+
+function evaluatePeriodoStampaDefinita(dataRegistrazione, stampeDefinitive) {
+  if (!dataRegistrazione || !stampeDefinitive || !stampeDefinitive.length) return false
+  const currentRegDate = new Date(dataRegistrazione)
+  if (isNaN(currentRegDate.getTime())) return false
+
+  return stampeDefinitive.some((stampa) => {
+    if (stampa.stato !== 'valida') return false
+    if (!['libro_giornale', 'registro_iva_acquisti', 'registro_iva_vendite', 'liquidazione_iva_periodica'].includes(stampa.tipo_stampa)) {
+      return false
+    }
+    const start = new Date(stampa.periodo_inizio)
+    const end = new Date(stampa.periodo_fine)
+    return currentRegDate >= start && currentRegDate <= end
+  })
 }
+
+export async function runCommitWorkflow(commitPayload, options = {}) {
+  const db = options.db || sb
+  
+  // 1. Input validation
+  if (!commitPayload) {
+    return { success: false, blockingReasons: ['Payload di commit mancante.'] }
+  }
+  const societaId = commitPayload.societaId || commitPayload.company?.societaId || (commitPayload.payload && (commitPayload.payload.societaId || commitPayload.payload.company?.societaId))
+  if (!societaId) {
+    return { success: false, blockingReasons: ['societaId mancante'] }
+  }
+  const dataRegistrazione = commitPayload.registrationDate || commitPayload.document?.registrationDate || (commitPayload.payload && (commitPayload.payload.registrationDate || commitPayload.payload.document?.registrationDate))
+  if (!dataRegistrazione) {
+    return { success: false, blockingReasons: ['data registrazione mancante'] }
+  }
+
+  // Check double commit
+  const documentId = commitPayload.sourceRow?.id || commitPayload.sourceRowId || (commitPayload.payload && (commitPayload.payload.sourceRow?.id || commitPayload.payload.sourceRowId))
+  if (documentId) {
+    const { data: existingDoc, error: checkError } = await db
+      .from('documenti_import')
+      .select('stato')
+      .eq('id', documentId)
+      .maybeSingle()
+    if (!checkError && existingDoc && ['processed', 'committed'].includes(existingDoc.stato)) {
+      return { success: false, blockingReasons: ['Documento già contabilizzato.'] }
+    }
+  }
+
+  // 2. Mapping to Canonical
+  const mapped = mapImportContabilitaCommitPayloadToCanonical(commitPayload, { mode: 'commit', validate: true })
+  const canonicalPayload = mapped.payload
+  const validationResult = mapped.validationResult || validateCanonicalAccountingPayload(canonicalPayload, { mode: 'commit' })
+
+  // 3. Validation canonical in commit mode
+  if (!validationResult.isValid && validationResult.blocking?.length) {
+    return {
+      success: false,
+      blockingReasons: validationResult.blocking,
+      warnings: validationResult.warnings || []
+    }
+  }
+
+  // 4. Controllo periodo stampato definitivo
+  const { data: stampeDefinitive, error: stampeError } = await getStampeDefinitiveValide(societaId, db)
+  if (stampeError) {
+    return { success: false, blockingReasons: [`Errore nel recupero delle stampe definitive: ${stampeError.message}`] }
+  }
+  if (evaluatePeriodoStampaDefinita(dataRegistrazione, stampeDefinitive)) {
+    return {
+      success: false,
+      blockingReasons: [
+        'Periodo stampato definitivo. Non è possibile contabilizzare documenti importati in un periodo già consolidato. Eventuali rettifiche richiedono workflow amministrativo.'
+      ]
+    }
+  }
+
+  // 5. Persistence via persistPrimaNotaDraft
+  // We need to map the canonical payload back to the structure expected by persistPrimaNotaDraft
+  // Let's create the adapter/bundle structure:
+  const rows = (canonicalPayload.accounting?.rows || []).map((r, index) => ({
+    conto_id: r.accountId,
+    conto_codice: r.accountCode,
+    conto_descrizione: r.accountDescription,
+    descrizione_riga: r.description,
+    dare: r.debit,
+    avere: r.credit,
+    riga_numero: r.rowNumber || index + 1,
+  }))
+
+  const primarySubject = canonicalPayload.subjects?.find(s => s.role === 'primary') || {}
+
+  const draftBundle = {
+    pnPayload: {
+      societa_id: societaId,
+      esercizio: parseInt(canonicalPayload.company?.esercizioId || dataRegistrazione.slice(0, 4), 10),
+      data_registrazione: dataRegistrazione,
+      data_documento: canonicalPayload.document?.dataDocumento || dataRegistrazione,
+      numero_documento: canonicalPayload.document?.numeroDocumento || '',
+      causale_id: canonicalPayload.header?.causaleContabile?.id || '',
+      causale_codice: canonicalPayload.header?.causaleContabile?.codice || canonicalPayload.header?.causaleContabile?.code || '',
+      descrizione: canonicalPayload.header?.descrizione || '',
+      cliente_fornitore_id: primarySubject.anagraficaId || '',
+      cliente_fornitore_nome: primarySubject.denominazione || '',
+      totale_dare: canonicalPayload.header?.totals?.totaleDare || 0,
+      totale_avere: canonicalPayload.header?.totals?.totaleAvere || 0,
+      stato: 'confermata',
+      documento_import_id: documentId || null,
+    },
+    righePayload: rows,
+    header: {
+      societaId: societaId,
+      esercizioContabile: canonicalPayload.company?.esercizioId || dataRegistrazione.slice(0, 4),
+      dataRegistrazione: dataRegistrazione,
+      dataDocumento: canonicalPayload.document?.dataDocumento || dataRegistrazione,
+      causaleContabile: {
+        ...(canonicalPayload.header?.causaleContabile || {}),
+        id: canonicalPayload.header?.causaleContabile?.id || '',
+        codice: canonicalPayload.header?.causaleContabile?.codice || canonicalPayload.header?.causaleContabile?.code || '',
+        description: canonicalPayload.header?.causaleContabile?.description || canonicalPayload.header?.descrizione || '',
+      },
+      descrizioneGenerale: canonicalPayload.header?.descrizione || '',
+      clienteFornitoreId: primarySubject.anagraficaId || '',
+      clienteFornitoreNome: primarySubject.denominazione || '',
+      clienteFornitoreCodice: primarySubject.codiceFiscale || '',
+      clienteFornitorePartitaIva: primarySubject.partitaIva || '',
+    },
+    totals: {
+      totaleDare: canonicalPayload.header?.totals?.totaleDare || 0,
+      totaleAvere: canonicalPayload.header?.totals?.totaleAvere || 0,
+      differenza: 0,
+      isBalanced: true,
+    },
+    meta: {
+      operatorId: canonicalPayload.audit?.createdBy || 'sistema',
+      createdAt: canonicalPayload.audit?.createdAt || new Date().toISOString(),
+      behavior: {
+        code: canonicalPayload.header?.causaleContabile?.code || '',
+        showDocumentPanel: true,
+        showIvaPanel: canonicalPayload.vat?.enabled || false,
+        showPartitario: canonicalPayload.ledger?.enabled || false,
+        showRitenute: canonicalPayload.withholding?.enabled || false,
+      }
+    },
+    ivaDraft: {
+      active: canonicalPayload.vat?.enabled || false,
+      registroIva: canonicalPayload.vat?.registerType || '',
+      rows: (canonicalPayload.vat?.rows || []).map((r, index) => ({
+        riga: r.rowNumber || index + 1,
+        imponibile: r.imponibile,
+        iva: r.imposta,
+        aliquota: r.aliquota,
+        causaleIvaId: r.causaleIvaId || '',
+        causaleIvaLabel: r.causaleIva || '',
+        esigibilita: r.esigibilita || 'Immediata',
+      }))
+    },
+    partitarioDraft: {
+      active: canonicalPayload.ledger?.enabled || false,
+      mode: canonicalPayload.ledger?.mode || 'none',
+      accountId: canonicalPayload.ledger?.accountId || '',
+      soggettoId: canonicalPayload.ledger?.subjectId || '',
+      rows: (canonicalPayload.ledger?.rows || []).map((r, index) => ({
+        riga: r.rowNumber || index + 1,
+        importoOriginario: r.amount,
+        importoAperto: r.amount,
+        dataScadenza: r.dueDate,
+        numeroDocumento: r.documentRef,
+      }))
+    },
+    ritenutaDraft: {
+      active: canonicalPayload.withholding?.enabled || false,
+      rows: []
+    }
+  }
+
+  const persistResult = await persistPrimaNotaDraft({
+    db,
+    draft: draftBundle
+  })
+
+  if (persistResult.error) {
+    return {
+      success: false,
+      blockingReasons: [persistResult.error.message]
+    }
+  }
+
+  const primaNotaId = persistResult.data?.prima_nota_id || (persistResult.pn && persistResult.pn.id) || null
+
+  // 6. Aggiornamento stato documento
+  if (documentId) {
+    const { error: updateError } = await db
+      .from('documenti_import')
+      .update({ stato: 'processed', prima_nota_id: primaNotaId, processed_at: new Date().toISOString() })
+      .eq('id', documentId)
+    if (updateError) {
+      // rollback or warning? The requirements say: "aggiornare lo stato del documento importato/staging solo dopo salvataggio contabile riuscito; gestire errori e rollback logico applicativo in modo chiaro"
+      // Se fallisce l'aggiornamento dello stato, dovremmo idealmente cancellare la prima nota creata per rollback logico
+      if (primaNotaId) {
+        await db.from('ritenute_dacconto').delete().eq('prima_nota_id', primaNotaId)
+        await db.from('partitario').delete().eq('prima_nota_id', primaNotaId)
+        await db.from('registri_iva').delete().eq('prima_nota_id', primaNotaId)
+        await db.from('prima_nota_righe').delete().eq('prima_nota_id', primaNotaId)
+        await db.from('prima_nota').delete().eq('id', primaNotaId)
+      }
+      return { success: false, blockingReasons: [`Salvataggio contabile riuscito ma aggiornamento stato documento import fallito: ${updateError.message}. Eseguito rollback.`] }
+    }
+  }
+
+  // 7. Risultato
+  return {
+    success: true,
+    primaNotaId,
+    documentoId: documentId,
+    status: 'processed',
+    warnings: validationResult.warnings || [],
+    blockingReasons: []
+  }
+}
+
