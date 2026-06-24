@@ -8828,3 +8828,31 @@ I 5 file modificati elencati nella tabella sopra dovranno entrare interamente ne
 ### Prossimo Step
 Prompt n. 6 = Creazione del checkpoint 14B con backup zip e commit selettivo dei file descritti.
 
+## CHECKPOINT-FINALE-14B-IMPORT-COMMIT-WORKFLOW-CANONICO
+
+- **Riferimento**: Prompt n. 4, n. 5 e n. 6 (Fase 14B)
+- **Backup ZIP creato**: `fiscosim-checkpoint-fase-14b-import-commit-workflow-canonico-2026-06-24-2240.zip`
+- **Hash Commit Funzionale Principale**: `510b24f`
+- **Messaggio Commit**: `checkpoint: import contabilita commit workflow canonico`
+- **File Committati**:
+  * `REPORT/REPORT_CODEX.md`
+  * `src/modules/contabilita/data/contabilitaRepo.js`
+  * `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  * `src/modules/import_contabilita/index.jsx`
+  * `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+- **Conferma Commit Selettivo**: Sì, eseguito aggiungendo esplicitamente i file con `git add` singoli.
+- **Conferma nessun `git add .`**: Sì, confermato.
+- **Conferma ZIP escluso dal commit**: Sì, lo ZIP è presente solo a livello locale e non tracciato dal repository.
+- **Test e Build**:
+  * Unit Test Import: 🟢 **49 / 49 test superati**.
+  * Unit Test Generali: 🟢 **29 / 29 test superati**.
+  * Build: 🟢 **Successo** (vite build completato in 21.71s).
+- **Git Status Post Commit**:
+  ```text
+  ?? fiscosim-checkpoint-fase-14b-import-commit-workflow-canonico-2026-06-24-2240.zip
+  ```
+- **Nessuna Modifica Database / Infrastruttura**: Nessun SQL applicato, nessuna migration, nessuna modifica a env/auth/RLS/policy.
+- **Rischi Residui**: Nulli.
+- **Prossimo Step Consigliato**: Procedere con la **Fase 14C** (Risoluzione anagrafiche mancanti/da validare nell'Import).
+
+
