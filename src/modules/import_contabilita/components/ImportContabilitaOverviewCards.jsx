@@ -332,6 +332,13 @@ export function ImportContabilitaOverviewCards({
             small
             disabled={!anagraficheStats.total || anagraficheTipoFiltro === 'percipiente'}
           />
+          <ActionButton
+            label="Conferma tutti"
+            onClick={() => confirmAnagraficheDecisioni('all')}
+            kind="warning"
+            small
+            disabled={!anagraficheStats.total || anagraficheTipoFiltro === 'percipiente'}
+          />
           {ignoredOperationalRowsLength ? (
             <ActionButton
               label="Elimina ignorati"

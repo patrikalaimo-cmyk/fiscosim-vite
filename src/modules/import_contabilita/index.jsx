@@ -26,6 +26,20 @@ import {
   updateImportContabilitaPianoContoAnagrafica,
 } from './data/importContabilitaRepo.js'
 
+import {
+  getDefaultMastrinoForTipo as getDefaultMastrinoForTipoDomain,
+  getAllowedMastriniForTipo as getAllowedMastriniForTipoDomain,
+  isAllowedMastrinoForTipo as isAllowedMastrinoForTipoDomain,
+  findAnagraficaExistingAccount as findAnagraficaExistingAccountDomain,
+  validateAnagraficaDecision as validateAnagraficaDecisionDomain,
+  normalizeAnagraficaDecisionForRow as normalizeAnagraficaDecisionForRowDomain,
+  getDefaultAnagraficaDecision as getDefaultAnagraficaDecisionDomain,
+  mergeAnagraficaDecision as mergeAnagraficaDecisionDomain,
+  getAllowedExistingAccounts as getAllowedExistingAccountsDomain,
+  resolveAllowedAnagraficaAccountByCode as resolveAllowedAnagraficaAccountByCodeDomain,
+} from './domain/anagraficaValidation.js'
+
+
 const MONEY_FORMATTER = new Intl.NumberFormat('it-IT', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -1330,72 +1344,11 @@ function getAnagraficaRowKey(row, fallbackIndex = '') {
 }
 
 function getDefaultAnagraficaDecision(row, pianoContiList = []) {
-  const tipo = row?.tipoSuggerito === 'cliente' ? 'cliente' : 'fornitore'
-  const fallbackMastrino = tipo === 'cliente' ? '1.02.20' : '2.03.08'
-  const existingAccountCode = normalizeText(row?.matchedPianoContoCode || '')
-  const matchStrength = normalizeText(row?.matchStrength || '')
-  const isStrongMatch = matchStrength === 'strong'
-  const isWeakMatch = matchStrength === 'weak'
-  const hasIdentityData = Boolean(normalizeText([
-    row?.denominazione,
-    row?.partitaIva,
-    row?.codiceFiscale,
-  ].join(' ')))
-  const safeExistingAccountCode = getAllowedMastriniForTipo(tipo).some((item) => accountCodeBelongsToMastrino(existingAccountCode, item.codice)) ? existingAccountCode : ''
-  const strongMastrino = safeExistingAccountCode ? getMastrinoCodeForAccountCode(safeExistingAccountCode, tipo) : ''
-  const resolvedExistingAccount = safeExistingAccountCode
-    ? resolveAllowedAnagraficaAccountByCode({ matchedPianoContoCode: safeExistingAccountCode }, pianoContiList, tipo)
-    : null
-
-  if ((isStrongMatch || isWeakMatch) && resolvedExistingAccount) {
-    return {
-      decisionStatus: 'pending',
-      tipo,
-      accountMode: 'existing',
-      mastrino: strongMastrino || fallbackMastrino,
-      existingAccountId: normalizeText(resolvedExistingAccount.id || ''),
-      existingAccountCode: normalizeText(resolvedExistingAccount.codice || safeExistingAccountCode),
-      updatedAt: '',
-    }
-  }
-
-  if (isWeakMatch) {
-    return {
-      decisionStatus: 'pending',
-      tipo,
-      accountMode: 'choose',
-      mastrino: fallbackMastrino,
-      existingAccountId: '',
-      existingAccountCode: '',
-      updatedAt: '',
-    }
-  }
-
-  if (!hasIdentityData) {
-    return {
-      decisionStatus: 'pending',
-      tipo,
-      accountMode: 'choose',
-      mastrino: fallbackMastrino,
-      existingAccountId: '',
-      existingAccountCode: '',
-      updatedAt: '',
-    }
-  }
-
-  return {
-    decisionStatus: 'pending',
-    tipo,
-    accountMode: 'new',
-    mastrino: fallbackMastrino,
-    existingAccountId: '',
-    existingAccountCode: '',
-    updatedAt: '',
-  }
+  return getDefaultAnagraficaDecisionDomain(row, pianoContiList)
 }
 
 function getDefaultMastrinoForTipo(tipo) {
-  return tipo === 'cliente' ? '1.02.20' : '2.03.08'
+  return getDefaultMastrinoForTipoDomain(tipo)
 }
 
 const ANAGRAFICA_MASTRINI_BY_TIPO = Object.freeze({
@@ -1411,11 +1364,11 @@ const ANAGRAFICA_MASTRINI_BY_TIPO = Object.freeze({
 })
 
 function getAllowedMastriniForTipo(tipo) {
-  return ANAGRAFICA_MASTRINI_BY_TIPO[tipo === 'cliente' ? 'cliente' : 'fornitore'] || ANAGRAFICA_MASTRINI_BY_TIPO.fornitore
+  return getAllowedMastriniForTipoDomain(tipo)
 }
 
 function getAllowedMastrinoCodesForTipo(tipo) {
-  return getAllowedMastriniForTipo(tipo).map((item) => item.codice)
+  return getAllowedMastrinoCodesForTipoDomain(tipo)
 }
 
 function buildAnagraficaAllowedAccountsIndex(pianoContiList) {
@@ -1601,8 +1554,7 @@ function getCounterpartyDisplayInfo(counterparty, role = 'fornitore') {
 }
 
 function isAllowedMastrinoForTipo(tipo, mastrino) {
-  const normalizedMastrino = normalizeText(mastrino)
-  return getAllowedMastriniForTipo(tipo).some((item) => item.codice === normalizedMastrino)
+  return isAllowedMastrinoForTipoDomain(tipo, mastrino)
 }
 
 function filterAllowedExistingAccounts(tipo, pianoContiList, searchTerm = '', selectedMastrino = '') {
@@ -1610,47 +1562,7 @@ function filterAllowedExistingAccounts(tipo, pianoContiList, searchTerm = '', se
 }
 
 function getAllowedExistingAccounts(tipo, pianoContiList, searchTerm = '', selectedMastrino = '') {
-  const normalizedTipo = tipo === 'cliente' ? 'cliente' : 'fornitore'
-  const allowedPrefixes = getAllowedMastrinoCodesForTipo(normalizedTipo)
-  const normalizedSearch = normalizeText(searchTerm).toLowerCase()
-  const normalizedSelectedMastrino = normalizeText(selectedMastrino)
-  const rows = Array.isArray(pianoContiList) ? pianoContiList : []
-
-  const filtered = rows.filter((conto) => {
-    const code = normalizeText(conto?.codice)
-    if (!code) return false
-    if (!allowedPrefixes.some((prefix) => accountCodeBelongsToMastrino(code, prefix))) return false
-    if (normalizedSelectedMastrino && isAllowedMastrinoForTipo(normalizedTipo, normalizedSelectedMastrino)) {
-      if (!accountCodeBelongsToMastrino(code, normalizedSelectedMastrino)) return false
-    }
-
-    if (!normalizedSearch) return true
-
-    const haystack = [
-      conto?.codice,
-      conto?.descrizione,
-      conto?.partitaIva,
-      conto?.anagraficaPiva,
-      conto?.codiceFiscale,
-      conto?.anagraficaCf,
-      formatAnagraficaAccountOption(conto),
-    ]
-      .map((value) => normalizeText(value))
-      .join(' ')
-      .toLowerCase()
-
-    return haystack.includes(normalizedSearch)
-  })
-
-  return filtered
-    .sort((left, right) => {
-      const leftPreferred = (normalizedTipo === 'fornitore' && left?.isFornitore === true) || (normalizedTipo === 'cliente' && left?.isCliente === true) ? 1 : 0
-      const rightPreferred = (normalizedTipo === 'fornitore' && right?.isFornitore === true) || (normalizedTipo === 'cliente' && right?.isCliente === true) ? 1 : 0
-      if (rightPreferred !== leftPreferred) return rightPreferred - leftPreferred
-      const leftCode = normalizeAccountCodeDigits(left?.codice)
-      const rightCode = normalizeAccountCodeDigits(right?.codice)
-      return leftCode.localeCompare(rightCode)
-    })
+  return getAllowedExistingAccountsDomain(tipo, pianoContiList, searchTerm, selectedMastrino)
 }
 
 function getImportContabilitaCounterpartyKey(row) {
@@ -1894,219 +1806,23 @@ function getAnagraficaDecisionStateTone(row, decision, pianoContiList) {
 }
 
 function validateAnagraficaDecision(row, decision, pianoContiList) {
-  const normalized = normalizeAnagraficaDecisionForRow(row, decision, pianoContiList)
-  const identityData = normalizeText([
-    row?.denominazione,
-    row?.partitaIva,
-    row?.codiceFiscale,
-  ].join(' '))
-  const reasons = []
-  const warnings = []
-
-  if (normalized.accountMode === 'none') {
-    return {
-      status: 'ignored',
-      label: 'Ignorata',
-      blockingReasons: [],
-      warnings,
-      normalized,
-    }
-  }
-
-  if (normalized.accountMode === 'choose' || !normalized.accountMode) {
-    reasons.push('Seleziona azione')
-    return {
-      status: 'incomplete',
-      label: 'Incompleta',
-      blockingReasons: reasons,
-      warnings,
-      normalized,
-    }
-  }
-
-  if (!normalized.tipo) {
-    reasons.push('Seleziona tipo soggetto')
-  }
-
-  if (!isAllowedMastrinoForTipo(normalized.tipo, normalized.mastrino)) {
-    reasons.push('Mastrino non valido')
-  }
-
-  if (normalized.accountMode === 'existing') {
-    const selectedAccount = findAnagraficaExistingAccount(
-      {
-        decision: normalized,
-        matchedPianoContoCode: normalized.existingAccountCode || row?.matchedPianoContoCode || '',
-      },
-      Array.isArray(pianoContiList) ? pianoContiList : [],
-    )
-    const selectedMastrino = selectedAccount ? getMastrinoCodeForAccountCode(selectedAccount.codice || '', normalized.tipo) : ''
-
-    if (!normalizeText(normalized.existingAccountId) && !normalizeText(normalized.existingAccountCode)) {
-      reasons.push('Seleziona conto esistente')
-    } else if (!selectedAccount) {
-      reasons.push('Conto fuori mastrini ammessi')
-    } else if (!isAllowedMastrinoForTipo(normalized.tipo, selectedMastrino)) {
-      reasons.push('Conto fuori mastrini ammessi')
-    }
-
-    if (reasons.length) {
-      const invalid = reasons.some((reason) => reason === 'Conto fuori mastrini ammessi')
-      return {
-        status: invalid ? 'invalid' : 'incomplete',
-        label: invalid ? 'Errore' : 'Incompleta',
-        blockingReasons: reasons,
-        warnings,
-        normalized,
-      }
-    }
-
-    if (normalized.decisionStatus === 'confirmed') {
-      warnings.push('Conto esistente confermato localmente')
-    } else {
-      warnings.push('Conto esistente da confermare localmente')
-    }
-    return {
-      status: 'linked',
-      label: 'Conto esistente',
-      blockingReasons: [],
-      warnings,
-      normalized,
-    }
-  }
-
-  if (!identityData) {
-    reasons.push('Dati anagrafici insufficienti')
-  }
-
-  if (reasons.length) {
-    const invalid = reasons.includes('Mastrino non valido')
-    return {
-      status: invalid ? 'invalid' : 'incomplete',
-      label: invalid ? 'Errore' : 'Incompleta',
-      blockingReasons: reasons,
-      warnings,
-      normalized,
-    }
-  }
-
-  if (normalized.decisionStatus === 'confirmed') {
-    warnings.push('Scelta confermata localmente')
-  }
-
-  return {
-    status: 'ready',
-    label: 'Pronta',
-    blockingReasons: [],
-    warnings,
-    normalized,
-  }
+  return validateAnagraficaDecisionDomain(row, decision, pianoContiList)
 }
 
 function normalizeAnagraficaDecisionForRow(row, storedDecision, pianoContiList) {
-  const defaults = getDefaultAnagraficaDecision(row, pianoContiList)
-  const decision = {
-    ...defaults,
-    ...(storedDecision && typeof storedDecision === 'object' ? storedDecision : {}),
-  }
-
-  decision.tipo = decision.tipo === 'cliente' ? 'cliente' : 'fornitore'
-
-  const allowedMastrini = getAllowedMastriniForTipo(decision.tipo)
-  const requestedMastrino = normalizeText(decision.mastrino)
-  const allowedMastrinoCodes = allowedMastrini.map((item) => item.codice)
-  if (!requestedMastrino || !allowedMastrinoCodes.includes(requestedMastrino)) {
-    decision.mastrino = defaults.mastrino
-  } else {
-    decision.mastrino = requestedMastrino
-  }
-
-  decision.accountMode = decision.accountMode === 'existing'
-    ? 'existing'
-    : decision.accountMode === 'none'
-      ? 'none'
-      : decision.accountMode === 'choose'
-        ? 'choose'
-        : 'new'
-
-  const allowedExistingAccounts = getAllowedExistingAccounts(decision.tipo, pianoContiList, '', decision.mastrino)
-  const selectedAccount = decision.accountMode === 'existing'
-    ? findAnagraficaExistingAccount(
-      {
-        decision,
-        matchedPianoContoCode: decision.existingAccountCode || row?.matchedPianoContoCode || '',
-      },
-      allowedExistingAccounts,
-    )
-    : null
-
-  if (decision.accountMode === 'existing' && selectedAccount) {
-    decision.existingAccountId = normalizeText(selectedAccount.id || '')
-    decision.existingAccountCode = normalizeText(selectedAccount.codice || '')
-    const selectedMastrino = getMastrinoCodeForAccountCode(selectedAccount.codice || '', decision.tipo)
-    if (selectedMastrino) {
-      decision.mastrino = selectedMastrino
-    }
-  } else {
-    if (decision.accountMode === 'existing') {
-      decision.existingAccountId = normalizeText(decision.existingAccountId || '')
-      decision.existingAccountCode = normalizeText(decision.existingAccountCode || row?.matchedPianoContoCode || '')
-    } else {
-      decision.existingAccountId = ''
-      decision.existingAccountCode = ''
-    }
-  }
-
-  if (decision.accountMode === 'none') {
-    decision.decisionStatus = 'ignored'
-  } else if (decision.accountMode === 'choose') {
-    decision.decisionStatus = decision.decisionStatus === 'ignored' ? 'ignored' : 'pending'
-  } else {
-    decision.decisionStatus = decision.decisionStatus === 'confirmed'
-      ? 'confirmed'
-      : decision.decisionStatus === 'ignored'
-        ? 'ignored'
-        : 'pending'
-  }
-
-  decision.updatedAt = normalizeText(decision.updatedAt || '')
-  decision.hiddenFromAnagrafiche = Boolean(decision.hiddenFromAnagrafiche)
-  decision.accountDataUpdatedAt = normalizeText(decision.accountDataUpdatedAt || '')
-  return decision
+  return normalizeAnagraficaDecisionForRowDomain(row, storedDecision, pianoContiList)
 }
 
 function mergeAnagraficaDecision(row, storedDecision, pianoContiList = []) {
-  return normalizeAnagraficaDecisionForRow(row, storedDecision, pianoContiList)
+  return mergeAnagraficaDecisionDomain(row, storedDecision, pianoContiList)
 }
 
 function findAnagraficaExistingAccount(row, pianoContiList) {
-  const decision = row?.decision || {}
-  const accountId = normalizeText(decision.existingAccountId)
-  const accountCode = normalizeText(decision.existingAccountCode || row?.matchedPianoContoCode)
-  const accountDigits = normalizeAccountCodeDigits(accountCode)
-  const list = Array.isArray(pianoContiList) ? pianoContiList : []
-
-  if (accountId) {
-    const byId = list.find((conto) => normalizeText(conto?.id) === accountId)
-    if (byId) return byId
-  }
-
-  if (accountDigits) {
-    const byCode = list.find((conto) => normalizeAccountCodeDigits(conto?.codice) === accountDigits)
-    if (byCode) return byCode
-  }
-
-  return null
+  return findAnagraficaExistingAccountDomain(row, pianoContiList)
 }
 
 function resolveAllowedAnagraficaAccountByCode(row, pianoContiList, tipo) {
-  const code = normalizeText(row?.matchedPianoContoCode || row?.existingAccountCode || '')
-  if (!code) return null
-  const mastrino = getMastrinoCodeForAccountCode(code, tipo)
-  if (!isAllowedMastrinoForTipo(tipo, mastrino)) return null
-  const allowedAccounts = getAllowedExistingAccounts(tipo, pianoContiList, '', mastrino)
-  const normalizedDigits = normalizeAccountCodeDigits(code)
-  return allowedAccounts.find((conto) => normalizeAccountCodeDigits(conto?.codice) === normalizedDigits) || null
+  return resolveAllowedAnagraficaAccountByCodeDomain(row, pianoContiList, tipo)
 }
 
 function getCounterpartyDataForAnagraficaRow(row) {
@@ -3821,6 +3537,29 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const confirmAnagraficheDecisioni = (mode = 'complete') => {
     const rows = Array.isArray(anagraficheBase) ? anagraficheBase : []
     if (!rows.length) return
+
+    if (mode === 'all') {
+      let warningsCount = 0
+      let errorsCount = 0
+      rows.forEach((row) => {
+        const key = normalizeAnagraficaDecisionKey(row?.decisionKey || row?.id)
+        if (!key) return
+        const decision = anagraficheDecisioniByKey ? anagraficheDecisioniByKey[key] || null : null
+        const validation = validateAnagraficaDecision(row, decision, pianoConti)
+        if (validation.warnings?.length > 0) {
+          warningsCount++
+        }
+        if (validation.status === 'incomplete' || validation.status === 'invalid') {
+          errorsCount++
+        }
+      })
+      if (warningsCount > 0 || errorsCount > 0) {
+        const msg = `Attenzione: ci sono ${warningsCount} anagrafiche con warning e ${errorsCount} incomplete/con errori. Vuoi procedere a confermare le sole anagrafiche pronte?`
+        if (typeof window !== 'undefined' && !window.confirm(msg)) {
+          return
+        }
+      }
+    }
 
     setAnagraficheDecisioniByKey((current) => {
       const next = {
