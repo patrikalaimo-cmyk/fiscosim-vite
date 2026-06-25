@@ -86,6 +86,7 @@ async function fetchPagedRows({
   select,
   orderBy = 'created_at',
   ascending = false,
+  limit,
 }) {
   const sid = normalizeSocietaId(societaId)
   if (!sid) return []
@@ -95,7 +96,10 @@ async function fetchPagedRows({
   let from = 0
 
   while (true) {
-    const to = from + PAGE_SIZE - 1
+    const nextLimit = limit ? Math.min(PAGE_SIZE, limit - allRows.length) : PAGE_SIZE
+    if (nextLimit <= 0) break
+
+    const to = from + nextLimit - 1
     const { data, error } = await sb
       .from(table)
       .select(select)
@@ -107,8 +111,8 @@ async function fetchPagedRows({
 
     const chunk = Array.isArray(data) ? data : []
     allRows.push(...chunk)
-    if (chunk.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+    if (chunk.length < nextLimit) break
+    from += nextLimit
   }
 
   return allRows
@@ -147,25 +151,52 @@ export async function loadImportContabilitaDedupCandidatesBySocieta(societaId) {
     }
   }
 
+  // DEDUP LIMIT: 500 righe per tabella.
+  // Motivo riduzione limit: la query su documenti_import era lenta senza indice su
+  // (societa_destinazione_id, created_at). Ridotto a 500 per limitare il carico.
+  //
+  // Schema fisico documenti_import (unico riferimento: migration 20260412090500):
+  //   id, societa_id, societa_destinazione_id, filename, file_path, file_url,
+  //   mime_type, file_size, tipo_documento, stato, metadata, created_at, updated_at
+  //   + colonne access-scope: tenant_id, company_id, created_by, owner_user_id,
+  //     visibility, locked_by, locked_at
+  //
+  // COLONNE NON ESISTENTI in documenti_import (errore confermato da Supabase):
+  //   numero_documento, data_documento, imponibile, iva, totale
+  // Questi dati stanno in ai_raw_response (JSONB) per i record di staging.
+  //
+  // Select corretto: usa solo colonne fisiche reali + ai_raw_response per i token dedup.
+  const DEDUP_LIMIT = 500
+
+  const _tStart = Date.now()
   const [stagingRows, accountingRows] = await Promise.all([
     fetchPagedRows({
       table: 'documenti_import',
       societaColumn: 'societa_destinazione_id',
       societaId: sid,
+      // ATTENZIONE SCHEMA: solo colonne fisicamente esistenti in documenti_import.
+      // numero_documento, data_documento, totale NON esistono come colonne fisiche.
+      // I dati dedup (numero/data/tipo/soggetto) stanno in ai_raw_response (JSONB).
       select: 'id,filename,stato,created_at,ai_raw_response',
       orderBy: 'created_at',
       ascending: false,
+      limit: DEDUP_LIMIT,
     }),
     fetchPagedRows({
       table: 'documenti_contabilita',
       societaColumn: 'societa_id',
       societaId: sid,
+      // documenti_contabilita ha colonne fisiche reali: numero_documento, data_documento,
+      // tipo_documento, soggetto_*, validation_status, workflow_status, totale, ecc.
       select:
-        'id,numero_documento,data_documento,tipo_documento,soggetto_denominazione,soggetto_piva,soggetto_cf,validation_status,workflow_status,conto_id,imponibile,iva,totale,registered_at,prima_nota_id,created_at',
+        'id,numero_documento,data_documento,tipo_documento,soggetto_denominazione,soggetto_piva,soggetto_cf,validation_status,workflow_status,totale,registered_at,prima_nota_id,created_at',
       orderBy: 'created_at',
       ascending: false,
+      limit: DEDUP_LIMIT,
     }),
   ])
+  const _tEnd = Date.now()
+  console.log(`[DIAG_IMPORT] loadImportContabilitaDedupCandidatesBySocieta: durata=${_tEnd - _tStart}ms stagingRows=${stagingRows.length} accountingRows=${accountingRows.length} limit=${DEDUP_LIMIT}`)
 
   return {
     stagingRows: stagingRows.map(normalizeDedupCandidateRow),

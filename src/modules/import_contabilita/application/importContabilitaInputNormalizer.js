@@ -286,7 +286,7 @@ async function normalizeZipInput(fileLike, options = {}) {
       const baseName = getBaseName(entryName)
       const lowerName = baseName.toLowerCase()
 
-      if (baseName.startsWith('.') || lowerName === 'desktop.ini' || lowerName === 'thumbs.db' || entryName.includes('__MACOSX')) {
+      if (baseName.startsWith('.') || lowerName === 'desktop.ini' || lowerName === 'thumbs.db' || entryName.includes('__MACOSX') || lowerName.endsWith('_metadati.xml') || lowerName.includes('metadati') || (!lowerName.endsWith('.xml') && !lowerName.endsWith('.p7m'))) {
         recordZipDiscard(discardMap, 'non_invoice_attachment')
         continue
       }

@@ -749,3 +749,61 @@ test('XML non FatturaPA', () => {
   const errorCodes = parsed.errors.map((e) => e.code)
   assert.ok(errorCodes.includes('not_fatturapa') || errorCodes.includes('root_unexpected'))
 })
+
+test('XML passivo reale con namespace, DatiRiepilogo multipli e dati documento', () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  <p:FatturaElettronica xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+    <FatturaElettronicaBody>
+      <DatiGenerali>
+        <DatiGeneraliDocumento>
+          <TipoDocumento>TD01</TipoDocumento>
+          <Data>2026-06-24</Data>
+          <Numero>10023/2026</Numero>
+          <ImportoTotaleDocumento>305.00</ImportoTotaleDocumento>
+        </DatiGeneraliDocumento>
+      </DatiGenerali>
+      <CedentePrestatore>
+        <DatiAnagrafici>
+          <Anagrafica><Denominazione>Fornitore Esterno S.p.A.</Denominazione></Anagrafica>
+          <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>09876543210</IdCodice></IdFiscaleIVA>
+        </DatiAnagrafici>
+      </CedentePrestatore>
+      <CessionarioCommittente>
+        <DatiAnagrafici>
+          <Anagrafica><Denominazione>SIRIA SRL</Denominazione></Anagrafica>
+          <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>01234567899</IdCodice></IdFiscaleIVA>
+        </DatiAnagrafici>
+      </CessionarioCommittente>
+      <DatiBeniServizi>
+        <DatiRiepilogo>
+          <AliquotaIVA>22.00</AliquotaIVA>
+          <ImponibileImporto>200.00</ImponibileImporto>
+          <Imposta>44.00</Imposta>
+        </DatiRiepilogo>
+        <DatiRiepilogo>
+          <AliquotaIVA>10.00</AliquotaIVA>
+          <ImponibileImporto>50.00</ImponibileImporto>
+          <Imposta>5.00</Imposta>
+        </DatiRiepilogo>
+        <DatiRiepilogo>
+          <AliquotaIVA>4.00</AliquotaIVA>
+          <ImponibileImporto>10.00</ImponibileImporto>
+          <Imposta>0.40</Imposta>
+        </DatiRiepilogo>
+      </DatiBeniServizi>
+    </FatturaElettronicaBody>
+  </p:FatturaElettronica>`
+
+  const parsed = pickSummary(parseFatturaXml(xml, { filename: 'passiva_multi_riepilogo.xml' }))
+
+  assert.equal(parsed.tipoDocumento, 'TD01')
+  assert.equal(parsed.dataDocumento, '2026-06-24')
+  assert.equal(parsed.numeroDocumento, '10023/2026')
+  assert.equal(parsed.fornitore?.denominazione, 'Fornitore Esterno S.p.A.')
+  assert.equal(parsed.fornitore?.partitaIva, '09876543210')
+  assert.equal(parsed.cliente?.denominazione, 'SIRIA SRL')
+  assert.equal(parsed.imponibile, 260)
+  assert.equal(parsed.iva, 49.4)
+  assert.equal(parsed.totale, 305)
+})
+

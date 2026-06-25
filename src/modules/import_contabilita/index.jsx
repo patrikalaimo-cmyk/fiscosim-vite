@@ -1732,6 +1732,8 @@ const AnagraficaExistingAccountPicker = memo(function AnagraficaExistingAccountP
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
+  const inputRef = useRef(null)
 
   useEffect(() => {
     if (disabled) {
@@ -1753,6 +1755,29 @@ const AnagraficaExistingAccountPicker = memo(function AnagraficaExistingAccountP
 
     return () => window.clearTimeout(timer)
   }, [isOpen, query])
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      const updateCoords = () => {
+        if (inputRef.current) {
+          const rect = inputRef.current.getBoundingClientRect()
+          setCoords({
+            top: rect.bottom,
+            left: rect.left,
+            width: rect.width,
+          })
+        }
+      }
+      updateCoords()
+      window.addEventListener('resize', updateCoords)
+      window.addEventListener('scroll', updateCoords, true)
+      return () => {
+        window.removeEventListener('resize', updateCoords)
+        window.removeEventListener('scroll', updateCoords, true)
+      }
+    }
+    return undefined
+  }, [isOpen])
 
   const normalizedQuery = normalizeText(debouncedQuery).toLowerCase()
   const selectedValueLabel = selectedLabel || normalizeText(valueCode) || normalizeText(valueId) || ''
@@ -1778,6 +1803,7 @@ const AnagraficaExistingAccountPicker = memo(function AnagraficaExistingAccountP
   return (
     <div data-row-key={rowKey} style={{ position: 'relative' }}>
       <input
+        ref={inputRef}
         type="text"
         value={displayValue}
         placeholder={selectedValueLabel || 'Seleziona conto esistente'}
@@ -1802,7 +1828,7 @@ const AnagraficaExistingAccountPicker = memo(function AnagraficaExistingAccountP
             setIsOpen(false)
             setQuery('')
             setDebouncedQuery('')
-          }, 120)
+          }, 150)
         }}
         style={{ width: '100%', border: '1px solid rgba(124,157,202,.18)', borderRadius: 8, background: 'rgba(255,255,255,.03)', color: 'var(--tx)', padding: '.18rem .24rem', fontSize: '.69rem' }}
       />
@@ -1811,8 +1837,8 @@ const AnagraficaExistingAccountPicker = memo(function AnagraficaExistingAccountP
           Selezionato: {selectedValueLabel}
         </div>
       ) : null}
-      {isOpen ? (
-        <div style={{ position: 'absolute', top: 'calc(100% + .1rem)', left: 0, right: 0, zIndex: 12, maxHeight: 220, overflow: 'auto', borderRadius: 10, border: '1px solid rgba(124,157,202,.18)', background: 'rgba(12,16,24,.98)', boxShadow: '0 10px 24px rgba(0,0,0,.24)' }}>
+      {isOpen ? createPortal(
+        <div style={{ position: 'fixed', top: coords.top + 4, left: coords.left, width: coords.width || 280, zIndex: 99999, maxHeight: 220, overflow: 'auto', borderRadius: 10, border: '1px solid rgba(124,157,202,.18)', background: 'rgba(12,16,24,.98)', boxShadow: '0 10px 24px rgba(0,0,0,.24)' }}>
           <div style={{ padding: '.24rem .34rem', fontSize: '.56rem', color: 'var(--mu)', borderBottom: '1px solid rgba(124,157,202,.08)' }}>
             {accountMessage || 'Digita almeno 2 caratteri per cercare'}
           </div>
@@ -1843,7 +1869,8 @@ const AnagraficaExistingAccountPicker = memo(function AnagraficaExistingAccountP
               {accountMessage || 'Nessun conto trovato nei mastrini ammessi'}
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   )

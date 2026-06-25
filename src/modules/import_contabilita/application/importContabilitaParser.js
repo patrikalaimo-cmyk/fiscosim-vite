@@ -306,9 +306,10 @@ export function parseFatturaXml(xmlString, options = {}) {
     pushIssue(parsed.errors, 'root_unexpected', `Root XML inatteso: ${rootName}.`)
   }
 
-  parsed.tipoDocumento = normalizeWhitespace(extractTextTag(xml, 'TipoDocumento'))
-  parsed.dataDocumento = normalizeDate(extractTextTag(xml, 'Data'))
-  parsed.numeroDocumento = normalizeWhitespace(extractTextTag(xml, 'Numero'))
+  const datiGeneraliBlock = extractTagMatch(xml, 'DatiGeneraliDocumento') || extractTagMatch(xml, 'DatiGenerali') || xml
+  parsed.tipoDocumento = normalizeWhitespace(extractTextTag(datiGeneraliBlock, 'TipoDocumento'))
+  parsed.dataDocumento = normalizeDate(extractTextTag(datiGeneraliBlock, 'Data'))
+  parsed.numeroDocumento = normalizeWhitespace(extractTextTag(datiGeneraliBlock, 'Numero'))
 
   const causaleText = extractTextTag(xml, 'Causale')
   const fornitoreBlock = extractTagMatch(xml, 'CedentePrestatore')
@@ -320,7 +321,7 @@ export function parseFatturaXml(xmlString, options = {}) {
   parsed.ivaRows = parseIvaRows(xml, parsed.warnings)
   finalizeNumbers(parsed)
 
-  const totaleDocumento = normalizeNumber(extractTextTag(xml, 'ImportoTotaleDocumento'))
+  const totaleDocumento = normalizeNumber(extractTextTag(datiGeneraliBlock, 'ImportoTotaleDocumento'))
   parsed.totale = totaleDocumento || parsed.imponibile + parsed.iva
 
   buildFlags(xml, parsed, causaleText)

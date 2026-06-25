@@ -359,6 +359,12 @@ function computeReportTotals(items) {
   )
 }
 
+// Yield control to the event loop to avoid blocking the main thread during large batch processing.
+// This is critical to prevent Supabase connection timeouts when parsing hundreds of XML files.
+function yieldToEventLoop() {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 export async function runImportWorkflow(files = [], options = {}) {
   const list = Array.isArray(files) ? files : []
   if (!list.length) {
@@ -376,28 +382,71 @@ export async function runImportWorkflow(files = [], options = {}) {
 
   const batchId = makeBatchId(options)
   const startedAt = new Date().toISOString()
+  const _t0 = Date.now()
+  console.log(`[DIAG_IMPORT] === runImportWorkflow START === batch=${batchId} files=${list.length} societaId=${options.societaId || 'none'}`)
+
+  // ── FASE 1: zip_open_start / file_filter_start / zip_open_end ──────────────
+  const _tZipStart = Date.now()
+  console.log(`[DIAG_IMPORT] FASE zip_open_start: t=0ms inputFiles=${list.length}`)
   const inputPreparation = await normalizeImportContabilitaInputFiles(list, options)
+  const _tZipEnd = Date.now()
   const preparedFiles = Array.isArray(inputPreparation.preparedFiles) ? inputPreparation.preparedFiles : []
+  console.log(`[DIAG_IMPORT] FASE zip_open_end: durata=${_tZipEnd - _tZipStart}ms preparedXml=${preparedFiles.length} scartati=${inputPreparation.discardedFilesCount} ragioniScarto=${JSON.stringify(inputPreparation.discardedReasons?.map(r => `${r.code}:${r.count}`) || [])}`)
+
+  // ── FASE 2: xml_parse_start ─────────────────────────────────────────────────
+  const _tParseStart = Date.now()
+  console.log(`[DIAG_IMPORT] FASE xml_parse_start: filesDaParsare=${preparedFiles.length}`)
   const parsedDocs = []
 
-  for (const fileLike of preparedFiles) {
-    try {
-      const parsed = await parseFatturaFile(fileLike)
-      parsedDocs.push({
-        ...parsed,
-        filename: normalizeText(fileLike?.name || parsed?.filename || ''),
-        sourceHash: normalizeText(parsed?.sourceHash || options.sourceHash || ''),
-      })
-    } catch (error) {
-      parsedDocs.push(createParseErrorParsedDoc(fileLike, error, options))
+  // Parse in chunks of PARSE_CHUNK_SIZE to yield between batches and avoid blocking
+  // the main thread for hundreds of ms, which causes Supabase to timeout.
+  const PARSE_CHUNK_SIZE = 50
+  let parseErrors = 0
+  for (let i = 0; i < preparedFiles.length; i += PARSE_CHUNK_SIZE) {
+    const chunk = preparedFiles.slice(i, i + PARSE_CHUNK_SIZE)
+    for (const fileLike of chunk) {
+      try {
+        const parsed = await parseFatturaFile(fileLike)
+        parsedDocs.push({
+          ...parsed,
+          filename: normalizeText(fileLike?.name || parsed?.filename || ''),
+          sourceHash: normalizeText(parsed?.sourceHash || options.sourceHash || ''),
+        })
+      } catch (error) {
+        parseErrors += 1
+        parsedDocs.push(createParseErrorParsedDoc(fileLike, error, options))
+      }
+    }
+    // Yield every PARSE_CHUNK_SIZE files so the event loop can process other tasks
+    // (e.g. keep Supabase connection alive, respond to browser events)
+    if (i + PARSE_CHUNK_SIZE < preparedFiles.length) {
+      await yieldToEventLoop()
     }
   }
 
-  const dedupCandidates = options.dedupCandidates
-    || (options.societaId
-      ? await loadImportContabilitaDedupCandidatesBySocieta(options.societaId)
-      : { stagingRows: [], accountingRows: [] })
+  const _tParseEnd = Date.now()
+  console.log(`[DIAG_IMPORT] FASE xml_parse_end: durata=${_tParseEnd - _tParseStart}ms parsedDocs=${parsedDocs.length} erroriParsing=${parseErrors}`)
 
+  // ── FASE 3: dedup_candidates_start ─────────────────────────────────────────
+  const _tDedupStart = Date.now()
+  console.log(`[DIAG_IMPORT] FASE dedup_candidates_start: societaId=${options.societaId || 'none'} tabelle=[documenti_import,documenti_contabilita] limit=500`)
+  let dedupCandidates
+  try {
+    dedupCandidates = options.dedupCandidates
+      || (options.societaId
+        ? await loadImportContabilitaDedupCandidatesBySocieta(options.societaId)
+        : { stagingRows: [], accountingRows: [] })
+  } catch (dedupError) {
+    const _tDedupErr = Date.now()
+    console.error(`[DIAG_IMPORT] FASE dedup_candidates_ERROR: durata=${_tDedupErr - _tDedupStart}ms errore="${dedupError?.message}" code=${dedupError?.code} details=${dedupError?.details} hint=${dedupError?.hint}`)
+    throw dedupError
+  }
+  const _tDedupEnd = Date.now()
+  console.log(`[DIAG_IMPORT] FASE dedup_candidates_end: durata=${_tDedupEnd - _tDedupStart}ms stagingCandidates=${dedupCandidates?.stagingRows?.length || 0} accountingCandidates=${dedupCandidates?.accountingRows?.length || 0}`)
+
+  // ── FASE 4: staging_build_start ─────────────────────────────────────────────
+  const _tBuildStart = Date.now()
+  console.log(`[DIAG_IMPORT] FASE staging_build_start: parsedDocs=${parsedDocs.length}`)
   const activeStagingByKey = new Map()
   const deletedStagingByKey = new Map()
   for (const row of Array.isArray(dedupCandidates?.stagingRows) ? dedupCandidates.stagingRows : []) {
@@ -448,6 +497,7 @@ export async function runImportWorkflow(files = [], options = {}) {
   const batchSeenKeys = new Set()
   const classifiedDocs = parsedDocs.map((parsedDoc) => buildClassifiedParsedDoc(parsedDoc, lookup, batchSeenKeys))
   const importableClassifiedDocs = classifiedDocs.filter((item) => item.classification === 'importable')
+
   const stagingRows = importableClassifiedDocs.map((item, index) =>
     buildStagingRow(item.parsedDoc, {
       batchId,
@@ -461,6 +511,8 @@ export async function runImportWorkflow(files = [], options = {}) {
     startedAt,
     finishedAt: new Date().toISOString(),
   })
+  const _tBuildEnd = Date.now()
+  console.log(`[DIAG_IMPORT] FASE staging_build_end: durata=${_tBuildEnd - _tBuildStart}ms stagingRows=${stagingRows.length} duplicatiStaging=${classifiedDocs.filter(d => d.classification === 'duplicateInStaging').length} duplicatiContabilita=${classifiedDocs.filter(d => d.classification === 'duplicateInAccounting').length}`)
 
   const reportItemsByKey = new Map()
   for (const item of Array.isArray(baseReport.items) ? baseReport.items : []) {
@@ -509,6 +561,8 @@ export async function runImportWorkflow(files = [], options = {}) {
   const reportTotals = computeReportTotals(reportItems)
 
   const finishedAt = new Date().toISOString()
+  const _tTotal = Date.now() - _t0
+  console.log(`[DIAG_IMPORT] === runImportWorkflow END === durataTotak=${_tTotal}ms importabili=${reportTotals.imported} bloccati=${reportTotals.blocked} avvertimenti=${reportTotals.warnings} errori=${reportTotals.errors}`)
 
   return {
     ok: true,

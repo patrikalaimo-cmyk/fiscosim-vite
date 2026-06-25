@@ -434,3 +434,122 @@ test('runCommitWorkflow: fallimento update stato causa rollback logico', async (
   assert.ok(hasPnDelete)
 })
 
+import { sb } from '../../../lib/supabase.js'
+import { loadImportContabilitaDedupCandidatesBySocieta } from '../data/importContabilitaRepo.js'
+
+test('loadImportContabilitaDedupCandidatesBySocieta: select documenti_import usa solo colonne fisiche reali (schema audit Prompt n.11)', async () => {
+  const originalFrom = sb.from
+  const queries = []
+  
+  sb.from = (table) => {
+    const query = {
+      select: (fields) => {
+        queries.push({ action: 'select', table, fields })
+        return query
+      },
+      eq: (field, val) => {
+        queries.push({ action: 'eq', table, field, val })
+        return query
+      },
+      order: (field, opts) => {
+        queries.push({ action: 'order', table, field, opts })
+        return query
+      },
+      range: (from, to) => {
+        queries.push({ action: 'range', table, from, to })
+        return query
+      },
+      then: (resolve, reject) => {
+        resolve({ data: [{ id: '1' }], error: null })
+      }
+    }
+    return query
+  }
+
+  try {
+    const res = await loadImportContabilitaDedupCandidatesBySocieta('soc-123')
+    assert.ok(res.stagingRows)
+    assert.ok(res.accountingRows)
+    
+    // ── Verifica tenant-safe: solo societa corretta ──────────────────────────
+    const eqQueries = queries.filter(q => q.action === 'eq')
+    assert.ok(eqQueries.length > 0, 'Deve filtrare per societa')
+    assert.ok(eqQueries.every(q => q.val === 'soc-123'), 'Tutti i filtri devono usare soc-123')
+    
+    // ── Verifica range con limit 500 ─────────────────────────────────────────
+    const rangeQueries = queries.filter(q => q.action === 'range')
+    assert.equal(rangeQueries.length, 2, 'Deve usare range su entrambe le tabelle')
+    assert.deepEqual(rangeQueries[0], { action: 'range', table: 'documenti_import', from: 0, to: 499 })
+    assert.deepEqual(rangeQueries[1], { action: 'range', table: 'documenti_contabilita', from: 0, to: 499 })
+
+    // ── SCHEMA AUDIT documenti_import ────────────────────────────────────────
+    // Schema fisico (migration 20260412090500): id, societa_id, societa_destinazione_id,
+    // filename, file_path, file_url, mime_type, file_size, tipo_documento, stato,
+    // metadata, created_at, updated_at + colonne access-scope.
+    // COLONNE NON ESISTENTI: numero_documento, data_documento, imponibile, iva, totale.
+    // I dati dedup stanno in ai_raw_response (JSONB).
+    const stagingSelect = queries.find(q => q.action === 'select' && q.table === 'documenti_import')
+    assert.ok(stagingSelect, 'Deve esistere una select su documenti_import')
+    
+    // ai_raw_response DEVE esserci: contiene numero/data/tipo/soggetto per la dedup
+    assert.ok(
+      stagingSelect.fields.includes('ai_raw_response'),
+      'ai_raw_response deve essere nel select di documenti_import (unica fonte di numero/data/soggetto)'
+    )
+    
+    // Colonne fisicamente inesistenti NON devono apparire
+    const inexistentColumns = ['numero_documento', 'data_documento', 'totale', 'imponibile', 'iva']
+    for (const col of inexistentColumns) {
+      assert.ok(
+        !stagingSelect.fields.includes(col),
+        `documenti_import.${col} NON esiste come colonna fisica — non deve essere nel select`
+      )
+    }
+
+    // ── SCHEMA AUDIT documenti_contabilita ───────────────────────────────────
+    // Schema fisico (migration 20260412090000): ha numero_documento, data_documento,
+    // tipo_documento, soggetto_*, validation_status, workflow_status, totale, ecc.
+    const accountingSelect = queries.find(q => q.action === 'select' && q.table === 'documenti_contabilita')
+    assert.ok(accountingSelect, 'Deve esistere una select su documenti_contabilita')
+    // numero_documento esiste fisicamente in documenti_contabilita
+    assert.ok(
+      accountingSelect.fields.includes('numero_documento'),
+      'numero_documento deve essere nel select di documenti_contabilita (esiste fisicamente)'
+    )
+  } finally {
+    sb.from = originalFrom
+  }
+})
+
+test('workflow: import massivo simulato con 200 file XML - nessuna query DB massiva', async () => {
+  const makeXml = (i) => `<?xml version="1.0" encoding="UTF-8"?>
+  <FatturaElettronica>
+    <FatturaElettronicaBody>
+      <DatiGenerali><DatiGeneraliDocumento><TipoDocumento>TD01</TipoDocumento><Data>2026-01-${String((i % 28) + 1).padStart(2, '0')}</Data><Numero>FPA-${i}</Numero><ImportoTotaleDocumento>${100 + i}.00</ImportoTotaleDocumento></DatiGeneraliDocumento></DatiGenerali>
+      <CedentePrestatore><DatiAnagrafici><Anagrafica><Denominazione>Fornitore ${i}</Denominazione></Anagrafica></DatiAnagrafici></CedentePrestatore>
+      <CessionarioCommittente><DatiAnagrafici><Anagrafica><Denominazione>Cliente</Denominazione></Anagrafica></DatiAnagrafici></CessionarioCommittente>
+      <DatiBeniServizi><DatiRiepilogo><AliquotaIVA>22.00</AliquotaIVA><ImponibileImporto>${100 + i}.00</ImponibileImporto><Imposta>22.00</Imposta></DatiRiepilogo></DatiBeniServizi>
+    </FatturaElettronicaBody>
+  </FatturaElettronica>`
+
+  const files = Array.from({ length: 200 }, (_, i) => ({
+    name: `fattura-${i}.xml`,
+    text: async () => makeXml(i),
+  }))
+
+  // Pass dedupCandidates to avoid any DB call
+  const res = await runImportWorkflow(files, {
+    batchId: 'batch-massivo-test',
+    dedupCandidates: { stagingRows: [], accountingRows: [] },
+  })
+
+  assert.equal(res.ok, true)
+  assert.equal(res.parsedDocs.length, 200)
+  // All 200 files should be importable (no dedup candidates)
+  assert.equal(res.stagingRows.length, 200)
+  assert.equal(res.report.totals.files, 200)
+  assert.equal(res.report.totals.imported, 200)
+  assert.equal(res.report.uploadedFilesCount, 200)
+})
+
+

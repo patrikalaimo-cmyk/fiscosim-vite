@@ -1,3 +1,6 @@
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+
 function getWorkingTableAutomationFieldLabels(fields = []) {
   const labelsByField = {
     account: 'Conto',
@@ -73,6 +76,34 @@ export function ImportContabilitaWorkingTable({
   setPreviewRowId,
   getRowKey,
 }) {
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
+
+  useEffect(() => {
+    const activeKey = accountEditorRowId || causaleEditorRowId
+    const type = accountEditorRowId ? 'conto' : 'causale'
+    if (activeKey) {
+      const btn = document.getElementById(`btn-${type}-${activeKey}`)
+      if (btn) {
+        const updateCoords = () => {
+          const rect = btn.getBoundingClientRect()
+          setCoords({
+            top: rect.bottom,
+            left: rect.left,
+            width: rect.width,
+          })
+        }
+        updateCoords()
+        window.addEventListener('resize', updateCoords)
+        window.addEventListener('scroll', updateCoords, true)
+        return () => {
+          window.removeEventListener('resize', updateCoords)
+          window.removeEventListener('scroll', updateCoords, true)
+        }
+      }
+    }
+    return undefined
+  }, [accountEditorRowId, causaleEditorRowId])
+
   return (
     <>
       {visibleRows.length ? (
@@ -327,6 +358,7 @@ export function ImportContabilitaWorkingTable({
                     <Td>
                       <div style={{ position: 'relative', minHeight: 24 }}>
                         <button
+                          id={`btn-conto-${key}`}
                           type="button"
                           onClick={() => {
                             setAccountEditorRowId(isAccountEditorOpen ? '' : key)
@@ -350,15 +382,15 @@ export function ImportContabilitaWorkingTable({
                           {formatManualAccount(manualAccount)}
                         </button>
 
-                        {isAccountEditorOpen ? (
+                        {isAccountEditorOpen ? createPortal(
                           <div
                             style={{
-                              position: 'absolute',
-                              top: 'calc(100% + 4px)',
-                              left: 0,
+                              position: 'fixed',
+                              top: coords.top + 4,
+                              left: coords.left,
                               width: 360,
-                              maxWidth: 'min(360px, 88vw)',
-                              zIndex: 20,
+                              maxWidth: 'min(360px, 95vw)',
+                              zIndex: 9999,
                               border: '1px solid rgba(148,163,184,.14)',
                               borderRadius: 12,
                               background: 'rgba(8,24,40,.98)',
@@ -444,13 +476,15 @@ export function ImportContabilitaWorkingTable({
                             ) : (
                               <div style={{ fontSize: '.68rem', color: 'var(--mu)' }}>Nessun conto trovato</div>
                             )}
-                          </div>
+                          </div>,
+                          document.body
                         ) : null}
                       </div>
                     </Td>
                     <Td>
                       <div style={{ position: 'relative', minHeight: 24 }}>
                         <button
+                          id={`btn-causale-${key}`}
                           type="button"
                           onClick={() => {
                             setCausaleEditorRowId(isCausaleEditorOpen ? '' : key)
@@ -474,15 +508,15 @@ export function ImportContabilitaWorkingTable({
                           {formatManualCausale(manualCausale)}
                         </button>
 
-                        {isCausaleEditorOpen ? (
+                        {isCausaleEditorOpen ? createPortal(
                           <div
                             style={{
-                              position: 'absolute',
-                              top: 'calc(100% + 4px)',
-                              left: 0,
+                              position: 'fixed',
+                              top: coords.top + 4,
+                              left: coords.left,
                               width: 360,
                               maxWidth: 'min(360px, 88vw)',
-                              zIndex: 20,
+                              zIndex: 9999,
                               border: '1px solid rgba(148,163,184,.14)',
                               borderRadius: 12,
                               background: 'rgba(8,24,40,.98)',
@@ -565,7 +599,8 @@ export function ImportContabilitaWorkingTable({
                             ) : (
                               <div style={{ fontSize: '.68rem', color: 'var(--mu)' }}>Nessuna causale trovata</div>
                             )}
-                          </div>
+                          </div>,
+                          document.body
                         ) : null}
                       </div>
                     </Td>
