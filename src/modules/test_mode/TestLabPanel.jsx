@@ -9,8 +9,8 @@ import {
   isAdminOrOwnerForTestLab,
   TEST_LAB_DEMO_COMPANY_CODE,
   TEST_LAB_DEMO_COMPANY_DENOMINATION,
-  buildTestLabDemoCompanyPayload,
 } from './demoCompanyProvision.js'
+import { ensureTestLabDemoAccountingSetup } from './testLabDemoAccountingSeed.js'
 import { buildOrdinariaAcquisto10CaseDefinitions } from './testLabOrdinariaAcquistoCases.js'
 import {
   runTestLabPreparaOrdinariaAcquisto,
@@ -75,6 +75,45 @@ function ReportPanel({ report }) {
   )
 }
 
+function AccountingSeedReportPanel({ report }) {
+  if (!report) return null
+  const color = STATO_COLOR[report.stato] || 'var(--mu)'
+  return (
+    <div style={{
+      marginTop: '.85rem', padding: '.75rem .85rem', borderRadius: 8,
+      border: `1px solid ${color}55`, background: `${color}11`,
+    }}>
+      <div style={{ fontWeight: 700, fontSize: '.85rem', color, marginBottom: '.5rem' }}>
+        Seed contabile demo — {report.stato?.toUpperCase()}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '.35rem', fontSize: '.72rem' }}>
+        <div>Piano conti creati: <strong>{report.pianoConti?.created}</strong></div>
+        <div>Piano conti esistenti: <strong>{report.pianoConti?.existing}</strong></div>
+        <div>Causali contabili create: <strong>{report.causaliContabili?.created}</strong></div>
+        <div>Causali contabili esistenti: <strong>{report.causaliContabili?.existing}</strong></div>
+        <div>Causali IVA create: <strong>{report.causaliIva?.created}</strong></div>
+        <div>Causali IVA esistenti: <strong>{report.causaliIva?.existing}</strong></div>
+        <div>Prime note: <strong>{report.primeNoteCreate}</strong></div>
+        <div>Registri IVA movimenti: <strong>{report.registroIvaMovimenti}</strong></div>
+        <div>Contabilizzati: <strong>{report.documentiContabilizzati}</strong></div>
+      </div>
+      {report.registroAcquisti01 && (
+        <div style={{ marginTop: '.45rem', fontSize: '.72rem', color: 'var(--cy)' }}>
+          Registro acquisti: {report.registroAcquisti01} · Causale FF configurata
+        </div>
+      )}
+      {(report.pianoConti?.errors?.length > 0 || report.causaliContabili?.errors?.length > 0 || report.causaliIva?.errors?.length > 0) && (
+        <div style={{ marginTop: '.5rem', fontSize: '.72rem', color: '#e05252' }}>
+          Errori: {[...(report.pianoConti?.errors || []), ...(report.causaliContabili?.errors || []), ...(report.causaliIva?.errors || [])].join('; ')}
+        </div>
+      )}
+      <div style={{ marginTop: '.45rem', fontSize: '.68rem', color: 'var(--mu)' }}>
+        Nessuna fattura generata · Nessuna contabilizzazione · Idempotente
+      </div>
+    </div>
+  )
+}
+
 /**
  * Test Lab — Fase 24B: Prepara test fattura ordinaria acquisto (10 casi).
  */
@@ -85,7 +124,9 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
   const phase = TEST_LAB_PHASE_24B
   const [busy, setBusy] = useState(false)
   const [demoBusy, setDemoBusy] = useState(false)
+  const [accountingBusy, setAccountingBusy] = useState(false)
   const [report, setReport] = useState(null)
+  const [accountingReport, setAccountingReport] = useState(null)
   const [lastError, setLastError] = useState(null)
   const [demoMessage, setDemoMessage] = useState(null)
 
@@ -119,6 +160,29 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
       setDemoBusy(false)
     }
   }, [canManageDemo, demoBusy, onDemoCompanyReady, utente])
+
+  const handleAccountingSeed = useCallback(async () => {
+    if (!isDemo || !canManageDemo || !societaId || !currentSocieta || accountingBusy) return
+    setAccountingBusy(true)
+    setLastError(null)
+    setAccountingReport(null)
+    try {
+      const result = await ensureTestLabDemoAccountingSetup({
+        db: sb,
+        utente,
+        societa: currentSocieta,
+        societaId,
+      })
+      setAccountingReport(result.report)
+      if (!result.ok) {
+        setLastError('Seed contabile demo completato con errori — vedi report.')
+      }
+    } catch (err) {
+      setLastError(err?.message || String(err))
+    } finally {
+      setAccountingBusy(false)
+    }
+  }, [isDemo, canManageDemo, societaId, currentSocieta, accountingBusy, utente])
 
   const handlePrepara = useCallback(async () => {
     if (!isDemo || !societaId || !currentSocieta || busy) return
@@ -218,8 +282,26 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
           <span style={{ display: 'block', fontWeight: 400, fontSize: '.75rem', color: 'var(--mu)', marginTop: '.25rem' }}>
             Codice: {currentSocieta?.codice} · {currentSocieta?.denominazione}
           </span>
+          {canManageDemo && (
+            <div style={{ marginTop: '.65rem' }}>
+              <button
+                type="button"
+                className="btn-sec"
+                disabled={accountingBusy}
+                onClick={handleAccountingSeed}
+                style={{ fontSize: '.78rem' }}
+              >
+                {accountingBusy ? '⏳ Seed contabile...' : 'Prepara dati contabili demo'}
+              </button>
+              <div style={{ fontWeight: 400, fontSize: '.68rem', color: 'var(--mu)', marginTop: '.35rem' }}>
+                Piano conti, causale FF, IVA 22/10/4 — idempotente, solo società demo. Non avvia test né contabilizza.
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      <AccountingSeedReportPanel report={accountingReport} />
 
       {societaId && !isDemo && (
         <div className="alert" style={{ marginBottom: '.85rem', background: 'rgba(224,82,82,.08)', borderColor: 'rgba(224,82,82,.4)', color: '#e05252' }}>

@@ -202,3 +202,53 @@ Invariata: solo prefisso `societa.codice` `__TEST__` / `test_`
 ### Rischi residui fuori perimetro
 Altri moduli (Import Contabilità workflow, Registrazione Manuale) referenziano ancora `societa.ragione_sociale` — da allineare in task dedicato, non in 24B-FIX-2.
 
+## FASE 24B-FIX-3 — Seed contabile minimo società demo
+
+### Problema risolto
+Società demo esistente ma **piano dei conti e causali vuoti** → working table Import incompleta (dropdown senza opzioni valide).
+
+### Soluzione
+- Funzione idempotente `ensureTestLabDemoAccountingSetup` — solo società demo (`__TEST__*` / `test_*`), solo Admin/Owner.
+- Pulsante Test Lab: **Prepara dati contabili demo** (esplicito, non avvia test fatture).
+- Report esito: conti/causali/causali IVA creati vs già esistenti.
+
+### Schema reale rilevato (introspezione DB live)
+- **`piano_conti`**: codice con spazi (`6 01 001`), colonne `codice_mastro`, `codice_conto`, `codice_sottoconto`, `livello`, `tipo`, `natura`, `sezione`, `is_fornitore`, `is_iva`, `attivo`, …
+- **`causali_contabili`**: `attivo` (non `attiva`), `tipo_causale`, `codice_registro_iva`, `operazione_partite`, `documento_direzione`, `righe_prima_nota_template`
+- **`causali_iva`**: `codice`, `descrizione`, `aliquota`, `detraibile`, `percentuale_detraibilita`, `attivo`, `societa_id`
+
+### Dati contabili demo creati/agganciati (set minimo)
+| Tipo | Quantità | Dettaglio |
+|------|----------|-----------|
+| Piano conti | 7 | `6 01 001`, `6 02 001`, `6 03 001`, `6 05 001`, `1 02 40 0001` (IVA credito), `2 04 02 0001` (fornitore), `6 99 001` (arrotondamenti) |
+| Causale contabile | 1 | `FF` — Doc. IVA normale, registro acquisti `01`, partitario Apre |
+| Causali IVA | 3 | `TESTLAB22` 22%, `TESTLAB10` 10%, `TESTLAB04` 4% |
+
+Marker: `[TEST_LAB]` su descrizioni/note. Nessuna clonazione da società reali.
+
+### Idempotenza
+Seconda esecuzione: `created=0`, `existing` = totale seed — nessun duplicato.
+
+### Cosa NON viene creato
+- Fatture, prime note, movimenti registro IVA, partitario, contabilizzazione, pulizia dati, delete.
+
+### File
+- `src/modules/test_mode/testLabAccountingSchema.js` — definizioni seed + mapping colonne reali
+- `src/modules/test_mode/testLabDemoAccountingSeed.js` — `ensureTestLabDemoAccountingSetup`
+- `src/modules/test_mode/TestLabPanel.jsx` — pulsante + `AccountingSeedReportPanel`
+
+### Test automatici (24B-FIX-3)
+- Seed bloccato su società reale
+- Seed abilitato solo demo
+- Idempotenza
+- Causale FF + IVA 22/10/4
+- Nessun commit/persist/delete nel modulo seed
+- `tests/testLabIntegrazione.test.js` — 32 test totali
+
+### Test manuali richiesti
+1. Selezionare società demo → **Prepara dati contabili demo** → report verde/giallo.
+2. **Prepara test — Fattura ordinaria acquisto** (10 casi).
+3. Aprire Import Contabilità: dropdown conto, causale `FF`, causali IVA popolati.
+
+### Prossimo step
+Validazione manuale Import su società demo post-seed, poi 24C (ciclo completo — ancora disabilitato).

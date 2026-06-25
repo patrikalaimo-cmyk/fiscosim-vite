@@ -294,3 +294,166 @@ test('24B-FIX — provision non genera fatture/contabilizzazione/pulizia', async
   assert.match(panelSource, /Crea società demo FiscoSim/)
   assert.match(panelSource, /Nessun test parte automaticamente/)
 })
+
+import {
+  ensureTestLabDemoAccountingSetup,
+  DEMO_CAUSALE_FF_CODICE,
+  DEMO_PIANO_CODICE,
+} from '../src/modules/test_mode/testLabDemoAccountingSeed.js'
+import {
+  buildDemoPianoContiSeedDefs,
+  buildDemoCausaleFfPayload,
+  buildDemoCausaliIvaSeedDefs,
+  toDbPianoCodice,
+  PIANO_CONTI_LIVE_COLUMNS,
+} from '../src/modules/test_mode/testLabAccountingSchema.js'
+
+const DEMO_SOCIETA = {
+  id: 'demo-seed-1',
+  codice: '__TEST__FISCOSIM_DEMO',
+  denominazione: 'FiscoSim Demo Test Lab SRL',
+}
+
+function createMockAccountingDb(initial = {}) {
+  const store = {
+    piano_conti: [...(initial.piano_conti || [])],
+    causali_contabili: [...(initial.causali_contabili || [])],
+    causali_iva: [...(initial.causali_iva || [])],
+  }
+  let insertCalls = 0
+
+  const db = {
+    from(table) {
+      return {
+        select(cols) {
+          const api = {
+            eq(field, value) {
+              const filters = [{ field, value }]
+              const chain = {
+                eq(field2, value2) {
+                  filters.push({ field: field2, value: value2 })
+                  return chain
+                },
+                maybeSingle: async () => {
+                  const row = store[table]?.find((r) => filters.every((f) => r[f.field] === f.value)) || null
+                  return { data: row, error: null }
+                },
+                single: async () => chain.maybeSingle(),
+              }
+              return chain
+            },
+          }
+          return api
+        },
+        insert(rows) {
+          insertCalls += 1
+          const payload = Array.isArray(rows) ? rows[0] : rows
+          const row = { id: `${table}-${store[table].length + 1}`, ...payload }
+          store[table].push(row)
+          return {
+            select() {
+              return {
+                single: async () => ({ data: row, error: null }),
+              }
+            },
+          }
+        },
+      }
+    },
+    _store: store,
+    _insertCalls: () => insertCalls,
+  }
+  return db
+}
+
+test('24B-FIX-3 — seed bloccato su società reale', async () => {
+  await assert.rejects(
+    () => ensureTestLabDemoAccountingSetup({
+      db: createMockAccountingDb(),
+      utente: { ruolo: 'owner' },
+      societa: REAL_COMPANY,
+      societaId: REAL_COMPANY.id,
+    }),
+    /non è qualificata come DEMO/
+  )
+})
+
+test('24B-FIX-3 — seed abilitato solo su società demo', async () => {
+  const db = createMockAccountingDb()
+  const result = await ensureTestLabDemoAccountingSetup({
+    db,
+    utente: { ruolo: 'owner' },
+    societa: DEMO_SOCIETA,
+    societaId: DEMO_SOCIETA.id,
+  })
+  assert.equal(result.ok, true)
+  assert.ok(result.report.pianoConti.created >= 1)
+  assert.equal(result.report.fattureGenerate, 0)
+  assert.equal(result.report.primeNoteCreate, 0)
+  assert.equal(result.report.documentiContabilizzati, 0)
+})
+
+test('24B-FIX-3 — seed idempotente non duplica', async () => {
+  const db = createMockAccountingDb()
+  const first = await ensureTestLabDemoAccountingSetup({
+    db, utente: { ruolo: 'admin' }, societa: DEMO_SOCIETA, societaId: DEMO_SOCIETA.id,
+  })
+  const second = await ensureTestLabDemoAccountingSetup({
+    db, utente: { ruolo: 'admin' }, societa: DEMO_SOCIETA, societaId: DEMO_SOCIETA.id,
+  })
+  assert.ok(first.report.pianoConti.created >= 1)
+  assert.equal(second.report.pianoConti.created, 0)
+  assert.ok(second.report.pianoConti.existing >= first.report.pianoConti.created)
+  assert.equal(second.report.causaliContabili.created, 0)
+  assert.equal(second.report.causaliIva.created, 0)
+})
+
+test('24B-FIX-3 — payload piano conti usa colonne reali', () => {
+  for (const def of buildDemoPianoContiSeedDefs()) {
+    const { key, ...payload } = def
+    for (const col of Object.keys(payload)) {
+      assert.ok(PIANO_CONTI_LIVE_COLUMNS.includes(col) || col === 'societa_id', `colonna non valida ${col} in ${key}`)
+    }
+  }
+  assert.equal(toDbPianoCodice('6.01.001'), DEMO_PIANO_CODICE.costoOrdinario)
+})
+
+test('24B-FIX-3 — crea causale FF e IVA 22/10/4', async () => {
+  const db = createMockAccountingDb()
+  await ensureTestLabDemoAccountingSetup({
+    db, utente: { ruolo: 'owner' }, societa: DEMO_SOCIETA, societaId: DEMO_SOCIETA.id,
+  })
+  const ff = db._store.causali_contabili.find((r) => r.codice === DEMO_CAUSALE_FF_CODICE)
+  assert.ok(ff)
+  assert.equal(ff.codice_registro_iva, '01')
+  assert.match(ff.descrizione, /TEST_LAB/)
+  const ivas = db._store.causali_iva.filter((r) => r.societa_id === DEMO_SOCIETA.id)
+  assert.equal(ivas.length, 3)
+  assert.deepEqual(ivas.map((r) => Number(r.aliquota)).sort((a, b) => a - b), [4, 10, 22])
+})
+
+test('24B-FIX-3 — buildDemoCausaleFfPayload senza contabilizzazione', () => {
+  const payload = buildDemoCausaleFfPayload('demo-id')
+  assert.equal(payload.codice, 'FF')
+  assert.equal(payload.codice_registro_iva, '01')
+  assert.equal(payload.documento_direzione, 'passiva')
+  assert.ok(Array.isArray(payload.righe_prima_nota_template))
+})
+
+test('24B-FIX-3 — seed module non usa delete/commit/persist', async () => {
+  const seedSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/test_mode/testLabDemoAccountingSeed.js', import.meta.url), 'utf8')
+  )
+  const panelSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/test_mode/TestLabPanel.jsx', import.meta.url), 'utf8')
+  )
+  assert.doesNotMatch(seedSource, /runCommitWorkflow|persistPrimaNotaDraft|\.delete\(/)
+  assert.match(panelSource, /Prepara dati contabili demo/)
+  assert.match(panelSource, /CICLO_COMPLETO_DISABLED_REASON/)
+})
+
+test('24B-FIX-3 — buildDemoCausaliIvaSeedDefs produce 3 aliquote', () => {
+  const defs = buildDemoCausaliIvaSeedDefs('demo-id')
+  assert.equal(defs.length, 3)
+  assert.deepEqual(defs.map((d) => d.aliquota).sort((a, b) => a - b), [4, 10, 22])
+})

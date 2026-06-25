@@ -9775,3 +9775,31 @@ pm run build -> Successo (429 moduli, 16s).
 - **Riconciliazione bancaria**: BLOCCATA
 
 
+## PROMPT-24B-FIX-3-SEED-CONTABILE-MINIMO-SOCIETA-DEMO-TEST-LAB
+
+- **Data**: 2026-06-26
+- **Task**: Seed contabile minimo idempotente per società demo Test Lab (piano conti, causale FF, IVA 22/10/4).
+- **Causa blocco**: società demo esistente ma piano conti/causali vuoti → Import working table incompleta.
+- **Schema reale rilevato**:
+  - `piano_conti`: codici con spazi; colonne `codice_mastro`, `codice_conto`, `codice_sottoconto`, `livello`, `tipo`, `natura`, `sezione`, `is_fornitore`, `is_iva`, `attivo`
+  - `causali_contabili`: `attivo`, `tipo_causale`, `codice_registro_iva`, `operazione_partite`, `documento_direzione`, `righe_prima_nota_template`
+  - `causali_iva`: `codice`, `aliquota`, `detraibile`, `percentuale_detraibilita`, `attivo`, `societa_id`
+- **Seed demo creato/agganciato**: **SÌ** — `ensureTestLabDemoAccountingSetup` (solo `__TEST__*` / `test_*`, Admin/Owner)
+- **Conti minimi (7)**: `6 01 001`, `6 02 001`, `6 03 001`, `6 05 001`, `1 02 40 0001`, `2 04 02 0001`, `6 99 001`
+- **Causale FF**: Doc. IVA normale, registro acquisti `01`, partitario Apre, direzione passiva
+- **Causali IVA**: `TESTLAB22` 22%, `TESTLAB10` 10%, `TESTLAB04` 4%
+- **Idempotenza**: seconda esecuzione → `created=0`, incremento `existing` — nessun duplicato
+- **Visibile in Import**: atteso sì post-seed (dropdown conto/causale/IVA) — validazione manuale richiesta
+- **File creati**:
+  - `src/modules/test_mode/testLabAccountingSchema.js`
+  - `src/modules/test_mode/testLabDemoAccountingSeed.js`
+- **File modificati**:
+  - `src/modules/test_mode/TestLabPanel.jsx` (pulsante + report)
+  - `tests/testLabIntegrazione.test.js` (32 test)
+  - `AI_WORKING_AREA_FISCOSIM/14_SOCIETA_DEMO_TEST_LAB.md`
+  - `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`
+- **Conferme sicurezza**: 0 fatture; 0 contabilizzazione; 0 prime note; 0 movimenti registro IVA/partitario; 0 pulizia; 0 delete; no migration/env/RLS; no clonazione da società reali
+- **Test**: testLab 32/32; import 71/71; regressione 55/55; build OK
+- **Riconciliazione bancaria**: BLOCCATA
+- **Prossimo step**: Validazione manuale Import post-seed, poi 24C
+
