@@ -175,6 +175,30 @@ Nessuna società con codice `__TEST__*` / `test_*` in DB → Test Lab non utiliz
 
 ### File
 - `src/modules/test_mode/demoCompanyProvision.js`
+- `src/modules/test_mode/societaTestLabSchema.js` (schema live + select allineate)
 - `src/modules/test_mode/TestLabPanel.jsx` (pulsante creazione)
 - `src/modules/test_mode/index.jsx` (reload tendina + selezione demo)
+
+## FASE 24B-FIX-2 — Schema alignment società demo
+
+### Causa errore UI
+`column societa.ragione_sociale does not exist` — insert/select Test Lab usavano colonna assente nel DB live.
+
+### Schema reale `societa` (introspezione DB live)
+`id`, `codice`, `denominazione`, `codice_fiscale`, `partita_iva`, `indirizzo`, `cap`, `citta`, `provincia`, `regime_contabile`, `esercizio_da`, `esercizio_a`, `attiva`, `note`, `created_at`, `updated_at`, `ai_enabled`, `tipo_liquidazione_iva`, `email`, `pec`, `telefono`, `attivo`
+
+**Assente:** `ragione_sociale` (presente solo in migration bootstrap locale, non in produzione).
+
+### Campi insert demo
+`codice`, `denominazione`, `partita_iva`, `codice_fiscale`, `regime_contabile`, `attiva`, `note`
+
+### Select Test Lab
+- Lista tendina: `SOCIETA_TEST_LAB_LIST_SELECT`
+- Provisioning: `SOCIETA_TEST_LAB_PROVISION_SELECT`
+
+### Guardia demo
+Invariata: solo prefisso `societa.codice` `__TEST__` / `test_`
+
+### Rischi residui fuori perimetro
+Altri moduli (Import Contabilità workflow, Registrazione Manuale) referenziano ancora `societa.ragione_sociale` — da allineare in task dedicato, non in 24B-FIX-2.
 

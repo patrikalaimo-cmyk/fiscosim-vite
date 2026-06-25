@@ -1,9 +1,14 @@
 /**
- * Provisioning società demo Test Lab — Fase 24B-FIX.
+ * Provisioning società demo Test Lab — Fase 24B-FIX / 24B-FIX-2.
  * Crea o aggancia __TEST__FISCOSIM_DEMO senza contabilizzazione/fatture/pulizia.
+ * Schema allineato a DB live: solo colonne reali (no ragione_sociale).
  */
 
 import { isDemoCompany } from './demoCompanyGuard.js'
+import {
+  SOCIETA_TEST_LAB_PROVISION_SELECT,
+  listForbiddenSocietaPayloadColumns,
+} from './societaTestLabSchema.js'
 
 export const TEST_LAB_DEMO_COMPANY_CODE = '__TEST__FISCOSIM_DEMO'
 export const TEST_LAB_DEMO_COMPANY_DENOMINATION = 'FiscoSim Demo Test Lab SRL'
@@ -20,19 +25,27 @@ export function isAdminOrOwnerForTestLab(utente) {
 }
 
 /**
+ * Payload insert minimo — allineato a ModalNuovaSocieta / schema live.
  * @returns {object}
  */
 export function buildTestLabDemoCompanyPayload() {
-  return {
+  const payload = {
     codice: TEST_LAB_DEMO_COMPANY_CODE,
     denominazione: TEST_LAB_DEMO_COMPANY_DENOMINATION,
-    ragione_sociale: TEST_LAB_DEMO_COMPANY_DENOMINATION,
     partita_iva: '',
     codice_fiscale: '',
     regime_contabile: 'ordinaria',
     attiva: true,
     note: '[TEST_LAB] Società demo FiscoSim — solo dati di test',
   }
+  const forbidden = listForbiddenSocietaPayloadColumns(payload)
+  if (forbidden.length > 0) {
+    throw new Error(`Payload società demo contiene colonne non valide: ${forbidden.join(', ')}`)
+  }
+  if (!payload.codice || !payload.denominazione) {
+    throw new Error('Payload società demo incompleto: codice e denominazione obbligatori')
+  }
+  return payload
 }
 
 /**
@@ -43,7 +56,7 @@ export async function findTestLabDemoCompany(db) {
   if (!db?.from) return { data: null, error: new Error('db_client_missing') }
   return db
     .from('societa')
-    .select('id,codice,denominazione,ragione_sociale,partita_iva,attiva,note')
+    .select(SOCIETA_TEST_LAB_PROVISION_SELECT)
     .eq('codice', TEST_LAB_DEMO_COMPANY_CODE)
     .maybeSingle()
 }
@@ -78,7 +91,7 @@ export async function ensureTestLabDemoCompany({ db, utente }) {
         .from('societa')
         .update({ attiva: true })
         .eq('id', existing.data.id)
-        .select('id,codice,denominazione,ragione_sociale,partita_iva,attiva,note')
+        .select(SOCIETA_TEST_LAB_PROVISION_SELECT)
         .single()
       if (reactivateError) throw new Error(reactivateError.message || 'Errore riattivazione società demo')
       return { societa: reactivated, created: false, attached: true }
@@ -87,7 +100,11 @@ export async function ensureTestLabDemoCompany({ db, utente }) {
   }
 
   const payload = buildTestLabDemoCompanyPayload()
-  const inserted = await db.from('societa').insert([payload]).select().single()
+  const inserted = await db
+    .from('societa')
+    .insert([payload])
+    .select(SOCIETA_TEST_LAB_PROVISION_SELECT)
+    .single()
   if (inserted.error) {
     if (isDuplicateKeyError(inserted.error)) {
       const retry = await findTestLabDemoCompany(db)

@@ -5,8 +5,7 @@ import { TestScenarioE2EPanel } from './TestScenarioE2EPanel.jsx'
 import { TestLabPanel } from './TestLabPanel.jsx'
 import { ModuleHeader } from '../../shared/components'
 import { TEST_LAB_DEMO_COMPANY_CODE } from './demoCompanyProvision.js'
-
-const SOCIETA_SELECT_FIELDS = 'id,denominazione,codice,ragione_sociale,partita_iva,attiva'
+import { SOCIETA_TEST_LAB_LIST_SELECT } from './societaTestLabSchema.js'
 
 const STATO_CFG = {
   pending:  { label: '⚪ Da testare', color: 'var(--mu)',   bg: 'rgba(107,122,153,.1)',  border: 'rgba(107,122,153,.25)' },
@@ -576,7 +575,7 @@ export function ModuloTestMode({ utente }) {
   const reloadSocieta = useCallback(async () => {
     const { data, error } = await sb
       .from('societa')
-      .select(SOCIETA_SELECT_FIELDS)
+      .select(SOCIETA_TEST_LAB_LIST_SELECT)
       .eq('attiva', true)
       .order('denominazione')
     if (error) throw new Error(error.message || 'Errore caricamento società')

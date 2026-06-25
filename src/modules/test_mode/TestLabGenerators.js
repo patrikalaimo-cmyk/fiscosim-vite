@@ -5,6 +5,7 @@
  */
 
 import { assertDemoCompanyForTestLab, isDemoCompany } from './demoCompanyGuard.js'
+import { resolveSocietaDisplayName } from './societaTestLabSchema.js'
 
 export { isDemoCompany, isDemoCompany as isTestCompany }
 
@@ -123,7 +124,7 @@ export function generateScenarioDocuments(scenarioId, societa) {
   assertDemoCompanyForTestLab(societa, 'generateScenarioDocuments')
 
   const myPiva = societa.partita_iva || '99999999999'
-  const myDenom = societa.denominazione || societa.ragione_sociale || 'Società Test'
+  const myDenom = resolveSocietaDisplayName(societa)
   const today = new Date().toISOString().split('T')[0]
 
   const docs = []

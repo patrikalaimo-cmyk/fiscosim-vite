@@ -9757,3 +9757,21 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo step**: Validazione manuale Prepara test su società demo, poi 24C
 
 
+## PROMPT-24B-FIX-2-SCHEMA-ALIGNMENT-SOCIETA-DEMO-TEST-LAB
+
+- **Data**: 2026-06-25
+- **Causa errore UI**: `column societa.ragione_sociale does not exist` su insert/select Test Lab
+- **Colonna errata**: `ragione_sociale` (presente in migration bootstrap locale, **assente** in DB live)
+- **Schema reale `societa`**: id, codice, denominazione, codice_fiscale, partita_iva, indirizzo, cap, citta, provincia, regime_contabile, esercizio_da, esercizio_a, attiva, note, timestamps, ai_enabled, tipo_liquidazione_iva, email, pec, telefono, attivo
+- **Insert demo**: codice, denominazione, partita_iva, codice_fiscale, regime_contabile, attiva, note
+- **Select Test Lab**: `SOCIETA_TEST_LAB_LIST_SELECT`, `SOCIETA_TEST_LAB_PROVISION_SELECT`
+- **File creati**: `src/modules/test_mode/societaTestLabSchema.js`
+- **File modificati**: `demoCompanyProvision.js`, `index.jsx`, `testLabPreparaWorkflow.js`, `testLabOrdinariaAcquistoCases.js`, `TestLabGenerators.js`, tests, docs
+- **Società demo**: creazione/aggancio idempotente ripristinata (schema allineato)
+- **Tendina**: visibile dopo reload (`attiva=true`, select senza colonne fantasma)
+- **Sicurezza**: 0 fatture, 0 contabilizzazione, 0 pulizia; guardia demo su codice invariata
+- **Test**: testLab 24/24; import 71/71; regressione 55/55; build OK
+- **Rischio fuori perimetro**: Import Contabilità workflow e Registrazione Manuale referenziano ancora `societa.ragione_sociale` — task futuro
+- **Riconciliazione bancaria**: BLOCCATA
+
+

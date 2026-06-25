@@ -3,6 +3,7 @@
  */
 
 import { assertDemoCompanyForTestLab } from './demoCompanyGuard.js'
+import { resolveSocietaDisplayName } from './societaTestLabSchema.js'
 
 export const TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO = 'ordinarie_acquisto_24b'
 export const TEST_LAB_SOURCE = 'test_lab'
@@ -128,7 +129,7 @@ function toFileLike(caseDef, xml) {
 export function buildOrdinariaAcquisto10CaseDefinitions(societa) {
   assertDemoCompanyForTestLab(societa, 'buildOrdinariaAcquisto10CaseDefinitions')
   const myPiva = societa.partita_iva || '99999999999'
-  const myDenom = societa.denominazione || societa.ragione_sociale || 'Società Demo'
+  const myDenom = resolveSocietaDisplayName(societa)
   const today = new Date().toISOString().split('T')[0]
 
   const baseMeta = {

@@ -23,6 +23,12 @@ import {
   buildTestLabDemoCompanyPayload,
   TEST_LAB_DEMO_COMPANY_CODE,
 } from '../src/modules/test_mode/demoCompanyProvision.js'
+import {
+  SOCIETA_TEST_LAB_LIST_SELECT,
+  SOCIETA_TEST_LAB_PROVISION_SELECT,
+  SOCIETA_FORBIDDEN_COLUMNS,
+  SOCIETA_LIVE_KNOWN_COLUMNS,
+} from '../src/modules/test_mode/societaTestLabSchema.js'
 
 const REAL_COMPANY = {
   id: '1',
@@ -194,6 +200,33 @@ test('24B-FIX — payload demo ha codice e denominazione canonici', () => {
   assert.equal(payload.codice, TEST_LAB_DEMO_COMPANY_CODE)
   assert.equal(payload.denominazione, 'FiscoSim Demo Test Lab SRL')
   assert.match(payload.note, /TEST_LAB/)
+  assert.equal('ragione_sociale' in payload, false)
+})
+
+test('24B-FIX-2 — payload demo usa solo colonne reali societa', () => {
+  const payload = buildTestLabDemoCompanyPayload()
+  for (const key of Object.keys(payload)) {
+    assert.ok(
+      SOCIETA_LIVE_KNOWN_COLUMNS.includes(key),
+      `colonna payload non presente nello schema live: ${key}`
+    )
+  }
+  for (const forbidden of SOCIETA_FORBIDDEN_COLUMNS) {
+    assert.equal(forbidden in payload, false, `colonna vietata nel payload: ${forbidden}`)
+  }
+})
+
+test('24B-FIX-2 — select Test Lab societa non include ragione_sociale', () => {
+  assert.doesNotMatch(SOCIETA_TEST_LAB_LIST_SELECT, /ragione_sociale/)
+  assert.doesNotMatch(SOCIETA_TEST_LAB_PROVISION_SELECT, /ragione_sociale/)
+})
+
+test('24B-FIX-2 — demoCompanyProvision non usa ragione_sociale su societa', async () => {
+  const source = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/test_mode/demoCompanyProvision.js', import.meta.url), 'utf8')
+  )
+  assert.doesNotMatch(source, /\.select\([^)]*ragione_sociale/)
+  assert.doesNotMatch(source, /ragione_sociale\s*:/)
 })
 
 test('24B-FIX — creazione idempotente non duplica se esiste', async () => {

@@ -5,6 +5,7 @@
 
 import { runImportWorkflow } from '../import_contabilita/application/importContabilitaWorkflow.js'
 import { assertDemoCompanyForTestLab, TEST_LAB_PHASE_24B } from './demoCompanyGuard.js'
+import { resolveSocietaDisplayName } from './societaTestLabSchema.js'
 import {
   generateOrdinariaAcquisto10Cases,
   TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
@@ -72,7 +73,7 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
 
   const importResult = await runImportWorkflow(files, {
     societaId,
-    societaName: societa.denominazione || societa.ragione_sociale,
+    societaName: resolveSocietaDisplayName(societa),
     dedupCandidates: { stagingRows: [], accountingRows: [] },
     sourceModule: TEST_LAB_SOURCE,
     batchId: `test_lab_24b_${Date.now()}`,
@@ -93,7 +94,7 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
     scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
     modalita: 'prepara_test',
     fase: TEST_LAB_PHASE_24B.id,
-    societaDemo: societa.denominazione || societa.ragione_sociale,
+    societaDemo: resolveSocietaDisplayName(societa),
     societaCodice: societa.codice,
     societaId,
     casiPrevisti: cases.length,
