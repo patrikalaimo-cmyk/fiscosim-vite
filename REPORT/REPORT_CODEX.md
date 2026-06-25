@@ -9609,3 +9609,55 @@ pm run build -> Successo (429 moduli, 16s).
 - **Stato gate**: Manuale 100%. Import: hardening completo su tutti i casi del gate tranne cespiti (Fase 16) e bollo/spese accessorie (parziale).
 - **Riconciliazione Bancaria**: BLOCCATA. Sblocco condizionato a Fase 16 (Libro Cespiti).
 - **Prossimo step**: Fase 16 - Libro Cespiti (innesco cespite e libro cespiti).
+
+## PROMPT-22B-FIX-BLOCCANTE-IMPORT-CONTABILITA-GETALLOWEDMASTRINOCODESFORTIPODOMAIN-NON-DEFINITA
+
+- **Data**: 2026-06-25
+- **Task**: Risoluzione crash bloccante in Import Contabilità dovuto alla mancata definizione di getAllowedMastrinoCodesForTipoDomain.
+- **File Creati**: Nessuno.
+- **File Modificati**: [index.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/index.jsx)
+- **Causa**: Mancava l'importazione con alias di `getAllowedMastrinoCodesForTipo` come `getAllowedMastrinoCodesForTipoDomain` nel file `index.jsx` da `./domain/anagraficaValidation.js`. La funzione veniva invocata ma produceva ReferenceError a runtime nel browser.
+- **Fix Applicato**: Aggiunta la funzione mancante all'istruzione di import da `./domain/anagraficaValidation.js`.
+- **Test Eseguiti**:
+  - `node --test src/modules/import_contabilita/tests/*.js` (70/70 superati).
+  - `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js` (51/51 superati).
+  - `npm run build` (Build completato con successo).
+- **Rischi**: Nessuno, fix puramente circoscritto all'import del modulo di validazione.
+- **Prossimo step**: Fase 16 - Libro Cespiti.
+
+
+## PROMPT-22A-IMPORT-MANUALE-MICRO-HARDENING-PRE-CESPITI
+
+- **Data**: 2026-06-25
+- **Task**: Micro-hardening di Import/Manuale per risolvere debiti tecnici prima dei Cespiti (Fase 16).
+- **File Creati**:
+  - `[NEW]` [resolveSplitPaymentAccount.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/registrazione/resolveSplitPaymentAccount.js)
+- **File Modificati**:
+  - `[MODIFY]` [importContabilitaWorkflow.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/application/importContabilitaWorkflow.js)
+  - `[MODIFY]` [buildSplitPaymentRows.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/application/registrazioneOperations/buildSplitPaymentRows.js)
+  - `[MODIFY]` [mapImportContabilitaCommitPayloadToCanonical.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js)
+  - `[MODIFY]` [importContabilitaParser.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/application/importContabilitaParser.js)
+  - `[MODIFY]` [index.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/index.jsx)
+  - `[MODIFY]` [importContabilitaHardening.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/tests/importContabilitaHardening.test.js)
+  - `[MODIFY]` [11_GATE_MANUALE_IMPORT_100.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md)
+  - `[MODIFY]` [10_IMPORT_CONTABILITA_OPERATIVO.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/10_IMPORT_CONTABILITA_OPERATIVO.md)
+  - `[MODIFY]` [PROJECT_STATE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md)
+  - `[MODIFY]` [REPORT/REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md) (questo report append-only)
+- **Dettaglio Attività**:
+  1. **Risoluzione Split Payment**:
+     - Estrazione della logica di risoluzione conto tecnico in un modulo di dominio condiviso `resolveSplitPaymentAccount.js` (`resolveSplitPaymentAccountDb` asincrono per database/Import, `resolveSplitPaymentAccountCatalog` sincrono in-memory per UI/Registrazione Manuale).
+     - Rimosso qualsiasi riferimento o codice conto hardcoded per l'evidenza split payment e la quadratura.
+     - Sostituito il filtraggio IVA split payment con euristica basata sull'importo della riga IVA originale.
+  2. **Quadratura Bollo/Cassa e Spese Accessorie**:
+     - Mappato il tag XML `DatiBollo` a livello di parser, importazione e mapping canonico (`totals.stampDuty`).
+     - Risolta la quadratura contabile Dare/Avere in presenza di bollo sommando automaticamente l'importo sul conto di costo/ricavo associato al documento nel commit workflow dell'Import.
+     - Mappato il tag XML `DatiCassaPrevidenziale` nel parser. Documentato il gap per la gestione analitica delle spese e casse previdenziali in assenza di anagrafiche/impostazioni dedicate (vengono cumulate nel costo).
+- **Test Eseguiti**:
+  - `node --test src/modules/import_contabilita/tests/*.js` (71/71 superati).
+  - `node --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js` (51/51 superati).
+  - `npm run build` (Compilazione completata con successo).
+- **Rischi residui**: Nessuno.
+- **Riconciliazione Bancaria**: Rigidamente BLOCCATA.
+- **Prossimo step**: Fase 16 - Cespiti leggeri.
+
+

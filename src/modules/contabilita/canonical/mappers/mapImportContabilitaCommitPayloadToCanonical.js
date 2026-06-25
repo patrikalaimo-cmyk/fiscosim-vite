@@ -498,7 +498,7 @@ export function mapImportContabilitaCommitPayloadToCanonical(importCommitPayload
     netPayable: numberOrZero(documentTotals.netPayable, gross - withholdingAmount, gross),
     withholding: numberOrZero(documentTotals.withholding, withholdingAmount),
     socialSecurity: numberOrZero(documentTotals.socialSecurity),
-    stampDuty: numberOrZero(documentTotals.stampDuty),
+    stampDuty: numberOrZero(documentTotals.stampDuty, documentTotals.bollo),
     rounding: numberOrZero(documentTotals.rounding),
     excluded: numberOrZero(documentTotals.excluded),
     currency,

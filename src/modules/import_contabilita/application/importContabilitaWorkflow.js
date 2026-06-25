@@ -595,6 +595,7 @@ export async function runImportWorkflow(files = [], options = {}) {
   }
 }
 
+import { resolveSplitPaymentAccountDb as resolveSplitPaymentAccount } from '../../contabilita/domain/registrazione/resolveSplitPaymentAccount.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { validateCanonicalAccountingPayload } from '../../contabilita/canonical/validateCanonicalAccountingPayload.js'
 import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRepo.js'
@@ -708,19 +709,73 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   const imponibileTotal = canonicalPayload.document?.totals?.taxable || 0
   const ivaTotal = canonicalPayload.document?.totals?.vat || 0
 
+  // Identificazione riga IVA senza codici hardcoded:
+  // Nel commit workflow canonico di Import, il pianoConti non è disponibile
+  // (a differenza di Registrazione Manuale che lo riceve come opzione).
+  // La heuristic corretta: una riga contabile è IVA se il suo importo
+  // (dare o avere) corrisponde all'importo IVA totale del documento E
+  // non è la riga del soggetto primario (importo lordo = imponibile + iva).
+  // Gap documentato: in presenza di multi-aliquota con righe IVA di importi
+  // diversi, questa heuristic può non identificare correttamente la riga IVA
+  // aggregata. La soluzione robusta richiede un campo `isVatRow` nel payload
+  // canonico (Fase futura: estensione del contratto canonico).
+  function isIvaAccountingRow(row) {
+    const dare = row.dare || 0
+    const avere = row.avere || 0
+    const eps = 0.02 // tolleranza centesimi per arrotondamenti
+    const isSubject = (row.conto_id && row.conto_id === primarySubject.anagraficaId)
+    if (isSubject) return false
+    const amount = dare || avere
+    return Math.abs(amount - ivaTotal) <= eps && ivaTotal > 0
+  }
+
+  let splitBlocker = null
   if (isSplit && !isAcquisti) {
-    // 1. Omit ordinary VAT row from accounting lines
-    finalRows = finalRows.filter(r => !['acc-iva-debito', '2.04.01.001'].includes(r.conto_codice) && !['acc-iva-credito', '1.03.01.001'].includes(r.conto_codice))
-    // 2. Set client row amount to taxable
-    finalRows.forEach(r => {
-      if (r.conto_id === primarySubject.anagraficaId) {
-        if (r.dare > 0) r.dare = imponibileTotal
-        if (r.avere > 0) r.avere = imponibileTotal
+    const causaleObj = canonicalPayload.header?.causaleContabile || {}
+    const splitAccount = await resolveSplitPaymentAccount(db, causaleObj, societaId)
+    if (!splitAccount) {
+      splitBlocker = 'Conto IVA split payment non configurato per questa causale/template. Configurare il conto tecnico IVA split payment.'
+    } else {
+      // 1. Omit ordinary VAT row from accounting lines (split payment: IVA versata direttamente a Erario dalla PA).
+      // Usa isIvaAccountingRow invece di codici hardcoded (vedi commento sopra).
+      finalRows = finalRows.filter(r => !isIvaAccountingRow(r))
+      // 2. Set client row amount to taxable (il cliente/PA deve solo l'imponibile)
+      finalRows.forEach(r => {
+        if (r.conto_id === primarySubject.anagraficaId) {
+          if (r.dare > 0) r.dare = imponibileTotal
+          if (r.avere > 0) r.avere = imponibileTotal
+        }
+      })
+      // 3. Add the two split payment technical rows (Dare and Avere)
+      const splitDareRow = {
+        conto_id: splitAccount.id,
+        conto_codice: splitAccount.codice || '',
+        conto_descrizione: splitAccount.descrizione || 'IVA split payment',
+        descrizione_riga: 'IVA split payment - evidenza Dare',
+        dare: ivaTotal,
+        avere: 0,
+        riga_numero: finalRows.length + 1,
       }
-    })
+      const splitAvereRow = {
+        conto_id: splitAccount.id,
+        conto_codice: splitAccount.codice || '',
+        conto_descrizione: splitAccount.descrizione || 'IVA split payment',
+        descrizione_riga: 'IVA split payment - evidenza Avere',
+        dare: 0,
+        avere: ivaTotal,
+        riga_numero: finalRows.length + 2,
+      }
+      finalRows.push(splitDareRow, splitAvereRow)
+    }
   } else if (isReverse && isAcquisti) {
     // For reverse charge / CEE / autofattura passiva:
-    const costRow = finalRows.find(r => r.conto_id !== primarySubject.anagraficaId && !['acc-iva-credito', 'acc-iva-debito', '1.03.01.001', '2.04.01.001'].includes(r.conto_codice))
+    // Le righe IVA da sostituire sono identificate con isIvaAccountingRow
+    // (heuristic importo) invece di codici hardcoded.
+    // Il conto IVA da usare per la doppia annotazione viene estratto dalla
+    // riga IVA originale nelle accounting.rows (identificata da isIvaAccountingRow):
+    // questa riga ha già il conto assegnato dall'utente nella working table.
+    const ivaRow = finalRows.find(r => r.conto_id !== primarySubject.anagraficaId && isIvaAccountingRow(r))
+    const costRow = finalRows.find(r => r.conto_id !== primarySubject.anagraficaId && !isIvaAccountingRow(r))
     finalRows = [
       {
         conto_id: costRow?.conto_id || '',
@@ -741,8 +796,12 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         riga_numero: 2,
       },
       {
-        conto_id: 'acc-iva-credito',
-        conto_codice: '1.03.01.001',
+        // Conto IVA a credito: usa il conto della riga IVA originale assegnata
+        // dall'utente nella working table (identificata da isIvaAccountingRow).
+        // Gap documentato: se l'utente non ha assegnato il conto IVA (accountId vuoto),
+        // persistPrimaNotaDraft segnala "conto mancante" come blocker.
+        conto_id: ivaRow?.conto_id || '',
+        conto_codice: ivaRow?.conto_codice || '',
         conto_descrizione: 'IVA a credito',
         descrizione_riga: 'IVA ns.credito (reverse charge)',
         dare: ivaTotal,
@@ -750,8 +809,8 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         riga_numero: 3,
       },
       {
-        conto_id: 'acc-iva-debito',
-        conto_codice: '2.04.01.001',
+        conto_id: ivaRow?.conto_id || '',
+        conto_codice: ivaRow?.conto_codice || '',
         conto_descrizione: 'IVA a debito',
         descrizione_riga: 'IVA ns.debito (reverse charge)',
         dare: 0,
@@ -759,6 +818,22 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         riga_numero: 4,
       }
     ]
+  }
+
+  if (splitBlocker) {
+    return {
+      success: false,
+      blockingReasons: [splitBlocker]
+    }
+  }
+
+  const stampDuty = canonicalPayload.document?.totals?.stampDuty || 0
+  if (stampDuty > 0) {
+    const costRow = finalRows.find(r => r.conto_id !== primarySubject.anagraficaId && !isIvaAccountingRow(r))
+    if (costRow) {
+      if (costRow.dare > 0) costRow.dare = Number((costRow.dare + stampDuty).toFixed(2))
+      if (costRow.avere > 0) costRow.avere = Number((costRow.avere + stampDuty).toFixed(2))
+    }
   }
 
   const totalDare = finalRows.reduce((sum, r) => sum + r.dare, 0)

@@ -322,7 +322,26 @@ export function parseFatturaXml(xmlString, options = {}) {
   finalizeNumbers(parsed)
 
   const totaleDocumento = normalizeNumber(extractTextTag(datiGeneraliBlock, 'ImportoTotaleDocumento'))
-  parsed.totale = totaleDocumento || parsed.imponibile + parsed.iva
+
+  // DatiBollo: estrae importo bollo virtuale (Art. 1350 c.c. / DPR 642/72).
+  // Il bollo non rientra nell'imponibile IVA ma contribuisce al totale documento.
+  // Viene preservato in parsed.bollo per permettere la quadratura corretta
+  // di documenti professionali e fatture con bollo (es. esenti IVA Art.15).
+  const datiBollo = extractTagMatch(xml, 'DatiBollo')
+  const importoBollo = datiBollo ? normalizeNumber(extractTextTag(datiBollo, 'ImportoBollo')) : 0
+  parsed.bollo = importoBollo || 0
+
+  // DatiCassaPrevidenziale: estrae contributo cassa previdenziale (es. INARCASSA, CNPADC).
+  // La cassa previdenziale aumenta l'imponibile complessivo e spesso aggiunge IVA.
+  // Viene già gestita nel totale tramite le ivaRows (DatiRiepilogo include la cassa nella base).
+  // Viene estratta qui per documentazione e warning in caso di disallineamento.
+  const datiCassaBlock = extractTagMatch(xml, 'DatiCassaPrevidenziale')
+  const importoCassa = datiCassaBlock ? normalizeNumber(extractTextTag(datiCassaBlock, 'Importo')) : 0
+  parsed.cassaPrevidenziale = importoCassa || 0
+
+  // Calcolo totale: se ImportoTotaleDocumento è presente nel documento XML, è quello autoritativo.
+  // Altrimenti, totalizza da imponibile + iva + bollo (fallback quadratura).
+  parsed.totale = totaleDocumento || (parsed.imponibile + parsed.iva + parsed.bollo)
 
   buildFlags(xml, parsed, causaleText)
 

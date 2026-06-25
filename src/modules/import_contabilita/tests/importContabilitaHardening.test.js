@@ -61,6 +61,10 @@ class MockDbClient {
     if (table === 'prima_nota') {
       return { data: this.responses.prima_nota, error: null }
     }
+    if (table === 'piano_conti') {
+      const idFilter = (filters || []).find(f => f.col === 'id')
+      return { data: { id: idFilter ? idFilter.val : 'piano_conti-id', codice: '2.04.02.099', descrizione: 'IVA split payment' }, error: null }
+    }
     return { data: { id: `${table}-id` }, error: null }
   }
   resolveMultiple(table, data, filters) {
@@ -125,6 +129,9 @@ function makeBasePayload({ direction = 'acquisto', causaleCode = 'FF', tipoCausa
           segnoRegistroIva: '+',
           opRitenute: hasRitenuta ? 'documento' : 'ignora',
           split_payment: splitPayment,
+          conto_iva_split_payment: splitPayment ? 'acc-split-payment' : undefined,
+          conto_iva_split_payment_codice: splitPayment ? '2.04.02.099' : undefined,
+          conto_iva_split_payment_descrizione: splitPayment ? 'IVA split payment' : undefined,
         },
         description: 'Test doc description',
         isBalanced: true,
@@ -239,9 +246,15 @@ test('Fase 15: runCommitWorkflow con active split payment', async () => {
   assert.ok(clientRow)
   assert.equal(clientRow.importo_dare, 100.00)
   
+  // Verifica le righe tecniche split payment
+  const splitDareRow = righeInsert?.data?.find(r => r.conto_id === 'acc-split-payment' && r.importo_dare === 22.00)
+  assert.ok(splitDareRow)
+  const splitAvereRow = righeInsert?.data?.find(r => r.conto_id === 'acc-split-payment' && r.importo_avere === 22.00)
+  assert.ok(splitAvereRow)
+
   const pnInsert = db.log.find(l => l.action === 'insert' && l.table === 'prima_nota')
-  assert.equal(pnInsert.data[0].totale_dare, 100.00)
-  assert.equal(pnInsert.data[0].totale_avere, 100.00)
+  assert.equal(pnInsert.data[0].totale_dare, 122.00)
+  assert.equal(pnInsert.data[0].totale_avere, 122.00)
   
   const partitarioInsert = db.log.find(l => l.action === 'insert' && l.table === 'partitario')
   assert.ok(partitarioInsert)
@@ -362,3 +375,29 @@ test('Fase 15: runCommitWorkflow con documento multi-aliquota righe IVA distinte
   assert.ok(aliquote.has(10) || aliquote.has('10') || aliquote.has(10.00), 'Aliquota 10% deve essere presente')
   assert.ok(aliquote.has(22) || aliquote.has('22') || aliquote.has(22.00), 'Aliquota 22% deve essere presente')
 })
+
+test('Fase 15: runCommitWorkflow con bollo (spese accessorie) - quadratura e sbilancio risolti', async () => {
+  const db = new MockDbClient()
+  const payload = makeBasePayload({ direction: 'acquisto', causaleCode: 'FF', tipoCausale: 'docivanormale' })
+  // Aggiungiamo bollo: 2.00. Il totale lordo del documento diventa 124.00 (invece di 122.00).
+  payload.payload.document.totals = { gross: 124.00, taxable: 100.00, vat: 22.00, bollo: 2.00 }
+  // La riga del soggetto ha importo 124.00
+  payload.payload.accounting.rows[2].credit = 124.00
+  payload.payload.accounting.rows[2].avere = 124.00
+  
+  const res = await runCommitWorkflow(payload, { db })
+  if (!res.success) console.log('DEBUG BOLLO:', res)
+  assert.equal(res.success, true)
+  
+  const righeInsert = db.log.find(l => l.action === 'insert' && l.table === 'prima_nota_righe')
+  
+  // La riga di costo deve avere importo aumentato del bollo: 100.00 + 2.00 = 102.00
+  const costRow = righeInsert?.data?.find(r => r.conto_id === 'acc-cost')
+  assert.ok(costRow)
+  assert.equal(costRow.importo_dare, 102.00)
+  
+  const pnInsert = db.log.find(l => l.action === 'insert' && l.table === 'prima_nota')
+  assert.equal(pnInsert.data[0].totale_dare, 124.00)
+  assert.equal(pnInsert.data[0].totale_avere, 124.00)
+})
+

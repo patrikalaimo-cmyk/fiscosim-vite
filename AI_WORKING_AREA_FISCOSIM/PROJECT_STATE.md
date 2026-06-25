@@ -1,9 +1,9 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase 15 — Import Contabilità: Hardening Casi Fiscali Complessi (Prompt 19 — aggiunta copertura nota credito e multi-aliquota commit workflow).
-* **Ultimo prompt eseguito:** Prompt n. 19.
-* **Ultimo checkpoint valido:** Fase 15 Hardening Prompt 19.
+* **Fase corrente:** Fase 15 completata — Import Contabilità/Manuale: Micro-Hardening (Prompt 22A — risoluzione conti split payment hardcoded e quadratura bollo/spese accessorie).
+* **Ultimo prompt eseguito:** Prompt n. 22A.
+* **Ultimo checkpoint valido:** Fase 15 Micro-Hardening Prompt 22A.
 * **Working tree atteso:** Modificato (da committare con patch chirurgica).
 
 ## 2. Roadmap attiva immediata
@@ -23,8 +23,8 @@
   - Dropdown conto, causale contabile e conto esistente in Anagrafiche da verificare validati.
   - Validato con import ZIP massivo reale da ~1034 file su SIRIA SRL.
   - **Prompt 19 hardening**: copertura commit workflow per nota credito (segno opposto, parità canonica), multi-aliquota (3 righe IVA distinte preservate). Tutti i casi fiscali complessi riusano `buildCausaleContabilePolicy` e `persistPrimaNotaDraft` da Registrazione Manuale — nessuna logica duplicata.
-  - **Gap documentato**: risoluzione conti IVA split payment con codici parzialmente hardcoded — da estrarre in helper condiviso (Fase futura).
-* **Riconciliazione bancaria:** Non avviata / Fuori perimetro attuale.
+  - **Prompt 22A hardening**: Risolta la risoluzione conti IVA split payment parzialmente hardcoded, estraendola nel modulo di dominio condiviso `resolveSplitPaymentAccount.js` riusato sia in Import che in Manuale. Risolta la quadratura automatica del bollo (spese accessorie) sommando l'importo del bollo sul conto di costo/ricavo nel commit workflow per prevenire sbilanci. Documentato il gap per la cassa previdenziale.
+* **Riconciliazione bancaria:** Non avviata / Fuori perimetro attuale (BLOCCATA).
 * **Partitario / Mastrini / Bilancio:** Allineati con le causali e il salvataggio prima nota.
 * **Ritenute / CU / 770 / F24:** Integrati a livello di schemi e validazioni.
 * **Cespiti:** Fuori perimetro attuale.
@@ -45,9 +45,10 @@
 * **Split payment, IVA per cassa, Reverse charge, Ritenute:** Integrati.
 
 ## 6. Backlog Azioni Massive Import Contabilità (Future)
-* **Storico Conto Prevalente**: Quando sarà disponibile lo storico contabilizzazioni per fornitore/documento, confrontare il conto applicato massivamente con il conto prevalente e mostrare alert: "Stai applicando conto X, ma dallo storico per questo fornitore/documento risulta prevalente il conto Y. Modifica o conferma comunque."
+* **Storico Conto Prevalente**: Quando sarà disponibile lo storico contabilizzazioni per fornitore/documento, confrontare il conto applicato massivamente con il conto prevalente e mostrare alert: "Stai applicando conto X, ma dallo storico per questo fornitore/documento resulta prevalente il conto Y. Modifica o conferma comunque."
 
 ## 7. Ultimi commit/checkpoint rilevanti
 * Checkpoint Fase 14C: Import contabilità anagrafiche working table (commit `137adda`).
 * Checkpoint Fase 14D: Import contabilità azioni massive working table (Prompt n. 17).
-* **Checkpoint Fase 15 Prompt 19**: Hardening casi fiscali complessi: +2 test commit workflow (nota credito, multi-aliquota), matrice gate aggiornata, architettura Import→Manuale documentata.
+* Checkpoint Fase 15 Prompt 19: Hardening casi fiscali complessi: +2 test commit workflow (nota credito, multi-aliquota), matrice gate aggiornata.
+* **Checkpoint Fase 15 Prompt 22A**: Micro-hardening: risoluzione split payment da dominio condiviso e quadratura bollo/spese accessorie. (Commit `checkpoint: import manuale micro hardening pre cespiti`).

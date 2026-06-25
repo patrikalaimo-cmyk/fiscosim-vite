@@ -1,4 +1,5 @@
 import { normalizeText, round2 } from '../canonical_mapper/utils.js'
+import { resolveSplitPaymentAccountCatalog } from '../../domain/registrazione/resolveSplitPaymentAccount.js'
 
 function amount(value) {
   const parsed = Number.parseFloat(normalizeText(value).replace(',', '.'))
@@ -42,35 +43,11 @@ function isOrdinaryVatRow(row = {}) {
 }
 
 function resolveSplitAccount(causale = {}, rows = [], pianoConti = []) {
-  const id = normalizeText(
-    causale?.conto_iva_split_payment ||
-    causale?.contoIvaSplitPayment ||
-    causale?.conto_split_payment ||
-    causale?.contoSplitPayment
-  )
-  if (id) {
-    const catalog = Array.isArray(pianoConti) ? pianoConti : []
-    const directMatch = catalog.find((item) => normalizeText(item?.id) === id)
-    if (directMatch) {
-      return {
-        id: normalizeText(directMatch.id),
-        codice: normalizeText(directMatch.codice || directMatch.code || directMatch.sigla),
-        descrizione: normalizeText(directMatch.descrizione || directMatch.description || directMatch.denominazione || directMatch.nome || 'IVA split payment'),
-      }
-    }
+  // Prova a risolvere usando l'helper condiviso
+  const resolved = resolveSplitPaymentAccountCatalog(causale, pianoConti)
+  if (resolved) return resolved
 
-    const codeMatch = catalog.filter((item) => normalizeText(item?.codice || item?.code || item?.sigla) === id)
-    if (codeMatch.length === 1) {
-      const match = codeMatch[0]
-      return {
-        id: normalizeText(match.id),
-        codice: normalizeText(match.codice || match.code || match.sigla),
-        descrizione: normalizeText(match.descrizione || match.description || match.denominazione || match.nome || 'IVA split payment'),
-      }
-    }
-    return null
-  }
-
+  // Fallback sui template/righe
   const template = causale?.righe_prima_nota_template || causale?.righePrimaNotaTemplate || causale?.righe_prima_nota || []
   const configured = [...(Array.isArray(template) ? template : []), ...(Array.isArray(rows) ? rows : [])]
     .find((row) => ['iva_split', 'iva_split_payment', 'split_payment'].includes(rowRole(row)))

@@ -29,6 +29,7 @@ import {
 import {
   getDefaultMastrinoForTipo as getDefaultMastrinoForTipoDomain,
   getAllowedMastriniForTipo as getAllowedMastriniForTipoDomain,
+  getAllowedMastrinoCodesForTipo as getAllowedMastrinoCodesForTipoDomain,
   isAllowedMastrinoForTipo as isAllowedMastrinoForTipoDomain,
   findAnagraficaExistingAccount as findAnagraficaExistingAccountDomain,
   validateAnagraficaDecision as validateAnagraficaDecisionDomain,
@@ -4458,6 +4459,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
             imponibile: Number(row?.parsedDocument?.imponibile || 0),
             iva: Number(row?.parsedDocument?.iva || 0),
             totaleDocumento: Number(row?.parsedDocument?.totale || 0),
+            bollo: Number(row?.parsedDocument?.bollo || 0),
           },
         },
         accounting: {

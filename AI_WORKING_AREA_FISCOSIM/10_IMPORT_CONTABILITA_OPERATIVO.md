@@ -10,18 +10,17 @@ Questo documento descrive il consolidamento dell'Import Contabilità per la gest
 * **Test di riferimento**: `Fase 15: runCommitWorkflow con ritenuta d acconto percipiente` in `importContabilitaHardening.test.js`.
 
 ### 2. Split Payment (Scissione dei pagamenti)
-* **Funzionamento**: Attivato in anagrafica cliente (soggetto pubblico/PA). Il commit workflow esclude la riga IVA dall'inserimento in prima nota righe, riduce il debito/credito v/cliente al solo imponibile e inserisce la riga del partitario sul solo imponibile.
-* **Funzione Manuale riusata**: `buildCausaleContabilePolicy` (rilevamento `splitPayment`), `persistPrimaNotaDraft`.
-* **Gap documentato**: risoluzione riga IVA da omettere usa codici parzialmente hardcoded (`1.03.01.001`, `2.04.01.001`) — da estrarre in helper condiviso per supporto piani dei conti personalizzati.
+* **Funzionamento**: Attivato in anagrafica cliente (soggetto pubblico/PA). Il commit workflow esclude la riga IVA dall'inserimento in prima nota righe, riduce il debito/credito v/cliente al solo imponibile e inserisce la riga del partitario sul solo imponibile. Inoltre, inserisce due righe tecniche di evidenza split payment (Dare/Avere) per allineare il Libro Giornale.
+* **Funzione condivisa**: La risoluzione del conto IVA split payment è stata centralizzata nel dominio condiviso [resolveSplitPaymentAccount.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/registrazione/resolveSplitPaymentAccount.js) (`resolveSplitPaymentAccountDb` per il workflow asincrono di Import e `resolveSplitPaymentAccountCatalog` per il rendering in-memory della Registrazione Manuale). Questo elimina qualsiasi codice conto hardcoded (`1.03.01.001`, `2.04.01.001`) a livello di Import.
 * **Test di riferimento**: `Fase 15: runCommitWorkflow con active split payment` in `importContabilitaHardening.test.js`.
 
 ### 3. IVA per cassa (Differita)
-* **Funzionamento**: Attivata tramite policy causale contabile (esigibilità differita). Il registro IVA viene popolato impostando `esigibilita = 'differita'` e l'IVA a credito/debito in prima nota rimane sospesa fino all'effettivo pagamento/incasso.
+* **Funzionamento**: Attivato tramite policy causale contabile (esigibilità differita). Il registro IVA viene popolato impostando `esigibilita = 'differita'` e l'IVA a credito/debito in prima nota rimane sospesa fino all'effettivo pagamento/incasso.
 * **Funzione Manuale riusata**: `buildCausaleContabilePolicy` (rilevamento `ivaPerCassa`), `persistPrimaNotaDraft` (gestione esigibilità per riga IVA).
 * **Test di riferimento**: `Fase 15: runCommitWorkflow con IVA per cassa differita` in `importContabilitaHardening.test.js`.
 
 ### 4. Reverse Charge, CEE ed Extra-UE (Autofatture)
-* **Funzionamento**: Rilevato da tipo causale o flag. Il commit workflow genera automaticamente la doppia annotazione IVA (doppio registro acquisti e vendite) e limita il partitario fornitore all'imponibile, neutralizzando l'effetto dell'imposta a livello finanziario.
+* **Funzionamento**: Rilevato da tipo causale o flag. Il commit workflow genera automaticamente la doppia annotazione IVA (doppio registro acquisti e vendite) e limita il partitario fornitore all'imponibile, neutralizzando l'effetto dell'imposta a livello finanziario. La riga IVA originale viene identificata tramite euristica dell'importo senza codici conto fissi.
 * **Funzione Manuale riusata**: `buildCausaleContabilePolicy` (rilevamento `reverseCharge`, `isAutofattura`, `isCee`), `persistPrimaNotaDraft`.
 * **Test di riferimento**: `Fase 15: runCommitWorkflow con reverse charge double entry e partitario imponibile` in `importContabilitaHardening.test.js`.
 
@@ -35,7 +34,13 @@ Questo documento descrive il consolidamento dell'Import Contabilità per la gest
 * **Funzione Manuale riusata**: `persistPrimaNotaDraft` / `buildVatRegisterEntriesFromCanonicalPayload` (inserimento righe IVA per riga).
 * **Test di riferimento**: `Fase 15: runCommitWorkflow con documento multi-aliquota righe IVA distinte` in `importContabilitaHardening.test.js`.
 
+### 7. Gestione Bollo e Cassa Previdenziale (Prompt 22A)
+* **Bollo (Stamp Duty)**: Il tag `DatiBollo` viene estratto dal parser XML e mappato nel payload canonico in `totals.stampDuty`. Per preservare la quadratura Dare/Avere (sbilanciata dalla presenza del bollo virtuale non soggetto a IVA ma incluso nel totale lordo dovuto al soggetto), il commit workflow dell'Import somma il bollo direttamente sul conto di costo/ricavo associato al documento.
+  * **Test di riferimento**: `Fase 15: runCommitWorkflow con bollo (spese accessorie) - quadratura e sbilancio risolti` in `importContabilitaHardening.test.js`.
+* **Cassa Previdenziale**: Viene estratta dal parser XML come informazione di testata (`parsed.cassaPrevidenziale`). Il suo importo confluisce nella base imponibile e nelle righe IVA del riepilogo XML (DatiRiepilogo), quindi la quadratura del totale è preservata. Non viene inserita in una riga di costo autonoma (cassa previdenziale a debito/credito) in assenza di impostazioni o mappature percipiente dedicate: la cassa viene registrata cumulativamente nel costo della prestazione.
+  * **Gap Documentato**: Per una gestione disgiunta o analitica della cassa previdenziale e delle spese accessorie (es. addebito spese bancarie o imballo non imponibili), sarà necessario introdurre nel piano dei conti/società conti di ricavo/costo specifici per accessori da valorizzare in sede di importazione (Fase futura).
+
 ---
-*Stato del Modulo*: **Hardening Completo** per i flussi di Import Contabilità (Prompt 19).
+*Stato del Modulo*: **Hardening Completo** per i flussi di Import Contabilità (Prompt 22A).
 *Riconciliazione Bancaria*: **Rigidamente Bloccata** in attesa del Libro Cespiti (Fase 16).
 
