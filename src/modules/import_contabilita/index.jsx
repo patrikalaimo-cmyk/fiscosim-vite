@@ -4402,6 +4402,38 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         }
       })
 
+      const causalePolicy = manualCausale ? buildCausaleContabilePolicy(manualCausale) : {}
+      const hasWithholding = Boolean(row?.parsedDocument?.withholding?.enabled)
+      const isSplitActive = !isAcquisti && Boolean(counterpartyAccount?.split_payment || row?.parsedDocument?.flags?.splitPayment)
+      const isCassaActive = Boolean(causalePolicy.ivaPerCassa)
+      const isReverseActive = Boolean(causalePolicy.reverseCharge || causalePolicy.isCee || causalePolicy.isAutofattura)
+
+      const withholdingBlock = hasWithholding
+        ? {
+            enabled: true,
+            recipient: {
+              anagraficaId: counterpartyAccount?.id || '',
+              denominazione: row?.parsedDocument?.fornitore?.denominazione || row?.parsedDocument?.cliente?.denominazione || '',
+              codiceFiscale: row?.parsedDocument?.fornitore?.codiceFiscale || row?.parsedDocument?.cliente?.codiceFiscale || '',
+              partitaIva: row?.parsedDocument?.fornitore?.partitaIva || row?.parsedDocument?.cliente?.partitaIva || '',
+              paese: 'IT',
+            },
+            rows: [
+              {
+                rowNumber: 1,
+                baseAmount: Number(row?.parsedDocument?.imponibile || 0),
+                rate: Number(row?.parsedDocument?.withholding?.rate || 0),
+                amount: Number(row?.parsedDocument?.withholding?.amount || 0),
+                netPaid: Number(row?.parsedDocument?.totale || 0) - Number(row?.parsedDocument?.withholding?.amount || 0),
+                causaleCu: row?.parsedDocument?.withholding?.causaleCu || '',
+                paymentDate: '',
+                dueDateF24: '',
+                tributeCode: '1040',
+              }
+            ]
+          }
+        : undefined
+
       const innerPayload = {
         company: {
           societaId: selectedSocietaId,
@@ -4468,7 +4500,15 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
           enabled: true,
           registerType: isAcquisti ? 'acquisti' : 'vendite',
           competencePeriod: registrationDateFormatted.slice(0, 7),
-          rows: vatRowsMapped,
+          splitPayment: isSplitActive,
+          ivaPerCassa: isCassaActive,
+          reverseCharge: isReverseActive,
+          rows: vatRowsMapped.map((v) => ({
+            ...v,
+            splitPayment: isSplitActive,
+            ivaPerCassa: isCassaActive,
+            reverseCharge: isReverseActive,
+          })),
         },
         ledger: {
           enabled: true,
@@ -4484,6 +4524,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
             },
           ],
         },
+        withholding: withholdingBlock,
         validation: {
           status: 'confermata',
           blockers: [],

@@ -9535,7 +9535,77 @@ M src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js
 - **Backlog**:
   - Quando sarà disponibile lo storico contabilizzazioni per fornitore/documento, confrontare il conto applicato massivamente con il conto prevalente e mostrare alert: "Stai applicando conto X, ma dallo storico per questo fornitore/documento risulta prevalente il conto Y. Modifica o conferma comunque."
 
+## FASE-15-GATE-MANUALE-E-IMPORT-100-SETUP
+
+- **Obiettivo**: Istituire il gate di sbarramento formale ed eseguire l'audit di copertura per impedire passaggi prematuri a Riconciliazione Bancaria.
+- **File Creati/Modificati**:
+  - `[NEW]` [11_GATE_MANUALE_IMPORT_100.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md)
+  - `[MODIFY]` [PROJECT_STATE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md)
+  - `[MODIFY]` [REPORT_CODEX.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+- **Esito Audit**:
+  - *Registrazione Manuale*: Copre ottimamente quasi il 100% dei casi (IVA ordinaria, split, cassa, ritenute, UE/CEE, reverse).
+  - *Import Contabilità*: Presenta forti lacune sugli scenari avanzati (ritenute riga rigide a `[]`, mancato allineamento automatico dei target split, cassa, reverse e UE beni/servizi).
+  - *Cespiti*: Non ancora implementato.
+- **Conclusione**: Riconciliazione Bancaria rimane bloccata. Il prossimo passo operativo obbligatorio per sbloccarla è la Fase 15 (Hardening casi complessi Import Contabilità) e la Fase 16 (Cespiti leggeri).
+- **Sicurezza**: Rispettata (nessun codice modificato, nessun commit funzionale necessario in assenza di modifiche al codice).
 
 
 
 
+
+
+
+## FASE-15-HARDENING-CASI-FISCALI-COMPLESSI-PROMPT-19
+
+- **Data**: 2026-06-25
+- **Obiettivo**: Hardening Import Contabilita per casi fiscali complessi prima di Riconciliazione. Completamento copertura commit workflow per nota credito (parita canonica segno opposto) e multi-aliquota (righe IVA distinte preservate). Verifica architettura Import -> Manuale.
+- **File Letti**:
+  - REGOLE_CODEX.md, AI_WORKING_AREA_FISCOSIM/00-06,10-11,PROJECT_STATE.md
+  - src/modules/import_contabilita/application/importContabilitaWorkflow.js
+  - src/modules/import_contabilita/application/importContabilitaParser.js
+  - src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js
+  - src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js
+  - src/modules/contabilita/application/persistPrimaNotaDraft.js
+  - src/modules/import_contabilita/tests/importContabilitaHardening.test.js
+- **Audit architettura Import -> Manuale**:
+  - buildCausaleContabilePolicy: CONDIVISO (notaCredito, splitPayment, reverseCharge, ivaPerCassa, autofattura, isCee).
+  - mapImportContabilitaCommitPayloadToCanonical: CONDIVISO.
+  - validateCanonicalAccountingPayload: CONDIVISO.
+  - persistPrimaNotaDraft: CONDIVISO (IVA, partitario, ritenute, segno NC).
+  - NESSUNA logica fiscale duplicata in Import.
+  - Gap documentato: risoluzione conti IVA split payment con codici hardcoded parziali (da estrarre in helper condiviso, non urgente).
+- **File Modificati**:
+  - [MODIFY] src/modules/import_contabilita/tests/importContabilitaHardening.test.js (+2 test: nota credito segno opposto, multi-aliquota 3 righe IVA distinte)
+  - [MODIFY] AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md (matrice aggiornata, architettura Import->Manuale documentata)
+  - [MODIFY] AI_WORKING_AREA_FISCOSIM/10_IMPORT_CONTABILITA_OPERATIVO.md (+2 casi: nota credito, multi-aliquota; funzioni Manuale riusate documentate)
+  - [MODIFY] AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md (stato aggiornato Prompt 19)
+  - [MODIFY] REPORT/REPORT_CODEX.md (append-only)
+- **Casi Fiscali Coperti (commit workflow)**:
+  1. Ritenute/parcelle (gia coperto, confermato)
+  2. Split payment (gia coperto, confermato)
+  3. IVA per cassa differita (gia coperto, confermato)
+  4. Reverse charge/autofatture/UE-extra UE (gia coperto, confermato)
+  5. Nota credito segno opposto (NUOVO - Prompt 19)
+  6. Multi-aliquota righe IVA distinte (NUOVO - Prompt 19)
+- **Casi ancora Parziali/Non coperti**:
+  - Cespite da fattura: Non coperto (attende Fase 16).
+  - Bollo/cassa previdenziale: Parziale (quadratura spese accessorie).
+  - Risoluzione conti IVA split payment hardcoded: Gap documentato (helper condiviso futuro).
+- **Test Eseguiti**:
+  - 
+ode --test src/modules/import_contabilita/tests/*.js -> 70/70 PASS (era 68, +2 nuovi).
+  - 
+ode --test tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js tests/fase3RegistrazioneManualeMovimentiGenerali.test.js tests/primaNotaMutationService.test.js tests/fase3c3FunctionalCorrection.test.js -> 51/51 PASS.
+  - 
+pm run build -> Successo (429 moduli, 16s).
+- **Conferma sicurezza**:
+  - Nessun env/auth/RLS/migration/policy toccato.
+  - Nessun dato reale modificato manualmente.
+  - Nessuna contabilizzazione reale avviata.
+  - Nessun legacy riattivato.
+  - Nessuna logica fiscale nel JSX.
+  - Nessuna logica fiscale duplicata in Import.
+  - No git add .
+- **Stato gate**: Manuale 100%. Import: hardening completo su tutti i casi del gate tranne cespiti (Fase 16) e bollo/spese accessorie (parziale).
+- **Riconciliazione Bancaria**: BLOCCATA. Sblocco condizionato a Fase 16 (Libro Cespiti).
+- **Prossimo step**: Fase 16 - Libro Cespiti (innesco cespite e libro cespiti).

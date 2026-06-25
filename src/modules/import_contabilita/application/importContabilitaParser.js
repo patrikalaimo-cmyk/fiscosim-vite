@@ -325,6 +325,22 @@ export function parseFatturaXml(xmlString, options = {}) {
   parsed.totale = totaleDocumento || parsed.imponibile + parsed.iva
 
   buildFlags(xml, parsed, causaleText)
+
+  const datiRitenutaBlock = extractTagMatch(xml, 'DatiRitenuta')
+  if (datiRitenutaBlock) {
+    const importoRitenuta = normalizeNumber(extractTextTag(datiRitenutaBlock, 'ImportoRitenuta'))
+    const aliquotaRitenuta = normalizeNumber(extractTextTag(datiRitenutaBlock, 'AliquotaRitenuta'))
+    const causalePagamento = normalizeWhitespace(extractTextTag(datiRitenutaBlock, 'CausalePagamento'))
+    parsed.withholding = {
+      enabled: true,
+      amount: importoRitenuta || 0,
+      rate: aliquotaRitenuta || 0,
+      causaleCu: causalePagamento || '',
+    }
+  } else {
+    parsed.withholding = null
+  }
+
   enrichWarningsAndErrors(xml, parsed)
 
   if (!parsed.totale) {

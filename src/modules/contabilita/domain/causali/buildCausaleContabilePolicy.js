@@ -37,8 +37,8 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const item = causale && typeof causale === 'object' ? causale : { codice: causale }
   const code = normalizeText(item?.code || item?.codice || item?.sigla || item?.id || '').toUpperCase()
   const typeCausale = pickPolicyText(item, ['tipo_causale', 'tipoCausale'])
-  const operazionePartite = pickPolicyText(item, ['operazione_partite', 'operazionePartite'])
-  const gestionePartite = pickPolicyText(item, ['gestione_partite', 'gestionePartite'])
+  const operazionePartite = pickPolicyText(item, ['operazione_partite', 'operazionePartite', 'gestionePartitario', 'gestione_partitario'])
+  const gestionePartite = pickPolicyText(item, ['gestione_partite', 'gestionePartite', 'gestionePartitario', 'gestione_partitario'])
   const opRitenute = pickPolicyText(item, ['op_ritenute', 'opRitenute', 'operazioneRitenute', 'operazione_ritenute'])
   const tipoDocumento = pickPolicyText(item, ['tipo_documento', 'tipoDocumento', 'operazione_gestita', 'operazioneGestita'])
   const dataDocumento = pickPolicyText(item, ['data_documento', 'dataDocumento'])

@@ -1,15 +1,15 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase 14D — Import Contabilità: Operatività Massiva Working Table (Chiusa, testata).
-* **Ultimo prompt eseguito:** Prompt n. 17 (Checkpoint Fase 14D).
-* **Ultimo checkpoint valido:** Fase 14D (Operatività massiva working table stabile).
-* **Working tree atteso:** Pulito post-checkpoint (dopo doppio commit).
+* **Fase corrente:** Fase 15 — Import Contabilità: Hardening Casi Fiscali Complessi (Prompt 19 — aggiunta copertura nota credito e multi-aliquota commit workflow).
+* **Ultimo prompt eseguito:** Prompt n. 19.
+* **Ultimo checkpoint valido:** Fase 15 Hardening Prompt 19.
+* **Working tree atteso:** Modificato (da committare con patch chirurgica).
 
 ## 2. Roadmap attiva immediata
-* **Fase corrente:** Checkpoint Fase 14D completato.
-* **Prossimo step:** Fase 15 — Integrazione / Riconciliazione Bancaria o passaggi contabili successivi.
-* **Cosa non anticipare:** Non iniziare Riconciliazione Bancaria né altre fasi successive prima del via libera.
+* **Fase corrente:** Fase 15 completata. Gate Manuale/Import 100% allineato.
+* **Prossimo step:** Fase 16 — Cespiti leggeri (innesco cespite e libro cespiti prima del via libera banca).
+* **Cosa non anticipare:** Riconciliazione Bancaria è rigorosamente BLOCCATA dal gate 100% Manuale/Import (vedi [11_GATE_MANUALE_IMPORT_100.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md)).
 * **Mantenere divieto** di "Avvia contabilizzazione" automatica su dati reali senza un test controllato successivo.
 
 ## 3. Stato moduli
@@ -22,6 +22,8 @@
   - Parsing XML FE passiva validato su working table (fornitore, data, numero, imponibile, iva, totale).
   - Dropdown conto, causale contabile e conto esistente in Anagrafiche da verificare validati.
   - Validato con import ZIP massivo reale da ~1034 file su SIRIA SRL.
+  - **Prompt 19 hardening**: copertura commit workflow per nota credito (segno opposto, parità canonica), multi-aliquota (3 righe IVA distinte preservate). Tutti i casi fiscali complessi riusano `buildCausaleContabilePolicy` e `persistPrimaNotaDraft` da Registrazione Manuale — nessuna logica duplicata.
+  - **Gap documentato**: risoluzione conti IVA split payment con codici parzialmente hardcoded — da estrarre in helper condiviso (Fase futura).
 * **Riconciliazione bancaria:** Non avviata / Fuori perimetro attuale.
 * **Partitario / Mastrini / Bilancio:** Allineati con le causali e il salvataggio prima nota.
 * **Ritenute / CU / 770 / F24:** Integrati a livello di schemi e validazioni.
@@ -48,3 +50,4 @@
 ## 7. Ultimi commit/checkpoint rilevanti
 * Checkpoint Fase 14C: Import contabilità anagrafiche working table (commit `137adda`).
 * Checkpoint Fase 14D: Import contabilità azioni massive working table (Prompt n. 17).
+* **Checkpoint Fase 15 Prompt 19**: Hardening casi fiscali complessi: +2 test commit workflow (nota credito, multi-aliquota), matrice gate aggiornata, architettura Import→Manuale documentata.

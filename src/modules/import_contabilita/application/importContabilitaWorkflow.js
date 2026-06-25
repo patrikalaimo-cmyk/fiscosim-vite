@@ -600,6 +600,7 @@ import { validateCanonicalAccountingPayload } from '../../contabilita/canonical/
 import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRepo.js'
 import { persistPrimaNotaDraft } from '../../contabilita/application/persistPrimaNotaDraft.js'
 import { sb } from '../../../lib/supabase.js'
+import { buildCausaleContabilePolicy } from '../../contabilita/domain/causali/buildCausaleContabilePolicy.js'
 
 function evaluatePeriodoStampaDefinita(dataRegistrazione, stampeDefinitive) {
   if (!dataRegistrazione || !stampeDefinitive || !stampeDefinitive.length) return false
@@ -677,7 +678,24 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   // 5. Persistence via persistPrimaNotaDraft
   // We need to map the canonical payload back to the structure expected by persistPrimaNotaDraft
   // Let's create the adapter/bundle structure:
-  const rows = (canonicalPayload.accounting?.rows || []).map((r, index) => ({
+  // 5. Persistence via persistPrimaNotaDraft
+  // We need to map the canonical payload back to the structure expected by persistPrimaNotaDraft
+  // Let's create the adapter/bundle structure:
+  const primarySubject = canonicalPayload.subjects?.find(s => s.role === 'primary') || {}
+
+  const headerCausale = canonicalPayload.header?.causaleContabile || {}
+  const policy = buildCausaleContabilePolicy({
+    ...headerCausale,
+    codice: headerCausale.codice || headerCausale.code || '',
+    tipo_causale: headerCausale.tipoCausale || headerCausale.tipo_causale || '',
+  })
+
+  const isAcquisti = canonicalPayload.fiscalContext?.tipoOperazione === 'acquisto' || canonicalPayload.fiscalContext?.tipoOperazione === 'passiva'
+  const isSplit = Boolean(canonicalPayload.fiscalContext?.splitPayment || policy.splitPayment)
+  const isReverse = Boolean(canonicalPayload.fiscalContext?.reverseCharge || policy.reverseCharge || policy.isCee || policy.isAutofattura)
+  const isCassa = Boolean(canonicalPayload.fiscalContext?.ivaPerCassa || policy.ivaPerCassa)
+
+  let finalRows = (canonicalPayload.accounting?.rows || []).map((r, index) => ({
     conto_id: r.accountId,
     conto_codice: r.accountCode,
     conto_descrizione: r.accountDescription,
@@ -687,7 +705,92 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     riga_numero: r.rowNumber || index + 1,
   }))
 
-  const primarySubject = canonicalPayload.subjects?.find(s => s.role === 'primary') || {}
+  const imponibileTotal = canonicalPayload.document?.totals?.taxable || 0
+  const ivaTotal = canonicalPayload.document?.totals?.vat || 0
+
+  if (isSplit && !isAcquisti) {
+    // 1. Omit ordinary VAT row from accounting lines
+    finalRows = finalRows.filter(r => !['acc-iva-debito', '2.04.01.001'].includes(r.conto_codice) && !['acc-iva-credito', '1.03.01.001'].includes(r.conto_codice))
+    // 2. Set client row amount to taxable
+    finalRows.forEach(r => {
+      if (r.conto_id === primarySubject.anagraficaId) {
+        if (r.dare > 0) r.dare = imponibileTotal
+        if (r.avere > 0) r.avere = imponibileTotal
+      }
+    })
+  } else if (isReverse && isAcquisti) {
+    // For reverse charge / CEE / autofattura passiva:
+    const costRow = finalRows.find(r => r.conto_id !== primarySubject.anagraficaId && !['acc-iva-credito', 'acc-iva-debito', '1.03.01.001', '2.04.01.001'].includes(r.conto_codice))
+    finalRows = [
+      {
+        conto_id: costRow?.conto_id || '',
+        conto_codice: costRow?.conto_codice || '',
+        conto_descrizione: costRow?.conto_descrizione || '',
+        descrizione_riga: costRow?.descrizione_riga || '',
+        dare: imponibileTotal,
+        avere: 0,
+        riga_numero: 1,
+      },
+      {
+        conto_id: primarySubject.anagraficaId || '',
+        conto_codice: primarySubject.pianoContiIdPatrimoniale || '',
+        conto_descrizione: primarySubject.denominazione || '',
+        descrizione_riga: `Debito v/fornitore estero`,
+        dare: 0,
+        avere: imponibileTotal,
+        riga_numero: 2,
+      },
+      {
+        conto_id: 'acc-iva-credito',
+        conto_codice: '1.03.01.001',
+        conto_descrizione: 'IVA a credito',
+        descrizione_riga: 'IVA ns.credito (reverse charge)',
+        dare: ivaTotal,
+        avere: 0,
+        riga_numero: 3,
+      },
+      {
+        conto_id: 'acc-iva-debito',
+        conto_codice: '2.04.01.001',
+        conto_descrizione: 'IVA a debito',
+        descrizione_riga: 'IVA ns.debito (reverse charge)',
+        dare: 0,
+        avere: ivaTotal,
+        riga_numero: 4,
+      }
+    ]
+  }
+
+  const totalDare = finalRows.reduce((sum, r) => sum + r.dare, 0)
+  const totalAvere = finalRows.reduce((sum, r) => sum + r.avere, 0)
+
+  const withholdingRecipient = canonicalPayload.subjects?.find(s => s.role === 'withholdingRecipient')
+  const percipienteRecord = withholdingRecipient
+    ? {
+        id: withholdingRecipient.anagraficaId || '',
+        denominazione: withholdingRecipient.denominazione || '',
+        codiceFiscale: withholdingRecipient.codiceFiscale || '',
+        partitaIva: withholdingRecipient.partitaIva || '',
+        paese: withholdingRecipient.paese || 'IT',
+      }
+    : null
+
+  const withholdingRows = (canonicalPayload.withholding?.rows || []).map((r, index) => ({
+    percipienteId: withholdingRecipient?.anagraficaId || primarySubject.anagraficaId || '',
+    percipienteNome: withholdingRecipient?.denominazione || primarySubject.denominazione || '',
+    codiceFiscale: withholdingRecipient?.codiceFiscale || primarySubject.codiceFiscale || '',
+    importoCompenso: r.baseAmount,
+    baseRitenuta: r.baseAmount,
+    aliquotaRitenuta: r.rate,
+    ritenuta: r.amount,
+    netto: r.netPaid,
+    causaleCu: r.causaleCu,
+    codiceTributo: r.tributeCode || '1040',
+    dataDocumento: canonicalPayload.document?.dataDocumento || dataRegistrazione,
+    numeroDocumento: canonicalPayload.document?.numeroDocumento || '',
+    mode: 'documento',
+    active: true,
+  }))
 
   const draftBundle = {
     pnPayload: {
@@ -701,12 +804,12 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
       descrizione: canonicalPayload.header?.descrizione || '',
       cliente_fornitore_id: primarySubject.anagraficaId || '',
       cliente_fornitore_nome: primarySubject.denominazione || '',
-      totale_dare: canonicalPayload.header?.totals?.totaleDare || 0,
-      totale_avere: canonicalPayload.header?.totals?.totaleAvere || 0,
+      totale_dare: totalDare,
+      totale_avere: totalAvere,
       stato: 'confermata',
       documento_import_id: documentId || null,
     },
-    righePayload: rows,
+    righePayload: finalRows,
     header: {
       societaId: societaId,
       esercizioContabile: canonicalPayload.company?.esercizioId || dataRegistrazione.slice(0, 4),
@@ -725,8 +828,8 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
       clienteFornitorePartitaIva: primarySubject.partitaIva || '',
     },
     totals: {
-      totaleDare: canonicalPayload.header?.totals?.totaleDare || 0,
-      totaleAvere: canonicalPayload.header?.totals?.totaleAvere || 0,
+      totaleDare: totalDare,
+      totaleAvere: totalAvere,
       differenza: 0,
       isBalanced: true,
     },
@@ -744,6 +847,7 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     ivaDraft: {
       active: canonicalPayload.vat?.enabled || false,
       registroIva: canonicalPayload.vat?.registerType || '',
+      esigibilita: isCassa ? 'differita' : 'immediata',
       rows: (canonicalPayload.vat?.rows || []).map((r, index) => ({
         riga: r.rowNumber || index + 1,
         imponibile: r.imponibile,
@@ -751,25 +855,36 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         aliquota: r.aliquota,
         causaleIvaId: r.causaleIvaId || '',
         causaleIvaLabel: r.causaleIva || '',
-        esigibilita: r.esigibilita || 'Immediata',
+        esigibilita: isCassa ? 'differita' : (r.esigibilita || 'Immediata'),
+        splitPayment: r.splitPayment || false,
       }))
     },
     partitarioDraft: {
       active: canonicalPayload.ledger?.enabled || false,
-      mode: canonicalPayload.ledger?.mode || 'none',
+      mode: canonicalPayload.ledger?.mode === 'open' ? 'apertura' : (canonicalPayload.ledger?.mode === 'close' ? 'chiusura' : 'nessuno'),
       accountId: canonicalPayload.ledger?.accountId || '',
       soggettoId: canonicalPayload.ledger?.subjectId || '',
-      rows: (canonicalPayload.ledger?.rows || []).map((r, index) => ({
-        riga: r.rowNumber || index + 1,
-        importoOriginario: r.amount,
-        importoAperto: r.amount,
-        dataScadenza: r.dueDate,
-        numeroDocumento: r.documentRef,
-      }))
+      rows: (canonicalPayload.ledger?.rows || []).map((r, index) => {
+        const finalAmount = (isSplit && !isAcquisti) || (isReverse && isAcquisti)
+          ? imponibileTotal
+          : r.amount
+        return {
+          riga: r.rowNumber || index + 1,
+          importoOriginario: finalAmount,
+          importoAperto: finalAmount,
+          dataScadenza: r.dueDate,
+          numeroDocumento: r.documentRef,
+        }
+      })
     },
     ritenutaDraft: {
       active: canonicalPayload.withholding?.enabled || false,
-      rows: []
+      mode: 'documento',
+      percipienteRecord,
+      percipienteId: percipienteRecord?.id || '',
+      percipienteNome: percipienteRecord?.denominazione || '',
+      codiceFiscale: percipienteRecord?.codiceFiscale || '',
+      rows: withholdingRows,
     }
   }
 
