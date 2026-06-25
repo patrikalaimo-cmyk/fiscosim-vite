@@ -7,13 +7,13 @@
 * **Working tree atteso:** Modificato (da committare con patch chirurgica).
 
 ## 2. Roadmap attiva immediata
-* **Fase corrente:** Fase 15 completata. Gate Manuale/Import 100% allineato.
-* **Prossimo step:** Fase 16 — Cespiti leggeri (innesco cespite e libro cespiti prima del via libera banca).
-* **Cosa non anticipare:** Riconciliazione Bancaria è rigorosamente BLOCCATA dal gate 100% Manuale/Import (vedi [11_GATE_MANUALE_IMPORT_100.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md)).
+* **Fase corrente:** Fase 16 completata — Cespiti leggeri (innesco cespite e libro cespiti da Manuale + Import).
+* **Prossimo step:** Riconciliazione bancaria (pianificazione e sblocco post-gate).
+* **Cosa non anticipare:** Riconciliazione Bancaria è ancora bloccata fino al via libera finale.
 * **Mantenere divieto** di "Avvia contabilizzazione" automatica su dati reali senza un test controllato successivo.
 
 ## 3. Stato moduli
-* **Inserimento Manuale:** Completo con gestione storni, modifiche e stati.
+* **Inserimento Manuale:** Completo con gestione storni, modifiche e stati. Intercetta conti cespiti con avviso e inserimento in libro cespiti.
 * **Consultazione Prima Nota:** Hardened, in sola lettura per modifiche contabili.
 * **Registri IVA / Liquidazioni / Stampe definitive:** Fase 13 chiusa, definitiva e consolidata.
 * **Import Contabilità:** 
@@ -24,10 +24,11 @@
   - Validato con import ZIP massivo reale da ~1034 file su SIRIA SRL.
   - **Prompt 19 hardening**: copertura commit workflow per nota credito (segno opposto, parità canonica), multi-aliquota (3 righe IVA distinte preservate). Tutti i casi fiscali complessi riusano `buildCausaleContabilePolicy` e `persistPrimaNotaDraft` da Registrazione Manuale — nessuna logica duplicata.
   - **Prompt 22A hardening**: Risolta la risoluzione conti IVA split payment parzialmente hardcoded, estraendola nel modulo di dominio condiviso `resolveSplitPaymentAccount.js` riusato sia in Import che in Manuale. Risolta la quadratura automatica del bollo (spese accessorie) sommando l'importo del bollo sul conto di costo/ricavo nel commit workflow per prevenire sbilanci. Documentato il gap per la cassa previdenziale.
+  - **Fase 16**: Intercettazione automatica dei conti cespite con badge "Potenziale cespite" in working table e salvataggio automatico bozza in `beni_ammortizzabili` a commit avvenuto.
 * **Riconciliazione bancaria:** Non avviata / Fuori perimetro attuale (BLOCCATA).
 * **Partitario / Mastrini / Bilancio:** Allineati con le causali e il salvataggio prima nota.
 * **Ritenute / CU / 770 / F24:** Integrati a livello di schemi e validazioni.
-* **Cespiti:** Fuori perimetro attuale.
+* **Cespiti:** Modulo cespiti leggero attivo (Fase 16): intercettazione da manuale ed import con salvataggio bozza cespite in `beni_ammortizzabili`.
 
 ## 4. Regole architetturali ferree
 * **No legacy:** Non toccare o riutilizzare vecchi import.

@@ -40,7 +40,11 @@ Questo documento descrive il consolidamento dell'Import Contabilità per la gest
 * **Cassa Previdenziale**: Viene estratta dal parser XML come informazione di testata (`parsed.cassaPrevidenziale`). Il suo importo confluisce nella base imponibile e nelle righe IVA del riepilogo XML (DatiRiepilogo), quindi la quadratura del totale è preservata. Non viene inserita in una riga di costo autonoma (cassa previdenziale a debito/credito) in assenza di impostazioni o mappature percipiente dedicate: la cassa viene registrata cumulativamente nel costo della prestazione.
   * **Gap Documentato**: Per una gestione disgiunta o analitica della cassa previdenziale e delle spese accessorie (es. addebito spese bancarie o imballo non imponibili), sarà necessario introdurre nel piano dei conti/società conti di ricavo/costo specifici per accessori da valorizzare in sede di importazione (Fase futura).
 
+### 8. Gestione Cespiti Leggeri (Fase 16)
+* **Funzionamento**: Nel workflow di commit dell'Import, dopo la persistenza riuscita, se viene identificata una riga contabile associata a un conto cespite (Immobilizzazioni Materiali/Immateriali), viene creata automaticamente una scheda bozza nella tabella `beni_ammortizzabili` con note di tracciamento contenenti l'ID della prima nota salvata, prevenendo duplicazioni.
+* **Test di riferimento**: `Fase 16 Cespiti Leggeri - runCommitWorkflow with asset account creates draft cespite` in `cespitiIntegrazione.test.js`.
+
 ---
-*Stato del Modulo*: **Hardening Completo** per i flussi di Import Contabilità (Prompt 22A).
-*Riconciliazione Bancaria*: **Rigidamente Bloccata** in attesa del Libro Cespiti (Fase 16).
+*Stato del Modulo*: **Hardening Completo** per i flussi di Import Contabilità (Prompt 22A & Fase 16).
+*Riconciliazione Bancaria*: **Rigidamente Bloccata** in attesa della pianificazione dello sblocco post-gate.
 

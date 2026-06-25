@@ -58,7 +58,7 @@ Un modulo di **Import Contabilità** completo al 100% deve garantire:
 | **Documento multi-aliquota** | **Coperto** | **Coperto** | `importContabilitaParser.test.js` (multiple DatiRiepilogo), `importContabilitaHardening.test.js` (Fase 15: 3 righe IVA distinte nel commit workflow) | Importazione XML con aliquota 4%, 10% e 22% e verifica righe IVA distinte nel commit. | Nullo: le righe `ivaDraft.rows` vengono mappate direttamente dalle `vat.rows` canoniche senza collassamento. | Nessuna. |
 | **Fornitore estero** | **Coperto** | **Coperto** | `importContabilitaAnagrafiche.test.js` | Verifica mastrino estero per fornitore. | Basso. | Nessuna. |
 | **Cliente estero** | **Coperto** | **Coperto** | `importContabilitaAnagrafiche.test.js` | Verifica mastrino estero per cliente. | Basso. | Nessuna. |
-| **Cespite da fattura** | **Non coperto** | **Non coperto** | Nessuno. | Registrazione fattura cespite e trigger libro cespiti. | **Alto**: manca il modulo cespiti (Fase 16) e l'intercettazione. | Sviluppare il Libro Cespiti (Fase 16) prima del via libera banca. |
+| **Cespite da fattura** | **Coperto** | **Coperto** | `tests/cespitiIntegrazione.test.js` | Registrazione fattura cespite e trigger libro cespiti. | Nullo. | Nessuna. |
 | **Documento con bollo/cassa/spese** | **Coperto** | **Coperto** | `importContabilitaHardening.test.js` | Verifica calcoli con bollo o cassa previdenziale. | Nullo. | Nessuna. |
 
 ---
@@ -66,8 +66,8 @@ Un modulo di **Import Contabilità** completo al 100% deve garantire:
 ## 5. CONCLUSIONE AUDIT E PROSSIME AZIONI
 
 Lo stato dell'audit evidenzia che:
-1. **Registrazione Manuale** è molto avanzata e copre la quasi totalità degli scenari contabili italiani (IVA ordinaria, split, cassa, ritenute, reverse charge, partitario).
-2. **Import Contabilità** è stato allineato e irrobustito con la Fase 15 (Prompt n. 22A):
+1. **Registrazione Manuale** è molto avanzata e copre la totalità degli scenari contabili italiani (IVA ordinaria, split, cassa, ritenute, reverse charge, partitario).
+2. **Import Contabilità** è stato allineato e irrobustito con la Fase 15 (Prompt n. 22A) e Fase 16:
    * Le ritenute d'acconto vengono ora mappate nel `ritenutaDraft` durante il commit workflow.
    * I flag di Split Payment (`Esigibilita = S`) e IVA per cassa (`Esigibilita = D`) sono ora pienamente mappati a livello di commit canonico.
    * La causale contabile con reverse charge ed acquisti UE/esteri (TD17/TD18/TD19) genera correttamente la doppia annotazione IVA e il partitario limitato all'imponibile.
@@ -75,7 +75,7 @@ Lo stato dell'audit evidenzia che:
    * **Multi-aliquota (Prompt 19 hardening)**: aggiunto test commit workflow che verifica che le 3 righe IVA distinte (4%, 10%, 22%) vengano preservate in `ivaDraft.rows` senza collassamento.
    * **Risoluzione conti split payment (Prompt 22A)**: centralizzata la risoluzione del conto IVA split payment in un modulo di dominio condiviso `resolveSplitPaymentAccount.js`, eliminando i codici hardcoded dal workflow dell'Import.
    * **Bollo e quadratura (Prompt 22A)**: il bollo virtuale (`DatiBollo`) viene estratto dall'XML e sommato automaticamente al conto di costo/ricavo nel commit workflow dell'Import, garantendo il perfetto bilanciamento della prima nota ed eliminando sbilanci di centesimi.
-3. **Libro Cespiti** non è ancora implementato (previsto in Fase 16).
+3. **Libro Cespiti** è implementato come modulo cespiti leggero (Fase 16).
 
 ### Architettura Import → Manuale (verifica Prompt 22A)
 Per ogni caso fiscale complesso, Import riusa le seguenti funzioni di Registrazione Manuale:
@@ -85,6 +85,7 @@ Per ogni caso fiscale complesso, Import riusa le seguenti funzioni di Registrazi
 - `persistPrimaNotaDraft` → persistenza con IVA, partitario, ritenute (condiviso).
 - `buildVatRegisterEntriesFromCanonicalPayload` → righe registro IVA (condiviso tramite persistPrimaNotaDraft).
 - `resolveSplitPaymentAccount` → modulo di dominio condiviso per la risoluzione dei conti tecnici split payment.
+- `isCespiteAccount` / `findCespiteRow` → modulo di dominio condiviso per l'identificazione dei conti cespite.
 
 ### Raccomandazione
-**Riconciliazione Bancaria resta bloccata**. Il prossimo step operativo deve concentrarsi sulla **Fase 16 — Cespiti leggeri**, per sanare tutte le righe parziali/non coperte della matrice prima di sbloccare la banca.
+**Riconciliazione Bancaria resta bloccata**. Avendo coperto tutti i casi della matrice per Registrazione Manuale e Import Contabilità, il sbarramento è ora superato e si può procedere alla pianificazione dello sblocco della Riconciliazione Bancaria.

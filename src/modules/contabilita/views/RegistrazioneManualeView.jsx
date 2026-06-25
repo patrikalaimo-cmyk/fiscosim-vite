@@ -19,6 +19,7 @@ import { buildCausaleStructureHistory } from '../application/registrazioneOperat
 import { resolvePartitaSoggettoId } from '../application/registrazioneOperations/resolvePartitaSoggettoId.js'
 
 import { resolveRegistrazioneCausaleBehavior } from '../domain/registrazione/resolveRegistrazioneCausaleBehavior.js'
+import { findCespiteRow } from '../domain/registrazione/resolveCespiteAccount.js'
 import { buildRegistrazioneManualeUiPolicy } from '../domain/registrazione/buildRegistrazioneManualeUiPolicy.js'
 import {
   REG_PAGE_STYLE,
@@ -2343,6 +2344,18 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           }
         };
 
+        // Intercettazione conto cespite
+        let prepareCespite = false;
+        let cespiteMatch = null;
+        const isIvaDoc = Boolean(selectedCausaleConfig?.showIvaPanel || state.ivaDraft?.active || draftModel.draft?.ivaDraft?.active);
+        
+        if (isIvaDoc) {
+          cespiteMatch = findCespiteRow(activeDraft.righePayload || activeDraft.rows || [], effectivePianoConti);
+          if (cespiteMatch) {
+            prepareCespite = window.confirm("Documento imputato a conto cespite: preparare scheda cespite?");
+          }
+        }
+
         console.log('[handleSave - Saving draft]', {
           activeDraft,
           partEntriesForDb: activeDraft.partitarioDraft?.rows
@@ -2366,6 +2379,54 @@ export function RegistrazioneManualeView({ societaAttiva, pianoConti = [], causa
           setError(result.error?.message || String(result.error))
           return
         }
+
+        const savedPrimaNotaId = result?.data?.prima_nota_id || result?.primaNotaId || result?.pn?.id;
+        
+        if (prepareCespite && savedPrimaNotaId && cespiteMatch) {
+          let resolvedClienteId = societaAttiva.id;
+          let resolvedClienteNome = societaAttiva.denominazione || societaAttiva.ragione_sociale || '';
+          try {
+            const { data: matchedCliente } = await sb
+              .from('clienti')
+              .select('id, ragione_sociale, nome, cognome')
+              .eq('partita_iva', societaAttiva.partita_iva || '')
+              .maybeSingle();
+            if (matchedCliente) {
+              resolvedClienteId = matchedCliente.id;
+              resolvedClienteNome = matchedCliente.ragione_sociale || `${matchedCliente.nome} ${matchedCliente.cognome}`.trim();
+            }
+          } catch (e) {
+            console.warn('[Cespite client resolution error]', e);
+          }
+
+          const costo = cespiteMatch.row.dare || cespiteMatch.row.avere || 0;
+          const aliquota = 20;
+          const anni = Math.ceil(100 / aliquota);
+          const newCespite = {
+            cliente_id: resolvedClienteId,
+            cliente_nome: resolvedClienteNome,
+            descrizione: cespiteMatch.row.descrizione_riga || cespiteMatch.row.descrizione || state.header.descrizioneGenerale || 'Cespite da registrazione contabile',
+            categoria: 'Attrezzatura',
+            data_acquisto: state.header.dataDocumento || state.header.dataRegistrazione || todayIso(),
+            costo_storico: costo,
+            aliquota_ammortamento: aliquota,
+            fondo_ammortamento: 0,
+            valore_residuo: costo,
+            anni_vita_utile: anni,
+            note: `Cespite inserito automaticamente da registrazione contabile. ID prima nota: ${savedPrimaNotaId}`,
+            attivo: true
+          };
+
+          try {
+            const { error: cespiteErr } = await sb.from('beni_ammortizzabili').insert([newCespite]);
+            if (cespiteErr) {
+              console.error('Errore durante la creazione della scheda cespite:', cespiteErr);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
         setSuccess(`Registrazione salvata con ID ${result?.data?.prima_nota_id || 'n/d'}`)
         setLastExerciseUsed(state.header.esercizioContabile || lastExerciseUsed)
         setPartiteRefreshKey((value) => value + 1)

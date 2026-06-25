@@ -9661,3 +9661,33 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo step**: Fase 16 - Cespiti leggeri.
 
 
+## PROMPT-23-FASE-16-CESPITI-LEGGERI-AGGANCIO-MANUALE-IMPORT
+
+- **Data**: 2026-06-25
+- **Task**: Fase 16 - Cespiti leggeri, innesco cespite e libro cespiti da Manuale + Import.
+- **File Creati**:
+  - `[NEW]` [resolveCespiteAccount.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/domain/registrazione/resolveCespiteAccount.js)
+  - `[NEW]` [cespitiIntegrazione.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/cespitiIntegrazione.test.js)
+  - `[NEW]` [13_CESPITI_OPERATIVO.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/13_CESPITI_OPERATIVO.md)
+- **File Modificati**:
+  - `[MODIFY]` [RegistrazioneManualeView.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/contabilita/views/RegistrazioneManualeView.jsx)
+  - `[MODIFY]` [importContabilitaWorkflow.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/application/importContabilitaWorkflow.js)
+  - `[MODIFY]` [ImportContabilitaWorkingTable.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx)
+  - `[MODIFY]` [10_IMPORT_CONTABILITA_OPERATIVO.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/10_IMPORT_CONTABILITA_OPERATIVO.md)
+  - `[MODIFY]` [11_GATE_MANUALE_IMPORT_100.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md)
+  - `[MODIFY]` [PROJECT_STATE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md)
+- **Dettaglio Attività**:
+  1. **Intercettazione Condivisa**: Creazione dell'helper di dominio `resolveCespiteAccount.js` con regole basate su prefissi standard (classe `1.01` e `1.02`) ed euristica su parole chiave per i conti patrimoniali attivi.
+  2. **Registrazione Manuale**: Aggiunta la richiesta di conferma `window.confirm` quando si registra un documento con righe imputate a conti cespite. Se confermato, a salvataggio avvenuto, viene inserito un record in bozza (con `attivo = true` e nota di tracciamento dell'ID prima nota) nella tabella `beni_ammortizzabili`.
+  3. **Import Contabilità**: Mostrato un badge `"Potenziale cespite"` nella working table sotto i conti identificati come cespite. Al commit del payload, se ci sono righe cespite, viene inserito automaticamente il record bozza in `beni_ammortizzabili` a salvataggio avvenuto.
+  4. **Libro Cespiti**: Popolamento della tabella esistente `beni_ammortizzabili` con calcolo automatico degli anni di vita utile e del valore residuo. Nessuna prima nota di ammortamento o scrittura autonoma viene generata in questa fase.
+- **Test Eseguiti**:
+  - `node --test tests/cespitiIntegrazione.test.js` (4/4 test passati).
+  - Test suite generale (`node --test tests/*.test.js src/modules/import_contabilita/tests/*.js`): 126/126 test superati.
+  - `npm run build` (Build completato con successo).
+- **Rischi residui**: Nessuno.
+- **Riconciliazione Bancaria**: Rigidamente BLOCCATA.
+- **Prossimo step**: Pianificazione e sblocco della Riconciliazione Bancaria.
+
+
+

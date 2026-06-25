@@ -596,6 +596,7 @@ export async function runImportWorkflow(files = [], options = {}) {
 }
 
 import { resolveSplitPaymentAccountDb as resolveSplitPaymentAccount } from '../../contabilita/domain/registrazione/resolveSplitPaymentAccount.js'
+import { isCespiteAccount } from '../../contabilita/domain/registrazione/resolveCespiteAccount.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { validateCanonicalAccountingPayload } from '../../contabilita/canonical/validateCanonicalAccountingPayload.js'
 import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRepo.js'
@@ -976,6 +977,70 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   }
 
   const primaNotaId = persistResult.data?.prima_nota_id || (persistResult.pn && persistResult.pn.id) || null
+
+  // FASE 16: Se la prima nota ha successo, verifichiamo se ci sono righe cespite per generare la scheda
+  if (primaNotaId) {
+    for (const r of finalRows) {
+      if (isCespiteAccount(r)) {
+        const costo = r.dare || r.avere || 0
+        if (costo > 0) {
+          try {
+            // Controlla se esiste già per evitare duplicazioni
+            const { data: existingBene } = await db
+              .from('beni_ammortizzabili')
+              .select('id')
+              .ilike('note', `%ID prima nota: ${primaNotaId}%`)
+              .maybeSingle()
+            
+            if (!existingBene) {
+              // Risolvi il cliente della societa
+              let resolvedClienteId = societaId
+              let resolvedClienteNome = ''
+              const { data: socData } = await db
+                .from('societa')
+                .select('id, denominazione, ragione_sociale, partita_iva, codice_fiscale')
+                .eq('id', societaId)
+                .maybeSingle()
+              
+              if (socData) {
+                resolvedClienteNome = socData.denominazione || socData.ragione_sociale || ''
+                const { data: matchedCliente } = await db
+                  .from('clienti')
+                  .select('id, ragione_sociale, nome, cognome')
+                  .eq('partita_iva', socData.partita_iva || '')
+                  .maybeSingle()
+                if (matchedCliente) {
+                  resolvedClienteId = matchedCliente.id
+                  resolvedClienteNome = matchedCliente.ragione_sociale || `${matchedCliente.nome} ${matchedCliente.cognome}`.trim()
+                }
+              }
+
+              const aliquota = 20
+              const anni = Math.ceil(100 / aliquota)
+              const newCespite = {
+                cliente_id: resolvedClienteId,
+                cliente_nome: resolvedClienteNome,
+                descrizione: r.descrizione_riga || r.conto_descrizione || 'Cespite da Import',
+                categoria: 'Attrezzatura',
+                data_acquisto: dataRegistrazione,
+                costo_storico: costo,
+                aliquota_ammortamento: aliquota,
+                fondo_ammortamento: 0,
+                valore_residuo: costo,
+                anni_vita_utile: anni,
+                note: `Cespite inserito automaticamente da Import Contabilità. ID prima nota: ${primaNotaId}`,
+                attivo: true
+              }
+
+              await db.from('beni_ammortizzabili').insert([newCespite])
+            }
+          } catch (e) {
+            console.warn('[Cespite creation error in import commit workflow]', e)
+          }
+        }
+      }
+    }
+  }
 
   // 6. Aggiornamento stato documento
   if (documentId) {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { isCespiteAccount } from '../../contabilita/domain/registrazione/resolveCespiteAccount.js'
 
 function getWorkingTableAutomationFieldLabels(fields = []) {
   const labelsByField = {
@@ -381,6 +382,26 @@ export function ImportContabilitaWorkingTable({
                         >
                           {formatManualAccount(manualAccount)}
                         </button>
+
+                        {isCespiteAccount(manualAccount) && (
+                          <div style={{ marginTop: '0.22rem' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '.06rem .22rem',
+                              borderRadius: 4,
+                              border: '1px solid rgba(245,158,11,.3)',
+                              background: 'rgba(245,158,11,.08)',
+                              color: '#ffe2a8',
+                              fontSize: '.58rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              letterSpacing: '.02em'
+                            }}>
+                              Potenziale cespite
+                            </span>
+                          </div>
+                        )}
 
                         {isAccountEditorOpen ? createPortal(
                           <div
