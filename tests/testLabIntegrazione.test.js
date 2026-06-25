@@ -17,6 +17,12 @@ import {
   runTestLabPreparaOrdinariaAcquisto,
   CICLO_COMPLETO_DISABLED_REASON,
 } from '../src/modules/test_mode/testLabPreparaWorkflow.js'
+import {
+  ensureTestLabDemoCompany,
+  isAdminOrOwnerForTestLab,
+  buildTestLabDemoCompanyPayload,
+  TEST_LAB_DEMO_COMPANY_CODE,
+} from '../src/modules/test_mode/demoCompanyProvision.js'
 
 const REAL_COMPANY = {
   id: '1',
@@ -171,4 +177,87 @@ test('24B — Riconciliazione resta bloccata (gate)', () => {
 test('24A legacy — cespiti placeholder non operativo', () => {
   const docs = generateScenarioDocuments('cespiti', DEMO_BY_CODE)
   assert.equal(docs.length, 0)
+})
+
+test('24B-FIX — __TEST__FISCOSIM_DEMO riconosciuta come demo', () => {
+  const demo = {
+    id: 'demo-fix',
+    codice: TEST_LAB_DEMO_COMPANY_CODE,
+    denominazione: 'FiscoSim Demo Test Lab SRL',
+  }
+  assert.equal(isDemoCompany(demo), true)
+  assert.equal(isDemoCompany(REAL_COMPANY), false)
+})
+
+test('24B-FIX — payload demo ha codice e denominazione canonici', () => {
+  const payload = buildTestLabDemoCompanyPayload()
+  assert.equal(payload.codice, TEST_LAB_DEMO_COMPANY_CODE)
+  assert.equal(payload.denominazione, 'FiscoSim Demo Test Lab SRL')
+  assert.match(payload.note, /TEST_LAB/)
+})
+
+test('24B-FIX — creazione idempotente non duplica se esiste', async () => {
+  const existing = {
+    id: 'existing-demo',
+    codice: TEST_LAB_DEMO_COMPANY_CODE,
+    denominazione: 'FiscoSim Demo Test Lab SRL',
+    attiva: true,
+  }
+  let insertCalls = 0
+  const db = {
+    from(table) {
+      assert.equal(table, 'societa')
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                maybeSingle: async () => ({ data: existing, error: null }),
+              }
+            },
+          }
+        },
+        insert() {
+          insertCalls += 1
+          return {
+            select() {
+              return { single: async () => ({ data: null, error: { message: 'should not insert' } }) }
+            },
+          }
+        },
+      }
+    },
+  }
+  const result = await ensureTestLabDemoCompany({ db, utente: { ruolo: 'owner' } })
+  assert.equal(result.created, false)
+  assert.equal(result.attached, true)
+  assert.equal(result.societa.id, existing.id)
+  assert.equal(insertCalls, 0)
+})
+
+test('24B-FIX — creazione bloccata per collaboratore', async () => {
+  await assert.rejects(
+    () => ensureTestLabDemoCompany({ db: { from: () => ({}) }, utente: { ruolo: 'collaboratore' } }),
+    /Solo Admin\/Owner/
+  )
+})
+
+test('24B-FIX — isAdminOrOwnerForTestLab', () => {
+  assert.equal(isAdminOrOwnerForTestLab({ ruolo: 'owner' }), true)
+  assert.equal(isAdminOrOwnerForTestLab({ ruolo: 'admin' }), true)
+  assert.equal(isAdminOrOwnerForTestLab({ ruolo: 'collaboratore' }), false)
+})
+
+test('24B-FIX — provision non genera fatture/contabilizzazione/pulizia', async () => {
+  const panelSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/test_mode/TestLabPanel.jsx', import.meta.url), 'utf8')
+  )
+  const provisionSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/test_mode/demoCompanyProvision.js', import.meta.url), 'utf8')
+  )
+  assert.doesNotMatch(provisionSource, /runCommitWorkflow|persistPrimaNotaDraft|runImportWorkflow/)
+  assert.doesNotMatch(provisionSource, /\.delete\(/)
+  assert.doesNotMatch(panelSource, /handlePrepara\(\).*handleEnsureDemoCompany/s)
+  assert.match(panelSource, /Crea società demo FiscoSim/)
+  assert.match(panelSource, /Nessun test parte automaticamente/)
 })

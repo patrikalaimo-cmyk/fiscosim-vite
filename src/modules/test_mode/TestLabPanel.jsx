@@ -1,8 +1,16 @@
 import { useState, useCallback } from 'react'
+import { sb } from '../../lib/supabase'
 import {
   isDemoCompany,
   TEST_LAB_PHASE_24B,
 } from './demoCompanyGuard.js'
+import {
+  ensureTestLabDemoCompany,
+  isAdminOrOwnerForTestLab,
+  TEST_LAB_DEMO_COMPANY_CODE,
+  TEST_LAB_DEMO_COMPANY_DENOMINATION,
+  buildTestLabDemoCompanyPayload,
+} from './demoCompanyProvision.js'
 import { buildOrdinariaAcquisto10CaseDefinitions } from './testLabOrdinariaAcquistoCases.js'
 import {
   runTestLabPreparaOrdinariaAcquisto,
@@ -70,12 +78,16 @@ function ReportPanel({ report }) {
 /**
  * Test Lab — Fase 24B: Prepara test fattura ordinaria acquisto (10 casi).
  */
-export function TestLabPanel({ societaId, currentSocieta }) {
+export function TestLabPanel({ societaId, currentSocieta, utente, societaList = [], onDemoCompanyReady }) {
   const isDemo = isDemoCompany(currentSocieta)
+  const canManageDemo = isAdminOrOwnerForTestLab(utente)
+  const demoExistsInList = societaList.some((s) => s.codice === TEST_LAB_DEMO_COMPANY_CODE)
   const phase = TEST_LAB_PHASE_24B
   const [busy, setBusy] = useState(false)
+  const [demoBusy, setDemoBusy] = useState(false)
   const [report, setReport] = useState(null)
   const [lastError, setLastError] = useState(null)
+  const [demoMessage, setDemoMessage] = useState(null)
 
   const casePreview = isDemo && currentSocieta
     ? buildOrdinariaAcquisto10CaseDefinitions(currentSocieta).map((d) => ({
@@ -85,6 +97,28 @@ export function TestLabPanel({ societaId, currentSocieta }) {
         meta: d.meta,
       }))
     : []
+
+  const handleEnsureDemoCompany = useCallback(async () => {
+    if (!canManageDemo || demoBusy) return
+    setDemoBusy(true)
+    setLastError(null)
+    setDemoMessage(null)
+    try {
+      const result = await ensureTestLabDemoCompany({ db: sb, utente })
+      if (typeof onDemoCompanyReady === 'function') {
+        await onDemoCompanyReady(result.societa)
+      }
+      setDemoMessage(
+        result.created
+          ? `Società demo creata (${TEST_LAB_DEMO_COMPANY_CODE}) e selezionata. Avvia manualmente "Prepara test" quando pronto.`
+          : `Società demo esistente agganciata (${TEST_LAB_DEMO_COMPANY_CODE}). Avvia manualmente "Prepara test" quando pronto.`
+      )
+    } catch (err) {
+      setLastError(err?.message || String(err))
+    } finally {
+      setDemoBusy(false)
+    }
+  }, [canManageDemo, demoBusy, onDemoCompanyReady, utente])
 
   const handlePrepara = useCallback(async () => {
     if (!isDemo || !societaId || !currentSocieta || busy) return
@@ -132,7 +166,46 @@ export function TestLabPanel({ societaId, currentSocieta }) {
 
       {!societaId && (
         <div className="alert alert-warn" style={{ marginBottom: '.75rem' }}>
-          Seleziona una società per verificare il criterio DEMO.
+          Seleziona una società demo oppure crea/aggancia la società demo FiscoSim.
+        </div>
+      )}
+
+      {!isDemo && canManageDemo && (
+        <div style={{
+          background: 'rgba(200,164,94,.08)', border: '1px solid rgba(200,164,94,.35)',
+          borderRadius: 8, padding: '.75rem .85rem', marginBottom: '.85rem',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '.82rem', color: 'var(--gold)', marginBottom: '.35rem' }}>
+            Società demo Test Lab non selezionata
+          </div>
+          <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.55rem' }}>
+            Codice richiesto: <code>{TEST_LAB_DEMO_COMPANY_CODE}</code> · {TEST_LAB_DEMO_COMPANY_DENOMINATION}
+            {demoExistsInList ? ' · già presente in elenco società' : ' · non ancora presente'}
+          </div>
+          <button
+            type="button"
+            className="btn"
+            disabled={demoBusy}
+            onClick={handleEnsureDemoCompany}
+            style={{ fontSize: '.78rem' }}
+          >
+            {demoBusy ? '⏳ Creazione/aggancio...' : 'Crea società demo FiscoSim'}
+          </button>
+          <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.45rem' }}>
+            Idempotente: se esiste già non duplica. Nessun test parte automaticamente.
+          </div>
+        </div>
+      )}
+
+      {!isDemo && !canManageDemo && societaId && (
+        <div className="alert alert-warn" style={{ marginBottom: '.75rem' }}>
+          Solo Admin/Owner possono creare la società demo Test Lab. Seleziona una società con codice <code>__TEST__</code> o <code>test_</code>.
+        </div>
+      )}
+
+      {demoMessage && (
+        <div className="alert alert-info" style={{ marginBottom: '.75rem', fontSize: '.78rem' }}>
+          {demoMessage}
         </div>
       )}
 

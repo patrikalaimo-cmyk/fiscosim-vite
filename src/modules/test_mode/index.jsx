@@ -4,6 +4,9 @@ import { createPrimaNota } from '../../../services/primaNotaService.js'
 import { TestScenarioE2EPanel } from './TestScenarioE2EPanel.jsx'
 import { TestLabPanel } from './TestLabPanel.jsx'
 import { ModuleHeader } from '../../shared/components'
+import { TEST_LAB_DEMO_COMPANY_CODE } from './demoCompanyProvision.js'
+
+const SOCIETA_SELECT_FIELDS = 'id,denominazione,codice,ragione_sociale,partita_iva,attiva'
 
 const STATO_CFG = {
   pending:  { label: '⚪ Da testare', color: 'var(--mu)',   bg: 'rgba(107,122,153,.1)',  border: 'rgba(107,122,153,.25)' },
@@ -570,12 +573,34 @@ export function ModuloTestMode({ utente }) {
   const [societaId, setSocietaId] = useState(null)
   const [societa, setSocieta] = useState([])
 
-  useEffect(() => {
-    sb.from('societa').select('id,denominazione,codice,ragione_sociale,partita_iva').order('denominazione').then(({ data }) => {
-      setSocieta(data || [])
-      if (data?.length) setSocietaId(data[0].id) // prima società di default
-    })
+  const reloadSocieta = useCallback(async () => {
+    const { data, error } = await sb
+      .from('societa')
+      .select(SOCIETA_SELECT_FIELDS)
+      .eq('attiva', true)
+      .order('denominazione')
+    if (error) throw new Error(error.message || 'Errore caricamento società')
+    const list = data || []
+    setSocieta(list)
+    return list
   }, [])
+
+  useEffect(() => {
+    reloadSocieta()
+      .then((list) => {
+        if (list?.length) setSocietaId(list[0].id)
+      })
+      .catch(() => setSocieta([]))
+  }, [reloadSocieta])
+
+  const handleDemoCompanyReady = useCallback(async (demoSocieta) => {
+    const list = await reloadSocieta()
+    const pick = list.find((s) => s.id === demoSocieta?.id)
+      || list.find((s) => s.codice === TEST_LAB_DEMO_COMPANY_CODE)
+      || demoSocieta
+    if (pick?.id) setSocietaId(pick.id)
+    return pick
+  }, [reloadSocieta])
   const [results, setResults] = useState({})
   const [running, setRunning] = useState(null)
   const [runningAll, setRunningAll] = useState(false)
@@ -703,7 +728,7 @@ export function ModuloTestMode({ utente }) {
               onChange={e=>setSocietaId(e.target.value||null)}
               style={{width:'100%',background:societaId?'var(--s2)':'rgba(251,146,60,.1)',borderColor:societaId?'var(--bd)':'rgba(251,146,60,.5)'}}>
               <option value=''>-- Seleziona società --</option>
-              {societa.map(s=><option key={s.id} value={s.id}>{s.denominazione}</option>)}
+              {societa.map(s=><option key={s.id} value={s.id}>{s.denominazione}{s.codice ? ` (${s.codice})` : ''}</option>)}
             </select>
           </div>
           <div style={{flex:1,minWidth:220}}>
@@ -720,7 +745,13 @@ export function ModuloTestMode({ utente }) {
 
       <TestScenarioE2EPanel societaId={societaId} />
 
-      <TestLabPanel societaId={societaId} currentSocieta={societa.find(s => s.id === societaId)} />
+      <TestLabPanel
+        societaId={societaId}
+        currentSocieta={societa.find(s => s.id === societaId)}
+        utente={utente}
+        societaList={societa}
+        onDemoCompanyReady={handleDemoCompanyReady}
+      />
 
       <div className="card" style={{ marginBottom: '.65rem', padding: '.55rem 1rem' }}>
         <div style={{ fontWeight: 700, fontSize: '.85rem', color: 'var(--mu)' }}>Suite operativa (T01–T26)</div>

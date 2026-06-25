@@ -9740,3 +9740,20 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo step**: 24C — ciclo completo commit su società demo dopo validazione manuale staging.
 
 
+## PROMPT-24B-FIX-SOCIETA-DEMO-SICURA-TEST-LAB
+
+- **Data**: 2026-06-25
+- **Task**: Creazione/aggancio società demo sicura visibile in tendina società.
+- **Società demo creata/agganciata**: **SÌ** (funzione idempotente `ensureTestLabDemoCompany`)
+- **Codice demo**: `__TEST__FISCOSIM_DEMO`
+- **Denominazione**: `FiscoSim Demo Test Lab SRL`
+- **Visibile in tendina**: **SÌ** — insert su `societa` + reload lista attive; owner/admin vedono tutte le società attive (RLS)
+- **Pulsante**: `Crea società demo FiscoSim` — solo Admin/Owner; idempotente; nessun test auto
+- **File creati**: `src/modules/test_mode/demoCompanyProvision.js`
+- **File modificati**: `TestLabPanel.jsx`, `test_mode/index.jsx`, `tests/testLabIntegrazione.test.js`, docs
+- **Conferme sicurezza**: nessuna fattura; nessuna contabilizzazione; nessuna pulizia; no migration/env/RLS
+- **Test**: testLab 21/21; import 71/71; regressione 55/55; build OK
+- **Riconciliazione bancaria**: BLOCCATA
+- **Prossimo step**: Validazione manuale Prepara test su società demo, poi 24C
+
+

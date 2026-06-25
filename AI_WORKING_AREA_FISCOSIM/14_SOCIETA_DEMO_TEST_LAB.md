@@ -149,3 +149,32 @@ Fase 16 = **aggancio leggero/parziale** (intercettazione conto + bozza `beni_amm
 - `src/modules/test_mode/TestLabPanel.jsx` (UI Prepara test)
 - `src/modules/test_mode/demoCompanyGuard.js` (`TEST_LAB_PHASE_24B`)
 
+## FASE 24B-FIX — Società demo sicura Test Lab
+
+### Problema risolto
+Nessuna società con codice `__TEST__*` / `test_*` in DB → Test Lab non utilizzabile manualmente.
+
+### Soluzione
+- Pulsante **Admin/Owner** nel Test Lab: `Crea società demo FiscoSim`
+- Codice fisso: `__TEST__FISCOSIM_DEMO`
+- Denominazione: `FiscoSim Demo Test Lab SRL`
+- Idempotente: se esiste → aggancia/seleziona, non duplica
+- Dopo creazione/aggancio compare nella tendina società (Test Mode + Contabilità, reload `societa` attive)
+- **Nessun test automatico** dopo creazione — scenario 24B resta manuale
+
+### Cosa viene creato
+- **Un solo record** `societa` con codice `__TEST__FISCOSIM_DEMO` e nota `[TEST_LAB]`
+
+### Cosa NON viene creato
+- Fatture, prime note, registri IVA, partitario, cespiti, pulizia dati
+
+### Sicurezza
+- Bloccato per ruoli diversi da `owner` / `admin`
+- Banner `SOCIETÀ DEMO — DATI DI TEST` quando selezionata
+- Nessuna migration / env / RLS / policy modificati
+
+### File
+- `src/modules/test_mode/demoCompanyProvision.js`
+- `src/modules/test_mode/TestLabPanel.jsx` (pulsante creazione)
+- `src/modules/test_mode/index.jsx` (reload tendina + selezione demo)
+
