@@ -1,6 +1,6 @@
-# 13_CESPITI_OPERATIVO — FASE 16 CESPITI LEGGERI
+# 13_CESPITI_OPERATIVO — FASE 16 CESPITI LEGGERI (AGGANCIO PARZIALE)
 
-Questo documento descrive l'implementazione e il perimetro della Fase 16 - Cespiti leggeri, per intercettare fatture/documenti imputati a conti cespite da Registrazione Manuale e Import Contabilità.
+Questo documento descrive l'implementazione e il perimetro della Fase 16 - Cespiti leggeri (aggancio parziale, **non** studio-grade). Libro cespiti completo e ammortamenti automatici restano **futuri**.
 
 ## 1. Perimetro Fase 16 (Cespiti Leggeri)
 
@@ -16,6 +16,7 @@ Questo documento descrive l'implementazione e il perimetro della Fase 16 - Cespi
   - Inserimento dei record nella tabella `beni_ammortizzabili` pre-esistente con `attivo = true`.
   - Calcolo del valore residuo e degli anni di vita utile ereditati dal costo storico e dall'aliquota ammortamento.
   - Nessuna prima nota autonoma viene generata dal modulo cespiti.
+  - **Non** costituisce libro cespiti completo né gestione ammortamenti automatici (futuro).
 
 ### Cosa resta futuro (Escluso):
 * **Riconciliazione Bancaria**: Rimane rigorosamente bloccata.
@@ -42,4 +43,5 @@ Il conto viene identificato come cespite se:
 * Verifica che non vengano create registrazioni di prima nota autonome o duplicate.
 
 ## 5. Stato Gate Manuale + Import
-* **Cespite da fattura**: Passa da **Non coperto** a **Parziale** (manca il motore di ammortamento completo e le registrazioni automatiche di prima nota di fine anno, ma l'aggancio a Manuale + Import è coperto).
+* **Cespite da fattura**: **Parziale** — aggancio leggero Manuale + Import coperto; motore ammortamento completo e registrazioni automatiche PN fine anno **non** coperti.
+* **Riconciliazione bancaria**: **BLOCCATA** fino a validazione Test Lab e matrice gate.

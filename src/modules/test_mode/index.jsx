@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { sb } from '../../lib/supabase'
 import { createPrimaNota } from '../../../services/primaNotaService.js'
 import { TestScenarioE2EPanel } from './TestScenarioE2EPanel.jsx'
+import { TestLabPanel } from './TestLabPanel.jsx'
 import { ModuleHeader } from '../../shared/components'
 
 const STATO_CFG = {
@@ -570,7 +571,7 @@ export function ModuloTestMode({ utente }) {
   const [societa, setSocieta] = useState([])
 
   useEffect(() => {
-    sb.from('societa').select('id,denominazione').order('denominazione').then(({ data }) => {
+    sb.from('societa').select('id,denominazione,codice,ragione_sociale,partita_iva').order('denominazione').then(({ data }) => {
       setSocieta(data || [])
       if (data?.length) setSocietaId(data[0].id) // prima società di default
     })
@@ -718,6 +719,8 @@ export function ModuloTestMode({ utente }) {
       </div>
 
       <TestScenarioE2EPanel societaId={societaId} />
+
+      <TestLabPanel societaId={societaId} currentSocieta={societa.find(s => s.id === societaId)} />
 
       <div className="card" style={{ marginBottom: '.65rem', padding: '.55rem 1rem' }}>
         <div style={{ fontWeight: 700, fontSize: '.85rem', color: 'var(--mu)' }}>Suite operativa (T01–T26)</div>

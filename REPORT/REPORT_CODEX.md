@@ -9690,4 +9690,28 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo step**: Pianificazione e sblocco della Riconciliazione Bancaria.
 
 
+## PROMPT-24A-FONDAZIONE-SICURA-SOCIETA-DEMO-TEST-LAB
+
+- **Data**: 2026-06-25
+- **Task**: Fase 24A — Recinto sicurezza società demo / Test Lab (nessun ciclo contabile).
+- **Audit demo sicuro**: **SÌ** — criterio esplicito prefisso `societa.codice`: `__TEST__*` o `test_*`. Rimossa euristica debole su denominazione.
+- **File creati**:
+  - `src/modules/test_mode/demoCompanyGuard.js`
+  - `AI_WORKING_AREA_FISCOSIM/14_SOCIETA_DEMO_TEST_LAB.md`
+  - `tests/testLabIntegrazione.test.js` (riscritto sicurezza 24A)
+- **File modificati**:
+  - `src/modules/test_mode/TestLabPanel.jsx` (UI minima, scenari disabilitati, no import/commit/delete)
+  - `src/modules/test_mode/TestLabGenerators.js` (guardia strict)
+  - `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`
+  - `AI_WORKING_AREA_FISCOSIM/10_IMPORT_CONTABILITA_OPERATIVO.md`
+  - `AI_WORKING_AREA_FISCOSIM/11_GATE_MANUALE_IMPORT_100.md`
+  - `AI_WORKING_AREA_FISCOSIM/13_CESPITI_OPERATIVO.md`
+  - `REPORT/REPORT_CODEX.md`
+- **Implementazione**: `isDemoCompany`, `assertDemoCompanyForTestLab`, `TEST_LAB_PHASE_24A`, banner demo, blocco società reale.
+- **Disabilitato in 24A**: generazione fatture UI, import, commit, persistenza, pulizia, scenari operativi.
+- **Conferme sicurezza**: nessuna fattura generata da UI; nessuna contabilizzazione; nessuna pulizia dati; nessuna migration/env/auth/RLS; no `git add .`.
+- **Test**: Import 71/71; regressione 55/55; testLab 9/9; build OK.
+- **Riconciliazione bancaria**: BLOCCATA (gate non superato — Test Lab 24B/24C pendente).
+- **Prossimo step**: 24B — Prepara test su società demo.
+
 

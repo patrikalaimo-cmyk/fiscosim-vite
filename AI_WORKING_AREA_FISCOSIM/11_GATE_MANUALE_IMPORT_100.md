@@ -7,7 +7,7 @@ Questo documento definisce le regole di sbarramento e lo stato di copertura per 
 ## 1. REGOLA GATE
 
 > [!CAUTION]
-> **Riconciliazione Bancaria Bloccata**: È tassativamente vietato avviare lo sviluppo o l'integrazione del modulo di Riconciliazione Bancaria (Fase 19) finché tutte le voci della matrice di Registrazione Manuale e Import Contabilità non risultano marcate come **Coperto** (verdi) con relativi test automatici e manuali validati con successo.
+> **Riconciliazione Bancaria Bloccata**: È tassativamente vietato avviare lo sviluppo o l'integrazione del modulo di Riconciliazione Bancaria (Fase 19) finché tutte le voci della matrice di Registrazione Manuale e Import Contabilità non risultano marcate come **Coperto** (verdi) con relativi test automatici e manuali validati con successo **e** il Test Lab contabile (fasi 24B/24C) non ha completato la validazione end-to-end su società demo.
 > Nessun piano di lavoro futuro deve proporre o iniziare attività sulla banca se questo gate non è interamente rispettato.
 
 ---
@@ -58,7 +58,7 @@ Un modulo di **Import Contabilità** completo al 100% deve garantire:
 | **Documento multi-aliquota** | **Coperto** | **Coperto** | `importContabilitaParser.test.js` (multiple DatiRiepilogo), `importContabilitaHardening.test.js` (Fase 15: 3 righe IVA distinte nel commit workflow) | Importazione XML con aliquota 4%, 10% e 22% e verifica righe IVA distinte nel commit. | Nullo: le righe `ivaDraft.rows` vengono mappate direttamente dalle `vat.rows` canoniche senza collassamento. | Nessuna. |
 | **Fornitore estero** | **Coperto** | **Coperto** | `importContabilitaAnagrafiche.test.js` | Verifica mastrino estero per fornitore. | Basso. | Nessuna. |
 | **Cliente estero** | **Coperto** | **Coperto** | `importContabilitaAnagrafiche.test.js` | Verifica mastrino estero per cliente. | Basso. | Nessuna. |
-| **Cespite da fattura** | **Coperto** | **Coperto** | `tests/cespitiIntegrazione.test.js` | Registrazione fattura cespite e trigger libro cespiti. | Nullo. | Nessuna. |
+| **Cespite da fattura** | **Coperto** | **Coperto** | `tests/cespitiIntegrazione.test.js` | Registrazione fattura cespite e trigger libro cespiti bozza. | Basso: aggancio leggero, non studio-grade. | Validare Test Lab 24B/24C. |
 | **Documento con bollo/cassa/spese** | **Coperto** | **Coperto** | `importContabilitaHardening.test.js` | Verifica calcoli con bollo o cassa previdenziale. | Nullo. | Nessuna. |
 
 ---
@@ -75,7 +75,10 @@ Lo stato dell'audit evidenzia che:
    * **Multi-aliquota (Prompt 19 hardening)**: aggiunto test commit workflow che verifica che le 3 righe IVA distinte (4%, 10%, 22%) vengano preservate in `ivaDraft.rows` senza collassamento.
    * **Risoluzione conti split payment (Prompt 22A)**: centralizzata la risoluzione del conto IVA split payment in un modulo di dominio condiviso `resolveSplitPaymentAccount.js`, eliminando i codici hardcoded dal workflow dell'Import.
    * **Bollo e quadratura (Prompt 22A)**: il bollo virtuale (`DatiBollo`) viene estratto dall'XML e sommato automaticamente al conto di costo/ricavo nel commit workflow dell'Import, garantendo il perfetto bilanciamento della prima nota ed eliminando sbilanci di centesimi.
-3. **Libro Cespiti** è implementato come modulo cespiti leggero (Fase 16).
+3. **Libro Cespiti** è implementato come **aggancio leggero/parziale** (Fase 16): intercettazione conto + bozza `beni_ammortizzabili`. Libro cespiti completo e ammortamenti automatici restano **futuri**.
+
+### Raccomandazione
+**Riconciliazione Bancaria resta bloccata**. La matrice casi fiscali è coperta su Manuale e Import, ma il gate **non è superato** finché Test Lab (24B/24C) e matrice test manuale end-to-end non sono validati.
 
 ### Architettura Import → Manuale (verifica Prompt 22A)
 Per ogni caso fiscale complesso, Import riusa le seguenti funzioni di Registrazione Manuale:
@@ -87,5 +90,3 @@ Per ogni caso fiscale complesso, Import riusa le seguenti funzioni di Registrazi
 - `resolveSplitPaymentAccount` → modulo di dominio condiviso per la risoluzione dei conti tecnici split payment.
 - `isCespiteAccount` / `findCespiteRow` → modulo di dominio condiviso per l'identificazione dei conti cespite.
 
-### Raccomandazione
-**Riconciliazione Bancaria resta bloccata**. Avendo coperto tutti i casi della matrice per Registrazione Manuale e Import Contabilità, il sbarramento è ora superato e si può procedere alla pianificazione dello sblocco della Riconciliazione Bancaria.
