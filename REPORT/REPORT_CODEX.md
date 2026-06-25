@@ -9499,6 +9499,43 @@ M src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js
 ?? fiscosim-checkpoint-fase-14c-anagrafiche-working-table-2026-06-25-1510.zip
 ```
 
+## FASE-14D-OPERATIVITA-MASSIVA-WORKING-TABLE
+
+- **Obiettivo**: Implementare in modo definitivo, sicuro e controllato l'operatività massiva della working table di Import Contabilità (selezione esplicita, applicazione conto e causale batch, dialoghi di conferma, alert note di credito e backlog dello storico).
+- **File Letti**:
+  - `REGOLE_CODEX.md`
+  - `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`
+  - `REPORT/REPORT_CODEX.md`
+  - `src/modules/import_contabilita/components/ImportContabilitaWorkingTableToolbar.jsx`
+  - `src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx`
+  - `src/modules/import_contabilita/index.jsx`
+- **File Modificati**:
+  - `[MODIFY]` [ImportContabilitaWorkingTableToolbar.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/ImportContabilitaWorkingTableToolbar.jsx)
+  - `[MODIFY]` [ImportContabilitaWorkingTable.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx)
+  - `[MODIFY]` [index.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/index.jsx)
+  - `[NEW]` [importContabilitaBulkActions.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/tests/importContabilitaBulkActions.test.js)
+  - `[MODIFY]` [PROJECT_STATE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md)
+- **Cosa è stato implementato**:
+  - **Selezione esplicita righe**: Consolidata ed integrata.
+  - **Applica conto a selezionate**: Aggiunto pulsante, validata PK reale (`conto_id` UUID), mostrato dialog di conferma e aggiornate solo le righe selezionate.
+  - **Applica causale a selezionate**: Aggiunto pulsante, mostrato dialog di conferma e aggiornate solo le righe selezionate.
+  - **Alert pesante Nota Credito vs causale fattura ordinaria**: Identificato se il documento XML è TD04/TD08 e se si sta applicando una causale fattura (es. `FF` o causale non nota credito), generando un alert forte prima dell'applicazione con opzioni di annulla o conferma comunque (che mantiene il warning inline `'causale incompatibile per nota credito'`).
+  - **Ricalcolo readiness**: Lo stato di prontezza viene ricalcolato reattivamente dopo le modifiche massive.
+  - **Backlog storico conto**: Aggiunto backlog per alert di prevalenza storica del conto.
+- **Test Eseguiti**:
+  - **Unit Test Import**: `node --test src/modules/import_contabilita/tests/*.js` -> ✅ **64 / 64 test superati** (inclusi 6 nuovi scenari per le azioni massive in `importContabilitaBulkActions.test.js`).
+  - **Unit Test Generali**: ✅ **29 / 29 test superati**.
+  - **Vite Build**: `npm run build` -> ✅ **Successo completo**.
+- **Sicurezza**:
+  - Nessun env/auth/RLS/migration/policy toccato;
+  - Nessun dato reale modificato manualmente;
+  - Nessuna contabilizzazione reale;
+  - Nessun legacy riattivato;
+  - No `git add .`.
+- **Backlog**:
+  - Quando sarà disponibile lo storico contabilizzazioni per fornitore/documento, confrontare il conto applicato massivamente con il conto prevalente e mostrare alert: "Stai applicando conto X, ma dallo storico per questo fornitore/documento risulta prevalente il conto Y. Modifica o conferma comunque."
+
+
 
 
 
