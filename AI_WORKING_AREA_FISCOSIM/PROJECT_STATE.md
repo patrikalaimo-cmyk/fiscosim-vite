@@ -1,38 +1,26 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase 24A — Fondazione sicura società demo / Test Lab (recinto sicurezza, nessun ciclo contabile).
-* **Ultimo prompt eseguito:** Prompt n. 24A.
-* **Ultimo checkpoint valido:** Fase 16 Cespiti leggeri (commit `288f274`) + 24A in corso.
-* **Working tree atteso:** Modificato (Test Lab recinto + documentazione).
+* **Fase corrente:** Fase 24B — Test Lab Prepara test fattura ordinaria acquisto 10 casi.
+* **Ultimo prompt eseguito:** Prompt n. 24B.
+* **Ultimo checkpoint valido:** 24A (`a9afc8b`) + 24B in corso.
 
 ## 2. Roadmap attiva immediata
-* **Fase corrente completata parzialmente:** 24A recinto demo Test Lab.
-* **Prossimo step:** 24B — Prepara test (generazione + import workflow su società demo).
-* **Cosa non anticipare:** Riconciliazione Bancaria **bloccata** fino a validazione Test Lab + matrice gate manuale.
-* **Gate Manuale + Import:** **NON superato** finché Test Lab e matrice test manuale non sono validati end-to-end.
+* **Completato 24B:** Prepara test — 10 casi acquisto ordinario → `runImportWorkflow` → sessionStorage.
+* **Prossimo step:** 24C — Ciclo completo commit su società demo + pulizia selettiva.
+* **Gate Manuale + Import:** NON superato — Test Lab 24B validazione manuale pendente.
+* **Riconciliazione bancaria:** BLOCCATA.
 
 ## 3. Stato moduli
-* **Inserimento Manuale:** Completo operativamente; write via `persistPrimaNotaDraft`.
-* **Import Contabilità:** Commit workflow canonico attivo; write via `runCommitWorkflow`.
-* **Test Lab (24A):** Solo recinto — `isDemoCompany`, banner, scenari disabilitati. **Nessuna** fattura/import/contabilizzazione.
-* **Cespiti:** Aggancio leggero/parziale Fase 16 (non studio-grade). Libro cespiti completo e ammortamenti automatici = futuro.
-* **Riconciliazione bancaria:** **BLOCCATA**.
+* **Test Lab 24B:** Scenario "Fattura ordinaria acquisto" abilitato in modalità Prepara test. Zero contabilizzazione.
+* **Import Contabilità:** Commit workflow attivo ma non raggiungibile da Test Lab 24B.
+* **Cespiti:** Aggancio leggero parziale — non studio-grade.
 
-## 4. Regole architetturali ferree
-* Criterio DEMO: prefisso `codice` `__TEST__` o `test_` — no euristica denominazione.
-* No write Test Lab in 24A.
-* No migration/env/auth/RLS senza task esplicito.
-* No `git add .` — commit selettivi.
-* Report sempre aggiornato in `REPORT/REPORT_CODEX.md`.
+## 4. Regole sicurezza Test Lab
+* Criterio DEMO: prefisso `codice` `__TEST__` o `test_`.
+* 24B: `runImportWorkflow` sì, `runCommitWorkflow` / `persistPrimaNotaDraft` no.
+* Snapshot solo sessionStorage — no DB staging.
 
-## 5. Stato fiscale/contabile canonico
-Invariato rispetto a checkpoint Fase 16.
-
-## 6. Backlog Test Lab
-* **24B:** Prepara test, tag `[TEST_LAB]`, import in-memory.
-* **24C:** Ciclo commit reale su demo + pulizia selettiva.
-
-## 7. Ultimi commit/checkpoint rilevanti
-* `288f274` — checkpoint: cespiti leggeri aggancio manuale import
-* 24A — checkpoint: fondazione sicura societa demo test lab (pending)
+## 5. Ultimi commit
+* `a9afc8b` — checkpoint: fondazione sicura societa demo test lab
+* 24B — checkpoint: test lab fattura ordinaria acquisto prepara test (pending commit)

@@ -16,6 +16,19 @@ export const TEST_LAB_PHASE_24A = Object.freeze({
   allowInvoiceGeneration: false,
 })
 
+/** Fase 24B: Prepara test — solo staging/working table, no contabilizzazione. */
+export const TEST_LAB_PHASE_24B = Object.freeze({
+  id: '24B',
+  operational: true,
+  scenariosEnabled: ['ordinarie_acquisto_24b'],
+  allowPrepare: true,
+  allowImport: true,
+  allowCommit: false,
+  allowCleanup: false,
+  allowFullCycle: false,
+  allowInvoiceGeneration: true,
+})
+
 /**
  * @param {object|null|undefined} societa
  * @returns {boolean}

@@ -9715,3 +9715,28 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo step**: 24B — Prepara test su società demo.
 
 
+## PROMPT-24B-TEST-LAB-FATTURA-ORDINARIA-ACQUISTO-PREPARA-TEST
+
+- **Data**: 2026-06-25
+- **Task**: Fase 24B — Test Lab scenario "Fattura ordinaria acquisto — 10 casi" in modalità Prepara test.
+- **Scenario 24B implementato**: **SÌ**
+- **Criterio demo**: prefisso `societa.codice` `__TEST__*` o `test_*` (guardia 24A invariata).
+- **10 casi creati**: **SÌ** (`acq_01`…`acq_10` — monoriga 22/10/4%, multi-riga, dual costo, multi-aliquota, bollo, arrotondamento, fornitore esistente/nuovo).
+- **Dove preparati**: `runImportWorkflow` (motore reale) → staging in-memory → snapshot `sessionStorage` chiave `import_contabilita.last_result.{societaId}` con `automationMetaByRowId` test_lab.
+- **Contabilizzazione**: **0** — `runCommitWorkflow` e `persistPrimaNotaDraft` non invocati.
+- **Prime note / registri IVA / partitario**: **0**
+- **Ciclo completo**: disabilitato con messaggio 24B.
+- **File creati**:
+  - `src/modules/test_mode/testLabOrdinariaAcquistoCases.js`
+  - `src/modules/test_mode/testLabPreparaWorkflow.js`
+- **File modificati**:
+  - `src/modules/test_mode/demoCompanyGuard.js` (`TEST_LAB_PHASE_24B`)
+  - `src/modules/test_mode/TestLabPanel.jsx`
+  - `tests/testLabIntegrazione.test.js` (15 test)
+  - `AI_WORKING_AREA_FISCOSIM/14_SOCIETA_DEMO_TEST_LAB.md`
+  - `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`
+- **Test**: Import 71/71; regressione 55/55 + testLab 15/15; build OK.
+- **Riconciliazione bancaria**: BLOCCATA.
+- **Prossimo step**: 24C — ciclo completo commit su società demo dopo validazione manuale staging.
+
+
