@@ -38,6 +38,7 @@ import {
   getAllowedExistingAccounts as getAllowedExistingAccountsDomain,
   resolveAllowedAnagraficaAccountByCode as resolveAllowedAnagraficaAccountByCodeDomain,
 } from './domain/anagraficaValidation.js'
+import { buildCausaleContabilePolicy } from '../contabilita/domain/causali/buildCausaleContabilePolicy.js'
 
 
 const MONEY_FORMATTER = new Intl.NumberFormat('it-IT', {
@@ -703,6 +704,23 @@ function getWorkingTableRowReadiness(row, manualAccount = null, manualCausale = 
       label: 'Incompleta',
     }
   }
+
+  // Check if document is a credit note and the causale is incompatible
+  if (manualCausale) {
+    const policy = buildCausaleContabilePolicy(manualCausale)
+    const tipoDoc = String(row?.parsedDocument?.tipoDocumento || '').trim().toUpperCase()
+    const isNotaCreditoDoc = tipoDoc === 'TD04' || tipoDoc === 'TD08'
+    const isIncompatible = isNotaCreditoDoc && (!policy.notaCredito || policy.isFatturaPassiva || policy.isFatturaAttiva)
+    if (isIncompatible) {
+      return {
+        ready: true,
+        missing: ['causale incompatibile per nota credito'],
+        severity: 'warning',
+        label: 'Pronta con avviso',
+      }
+    }
+  }
+
   return readiness
 }
 
@@ -2521,6 +2539,11 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [causaleEditorRowId, setCausaleEditorRowId] = useState('')
   const [causaleSearchTerm, setCausaleSearchTerm] = useState('')
   const [manualCausaleByRowId, setManualCausaleByRowId] = useState({})
+
+  const [bulkContoPickerOpen, setBulkContoPickerOpen] = useState(false)
+  const [bulkCausalePickerOpen, setBulkCausalePickerOpen] = useState(false)
+  const [bulkSearchTerm, setBulkSearchTerm] = useState('')
+
   const [previewRowId, setPreviewRowId] = useState('')
   const [previewTab, setPreviewTab] = useState('fattura')
   const [workingViewOpen, setWorkingViewOpen] = useState(false)
@@ -2807,6 +2830,19 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     const filtered = rows.filter((row) => matchesCausaleSearch(row, causaleSearchTerm))
     return filtered.slice(0, 20)
   }, [causaliContabili, causaleSearchTerm])
+
+  const bulkFilteredPianoConti = useMemo(() => {
+    const rows = Array.isArray(pianoConti) ? pianoConti : []
+    const filtered = rows.filter((row) => matchesPianoContoSearch(row, bulkSearchTerm))
+    return filtered.slice(0, 20)
+  }, [pianoConti, bulkSearchTerm])
+
+  const bulkFilteredCausaliContabili = useMemo(() => {
+    const rows = Array.isArray(causaliContabili) ? causaliContabili : []
+    const filtered = rows.filter((row) => matchesCausaleSearch(row, bulkSearchTerm))
+    return filtered.slice(0, 20)
+  }, [causaliContabili, bulkSearchTerm])
+
 
   const anagraficaAllowedAccountsIndex = useMemo(
     () => buildAnagraficaAllowedAccountsIndex(pianoConti),
@@ -4677,6 +4713,118 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     persistSocietaState(result, manualAccountByRowId, manualCausaleByRowId, next, anagraficheDecisioniByKey, percipientiDecisioniByKey)
   }
 
+  const onApplyContoBulk = () => {
+    if (!selectedCount) return
+    setBulkSearchTerm('')
+    setBulkContoPickerOpen(true)
+  }
+
+  const handleApplyContoBulkSelect = (conto) => {
+    if (!conto?.id) {
+      alert('Errore: PK reale del conto mancante.')
+      return
+    }
+    setBulkContoPickerOpen(false)
+    const selectedIds = Array.from(selectedRowIds)
+    const rowCount = selectedIds.length
+
+    const msg = `Stai per applicare il conto "${conto.codice} - ${conto.descrizione}" a ${rowCount} righe selezionate.\n\nVuoi procedere?`
+    if (!window.confirm(msg)) return
+
+    const nextAccounts = { ...manualAccountByRowId }
+    selectedIds.forEach((id) => {
+      nextAccounts[id] = {
+        id: conto.id,
+        codice: conto.codice,
+        descrizione: conto.descrizione,
+      }
+    })
+
+    setManualAccountByRowId(nextAccounts)
+    persistSocietaState(
+      result,
+      nextAccounts,
+      manualCausaleByRowId,
+      manualRegistrationDateByRowId,
+      anagraficheDecisioniByKey,
+      percipientiDecisioniByKey,
+      automationMetaByRowId
+    )
+    showActionBanner('success', `Conto applicato con successo a ${rowCount} righe.`)
+  }
+
+  const onApplyCausaleBulk = () => {
+    if (!selectedCount) return
+    setBulkSearchTerm('')
+    setBulkCausalePickerOpen(true)
+  }
+
+  const handleApplyCausaleBulkSelect = (causale) => {
+    setBulkCausalePickerOpen(false)
+    const selectedIds = Array.from(selectedRowIds)
+    const rowCount = selectedIds.length
+
+    const policy = buildCausaleContabilePolicy(causale)
+
+    // Find any selected documents that are note credito (TD04/TD08) where this causale is incompatible
+    const incompatibleRows = []
+    const allRows = Array.isArray(stagingRows) ? stagingRows : []
+    const rowsMap = new Map(allRows.map((r) => [String(r.id || r.filename || ''), r]))
+
+    selectedIds.forEach((id) => {
+      const row = rowsMap.get(id)
+      if (!row) return
+      const tipoDoc = String(row?.parsedDocument?.tipoDocumento || '').trim().toUpperCase()
+      const isNotaCreditoDoc = tipoDoc === 'TD04' || tipoDoc === 'TD08'
+      
+      const isIncompatible = isNotaCreditoDoc && (!policy.notaCredito || policy.isFatturaPassiva || policy.isFatturaAttiva)
+      if (isIncompatible) {
+        incompatibleRows.push(row)
+      }
+    })
+
+    if (incompatibleRows.length > 0) {
+      let warningMsg = `Attenzione: alcuni documenti selezionati risultano note credito, ma stai applicando una causale da fattura ordinaria/incompatibile. Verifica prima di confermare.\n\n`
+      warningMsg += `Documenti incompatibili (${incompatibleRows.length}):\n`
+      incompatibleRows.slice(0, 10).forEach((row) => {
+        const docNum = row?.parsedDocument?.numeroDocumento || 'Senza numero'
+        const docDate = row?.parsedDocument?.dataDocumento || 'Senza data'
+        const supplierName = row?.parsedDocument?.fornitore?.denominazione || 'Senza fornitore'
+        warningMsg += `- N. ${docNum} del ${docDate} (${supplierName})\n`
+      })
+      if (incompatibleRows.length > 10) {
+        warningMsg += `... e altri ${incompatibleRows.length - 10} documenti.\n`
+      }
+      warningMsg += `\nVuoi confermare comunque l'applicazione della causale "${causale.codice} - ${causale.descrizione}"?`
+      if (!window.confirm(warningMsg)) return
+    } else {
+      const msg = `Stai per applicare la causale "${causale.codice} - ${causale.descrizione}" a ${rowCount} righe selezionate.\n\nVuoi procedere?`
+      if (!window.confirm(msg)) return
+    }
+
+    const nextCausali = { ...manualCausaleByRowId }
+    selectedIds.forEach((id) => {
+      nextCausali[id] = {
+        id: causale.id,
+        codice: causale.codice,
+        descrizione: causale.descrizione,
+      }
+    })
+
+    setManualCausaleByRowId(nextCausali)
+    persistSocietaState(
+      result,
+      manualAccountByRowId,
+      nextCausali,
+      manualRegistrationDateByRowId,
+      anagraficheDecisioniByKey,
+      percipientiDecisioniByKey,
+      automationMetaByRowId
+    )
+    showActionBanner('success', `Causale applicata con successo a ${rowCount} righe.`)
+  }
+
+
   const renderReimportList = (title, rows) => {
     if (!Array.isArray(rows) || !rows.length) return null
 
@@ -5326,6 +5474,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
                 hasActiveWorkingTableColumnFilters={hasActiveWorkingTableColumnFilters}
                 activeWorkingTableColumnFilters={activeWorkingTableColumnFilters}
                 clearAllWorkingTableColumnFilters={clearAllWorkingTableColumnFilters}
+                onApplyContoBulk={onApplyContoBulk}
+                onApplyCausaleBulk={onApplyCausaleBulk}
               />
               <div
                 style={{
@@ -5441,6 +5591,190 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
           />
         ) : null}
       </section>
+
+      {bulkContoPickerOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+        }}>
+          <div style={{
+            width: 480,
+            maxWidth: '90vw',
+            borderRadius: 16,
+            border: '1px solid rgba(96,165,250,.24)',
+            background: 'rgba(8,24,40,.98)',
+            boxShadow: '0 24px 64px rgba(0,0,0,.46)',
+            padding: '1.2rem',
+            display: 'grid',
+            gap: '.8rem',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '.9rem', color: '#dbeafe' }}>Applica conto costo/ricavo a selezionate ({selectedCount})</h3>
+              <button
+                type="button"
+                onClick={() => setBulkContoPickerOpen(false)}
+                style={{ ...BUTTON_BASE, padding: '.12rem .3rem', fontSize: '.64rem', cursor: 'pointer' }}
+              >
+                Chiudi
+              </button>
+            </div>
+            
+            <input
+              type="text"
+              autoFocus
+              value={bulkSearchTerm}
+              onChange={(e) => setBulkSearchTerm(e.target.value)}
+              placeholder="Cerca per codice o descrizione..."
+              style={{
+                width: '100%',
+                border: '1px solid rgba(148,163,184,.18)',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,.03)',
+                color: '#dbeafe',
+                padding: '.3rem .4rem',
+                fontSize: '.78rem',
+                outline: 'none',
+              }}
+            />
+
+            <div style={{ display: 'grid', gap: '.22rem', maxHeight: 300, overflowY: 'auto' }}>
+              {bulkFilteredPianoConti.length ? (
+                bulkFilteredPianoConti.map((conto) => (
+                  <button
+                    key={conto.id}
+                    type="button"
+                    onClick={() => handleApplyContoBulkSelect(conto)}
+                    style={{
+                      width: '100%',
+                      border: '1px solid rgba(148,163,184,.14)',
+                      borderRadius: 8,
+                      background: 'rgba(255,255,255,.015)',
+                      color: '#dbeafe',
+                      padding: '.24rem .32rem',
+                      cursor: 'pointer',
+                      display: 'grid',
+                      gridTemplateColumns: '90px 1fr',
+                      gap: '.3rem',
+                      alignItems: 'center',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <strong style={{ fontSize: '.74rem' }}>{conto.codice || '—'}</strong>
+                    <span style={{ fontSize: '.72rem', color: 'var(--tx)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {conto.descrizione || '—'}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div style={{ fontSize: '.68rem', color: 'var(--mu)', textAlign: 'center', padding: '.4rem' }}>
+                  Nessun conto corrispondente.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkCausalePickerOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+        }}>
+          <div style={{
+            width: 480,
+            maxWidth: '90vw',
+            borderRadius: 16,
+            border: '1px solid rgba(96,165,250,.24)',
+            background: 'rgba(8,24,40,.98)',
+            boxShadow: '0 24px 64px rgba(0,0,0,.46)',
+            padding: '1.2rem',
+            display: 'grid',
+            gap: '.8rem',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '.9rem', color: '#dbeafe' }}>Applica causale contabile a selezionate ({selectedCount})</h3>
+              <button
+                type="button"
+                onClick={() => setBulkCausalePickerOpen(false)}
+                style={{ ...BUTTON_BASE, padding: '.12rem .3rem', fontSize: '.64rem', cursor: 'pointer' }}
+              >
+                Chiudi
+              </button>
+            </div>
+            
+            <input
+              type="text"
+              autoFocus
+              value={bulkSearchTerm}
+              onChange={(e) => setBulkSearchTerm(e.target.value)}
+              placeholder="Cerca per codice o descrizione..."
+              style={{
+                width: '100%',
+                border: '1px solid rgba(148,163,184,.18)',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,.03)',
+                color: '#dbeafe',
+                padding: '.3rem .4rem',
+                fontSize: '.78rem',
+                outline: 'none',
+              }}
+            />
+
+            <div style={{ display: 'grid', gap: '.22rem', maxHeight: 300, overflowY: 'auto' }}>
+              {bulkFilteredCausaliContabili.length ? (
+                bulkFilteredCausaliContabili.map((causale) => (
+                  <button
+                    key={causale.id}
+                    type="button"
+                    onClick={() => handleApplyCausaleBulkSelect(causale)}
+                    style={{
+                      width: '100%',
+                      border: '1px solid rgba(148,163,184,.14)',
+                      borderRadius: 8,
+                      background: 'rgba(255,255,255,.015)',
+                      color: '#dbeafe',
+                      padding: '.24rem .32rem',
+                      cursor: 'pointer',
+                      display: 'grid',
+                      gridTemplateColumns: '70px 1fr',
+                      gap: '.3rem',
+                      alignItems: 'center',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <strong style={{ fontSize: '.74rem' }}>{causale.codice || '—'}</strong>
+                    <span style={{ fontSize: '.72rem', color: 'var(--tx)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {causale.descrizione || '—'}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div style={{ fontSize: '.68rem', color: 'var(--mu)', textAlign: 'center', padding: '.4rem' }}>
+                  Nessuna causale corrispondente.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

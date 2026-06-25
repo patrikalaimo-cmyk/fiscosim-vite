@@ -616,17 +616,17 @@ export function ImportContabilitaWorkingTable({
                             borderRadius: 999,
                             border: readiness.label === 'Pronta'
                               ? '1px solid rgba(34,197,94,.16)'
-                              : readiness.label === 'Da completare'
+                              : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
                                 ? '1px solid rgba(245,158,11,.18)'
                                 : '1px solid rgba(239,68,68,.18)',
                             background: readiness.label === 'Pronta'
                               ? 'rgba(34,197,94,.08)'
-                              : readiness.label === 'Da completare'
+                              : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
                                 ? 'rgba(245,158,11,.08)'
                                 : 'rgba(239,68,68,.08)',
                             color: readiness.label === 'Pronta'
                               ? '#a7f3d0'
-                              : readiness.label === 'Da completare'
+                              : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
                                 ? '#ffe2a8'
                                 : '#ffb9be',
                             fontSize: '.58rem',

@@ -1,15 +1,15 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase 14C — Import Contabilità Anagrafiche e Working Table (Chiusa, testata).
-* **Ultimo prompt eseguito:** Prompt n. 15 (Checkpoint Fase 14C).
-* **Ultimo checkpoint valido:** Fase 14C (Anagrafiche da verificare e working table stabili).
+* **Fase corrente:** Fase 14D — Import Contabilità: Operatività Massiva Working Table (Chiusa, testata).
+* **Ultimo prompt eseguito:** Prompt n. 17 (Checkpoint Fase 14D).
+* **Ultimo checkpoint valido:** Fase 14D (Operatività massiva working table stabile).
 * **Working tree atteso:** Pulito post-checkpoint (dopo doppio commit).
 
 ## 2. Roadmap attiva immediata
-* **Fase corrente:** Checkpoint Fase 14C completato.
-* **Prossimo step:** Fase 14D — Implementare funzioni massive "Applica conto a tutte le selezionate" e "Applica causale a tutte le selezionate" con relativi alert (nota credito vs fattura).
-* **Cosa non anticipare:** Non iniziare Riconciliazione Bancaria né altre fasi successive prima di aver stabilito la gestione delle azioni massive.
+* **Fase corrente:** Checkpoint Fase 14D completato.
+* **Prossimo step:** Fase 15 — Integrazione / Riconciliazione Bancaria o passaggi contabili successivi.
+* **Cosa non anticipare:** Non iniziare Riconciliazione Bancaria né altre fasi successive prima del via libera.
 * **Mantenere divieto** di "Avvia contabilizzazione" automatica su dati reali senza un test controllato successivo.
 
 ## 3. Stato moduli
@@ -43,12 +43,8 @@
 * **Split payment, IVA per cassa, Reverse charge, Ritenute:** Integrati.
 
 ## 6. Backlog Azioni Massive Import Contabilità (Future)
-* **Funzione “Applica conto a tutte le selezionate”** nella working table Import.
-* **Funzione “Applica causale contabile a tutte le selezionate”** nella working table Import.
-* **Controllo nota credito vs FF**: alert bloccante/conferma "Documento XXX risulta nota credito ma stai applicando FF. Modifica o conferma comunque."
-* **Controllo conto vs storico fornitore**: alert bloccante/conferma "Stai applicando conto X ma dallo storico per questo fornitore il conto prevalente è Y. Modifica o conferma."
-* Da implementare dopo stabilizzazione parsing/working table/anagrafiche e prima dell'operatività massiva definitiva.
+* **Storico Conto Prevalente**: Quando sarà disponibile lo storico contabilizzazioni per fornitore/documento, confrontare il conto applicato massivamente con il conto prevalente e mostrare alert: "Stai applicando conto X, ma dallo storico per questo fornitore/documento risulta prevalente il conto Y. Modifica o conferma comunque."
 
 ## 7. Ultimi commit/checkpoint rilevanti
-* Checkpoint Fase 13E: Blocco periodi stampati definitivo validato.
-* Checkpoint Fase 14B: Import contabilità massivo parsing workflow (Prompt n. 12).
+* Checkpoint Fase 14C: Import contabilità anagrafiche working table (commit `137adda`).
+* Checkpoint Fase 14D: Import contabilità azioni massive working table (Prompt n. 17).

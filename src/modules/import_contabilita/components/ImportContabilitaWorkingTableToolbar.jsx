@@ -33,6 +33,8 @@ export function ImportContabilitaWorkingTableToolbar({
   hasActiveWorkingTableColumnFilters,
   activeWorkingTableColumnFilters,
   clearAllWorkingTableColumnFilters,
+  onApplyContoBulk,
+  onApplyCausaleBulk,
 }) {
   return (
     <>
@@ -199,6 +201,8 @@ export function ImportContabilitaWorkingTableToolbar({
             <MetaPill label="Selezionate" value={selectedCount} />
             <ActionButton label="Seleziona tutto" onClick={onSelectAllVisible} disabled={!visibleRows.length || busy} small />
             <ActionButton label="Deseleziona" onClick={onDeselectAll} disabled={!selectedCount || busy} small />
+            <ActionButton label="Applica conto" onClick={onApplyContoBulk} disabled={!selectedCount || busy} kind="primary" small />
+            <ActionButton label="Applica causale" onClick={onApplyCausaleBulk} disabled={!selectedCount || busy} kind="primary" small />
             <ActionButton label="Elimina selezionate" onClick={onDeleteSelectedRows} disabled={busy} kind="danger" small />
             <ActionButton label="Avvia contabilizzazione" onClick={onStartAccounting} disabled={busy} kind="warning" emphasis />
           </div>
