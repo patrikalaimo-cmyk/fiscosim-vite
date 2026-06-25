@@ -1,15 +1,15 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase 14B — Import Contabilità (Chiusa, validata manualmente).
-* **Ultimo prompt eseguito:** Prompt n. 12 (Checkpoint Fase 14B).
-* **Ultimo checkpoint valido:** Fase 14B (Import Contabilità massivo, parsing e workflow validati).
-* **Working tree atteso:** Pulito post-checkpoint (dopo doppio commit: principale e docs).
+* **Fase corrente:** Fase 14C — Import Contabilità Anagrafiche e Working Table (Chiusa, testata).
+* **Ultimo prompt eseguito:** Prompt n. 15 (Checkpoint Fase 14C).
+* **Ultimo checkpoint valido:** Fase 14C (Anagrafiche da verificare e working table stabili).
+* **Working tree atteso:** Pulito post-checkpoint (dopo doppio commit).
 
 ## 2. Roadmap attiva immediata
-* **Fase corrente:** Checkpoint Fase 14B completato.
-* **Prossimo step:** Valutare Fase 14C su Anagrafiche da verificare / operatività working table / azioni massive, non Riconciliazione bancaria.
-* **Cosa non anticipare:** Non iniziare Riconciliazione Bancaria né altre fasi successive prima di aver stabilito la gestione delle anagrafiche e del backlog di azioni massive.
+* **Fase corrente:** Checkpoint Fase 14C completato.
+* **Prossimo step:** Fase 14D — Implementare funzioni massive "Applica conto a tutte le selezionate" e "Applica causale a tutte le selezionate" con relativi alert (nota credito vs fattura).
+* **Cosa non anticipare:** Non iniziare Riconciliazione Bancaria né altre fasi successive prima di aver stabilito la gestione delle azioni massive.
 * **Mantenere divieto** di "Avvia contabilizzazione" automatica su dati reali senza un test controllato successivo.
 
 ## 3. Stato moduli

@@ -9425,3 +9425,37 @@ M src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js
 * **Git status finale reale**: Solo file non tracciati (.zip, log, scratch)
 
 
+## FASE-14C-ANAGRAFICHE-DA-VERIFICARE-WORKING-TABLE
+
+- **Obiettivo**: Stabilizzare la sezione “Anagrafiche da verificare” e rendere più operativa e sicura la working table di Import Contabilità, senza avviare ancora contabilizzazione reale massiva.
+- **File Modificati/Creati**:
+  - `[NEW]` [anagraficaValidation.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/domain/anagraficaValidation.js)
+  - `[NEW]` [importContabilitaAnagrafiche.test.js](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/tests/importContabilitaAnagrafiche.test.js)
+  - `[MODIFY]` [index.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/index.jsx)
+  - `[MODIFY]` [ImportContabilitaOverviewCards.jsx](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/ImportContabilitaOverviewCards.jsx)
+  - `[MODIFY]` [PROJECT_STATE.md](file:///C:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md)
+- **Cosa è stato implementato**:
+  - **Mastrini Validation & Defaults**: Enforced defaults (Italia for both customers/suppliers) and restricted client selections to Italy/Estero, suppliers to Italy/Estero/Professionisti.
+  - **Identity Safety Check**: Enforced that `existingAccountId` strictly holds the Primary Key. Prevented using codes/labels inside `conto_id`/`existingAccountId`, blocking the confirmation with an "Errore" / "PK reale del conto mancante" status.
+  - **Conferma completati vs Conferma tutti**: Added the orange "Conferma tutti" button next to "Conferma completati" and bound it to `confirmAnagraficheDecisioni('all')`. Built a strong `window.confirm` dialog in "Conferma tutti" if there are warnings or unresolved rows before committing in-state. No real Postgres account creation or Prima Nota postings are executed.
+  - **Separation of Concerns**: Verified the strict separation in the working table of patrimonial counterparty, cost/revenue accounts, and causale contabile.
+  - **Domain Extraction**: Extracted counterparty validation helpers into a separate pure JS file `domain/anagraficaValidation.js` to enable automated unit testing outside React context.
+- **Backlog (prossimo step 14D)**:
+  - Implement bulk functions "Applica conto a tutte le righe selezionate" and "Applica causale a tutte le righe selezionate".
+  - Add invoice vs credit note warnings (e.g. FF applied to credit note).
+  - Add account historical prevalency warning once historic database records are stable.
+- **Test Eseguiti**:
+  - **Unit Test Import**: Eseguito `node --test src/modules/import_contabilita/tests/*.js` -> ✅ **58 / 58 test superati** (incluso il nuovo test `importContabilitaAnagrafiche.test.js` con 6 scenari dettagliati).
+  - **Unit Test Generali**: Eseguito regression test -> ✅ **29 / 29 test superati**.
+  - **Vite Build**: Eseguito `npm run build` -> ✅ **Successo completo** in 30s.
+- **Conferma sicurezza**:
+  - Nessun env/auth/RLS/migration/policy toccato.
+  - Nessun dato reale modificato manualmente.
+  - Nessuna contabilizzazione reale avviata.
+  - Nessun legacy riattivato.
+  - No `git add .`
+- **Rischi residui**: Nessuno.
+- **Prossimo step consigliato**: Procedere con la Fase 14D per l'implementazione delle azioni massive batch sulla working table.
+
+
+
