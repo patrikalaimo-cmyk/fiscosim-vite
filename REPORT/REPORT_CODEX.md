@@ -9458,4 +9458,47 @@ M src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js
 - **Prossimo step consigliato**: Procedere con la Fase 14D per l'implementazione delle azioni massive batch sulla working table.
 
 
+## VERIFICA-FINALE-CHECKPOINT-14C-PROMPT-16
+
+- **Esito checkpoint**: FASE 14C formalmente chiusa.
+- **Hash commit principale reale**: `137adda`
+- **Eventuale hash commit docs reale**: `b081cf9`
+- **Messaggio commit**: `checkpoint: import contabilita anagrafiche working table`
+- **File committati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/ImportContabilitaOverviewCards.jsx`
+  - `src/modules/import_contabilita/domain/anagraficaValidation.js`
+  - `src/modules/import_contabilita/tests/importContabilitaAnagrafiche.test.js`
+- **Nome backup ZIP reale**: `fiscosim-checkpoint-fase-14c-anagrafiche-working-table-2026-06-25-1510.zip`
+- **Conferma ZIP non committato**: Confermato, lo ZIP è escluso ed è presente solo come untracked file locale.
+- **Test eseguiti**:
+  - `node --test src/modules/import_contabilita/tests/*.js` -> ✅ **58 / 58 test superati**
+  - `node --test tests/fase13eClosedPeriodBlock.test.js tests/fase13fClosedPeriodBlock.test.js tests/canonicalAccountingValidation.test.js tests/persistPrimaNotaDraft.test.js` -> ✅ **29 / 29 test superati**
+  - `npm run build` -> ✅ **Successo completo** (429 moduli compilati)
+- **Sicurezza**:
+  - Nessun env/auth/RLS/migration/policy toccato;
+  - Nessun dato reale modificato manualmente;
+  - Nessuna contabilizzazione reale;
+  - Nessun legacy riattivato;
+  - No `git add .`.
+- **Backlog confermato**:
+  - Applica conto a selezionate (Fase 14D);
+  - Applica causale a selezionate (Fase 14D);
+  - Alert nota credito vs causale (Fase 14D);
+  - Alert storico conto quando disponibile (Fase 14D).
+- **Git status finale reale**:
+```
+?? REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md
+?? REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md
+?? REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md
+?? ROADMAP_Copilot.md
+?? fiscosim-checkpoint-consultazione-prima-nota-hardening-completo-2026-06-02-2315.zip
+?? fiscosim-checkpoint-fase-13d-b2b3-rpc-stampe-definitive-post-sql-2026-06-21-2242.zip
+?? fiscosim-checkpoint-fase-13d-b4-ui-stampa-definitiva-validata-2026-06-22-0002.zip
+...
+?? fiscosim-checkpoint-fase-14c-anagrafiche-working-table-2026-06-25-1510.zip
+```
+
+
+
 
