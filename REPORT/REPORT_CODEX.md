@@ -9206,7 +9206,8 @@ umero_documento text ✅
 - soggetto_denominazione, soggetto_piva, soggetto_cf text ✅
 - imponibile, iva, 	otale numeric(15,2) ✅
 - alidation_status, workflow_status text ✅
-- egistered_at, prima_nota_id, created_at ✅
+- 
+egistered_at, prima_nota_id, created_at ✅
 
 ### Causa esatta dell'errore
 
@@ -9260,13 +9261,20 @@ Gestisce namespace/prefix, più DatiRiepilogo (sommatoria), più FatturaElettron
 
 | Campo parser | Colonna DB | Working table | Commit workflow |
 |---|---|---|---|
-| parsed.tipoDocumento | ❌ non in documenti_import | ow.tipoDocumento (view model) | payload.document.tipoDocumento |
-| parsed.numeroDocumento | ❌ non in documenti_import | ow.numeroDocumento (view model) | payload.document.number |
-| parsed.dataDocumento | ❌ non in documenti_import | ow.dataDocumento (view model) | payload.document.documentDate |
-| parsed.imponibile | ❌ non in documenti_import | ow.imponibile (view model) | payload.document.totals.taxable |
-| parsed.iva | ❌ non in documenti_import | ow.iva (view model) | payload.document.totals.vat |
-| parsed.totale | ❌ non in documenti_import | ow.totale (view model) | payload.document.totals.gross |
-| parsed.fornitore | ❌ non in documenti_import | ow.fornitore (view model) | payload.document.counterparty |
+| parsed.tipoDocumento | ❌ non in documenti_import | 
+ow.tipoDocumento (view model) | payload.document.tipoDocumento |
+| parsed.numeroDocumento | ❌ non in documenti_import | 
+ow.numeroDocumento (view model) | payload.document.number |
+| parsed.dataDocumento | ❌ non in documenti_import | 
+ow.dataDocumento (view model) | payload.document.documentDate |
+| parsed.imponibile | ❌ non in documenti_import | 
+ow.imponibile (view model) | payload.document.totals.taxable |
+| parsed.iva | ❌ non in documenti_import | 
+ow.iva (view model) | payload.document.totals.vat |
+| parsed.totale | ❌ non in documenti_import | 
+ow.totale (view model) | payload.document.totals.gross |
+| parsed.fornitore | ❌ non in documenti_import | 
+ow.fornitore (view model) | payload.document.counterparty |
 
 **Tutti i dati sono view model lato client, derivati dal parser XML. La tabella documenti_import è solo staging con metadata + i_raw_response + stato. La working table non dipende da colonne DB inesistenti.**
 
@@ -9802,4 +9810,196 @@ pm run build -> Successo (429 moduli, 16s).
 - **Test**: testLab 32/32; import 71/71; regressione 55/55; build OK
 - **Riconciliazione bancaria**: BLOCCATA
 - **Prossimo step**: Validazione manuale Import post-seed, poi 24C
+
+## PROMPT-24B-FIX-5-CONFERMA-SINGOLA-ANAGRAFICA-IMPORT-TEST-LAB
+
+- **Data**: 2026-06-29
+- **Obiettivo**: Aggiungere la conferma di una singola anagrafica/controparte nella sezione "Anagrafiche da verificare" dell'Import Contabilità, senza alterare la conferma massiva.
+- **Soluzione**:
+  - Aggiunta colonna "Conferma" nella tabella UI di `ImportContabilitaAnagraficheDetail`.
+  - Abilitazione del pulsante "Conferma" solo per righe pronte (`validation.status` = `'ready'`, `'linked'`, or `'ignored'`). Se non pronta, il pulsante è disabilitato e mostra il motivo specifico in un tooltip.
+  - Implementazione dell'azione `onConfirmSingleAnagrafica` in `index.jsx`:
+    - Per `"Crea nuovo conto"`: crea progressivamente il conto in `piano_conti` reale tramite `createImportContabilitaPianoConto`, ricarica il piano dei conti locale e aggiorna la decisione come confermata/collegata a tale conto.
+    - Per `"Seleziona esistente"`: collega il conto esistente selezionato.
+    - Per `"Ignora"`: contrassegna come ignorata.
+  - Salvataggio dello stato in `sessionStorage` e aggiornamento reattivo dei soli documenti collegati a quella specifica controparte.
+- **Feedback**: Mostra l'esito della conferma con denominazione confermata, conto creato/collegato e conteggio dei documenti aggiornati.
+- **Comportamento massivo**: Invariato.
+- **File modificati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/ImportContabilitaAnagraficheDetail.jsx`
+- **Conferme sicurezza**: Nessuna contabilizzazione reale (prima nota/registri/partitario vuoti), nessuna generazione automatica fatture, nessuna pulizia dati, 24B in stato "Prepara test", Riconciliazione bancaria bloccata.
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build`).
+  - Unit Test TestLab: 🟢 32 / 32 passati.
+  - Unit Test Import: 🟢 71 / 71 passati.
+  - Unit Test Contabilità Core: 🟢 55 / 55 passati.
+- **Prossimo Step**: Test manuale utente sul fornitore della fattura `TL-ACQ-01` e avvio della Fase 24C.
+
+## PROMPT-24C-TEST-LAB-CICLO-COMPLETO-CONTROLLATO-SU-UNA-SOLA-FATTURA-DEMO
+
+- **Data**: 2026-06-29
+- **Obiettivo**: Abilitare il ciclo completo controllato SOLO per una riga selezionata in società demo/Test Lab.
+- **Soluzione**:
+  - Test Lab configurato ed elevato a **Fase 24C**.
+  - In `onStartAccounting` (Import Contabilità), per società demo:
+    - Obbligo di selezionare esattamente 1 riga pronta (non registrata/committed). Se 0 o >1 righe selezionate, blocca con banner di avviso chiaro.
+    - Mostra popup di conferma esplicito (`window.confirm`) riepilogando i dettagli contabili del documento (numero, fornitore, imponibile, IVA, totale, conto, causale).
+    - Esegue il commit reale nel DB (`runCommitWorkflow` -> `persistPrimaNotaDraft`).
+    - Al completamento riuscito, visualizza un report esito dettagliato (`window.alert`) indicando il documento, lo stato committed in staging, l'ID della Prima Nota, le righe Prima Nota create, le righe Registro IVA, lo scadenziario, la quadratura Dare/Avere e che le altre 9 righe in staging sono escluse.
+  - Per società non-demo, mantiene il comportamento standard (24C è bloccato, non si applica la restrizione della singola riga).
+- **Sicurezza**: Riconciliazione bancaria resta bloccata. Nessuna contabilizzazione automatica o massiva. Nessuna pulizia dati.
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build`).
+  - Unit Test TestLab: 🟢 34 / 34 passati (aggiunti test di conformità 24C).
+  - Unit Test Import: 🟢 71 / 71 passati.
+  - Unit Test Contabilità Core: 🟢 55 / 55 passati.
+- **Prossimo Step**: Validazione manuale del ciclo completo su `TL-ACQ-01` da parte dell'utente.
+
+
+## PROMPT-24D-RIAGGANCIO-WORKING-AREA-IMPORT-SOCIETA-DEMO
+
+- **Data**: 2026-06-29
+- **Obiettivo**: Recuperare e riagganciare la working area/predisposizione contabile esistente (`ImportContabilitaWorkingView`) al flusso Import demo, rimuovendo il commit diretto fallito (24C).
+- **Diagnosi**:
+  - **Working area storica trovata**: **SÌ** — `ImportContabilitaWorkingView.jsx` (1272 righe) con:
+    - Tab Prima Nota (righe Dare/Avere)
+    - Tab Movimenti IVA (aliquote, causali IVA, detraibilità)
+    - Tab Partitario (partite aperte/chiuse)
+    - Tab Suggerimenti AI
+    - Anteprima fattura (`WorkingViewInvoicePreviewTabs.jsx`)
+    - Popover azioni (`WorkingViewApplyActionsPopover.jsx`)
+    - Tabella prima nota (`WorkingViewPrimaNotaTable.jsx`)
+  - **Causa bypass 24C**: `onStartAccounting` in `index.jsx` (24C) tentava `runCommitWorkflow` → `persistPrimaNotaDraft` diretto, saltando completamente la working view. Il payload assemblato inline era incompleto/non validato dal motore canonico.
+  - **Componenti working view**: già funzionanti e collegati al flusso Import standard tramite `setWorkingViewOpen`, `setWorkingViewRowId`, `setWorkingViewTab`.
+- **Soluzione implementata**:
+  - **Test Lab elevato a Fase 24D** (`demoCompanyGuard.js`):
+    - `allowCommit = false` (commit bloccato)
+    - `allowFullCycle = false` (ciclo completo massivo disabilitato)
+    - `allowPrepare = true`, `allowImport = true`
+  - **`onStartAccounting`** (`index.jsx`) riscritta:
+    - Se società non demo → blocco con banner chiaro
+    - Se 0 righe selezionate → blocco: "seleziona esattamente 1 riga"
+    - Se >1 riga selezionata → blocco: "azioni massive disabilitate"
+    - Se 1 riga selezionata ma non pronta → blocco: "completa la riga"
+    - Validazione esaustiva (documento, XML, fornitore, conto, causale, imponibile, IVA, totale, data documento, data registrazione, numero documento, metadata test_lab)
+    - Se tutto valido → apertura `ImportContabilitaWorkingView` su tab Prima Nota
+    - **Nessun commit diretto**
+  - **Dead code rimosso**: codice 24C unreachable (190 righe di commit diretto, payload inline, report window.alert) eliminato completamente → build Vite senza warning.
+  - **`CICLO_COMPLETO_DISABLED_REASON`**: aggiornato a "24D" (era "24C").
+  - **Assertions test**: aggiornate da `24C` a `24D` (fase metadata, regex disabled reason).
+- **File letti**:
+  - `REGOLE_CODEX.md`
+  - `AI_WORKING_AREA_FISCOSIM/14_SOCIETA_DEMO_TEST_LAB.md`
+  - `REPORT/REPORT_CODEX.md` ultime 1200 righe
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/components/working_view/WorkingViewApplyActionsPopover.jsx`
+  - `src/modules/test_mode/demoCompanyGuard.js`
+  - `src/modules/test_mode/TestLabPanel.jsx`
+  - `src/modules/test_mode/testLabPreparaWorkflow.js`
+- **File modificati**:
+  - `src/modules/test_mode/demoCompanyGuard.js` — nuova fase `TEST_LAB_PHASE_24D`
+  - `src/modules/test_mode/TestLabPanel.jsx` — usa `TEST_LAB_PHASE_24D`
+  - `src/modules/test_mode/testLabPreparaWorkflow.js` — fase 24D nel report, `CICLO_COMPLETO_DISABLED_REASON` → 24D
+  - `src/modules/import_contabilita/index.jsx` — riscritta `onStartAccounting` (apertura working view, rimosso dead code commit 24C)
+  - `tests/testLabIntegrazione.test.js` — assertions 24C→24D, nuovi test fase 24D
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni reali (commit diretto rimosso, `runCommitWorkflow`/`persistPrimaNotaDraft` non invocati)
+  - **0** fatture generate
+  - **0** prime note create
+  - **0** movimenti registro IVA/partitario
+  - **0** pulizia/delete
+  - **0** migration/env/auth/RLS/policy
+  - **0** società reali toccate
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 12.98s, nessun warning)
+  - Unit Test TestLab: 🟢 34 / 34 passati
+  - Unit Test Import: 🟢 71 / 71 passati
+  - Unit Test Contabilità Core: 🟢 55 / 55 passati
+  - Unit Test Partitario/IVA: 🟢 passati
+  - Totale combinato: 🟢 128 / 128 passati
+- **Cosa deve testare l'utente**:
+  1. Selezionare società demo → Import Contabilità → 10 righe staging visibili
+  2. Selezionare TL-ACQ-01 → cliccare "Avvia contabilizzazione"
+  3. Verificare apertura della working area/predisposizione contabile (non commit diretto)
+  4. Verificare tab Prima Nota con righe Dare/Avere previste
+  5. Verificare tab Movimenti IVA, Partitario, Suggerimenti AI
+  6. Verificare che selezionando 0 righe o >1 riga → blocco con messaggio
+  7. Verificare che su società reale → blocco completo
+- **Prossimo Step**: Validazione manuale della working area da parte dell'utente, poi eventuale 24E (abilitazione commit controllato dalla working area).
+
+
+## PROMPT-24D-FIX-1-ALLINEAMENTO-RICONOSCIMENTO-SOCIETA-DEMO-IMPORT-WORKING-AREA
+
+- **Data**: 2026-06-29
+- **Causa blocco**: `loadSocietaAttive` in Import caricava solo `id,denominazione` — **`codice` perso** → guardia demo (`isDemoCompany`) falliva anche con società demo selezionata in tendina.
+- **Campo codice perso**: **SÌ** (query `select('id,denominazione')` senza `codice`).
+- **Fix applicato**:
+  - `loadSocietaAttive`: select `id,denominazione,codice`
+  - `resolveSocietaFromImportOptions` + `evaluateDemoCompanyForImport` + messaggio diagnostico con id/denominazione/codice
+  - `onStartAccounting` usa guardia con oggetto società completo (nessun fallback su denominazione)
+- **File modificati**:
+  - `src/modules/import_contabilita/data/importContabilitaRepo.js`
+  - `src/modules/test_mode/demoCompanyGuard.js`
+  - `src/modules/import_contabilita/index.jsx`
+  - `tests/testLabIntegrazione.test.js`
+  - `AI_WORKING_AREA_FISCOSIM/14_SOCIETA_DEMO_TEST_LAB.md`
+- **Conferme sicurezza**: 0 contabilizzazione; 0 commit (`runCommitWorkflow`/`persistPrimaNotaDraft` non invocati in `onStartAccounting`); working area solo aperta; Riconciliazione **BLOCCATA**
+- **Test utente**: refresh Import → società demo → 1 riga pronta → Avvia contabilizzazione → working area; società reale → blocco con diagnostica codice
+
+
+## PROMPT-24D-FIX-2-ALLINEAMENTO-CAUSALI-IVA-WORKING-VIEW-IMPORT-DEMO
+
+- **Data**: 2026-06-29
+- **Causa sorgente errata**: `loadCausaliIvaBySocieta` unisce globali + società; autoproposta via `resolveIvaOrNull` richiede `is_default_per_aliquota` (assente su TESTLAB seed).
+- **Loader corretto**: `filterCausaliIvaForDemoWorkingView` — dropdown demo solo TESTLAB22/10/04.
+- **Autoproposta TESTLAB22**: **SÌ** — `resolveImportWorkingViewCausaleIvaId` per aliquota 22/10/4 in società demo.
+- **Bozza IVA incompleta bloccata**: **SÌ** — `assessWorkingViewIvaDraftRows` + merge → “Causale IVA mancante” / Contabilizzazione bloccata.
+- **File**: `importContabilitaDemoCausaliIva.js`, `ImportContabilitaWorkingView.jsx`, `index.jsx`, `importContabilitaDemoCausaliIva.test.js`
+- **Test/build**: 6/6 test dedicati + build OK
+- **Test utente**: TL-ACQ-01 tab IVA → TESTLAB22 precompilata; dropdown solo TESTLAB; rimuovere causale → blocco
+- **Sicurezza**: 0 contabilizzazione/commit/pulizia; Riconciliazione **BLOCCATA**
+
+
+## PROMPT-24E-COMMIT-REALE-DEMO-WORKING-VIEW-SINGOLA-FATTURA
+
+- **Data**: 2026-06-25
+- **Obiettivo**: Commit reale controllato dalla Working View Import su **1 sola** fattura demo ordinaria acquisto (es. TL-ACQ-01).
+- **Funzione commit agganciata**: `handleDemoWorkingViewCommit` → `buildDemoWorkingViewCommitBundle` → `runCommitWorkflow` → `persistPrimaNotaDraft` (workflow canonico esistente). **Non** commit da `onStartAccounting` (apre solo working view).
+- **Payload**: costruito da draft working view (`buildWorkingViewPrimaNotaDraftRowsFromModel`, `mapWorkingViewIvaDraftToCommitRows`, `assessWorkingViewPartitarioDraft`) via `buildContabilitaPayloadFromImportRow` / `buildImportContabilitaCommitPayload` — **non** da working table grezza.
+- **Guardie 24E** (`evaluateDemo24EWorkingViewCommitGuards`):
+  - Solo società demo (`isDemoCompany`)
+  - `selectedRows.length === 1`, riga PRONTA, working view aperta e allineata
+  - PN/IVA/Partitario completi (merge checks + conto costo, causale contabile, numero documento, conto IVA credito demo)
+  - Documento già contabilizzato → blocco
+- **UI**: pulsante **Contabilizza documento demo** in working view (conferma utente) + report esito (`formatDemoWorkingViewCommitReport`) in banner/alert/pannello.
+- **Post-commit**: aggiorna **solo** la riga selezionata (`state: committed`); TL-ACQ-02…10 restano non contabilizzate.
+- **Fase Test Lab**: `TEST_LAB_PHASE_24E` — `allowCommit: true`, `allowSingleDocumentCommit: true`; metadata prepara test → fase `24E`.
+- **File nuovi/modificati**:
+  - `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js` (nuovo)
+  - `src/modules/import_contabilita/domain/importContabilitaDemoCausaliIva.js`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/test_mode/demoCompanyGuard.js`
+  - `src/modules/test_mode/testLabPreparaWorkflow.js`
+  - `src/modules/test_mode/TestLabPanel.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js` (nuovo)
+  - `tests/testLabIntegrazione.test.js`
+- **Conferme sicurezza**:
+  - **Nessuna** contabilizzazione automatica (solo dopo conferma utente in working view)
+  - **Nessuna** riga non selezionata contabilizzata
+  - **Nessuna** società reale toccata (guardia demo obbligatoria)
+  - **0** delete/pulizia/migration/env/auth/RLS
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test/build**:
+  - `node --test` Import/TestLab 24E: **54/54** passati
+  - `npm run build`: **OK**
+- **Test manuali utente**:
+  1. Demo → Prepara test (10 righe) + seed contabile se necessario
+  2. Selezionare **solo TL-ACQ-01** → Avvia contabilizzazione → verificare PN quadrata, IVA TESTLAB22, Partitario fornitore
+  3. **Contabilizza documento demo** → conferma → verificare prima nota / IVA acquisti / partita fornitore in DB
+  4. Verificare TL-ACQ-02…10 ancora non contabilizzate
+  5. Tentare >1 riga selezionata → commit bloccato
+  6. Società reale → commit bloccato
 

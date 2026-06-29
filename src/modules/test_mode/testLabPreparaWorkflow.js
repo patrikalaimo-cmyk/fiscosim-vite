@@ -4,7 +4,7 @@
  */
 
 import { runImportWorkflow } from '../import_contabilita/application/importContabilitaWorkflow.js'
-import { assertDemoCompanyForTestLab, TEST_LAB_PHASE_24B } from './demoCompanyGuard.js'
+import { assertDemoCompanyForTestLab, TEST_LAB_PHASE_24E } from './demoCompanyGuard.js'
 import { resolveSocietaDisplayName } from './societaTestLabSchema.js'
 import {
   generateOrdinariaAcquisto10Cases,
@@ -43,7 +43,7 @@ function attachTestLabMetaToImportResult(importResult, cases) {
       testLabMarker: TEST_LAB_MARKER,
       scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
       caseId: caseDef?.caseId || null,
-      phase: TEST_LAB_PHASE_24B.id,
+      phase: TEST_LAB_PHASE_24E.id,
       meta: caseDef?.meta || null,
       preparedAt: new Date().toISOString(),
     }
@@ -93,7 +93,7 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
   const report = {
     scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
     modalita: 'prepara_test',
-    fase: TEST_LAB_PHASE_24B.id,
+    fase: TEST_LAB_PHASE_24E.id,
     societaDemo: resolveSocietaDisplayName(societa),
     societaCodice: societa.codice,
     societaId,
@@ -147,7 +147,7 @@ export function writeTestLabImportSnapshot(societaId, importResult, automationMe
     testLab: {
       source: TEST_LAB_SOURCE,
       scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
-      phase: TEST_LAB_PHASE_24B.id,
+      phase: TEST_LAB_PHASE_24E.id,
       preparedAt: new Date().toISOString(),
     },
   }
@@ -160,4 +160,4 @@ export function writeTestLabImportSnapshot(societaId, importResult, automationMe
 }
 
 export const CICLO_COMPLETO_DISABLED_REASON =
-  'Ciclo completo disabilitato in 24B: prima va validata la preparazione/staging su società demo.'
+  'Ciclo completo massivo disabilitato in 24E: contabilizzare 1 documento demo dalla working view Import.'

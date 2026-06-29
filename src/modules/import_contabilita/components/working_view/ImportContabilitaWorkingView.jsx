@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { WorkingViewApplyActionsPopover } from './WorkingViewApplyActionsPopover.jsx'
-import { resolveIvaOrNull } from '../../../../../domain/resolveIva.js'
 import { WorkingViewInvoicePreviewTabs } from './WorkingViewInvoicePreviewTabs.jsx'
 import { WorkingViewPrimaNotaTable } from './WorkingViewPrimaNotaTable.jsx'
+import {
+  resolveImportWorkingViewCausaleIvaId,
+  assessWorkingViewIvaDraftRows,
+  mergeWorkingViewChecksWithIvaDraft,
+  extractWorkingViewIvaSourceRows,
+} from '../../domain/importContabilitaDemoCausaliIva.js'
+import {
+  assessWorkingViewPartitarioDraft,
+  buildDemoWorkingViewCommitConfirmMessage,
+} from '../../domain/importContabilitaDemoWorkingViewCommit.js'
 
 let workingViewIvaDraftSequence = 0
 
@@ -191,24 +200,6 @@ function getWorkingViewCounterpartyCausaleIvaId(counterpartyAccount) {
   )
 }
 
-function resolveWorkingViewSuggestedCausaleIvaId({ source = {}, counterpartyAccount = null, causaliIva = [] } = {}) {
-  const explicitId = normalizeWorkingViewCausaleIvaId(source?.causaleIvaId || source?.causale_iva_id)
-  if (explicitId) return explicitId
-
-  const supplierPreferredCausaleId = getWorkingViewCounterpartyCausaleIvaId(counterpartyAccount)
-
-  // Priority 2: storico IVA fornitore. Non ancora disponibile in Import Contabilita.
-  const historicalCausaleIvaId = ''
-  if (historicalCausaleIvaId) return historicalCausaleIvaId
-
-  return normalizeWorkingViewCausaleIvaId(resolveIvaOrNull({
-    conto: supplierPreferredCausaleId ? { causale_iva_id: supplierPreferredCausaleId } : null,
-    aliquota: source?.aliquota,
-    natura: source?.natura,
-    causaliIva,
-  }))
-}
-
 function createWorkingViewIvaDraftRow(source = {}, causaliIvaById = new Map(), options = {}) {
   const defaultCausaleIvaId = normalizeWorkingViewCausaleIvaId(
     options?.resolveDefaultCausaleIvaId ? options.resolveDefaultCausaleIvaId(source) : ''
@@ -313,6 +304,10 @@ export function ImportContabilitaWorkingView({
   formatManualCausale,
   causaliContabili,
   causaliIva,
+  isDemoSocieta = false,
+  onCommitDemoWorkingView,
+  commitBusy = false,
+  demoCommitReport = null,
   getCounterpartyDisplayInfo,
   onPlaceholderAction,
   stagingRows,
@@ -326,13 +321,14 @@ export function ImportContabilitaWorkingView({
   const [applyPopoverOpen, setApplyPopoverOpen] = useState(false)
   const [previewTab, setPreviewTab] = useState('fattura_fiscosim')
   const causaliIvaById = new Map((Array.isArray(causaliIva) ? causaliIva : []).map((item) => [String(item?.id || '').trim(), item]))
-  const resolveDefaultWorkingViewCausaleIvaId = (sourceRow = {}) => resolveWorkingViewSuggestedCausaleIvaId({
+  const resolveDefaultWorkingViewCausaleIvaId = (sourceRow = {}) => resolveImportWorkingViewCausaleIvaId({
     source: sourceRow,
     counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
     causaliIva,
+    isDemoSocieta,
   })
   const [ivaDraftRows, setIvaDraftRows] = useState(() => buildWorkingViewIvaDraftRows(
-    activeWorkingViewModel?.parsedDocument?.ivaRows,
+    extractWorkingViewIvaSourceRows(activeWorkingViewModel?.parsedDocument),
     causaliIvaById,
     { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId }
   ))
@@ -340,18 +336,33 @@ export function ImportContabilitaWorkingView({
   const [ivaCausalePickerRowId, setIvaCausalePickerRowId] = useState('')
   const [ivaCausaleSearchTerm, setIvaCausaleSearchTerm] = useState('')
   const ivaCausaleSearchInputRef = useRef(null)
-  const workingStatusLabel = activeWorkingViewChecks.status === 'blocked'
+  const ivaDraftChecks = useMemo(
+    () => assessWorkingViewIvaDraftRows(ivaDraftRows),
+    [ivaDraftRows],
+  )
+  const partitarioDraftChecks = useMemo(
+    () => assessWorkingViewPartitarioDraft(activeWorkingViewModel),
+    [activeWorkingViewModel],
+  )
+  const mergedWorkingViewChecks = useMemo(
+    () => mergeWorkingViewChecksWithIvaDraft(
+      mergeWorkingViewChecksWithIvaDraft(activeWorkingViewChecks, ivaDraftChecks),
+      partitarioDraftChecks,
+    ),
+    [activeWorkingViewChecks, ivaDraftChecks, partitarioDraftChecks],
+  )
+  const workingStatusLabel = mergedWorkingViewChecks.status === 'blocked'
     ? 'Contabilizzazione bloccata'
-    : activeWorkingViewChecks.status === 'warning'
+    : mergedWorkingViewChecks.status === 'warning'
       ? 'Bozza da verificare'
       : 'Bozza coerente'
-  const workingStatusTone = activeWorkingViewChecks.status === 'blocked'
+  const workingStatusTone = mergedWorkingViewChecks.status === 'blocked'
     ? {
       border: '1px solid rgba(220,53,69,.34)',
       background: 'rgba(95,27,38,.34)',
       color: '#ffd7dd',
     }
-    : activeWorkingViewChecks.status === 'warning'
+    : mergedWorkingViewChecks.status === 'warning'
       ? {
         border: '1px solid rgba(255,193,7,.3)',
         background: 'rgba(92,64,9,.24)',
@@ -363,19 +374,19 @@ export function ImportContabilitaWorkingView({
         color: '#c8f3df',
       }
   const readinessLabel = activeWorkingViewModel.readiness?.label || 'Incompleta'
-  const topIssueLabel = activeWorkingViewChecks.status === 'blocked'
-    ? activeWorkingViewChecks.blockingIssues?.[0]
-    : activeWorkingViewChecks.status === 'warning'
-      ? activeWorkingViewChecks.warnings?.[0]
+  const topIssueLabel = mergedWorkingViewChecks.status === 'blocked'
+    ? mergedWorkingViewChecks.blockingIssues?.[0]
+    : mergedWorkingViewChecks.status === 'warning'
+      ? mergedWorkingViewChecks.warnings?.[0]
       : ''
   const workingDocumentMeta = [
     activeWorkingViewModel.originType || null,
     activeWorkingViewModel.numeroDocumento ? `N. ${activeWorkingViewModel.numeroDocumento}` : null,
     activeWorkingViewModel.dataDocumento ? `Data ${activeWorkingViewModel.dataDocumento}` : null,
   ].filter(Boolean).join(' · ')
-  const operationalSuggestion = activeWorkingViewChecks.status === 'blocked'
+  const operationalSuggestion = mergedWorkingViewChecks.status === 'blocked'
     ? topIssueLabel || 'Verifica la quadratura della prima nota rispetto al totale documento.'
-    : activeWorkingViewChecks.status === 'warning'
+    : mergedWorkingViewChecks.status === 'warning'
       ? topIssueLabel || 'Verifica i campi mancanti prima della contabilizzazione.'
       : 'Scrittura coerente: puoi procedere con la contabilizzazione o salvare la bozza locale.'
   const currentAutomationMeta = activeWorkingViewModel?.automationMeta || null
@@ -539,14 +550,14 @@ export function ImportContabilitaWorkingView({
 
   useEffect(() => {
     setIvaDraftRows(buildWorkingViewIvaDraftRows(
-      activeWorkingViewModel?.parsedDocument?.ivaRows,
+      extractWorkingViewIvaSourceRows(activeWorkingViewModel?.parsedDocument),
       causaliIvaById,
       { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId }
     ))
     setSelectedIvaDraftRowId(null)
     setIvaCausalePickerRowId('')
     setIvaCausaleSearchTerm('')
-  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.counterpartyAccount?.id, activeWorkingViewModel?.counterpartyAccount?.causaleIvaId, causaliIva])
+  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.counterpartyAccount?.id, activeWorkingViewModel?.counterpartyAccount?.causaleIvaId, causaliIva, isDemoSocieta])
 
   useEffect(() => {
     if (!ivaDraftRows.length) {
@@ -848,11 +859,26 @@ export function ImportContabilitaWorkingView({
                 </button>
                 <button
                   type="button"
-                  onClick={workingTableReadyCount ? onStartAccounting : undefined}
-                  style={headerSuccessActionStyle}
+                  disabled={!isDemoSocieta || commitBusy || mergedWorkingViewChecks.status !== 'ok'}
+                  title={isDemoSocieta
+                    ? (mergedWorkingViewChecks.status === 'ok'
+                      ? 'Contabilizza in DB solo questo documento demo (24E)'
+                      : 'Completa PN, IVA e partitario prima del commit')
+                    : 'Commit demo disponibile solo su società Test Lab'}
+                  onClick={() => {
+                    if (!isDemoSocieta || typeof onCommitDemoWorkingView !== 'function') return
+                    const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, ivaDraftRows)
+                    if (!window.confirm(message)) return
+                    onCommitDemoWorkingView({ ivaDraftRows })
+                  }}
+                  style={{
+                    ...headerSuccessActionStyle,
+                    opacity: (!isDemoSocieta || commitBusy || mergedWorkingViewChecks.status !== 'ok') ? 0.45 : 1,
+                    cursor: (!isDemoSocieta || commitBusy || mergedWorkingViewChecks.status !== 'ok') ? 'not-allowed' : 'pointer',
+                  }}
                 >
                   ⟲
-                  <span>Contabilizza selezionata</span>
+                  <span>{commitBusy ? 'Contabilizzazione...' : 'Contabilizza documento demo'}</span>
                 </button>
                 <button type="button" onClick={() => onPlaceholderAction('Salva bozza')} style={headerGhostActionStyle}>
                   <span>◫</span>
@@ -878,21 +904,36 @@ export function ImportContabilitaWorkingView({
               </div>
             </div>
 
+            {demoCommitReport?.text ? (
+              <div style={{
+                padding: '.18rem .22rem',
+                borderRadius: 12,
+                border: `1px solid ${demoCommitReport.ok ? 'rgba(25,135,84,.32)' : 'rgba(220,53,69,.34)'}`,
+                background: demoCommitReport.ok ? 'rgba(18,76,56,.26)' : 'rgba(95,27,38,.34)',
+                fontSize: '.66rem',
+                whiteSpace: 'pre-wrap',
+                lineHeight: 1.35,
+                color: demoCommitReport.ok ? '#c8f3df' : '#ffd7dd',
+              }}>
+                {demoCommitReport.text}
+              </div>
+            ) : null}
+
             {topIssueLabel ? (
               <div
                 style={{
                   padding: '.18rem .22rem',
                   borderRadius: 12,
-                  border: `1px solid ${activeWorkingViewChecks.status === 'blocked' ? 'rgba(220,53,69,.34)' : 'rgba(255,193,7,.3)'}`,
-                  background: activeWorkingViewChecks.status === 'blocked' ? 'rgba(95,27,38,.34)' : 'rgba(92,64,9,.24)',
+                  border: `1px solid ${mergedWorkingViewChecks.status === 'blocked' ? 'rgba(220,53,69,.34)' : 'rgba(255,193,7,.3)'}`,
+                  background: mergedWorkingViewChecks.status === 'blocked' ? 'rgba(95,27,38,.34)' : 'rgba(92,64,9,.24)',
                   display: 'grid',
                   gap: '.06rem',
                 }}
               >
-                <strong style={{ fontSize: '.78rem', color: activeWorkingViewChecks.status === 'blocked' ? '#ffe1e6' : '#ffe9a8' }}>
-                  {workingStatusLabel} {activeWorkingViewChecks.status === 'blocked' ? '— controlli non bypassabili' : '— verifica richiesta'}
+                <strong style={{ fontSize: '.78rem', color: mergedWorkingViewChecks.status === 'blocked' ? '#ffe1e6' : '#ffe9a8' }}>
+                  {workingStatusLabel} {mergedWorkingViewChecks.status === 'blocked' ? '— controlli non bypassabili' : '— verifica richiesta'}
                 </strong>
-                <div style={{ fontSize: '.66rem', color: activeWorkingViewChecks.status === 'blocked' ? '#ffd7dd' : '#fbe2a2', lineHeight: 1.32 }}>
+                <div style={{ fontSize: '.66rem', color: mergedWorkingViewChecks.status === 'blocked' ? '#ffd7dd' : '#fbe2a2', lineHeight: 1.32 }}>
                   {topIssueLabel}
                 </div>
               </div>
@@ -1185,22 +1226,22 @@ export function ImportContabilitaWorkingView({
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, .92fr)', gap: '.12rem' }}>
               <div style={{ display: 'grid', gap: '.1rem', padding: '.16rem .18rem', borderRadius: 12, border: '1px solid rgba(124,157,202,.12)', background: 'rgba(8,27,42,.46)' }}>
                 <div style={{ fontSize: '.56rem', color: 'rgba(188,204,226,.72)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Controlli</div>
-                {activeWorkingViewChecks.status === 'blocked' ? (
-                  activeWorkingViewChecks.blockingIssues.map((issue) => (
+                {mergedWorkingViewChecks.status === 'blocked' ? (
+                  mergedWorkingViewChecks.blockingIssues.map((issue) => (
                     <div key={issue} style={{ display: 'flex', alignItems: 'flex-start', gap: '.14rem', color: '#ffd8dd', fontSize: '.66rem', lineHeight: 1.28 }}>
                       <span style={{ color: '#ef5b6c' }}>●</span>
                       <span>{issue}</span>
                     </div>
                   ))
-                ) : activeWorkingViewChecks.status === 'warning' ? (
-                  activeWorkingViewChecks.warnings.map((issue) => (
+                ) : mergedWorkingViewChecks.status === 'warning' ? (
+                  mergedWorkingViewChecks.warnings.map((issue) => (
                     <div key={issue} style={{ display: 'flex', alignItems: 'flex-start', gap: '.14rem', color: '#ffe38a', fontSize: '.66rem', lineHeight: 1.28 }}>
                       <span style={{ color: '#f2be42' }}>●</span>
                       <span>{issue}</span>
                     </div>
                   ))
                 ) : (
-                  activeWorkingViewChecks.checks
+                  mergedWorkingViewChecks.checks
                     .filter((check) => check.status === 'ok' || check.status === 'info')
                     .slice(0, 4)
                     .map((check) => (

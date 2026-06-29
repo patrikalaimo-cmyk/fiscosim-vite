@@ -1069,7 +1069,13 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     documentoId: documentId,
     status: 'processed',
     warnings: validationResult.warnings || [],
-    blockingReasons: []
+    blockingReasons: [],
+    numeroRighe: persistResult.data?.numero_righe || 0,
+    numeroRigheIva: persistResult.data?.numero_righe_iva || 0,
+    partitaFornitoreCount: (persistResult.partIns && persistResult.partIns.data && persistResult.partIns.data.length) || (persistResult.partIns?.count) || (draftBundle.partitarioDraft?.active ? draftBundle.partitarioDraft.rows.length : 0),
+    totaleDare: persistResult.data?.totale_dare || 0,
+    totaleAvere: persistResult.data?.totale_avere || 0,
+    isBalanced: persistResult.data?.isBalanced || false,
   }
 }
 

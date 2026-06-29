@@ -213,7 +213,7 @@ export async function loadImportContabilitaDedupCandidatesBySocieta(societaId) {
 export async function loadSocietaAttive() {
   const { data, error } = await sb
     .from('societa')
-    .select('id,denominazione')
+    .select('id,denominazione,codice')
     .eq('attiva', true)
     .order('denominazione')
 
@@ -224,6 +224,7 @@ export async function loadSocietaAttive() {
         .map((row) => ({
           id: String(row?.id || '').trim(),
           denominazione: String(row?.denominazione || '').trim(),
+          codice: String(row?.codice || '').trim(),
         }))
         .filter((row) => row.id && row.denominazione)
     : []

@@ -5,6 +5,12 @@ import {
   assertDemoCompanyForTestLab,
   TEST_LAB_PHASE_24A,
   TEST_LAB_PHASE_24B,
+  TEST_LAB_PHASE_24C,
+  TEST_LAB_PHASE_24D,
+  TEST_LAB_PHASE_24E,
+  evaluateDemoCompanyForImport,
+  resolveSocietaFromImportOptions,
+  buildImportDemoGuardBlockMessage,
 } from '../src/modules/test_mode/demoCompanyGuard.js'
 import { generateScenarioDocuments } from '../src/modules/test_mode/TestLabGenerators.js'
 import {
@@ -140,7 +146,7 @@ test('24B — automationMetaByRowId traccia test_lab per riga staging', async ()
     const meta = automationMetaByRowId[id]
     assert.equal(meta.source, TEST_LAB_SOURCE)
     assert.equal(meta.scenario, TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO)
-    assert.equal(meta.phase, '24B')
+    assert.equal(meta.phase, '24E')
     assert.ok(meta.caseId?.startsWith('acq_'))
   }
   assert.equal(importResult.stagingRows.length, rowIds.length)
@@ -171,8 +177,8 @@ test('24B — Prepara test non invoca runCommitWorkflow né persistPrimaNotaDraf
 })
 
 test('24B — ciclo completo disabilitato con motivo esplicito', () => {
-  assert.match(CICLO_COMPLETO_DISABLED_REASON, /24B/)
-  assert.match(CICLO_COMPLETO_DISABLED_REASON, /preparazione\/staging/)
+  assert.match(CICLO_COMPLETO_DISABLED_REASON, /24E/)
+  assert.match(CICLO_COMPLETO_DISABLED_REASON, /working view/)
 })
 
 test('24B — Riconciliazione resta bloccata (gate)', () => {
@@ -457,3 +463,84 @@ test('24B-FIX-3 — buildDemoCausaliIvaSeedDefs produce 3 aliquote', () => {
   assert.equal(defs.length, 3)
   assert.deepEqual(defs.map((d) => d.aliquota).sort((a, b) => a - b), [4, 10, 22])
 })
+
+test('24E — fase 24E consente prepare/import e commit singolo da working view', () => {
+  assert.equal(TEST_LAB_PHASE_24E.allowPrepare, true)
+  assert.equal(TEST_LAB_PHASE_24E.allowImport, true)
+  assert.equal(TEST_LAB_PHASE_24E.allowCommit, true)
+  assert.equal(TEST_LAB_PHASE_24E.allowSingleDocumentCommit, true)
+  assert.equal(TEST_LAB_PHASE_24E.allowFullCycle, true)
+})
+
+test('24E — testLabPreparaWorkflow genera metadati con fase 24E', async () => {
+  const testLabWorkflow = await import('../src/modules/test_mode/testLabPreparaWorkflow.js')
+  assert.equal(testLabWorkflow.CICLO_COMPLETO_DISABLED_REASON.includes('24E'), true)
+})
+
+test('24D — fase 24D resta senza commit (storico)', () => {
+  assert.equal(TEST_LAB_PHASE_24D.allowPrepare, true)
+  assert.equal(TEST_LAB_PHASE_24D.allowImport, true)
+  assert.equal(TEST_LAB_PHASE_24D.allowCommit, false)
+  assert.equal(TEST_LAB_PHASE_24D.allowFullCycle, false)
+})
+
+test('24D-FIX-1 — guardia demo accetta codice __TEST__FISCOSIM_DEMO', () => {
+  const societa = {
+    id: 'demo-1',
+    codice: '__TEST__FISCOSIM_DEMO',
+    denominazione: 'FiscoSim Demo Test Lab SRL',
+  }
+  const result = evaluateDemoCompanyForImport(societa)
+  assert.equal(result.allowed, true)
+  assert.equal(isDemoCompany(societa), true)
+})
+
+test('24D-FIX-1 — guardia blocca società reale anche se denominazione contiene demo', () => {
+  const societa = {
+    id: 'real-1',
+    codice: 'SIRIA',
+    denominazione: 'FiscoSim Demo Test Lab SRL',
+  }
+  const result = evaluateDemoCompanyForImport(societa)
+  assert.equal(result.allowed, false)
+  assert.equal(isDemoCompany(societa), false)
+  assert.match(result.reason, /Test Lab/)
+})
+
+test('24D-FIX-1 — codice mancante produce errore diagnostico controllato', () => {
+  const societa = { id: 'demo-1', denominazione: 'FiscoSim Demo Test Lab SRL' }
+  const result = evaluateDemoCompanyForImport(societa)
+  assert.equal(result.allowed, false)
+  assert.match(result.reason, /Codice società non disponibile nel flusso Import/)
+  const message = buildImportDemoGuardBlockMessage(result)
+  assert.match(message, /id=demo-1/)
+  assert.match(message, /codice=mancante/)
+})
+
+test('24D-FIX-1 — resolveSocietaFromImportOptions passa codice dalla tendina', () => {
+  const options = [
+    { id: 'a', codice: '__TEST__FISCOSIM_DEMO', denominazione: 'FiscoSim Demo Test Lab SRL' },
+    { id: 'b', codice: 'SIRIA', denominazione: 'Siria SRL' },
+  ]
+  const resolved = resolveSocietaFromImportOptions(options, 'a', '')
+  assert.equal(resolved.codice, '__TEST__FISCOSIM_DEMO')
+  assert.equal(evaluateDemoCompanyForImport(resolved).allowed, true)
+})
+
+test('24D-FIX-1 — loadSocietaAttive select include codice', async () => {
+  const repoSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/data/importContabilitaRepo.js', import.meta.url), 'utf8')
+  )
+  assert.match(repoSource, /select\('id,denominazione,codice'\)/)
+})
+
+test('24D-FIX-1 — onStartAccounting Import usa guardia con codice, non commit', async () => {
+  const importSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/index.jsx', import.meta.url), 'utf8')
+  )
+  assert.match(importSource, /evaluateDemoCompanyForImport/)
+  assert.match(importSource, /resolveSocietaFromImportOptions/)
+  assert.match(importSource, /setWorkingViewOpen\(true\)/)
+  assert.doesNotMatch(importSource, /onStartAccounting[\s\S]{0,800}runCommitWorkflow/)
+})
+

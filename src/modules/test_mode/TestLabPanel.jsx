@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import {
   isDemoCompany,
-  TEST_LAB_PHASE_24B,
+  TEST_LAB_PHASE_24E,
 } from './demoCompanyGuard.js'
 import {
   ensureTestLabDemoCompany,
@@ -115,13 +115,13 @@ function AccountingSeedReportPanel({ report }) {
 }
 
 /**
- * Test Lab — Fase 24B: Prepara test fattura ordinaria acquisto (10 casi).
+ * Test Lab — Fase 24E: commit controllato 1 documento demo da working view Import.
  */
 export function TestLabPanel({ societaId, currentSocieta, utente, societaList = [], onDemoCompanyReady }) {
   const isDemo = isDemoCompany(currentSocieta)
   const canManageDemo = isAdminOrOwnerForTestLab(utente)
   const demoExistsInList = societaList.some((s) => s.codice === TEST_LAB_DEMO_COMPANY_CODE)
-  const phase = TEST_LAB_PHASE_24B
+  const phase = TEST_LAB_PHASE_24E
   const [busy, setBusy] = useState(false)
   const [demoBusy, setDemoBusy] = useState(false)
   const [accountingBusy, setAccountingBusy] = useState(false)
@@ -335,14 +335,14 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
             type="button"
             className="btn-sec"
             disabled
-            title={CICLO_COMPLETO_DISABLED_REASON}
+            title="Ciclo completo massivo disabilitato in 24E. Contabilizzare 1 documento demo dalla working view Import."
             style={{ fontSize: '.72rem', opacity: 0.45, cursor: 'not-allowed' }}
           >
             Esegui ciclo completo (disabilitato)
           </button>
         </div>
         <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.45rem' }}>
-          {CICLO_COMPLETO_DISABLED_REASON}
+          Ciclo completo massivo disabilitato in 24E. Dalla working view Import, con 1 riga pronta selezionata, usa «Contabilizza documento demo» dopo aver verificato PN/IVA/Partitario.
         </div>
       </div>
 

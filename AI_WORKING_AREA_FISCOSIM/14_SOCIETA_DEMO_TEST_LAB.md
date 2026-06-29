@@ -252,3 +252,188 @@ Seconda esecuzione: `created=0`, `existing` = totale seed — nessun duplicato.
 
 ### Prossimo step
 Validazione manuale Import su società demo post-seed, poi 24C (ciclo completo — ancora disabilitato).
+
+## FASE 24B-FIX-4 — Allineamento Dropdown Import con Seed Contabile Demo
+- **Seed contabile demo** verificato ed eseguito correttamente nel database reale tramite script di setup diagnostico.
+- **Dropdown Conto proposto / Causale contabile** allineati, caricando dinamicamente i record associati alla società demo in `Import Contabilità`.
+
+## FASE 24B-FIX-5 — Conferma Singola Anagrafica Import / Test Lab
+- **Obiettivo**: Permettere all'operatore di confermare una singola anagrafica/controparte nella sezione "Anagrafiche da verificare".
+- **Soluzione**: Aggiunta una colonna "Conferma" nella tabella anagrafiche. Se la riga è pronta (validation status is `ready`, `linked`, or `ignored`), viene mostrato un pulsante "Conferma".
+- **Logica**: Per le azioni `"Crea nuovo conto"`, il pulsante crea il conto reale in `piano_conti` tramite `createImportContabilitaPianoConto`, calcolandone il codice progressivo e ricaricando il piano dei conti locale. Per `"Seleziona esistente"`, associa l'anagrafica esistente. Per `"Ignora"`, la esclude.
+- **Feedback**: Banners di successo riportano la denominazione confermata, il conto generato/collegato, e il numero di documenti aggiornati localmente.
+- **File coinvolti**:
+  - `src/modules/import_contabilita/index.jsx` (onConfirmSingleAnagrafica)
+  - `src/modules/import_contabilita/components/ImportContabilitaAnagraficheDetail.jsx` (porting del bottone nella tabella UI)
+
+## FASE 24C — Test Lab Ciclo Completo Controllato su una sola Fattura Demo
+- **Obiettivo**: Abilitare il ciclo completo controllato SOLO per una riga selezionata in società demo.
+- **Implementazione**:
+  - `Test Lab` configurato su **Fase 24C**.
+  - `onStartAccounting` in `index.jsx` blocca la contabilizzazione se non è selezionata esattamente una riga pronta.
+  - Se selezionata, mostra un popup di conferma riepilogando numero documento, fornitore, imponibile, IVA, totale, conto e causale contabile.
+  - Esegue il commit reale (tramite `runCommitWorkflow` -> `persistPrimaNotaDraft`).
+  - Al termine, restituisce un report esito dettagliato (`window.alert`) indicando il documento selezionato/contabilizzato, lo stato della riga in staging, l'ID della Prima Nota, il numero di righe Prima Nota create, le righe Registro IVA, lo scadenziario partitario e che le rimanenti 9 righe non selezionate in staging sono escluse.
+- **Sicurezza**: Blocco assoluto della modalità 24C su società non-demo (usano il flusso standard). Riconciliazione bancaria resta bloccata.
+
+
+## FASE 24D — Riaggancio Working Area Import su Società Demo
+
+### Problema risolto
+24C tentava commit diretto (`runCommitWorkflow` → `persistPrimaNotaDraft`) in `onStartAccounting`, saltando la working area/predisposizione contabile già esistente. Il payload assemblato inline era incompleto e non passava la validazione canonica.
+
+### Working area storica trovata: SÌ
+| Componente | File | Ruolo |
+|---|---|---|
+| Working View principale | `ImportContabilitaWorkingView.jsx` | Tab Prima Nota, IVA, Partitario, Suggerimenti AI |
+| Anteprima fattura | `WorkingViewInvoicePreviewTabs.jsx` | Visualizzazione documento XML |
+| Azioni | `WorkingViewApplyActionsPopover.jsx` | Selezione conto/causale/data registrazione |
+| Tabella prima nota | `WorkingViewPrimaNotaTable.jsx` | Righe Dare/Avere |
+
+### Apertura working view
+Funzioni di stato già implementate: `setWorkingViewOpen`, `setWorkingViewRowId`, `setWorkingViewRowIds`, `setWorkingViewTab`.
+
+### Soluzione
+- `onStartAccounting` riscritta: valida tutti i dati richiesti, poi apre `ImportContabilitaWorkingView` su tab Prima Nota.
+- Dead code commit 24C rimosso (190 righe unreachable).
+- `TEST_LAB_PHASE_24D.allowCommit = false` — nessun commit possibile.
+- Pulsante di conferma nella working view: non presente (la working view è solo anteprima/predisposizione).
+
+### Validazioni bloccanti pre-apertura
+- Documento importato presente
+- XML/anteprima disponibile
+- Fornitore collegato
+- Conto costo/ricavo selezionato
+- Causale contabile FF demo impostata
+- Imponibile > 0
+- IVA presente
+- Totale > 0
+- Data documento specificata
+- Data registrazione specificata
+- Numero documento specificato
+- Metadata test_lab presente
+
+### Blocchi operativi
+| Condizione | Azione |
+|---|---|
+| Società non demo | Blocco totale (banner warning) |
+| 0 righe selezionate | Blocco (banner: "seleziona esattamente 1 riga") |
+| >1 riga selezionata | Blocco (banner: "azioni massive disabilitate") |
+| 1 riga non pronta | Blocco (banner: "completa la riga") |
+| 1 riga pronta + validata | Apertura working view |
+
+### Cosa NON viene fatto
+- Nessun commit diretto
+- Nessuna chiamata a `runCommitWorkflow` o `persistPrimaNotaDraft`
+- Nessuna fattura generata
+- Nessuna pulizia/delete
+- Nessuna migration/env/auth/RLS/policy
+
+### File
+- `src/modules/test_mode/demoCompanyGuard.js` — `TEST_LAB_PHASE_24D`
+- `src/modules/test_mode/TestLabPanel.jsx` — fase 24D
+- `src/modules/test_mode/testLabPreparaWorkflow.js` — report + disabled reason 24D
+- `src/modules/import_contabilita/index.jsx` — `onStartAccounting` → working view
+- `tests/testLabIntegrazione.test.js` — 34 test (conformità 24D)
+
+### Test manuali richiesti
+1. Società demo → Import → 10 righe staging
+2. Selezionare TL-ACQ-01 → "Avvia contabilizzazione" → verifica apertura working view
+3. Verificare tab Prima Nota, IVA, Partitario
+4. Selezionare 0 o >1 riga → verifica blocco
+5. Società reale → verifica blocco completo
+
+### Prossimo step
+Validazione manuale working area, poi 24E (abilitazione commit controllato dalla working area).
+
+## FASE 24D-FIX-1 — Riconoscimento società demo in Import / Working Area
+
+### Problema risolto
+Tendina Import mostrava la società demo per **denominazione**, ma `loadSocietaAttive` caricava solo `id,denominazione` — **`codice` assente** → `isDemoCompany` restituiva sempre `false` → blocco su "Avvia contabilizzazione".
+
+### Causa
+Campo `codice` perso nella query società del modulo Import (`importContabilitaRepo.loadSocietaAttive`).
+
+### Fix
+- Select società: `id,denominazione,codice`
+- `resolveSocietaFromImportOptions` — risolve oggetto completo da tendina + fallback id/denominazione
+- `evaluateDemoCompanyForImport` — guardia basata solo su `codice` (prefisso `__TEST__` / `test_`)
+- Messaggio blocco diagnostico: id, denominazione, codice (o `mancante`)
+
+### Nessun fallback su denominazione
+Denominazione "FiscoSim Demo Test Lab SRL" con codice reale (es. `SIRIA`) resta **bloccata**.
+
+### File
+- `src/modules/import_contabilita/data/importContabilitaRepo.js`
+- `src/modules/test_mode/demoCompanyGuard.js`
+- `src/modules/import_contabilita/index.jsx` (`onStartAccounting`)
+
+### Test manuali utente
+1. Ricaricare Import Contabilità (refresh pagina per ricaricare tendina con `codice`).
+2. Selezionare `FiscoSim Demo Test Lab SRL` → 1 riga pronta → **Avvia contabilizzazione** → working area si apre.
+3. Società reale → blocco con diagnostica `codice=...` (non demo).
+
+## FASE 24D-FIX-2 — Causali IVA working view Import demo
+
+### Problema risolto
+Tab IVA working view mostrava causali globali (A1, A17, …) e non autoproponeva TESTLAB22/10/04 per fattura ordinaria demo.
+
+### Causa
+- `loadCausaliIvaBySocieta` unisce globali + società → dropdown saturato da causali reali.
+- Autoproposta usava `resolveIvaOrNull` che richiede `is_default_per_aliquota` (assente su seed TESTLAB).
+
+### Fix
+- `filterCausaliIvaForDemoWorkingView` — in società demo dropdown solo causali TESTLAB seedate.
+- `resolveImportWorkingViewCausaleIvaId` — autoproposta per aliquota 22/10/4 → TESTLAB22/10/04.
+- `assessWorkingViewIvaDraftRows` + merge checks — bozza con IVA senza causale → **Contabilizzazione bloccata** (“Causale IVA mancante”).
+
+### File
+- `src/modules/import_contabilita/domain/importContabilitaDemoCausaliIva.js`
+- `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/tests/importContabilitaDemoCausaliIva.test.js`
+
+### Test manuali utente
+1. Demo → TL-ACQ-01 → working view tab IVA → causale **TESTLAB22** precompilata.
+2. Dropdown mostra solo TESTLAB22/10/04.
+3. Rimuovere causale IVA → stato **Contabilizzazione bloccata**.
+
+## FASE 24E — Commit reale controllato da Working View (1 documento demo)
+
+### Obiettivo
+Contabilizzazione **reale** di **una sola** fattura demo ordinaria acquisto dalla working view Import, dopo preview PN/IVA/Partitario e conferma utente.
+
+### Flusso
+Import working table → selezione **1** riga pronta → working view → validazione → **Contabilizza documento demo** → `runCommitWorkflow` / `persistPrimaNotaDraft` → report esito.
+
+### Guardie
+- Solo società demo (`__TEST__` / `test_`)
+- Esattamente 1 riga selezionata, stato PRONTA
+- PN quadrata, IVA completa (causale TESTLAB), partitario fornitore completo
+- Conto costo, causale FF, numero documento obbligatori
+- Documento già committed → blocco
+- Società reale → blocco
+
+### Payload atteso TL-ACQ-01
+- PN: costo Dare 1.000,00 · IVA credito Dare 220,00 · fornitore Avere 1.220,00
+- IVA: registro acquisti, TESTLAB22, 22%
+- Partitario: Demo 22 S.r.l., debito 1.220,00
+
+### File
+- `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js`
+- `src/modules/import_contabilita/index.jsx` (`handleDemoWorkingViewCommit`)
+- `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+- `src/modules/test_mode/demoCompanyGuard.js` (`TEST_LAB_PHASE_24E`)
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Vietato in 24E
+- Commit automatico o massivo
+- Commit da working table senza working view
+- Commit su società reali
+- Pulizia/delete/migration
+
+### Test manuali utente
+1. Demo → TL-ACQ-01 solo → working view OK su tutte le tab
+2. Contabilizza documento demo → conferma → verifica DB (PN, IVA, partitario)
+3. TL-ACQ-02…10 non contabilizzate
+4. >1 riga o società reale → blocco
