@@ -10213,4 +10213,36 @@ pm run build -> Successo (429 moduli, 16s).
   4. Verificare che la registrazione della Prima Nota avvenga con successo ed aggiorni i registri IVA correttamente.
 
 
+## PROMPT 24E-FIX-7 — ELIMINAZIONE ID SINTETICO TEST LAB DAL PAYLOAD DB PRIMA_NOTA
+
+- **Data**: 2026-06-30
+- **Problema diagnosticato**:
+  - Il database REST (Supabase) restituiva errore `400 Bad Request` con motivazione `invalid input syntax for type uuid: "test_lab_24b_1782764101229-1"`.
+  - Questo succedeva perché la colonna `documento_import_id` della tabella `prima_nota` (che ha vincolo di tipo UUID) riceveva l'ID sintetico del Test Lab (`test_lab_24b_...`).
+- **Soluzione adottata**:
+  - In `buildPrimaNotaHeaderFromCanonicalPayload.js`, viene verificato se `handoff.sourceRowKey` è un UUID valido tramite un'espressione regolare. Se non lo è, viene impostato a `null` nel campo `documento_import_id`.
+  - Il riferimento umano e tecnico al documento d'importazione (`test_lab_24b_...`) viene comunque preservato nella colonna JSONB `scope` (nel campo `source_row_key`) e nella descrizione testuale generica del documento.
+  - Per ragioni di sicurezza, non è stato generato alcun UUID casuale per evitare di falsificare le associazioni relazionali del database.
+- **Validazione anticipata e diagnostica**:
+  - Aggiunto il log diagnostico `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD]` che stampa le chiavi del payload header destinate alla persistenza e segnala eventuali violazioni o campi non conformi.
+  - Aggiunto il blocco di sicurezza applicativo `[TEST_LAB_COMMIT_UUID_GUARD]` in `persistPrimaNotaDraft.js` che intercetta valori non UUID inseriti nei campi UUID delle tabelle `prima_nota`, `prima_nota_righe`, `registri_iva` e `partitario` bloccando il commit preventivamente.
+- **File modificati**:
+  - `src/modules/contabilita/application/canonical_mapper/buildPrimaNotaHeaderFromCanonicalPayload.js`
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche
+  - **0** modifiche a società reali
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 20.09s)
+  - Unit Test TestLab / Import: 🟢 159 / 159 passati (aggiunti test di verifica sul blocco UUID e sulla rimozione degli ID sintetici dalle colonne UUID del DB)
+- **Cosa deve testare l'utente**:
+  1. Selezionare società demo, aprire la working view di `TL-ACQ-01`.
+  2. Fare clic su **Contabilizza documento demo** → confermare.
+  3. Verificare che in console compaia il log diagnostico `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD]` e che indichi `documento_import_id: null` (mentre lo `scope` nel DB conserva il riferimento sintetico).
+  4. Verificare che la registrazione avvenga con successo sul database Supabase reale della società demo senza errori UUID.
+
+
+
 

@@ -614,6 +614,98 @@ export async function persistPrimaNotaDraft({
     ? [buildRitenutaMaturazionePayload(ritenuteDraft)]
     : []
 
+  function isLocalUuid(val) {
+    if (typeof val !== 'string') return false
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+  }
+
+  const societaCodice = String(resolved?.innerDraft?.company?.codice || resolved?.innerDraft?.societa?.codice || resolved?.bundle?.societa?.codice || '').trim()
+  const isDemo = societaCodice.includes('DEMO') || resolved?.pnPayload?.societa_id === 'demo-1' || resolved?.pnPayload?.societa_id === 'demo-2'
+  const docNum = pnPayloadForDb.numero_registrazione || resolved?.pnPayload?.numero_documento || 'TL-ACQ-01'
+
+  if (isDemo || docNum.includes('TL-ACQ')) {
+    const headerKeys = Object.keys(pnPayloadForDb)
+    console.log('[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD]')
+    console.log(`documento=${docNum}`)
+    console.log(`societaCodice=${societaCodice}`)
+    console.log(`keys=${headerKeys.join(',')}`)
+
+    // Log fields with 'test_lab_24b_'
+    for (const [key, val] of Object.entries(pnPayloadForDb)) {
+      if (typeof val === 'string' && val.includes('test_lab_24b_')) {
+        console.log(`[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_WARNING] campo=${key}, valore=${val}`)
+      }
+    }
+
+    // Log UUID fields check
+    const headerUuidFields = [
+      'id', 'societa_id', 'causale_id', 'cliente_fornitore_id', 'cliente_id',
+      'tenant_id', 'company_id', 'owner_user_id', 'locked_by',
+      'documento_import_id', 'documento_contabilita_id'
+    ]
+    headerUuidFields.forEach(field => {
+      const val = pnPayloadForDb[field]
+      if (val !== undefined && val !== null && val !== '') {
+        const valid = isLocalUuid(val)
+        console.log(`[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_UUID_CHECK] campo=${field}, valore=${val}, valido=${valid}`)
+      }
+    })
+
+    // [TEST_LAB_COMMIT_UUID_GUARD]
+    // 1. Check prima_nota
+    headerUuidFields.forEach(field => {
+      const val = pnPayloadForDb[field]
+      if (val !== undefined && val !== null && val !== '') {
+        if (!isLocalUuid(val)) {
+          console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di prima_nota: ${val}`)
+          throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di prima_nota: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
+        }
+      }
+    })
+
+    // 2. Check prima_nota_righe
+    const rowUuidFields = ['id', 'prima_nota_id', 'conto_id', 'partita_id', 'tenant_id', 'company_id', 'owner_user_id']
+    righePayloadForDb.forEach((row, idx) => {
+      rowUuidFields.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!isLocalUuid(val)) {
+            console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di prima_nota_righe: ${val}`)
+            throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di prima_nota_righe: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
+          }
+        }
+      })
+    })
+
+    // 3. Check registri_iva
+    const vatUuidFields = ['id', 'prima_nota_id', 'riga_prima_nota_id', 'causale_iva_id', 'soggetto_id', 'documento_import_id', 'documento_contabilita_id', 'tenant_id', 'company_id']
+    vatEntriesForDb.forEach((row, idx) => {
+      vatUuidFields.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!isLocalUuid(val)) {
+            console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di registri_iva: ${val}`)
+            throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di registri_iva: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
+          }
+        }
+      })
+    })
+
+    // 4. Check partitario
+    const partUuidFields = ['id', 'prima_nota_id', 'riga_prima_nota_id', 'partita_id', 'soggetto_id', 'tenant_id', 'company_id']
+    partEntriesForDb.forEach((row, idx) => {
+      partUuidFields.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!isLocalUuid(val)) {
+            console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di partitario: ${val}`)
+            throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di partitario: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
+          }
+        }
+      })
+    })
+  }
+
   const complete = await createPrimaNotaCompleta({
     db,
     pnPayload: pnPayloadForDb,

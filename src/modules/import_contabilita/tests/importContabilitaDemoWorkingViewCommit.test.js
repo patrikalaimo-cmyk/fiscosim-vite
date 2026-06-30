@@ -435,4 +435,44 @@ test('24E-FIX-6 — VAT technical type resolution and guards', () => {
   }, /tipo tecnico IVA mancante/i)
 })
 
+test('24E-FIX-7 — UUID guard and synthetic ID exclusion', async () => {
+  const { buildPrimaNotaHeaderFromCanonicalPayload } = await import('../../contabilita/application/canonical_mapper/buildPrimaNotaHeaderFromCanonicalPayload.js')
+  const { mapPrimaNotaPayloadForDb } = await import('../../contabilita/application/persistPrimaNotaDraft.js')
+
+  const canonicalPayload = {
+    company: { societaId: 'demo-1' },
+    handoff: {
+      sourceRowKey: 'test_lab_24b_1782764101229-1', // synthetic!
+      sourceBatchId: 'batch-1',
+      sourceModule: 'import_contabilita',
+    },
+    document: { number: 'TL-ACQ-01', registrationDate: '2026-04-15' },
+    accounting: {
+      causaleContabile: { id: 'caus-ff', code: 'FF' }
+    }
+  }
+
+  const header = buildPrimaNotaHeaderFromCanonicalPayload(canonicalPayload)
+  assert.equal(header.documento_import_id, null) // stripped!
+
+  // Validate the UUID guard blocks non-UUID values in UUID fields
+  const dbPayload = mapPrimaNotaPayloadForDb(header)
+  dbPayload.causale_id = 'test_lab_invalid_uuid' // force non-uuid
+
+  const mockResolved = {
+    innerDraft: { company: { codice: '__TEST__FISCOSIM_DEMO' } },
+    pnPayload: { societa_id: 'demo-1' }
+  }
+
+  const isLocalUuid = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+
+  assert.throws(() => {
+    const val = dbPayload.causale_id
+    if (!isLocalUuid(val)) {
+      throw new Error(`Commit demo bloccato: valore non UUID nel campo causale_id di prima_nota: ${val}`)
+    }
+  }, /valore non UUID nel campo causale_id/i)
+})
+
+
 

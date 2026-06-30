@@ -1,5 +1,10 @@
 import { buildPrimaNotaHeaderPayload } from '../../../../../domain/primaNotaPayloadBuilder.js'
 
+function isUuid(val) {
+  if (typeof val !== 'string') return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+}
+
 export function buildPrimaNotaHeaderFromCanonicalPayload(normalized = {}, classification = null) {
   const document = normalized?.document && typeof normalized.document === 'object' ? normalized.document : {}
   const accounting = normalized?.accounting && typeof normalized.accounting === 'object' ? normalized.accounting : {}
@@ -20,7 +25,7 @@ export function buildPrimaNotaHeaderFromCanonicalPayload(normalized = {}, classi
     totale_dare: accounting?.totals?.debit || document?.totals?.gross || 0,
     totale_avere: accounting?.totals?.credit || document?.totals?.gross || 0,
     stato: normalized?.readiness?.status === 'pronto_per_contabilita' ? 'confermato' : 'bozza',
-    documento_import_id: handoff.sourceRowKey || handoff.sourceBatchId || null,
+    documento_import_id: isUuid(handoff.sourceRowKey) ? handoff.sourceRowKey : null,
     scope: {
       source_module: handoff.sourceModule || 'import_contabilita',
       source_batch_id: handoff.sourceBatchId || null,

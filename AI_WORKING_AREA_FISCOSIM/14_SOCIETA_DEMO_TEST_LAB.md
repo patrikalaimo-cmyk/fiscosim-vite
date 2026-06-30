@@ -609,5 +609,32 @@ La causale contabile all'interno del payload canonico (`payload.header.causaleCo
 4. Accertarsi che la registrazione avvenga con successo ed aggiorni i registri IVA corretti.
 
 
+## FASE 24E-FIX-7 — Eliminazione ID Sintetico Test Lab dal Payload DB prima_nota
+
+### Problema risolto
+A runtime il commit demo falliva sulla chiamata Supabase REST a causa del blocco UUID: `motivo=invalid input syntax for type uuid: "test_lab_24b_..."`.
+
+### Causa
+La colonna `documento_import_id` della tabella `prima_nota` nel database è di tipo UUID. Il mapper vi iniettava l'ID sintetico del Test Lab (`test_lab_24b_...`), che non è conforme alle specifiche UUID.
+
+### Soluzione
+- **Controllo UUID preventivo**: In `buildPrimaNotaHeaderFromCanonicalPayload.js`, viene verificata la conformità del valore UUID tramite regex prima dell'assegnazione a `documento_import_id`. Se non è un UUID reale, viene impostato a `null`.
+- **Preservazione traccia**: il riferimento all'ID sintetico rimarrà salvato in modo non intrusivo all'interno del campo JSONB `scope.source_row_key` e nella descrizione del documento per tracciamento umano.
+- **Log diagnostico**: aggiunto il log diagnostico `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD]` in `persistPrimaNotaDraft.js` che ispeziona il payload del DB.
+- **Guardia UUID**: aggiunta la guardia applicativa `[TEST_LAB_COMMIT_UUID_GUARD]` in `persistPrimaNotaDraft.js` che intercetta e blocca il commit se un valore non conforme a UUID finisce in colonne note di tipo UUID.
+
+### File
+- `src/modules/contabilita/application/canonical_mapper/buildPrimaNotaHeaderFromCanonicalPayload.js`
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-01` per la società demo.
+2. Controllare in console il log `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD]` dopo aver confermato il commit.
+3. Accertarsi che `documento_import_id` sia stampato come `null` e che non ci siano avvertimenti o blocchi.
+4. Confermare e verificare l'avvenuta contabilizzazione su Supabase.
+
+
+
 
 
