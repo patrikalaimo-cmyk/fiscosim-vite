@@ -471,3 +471,29 @@ Qualsiasi errore o eccezione lanciata all'interno di `buildDemoWorkingViewCommit
 3. Verificare che durante il salvataggio il bottone diventi disabilitato con dicitura `"Contabilizzazione demo in corso..."`.
 4. All'esito positivo, verificare la presenza del pop-up informativo di successo con i conteggi di righe inserite, e verificare che lo stato della riga passi a `committed` nello staging.
 5. In caso di errore o blocco (ad es. togliendo causale o conti necessari), verificare la comparsa del banner di errore/warning e la presenza dei log `[TEST_LAB_COMMIT_BLOCKED]` / `[TEST_LAB_COMMIT_ERROR]` in console.
+
+
+## FASE 24E-FIX-2 — Normalizzazione header.stato nel Commit Demo Import
+
+### Problema risolto
+Il commit demo di TL-ACQ-01 veniva bloccato nella validazione contabile con l'errore `motivo=header.stato non valido`.
+
+### Causa
+Il mapper canonico `mapImportContabilitaCommitPayloadToCanonical` assegnava al campo `payload.header.stato` il valore dello stato di convalida dello staging (ad es. `'ready'`). Tuttavia, `'ready'` non è presente nel set consentito di stati di Prima Nota canonici (`CANONICAL_ACCOUNTING_REGISTRATION_STATES` in `canonicalAccountingPayload.schema.js`), causando la bocciatura del payload da parte del validatore in modalità commit.
+
+### Soluzione
+- **Normalizzazione dello stato**: introdotta la funzione helper `resolveImportCommitPrimaNotaStato(rawStato, options)` nel modulo canonical mapper:
+  - Gli stati di staging pronti (es. `'ready'`, `'ready_for_accounting'`, `'committed'`, `'processed'`) vengono normalizzati a `'confermata'` (lo stato contabile canonico per la scrittura a libro giornale).
+  - Gli stati bozza (es. `'bozza'`, `'draft'`) rimangono `'bozza'`.
+  - Gli stati di blocco (es. `'blocked'`, `'incomplete'`) passano a `'da_verificare'`.
+- **Separazione dei domini**: lo stato del documento importato nello staging rimane `'committed'` (aggiornato in `sessionStorage` / `documenti_import`), mentre la scrittura contabile nel DB in Prima Nota assume il corretto stato canonico `'confermata'`.
+- **Test unitari**: inseriti test specifici su `resolveImportCommitPrimaNotaStato` e sulla presenza del corretto valore `'confermata'` in `payload.header.stato` post-mappatura.
+
+### File
+- `src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Selezionare società demo → Import → aprire working view di `TL-ACQ-01`.
+2. Cliccare su **Contabilizza documento demo** → confermare.
+3. Verificare che la validazione non sia più bloccata da `header.stato non valido` e che il salvataggio contabile vada a buon fine generando la registrazione Prima Nota in stato `confermata` ed aggiornando lo staging a `committed`.

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mapImportContabilitaCommitPayloadToCanonical, resolveImportCommitPrimaNotaStato } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import {
   buildWorkingViewPrimaNotaDraftRowsFromModel,
   evaluateDemo24EWorkingViewCommitGuards,
@@ -112,6 +113,9 @@ test('24E — bundle commit usa draft working view non working table grezza', ()
   assert.equal(bundle.builderInput.primaNotaDraftRows.length, 3)
   assert.equal(bundle.builderInput.ivaDraftRows[0].causaleIvaId, 'tl22')
   assert.equal(bundle.directValidation.blockers.length, 0)
+  const mapped = mapImportContabilitaCommitPayloadToCanonical(bundle.commitEnvelope)
+  assert.equal(mapped.payload.header.stato, 'confermata')
+  assert.notEqual(mapped.payload.header.stato, 'committed')
 })
 
 test('24E — commit bloccato se partitario mancante', () => {
@@ -188,4 +192,17 @@ test('24E — evaluateDemo24EWorkingViewCommitGuards blocca se mancano parametri
   })
   assert.equal(guard.allowed, false)
   assert.ok(guard.blockingIssues.some((item) => /costo/i.test(item)))
+})
+
+test('24E-FIX-2 — resolveImportCommitPrimaNotaStato normalizza correttamente lo stato', () => {
+  assert.equal(resolveImportCommitPrimaNotaStato('ready'), 'confermata')
+  assert.equal(resolveImportCommitPrimaNotaStato('ready_for_accounting'), 'confermata')
+  assert.equal(resolveImportCommitPrimaNotaStato('confermata'), 'confermata')
+  assert.equal(resolveImportCommitPrimaNotaStato('committed'), 'confermata')
+  assert.equal(resolveImportCommitPrimaNotaStato('processed'), 'confermata')
+  assert.equal(resolveImportCommitPrimaNotaStato('blocked'), 'da_verificare')
+  assert.equal(resolveImportCommitPrimaNotaStato('incomplete'), 'da_verificare')
+  assert.equal(resolveImportCommitPrimaNotaStato('bozza'), 'bozza')
+  assert.equal(resolveImportCommitPrimaNotaStato('simulata'), 'simulata')
+  assert.equal(resolveImportCommitPrimaNotaStato('qualcosa_a_caso'), 'confermata')
 })

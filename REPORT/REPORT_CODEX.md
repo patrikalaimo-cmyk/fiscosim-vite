@@ -10040,3 +10040,32 @@ pm run build -> Successo (429 moduli, 16s).
   3. Verificare che durante il salvataggio il bottone diventi disabilitato con dicitura `"Contabilizzazione demo in corso..."`.
   4. All'esito positivo, verificare la presenza del pop-up informativo di successo con i conteggi di righe inserite, e verificare che lo stato della riga passi a `committed` nello staging.
   5. In caso di errore o blocco (ad es. togliendo causale o conti necessari), verificare la comparsa del banner di errore/warning e la presenza dei log `[TEST_LAB_COMMIT_BLOCKED]` / `[TEST_LAB_COMMIT_ERROR]` in console.
+
+
+## PROMPT-24E-FIX-2-NORMALIZZAZIONE-HEADER-STATO-NEL-COMMIT-DEMO-IMPORT
+
+- **Data**: 2026-06-30
+- **Causa errore**: Il mapper canonico `mapImportContabilitaCommitPayloadToCanonical` assegnava a `payload.header.stato` il valore di `validation.status` (cioè `'ready'`), che non è uno stato contabile ammesso da `validateCanonicalAccountingPayload` (che ammette `'bozza'`, `'confermata'`, `'simulata'`, ecc.). Questo causava il blocco della validazione con l'errore: `motivo=header.stato non valido`.
+- **Soluzione applicata**:
+  - Creata la funzione `resolveImportCommitPrimaNotaStato(rawStato, options)` all'interno del mapper `mapImportContabilitaCommitPayloadToCanonical.js`.
+  - La funzione normalizza gli stati dello staging/import (es. `'ready'`, `'ready_for_accounting'`, `'committed'`, `'processed'`) nello stato contabile canonico reale `'confermata'`.
+  - Gli stati di blocco (es. `'blocked'`, `'incomplete'`) vengono mappati su `'da_verificare'`.
+  - Gli stati bozza (es. `'bozza'`, `'draft'`) vengono mappati su `'bozza'`.
+  - Lo stato del documento importato/staging rimane separato e distinto dallo stato contabile in Prima Nota (lo staging usa `'committed'`, mentre la Prima Nota creata ha stato `'confermata'`).
+- **File modificati**:
+  - `src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche (il commit avviene solo su selezione della singola riga demo e conferma dell'utente)
+  - **0** documenti aggiuntivi generati
+  - **0** modifiche a società reali (recinto demo preservato)
+  - **0** delete/pulizia/migration/env/auth/RLS
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 14.47s)
+  - Unit Test TestLab / Import: 🟢 153 / 153 passati (aggiunti test di verifica mapping e non-blocco su `header.stato`)
+- **Cosa deve testare l'utente**:
+  1. Accedere alla società demo `__TEST__FISCOSIM_DEMO` → aprire la working view del documento `TL-ACQ-01`.
+  2. Cliccare su **Contabilizza documento demo** → confermare nel prompt `window.confirm`.
+  3. Verificare che la validazione non sia più bloccata da `header.stato non valido` e che il salvataggio proceda al database reale con successo (mostrando l'ID prima nota e il popup informativo di esito contabile).
+  4. Verificare che la Prima Nota sia creata con stato contabile `confermata`, mentre il documento staging passi a `committed`.

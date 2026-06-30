@@ -470,7 +470,8 @@ export function mapImportContabilitaCommitPayloadToCanonical(importCommitPayload
   )
   payload.header.protocollo = text(vat.protocolNumber || options?.protocollo)
   payload.header.numeroRegistrazione = text(options?.numeroRegistrazione || root.numeroRegistrazione || payloadSource.numeroRegistrazione)
-  payload.header.stato = text(validation.status || readiness?.status || root.readiness?.status || 'bozza') || 'bozza'
+  const rawStato = validation.status || readiness?.status || root.readiness?.status || 'bozza'
+  payload.header.stato = resolveImportCommitPrimaNotaStato(rawStato, options)
   payload.header.currency = currency
   payload.header.totals = {
     totaleDare: numberOrZero(accounting.totals?.debit, accounting.totals?.dare),
@@ -640,4 +641,21 @@ export function mapImportContabilitaCommitPayloadToCanonical(importCommitPayload
     payload,
     validationResult,
   }
+}
+
+export function resolveImportCommitPrimaNotaStato(rawStato, options = {}) {
+  const normalized = String(rawStato || '').trim().toLowerCase()
+  if (normalized === 'ready' || normalized === 'ready_for_accounting' || normalized === 'confermata' || normalized === 'committed' || normalized === 'processed') {
+    return 'confermata'
+  }
+  if (normalized === 'blocked' || normalized === 'incomplete') {
+    return 'da_verificare'
+  }
+  if (normalized === 'bozza' || normalized === 'draft') {
+    return 'bozza'
+  }
+  if (normalized === 'simulata') {
+    return 'simulata'
+  }
+  return 'confermata'
 }
