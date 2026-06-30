@@ -583,4 +583,31 @@ Nella working view, la riga IVA veniva generata staticamente con `account: null`
 4. Confermare il commit e accertarsi del successo della registrazione sul database.
 
 
+## FASE 24E-FIX-6 — Tipo Tecnico Causale IVA Ordinaria nel Commit Import Demo
+
+### Problema risolto
+A runtime il commit demo si bloccava a causa del validatore canonico con l'errore: `motivo=Tipo causale tecnico IVA ordinario mancante o non gestito`.
+
+### Causa
+La causale contabile all'interno del payload canonico (`payload.header.causaleContabile`) non conteneva le proprietà tecniche come `tipo_causale` o `tipoCausale`. Esse venivano scartate a monte in `buildImportContabilitaCommitPayload.js` in cui venivano mappati solo `id`, `codice` e `descrizione`, rendendo impossibile la decodifica dei registri IVA.
+
+### Soluzione
+- **Mapping proprietà tecniche causale**: aggiornato `buildImportContabilitaCommitPayload.js` per copiare e preservare tutte le proprietà tecniche del conto causale (`tipoCausale`, `operazioneGestita`, `registroIva`, `segnoRegistroIva`, `tipoDocumento`, ecc.) nel payload.
+- **Tipi tecnici di fallback**: inseriti fallback deterministici per le società demo e mock dei test unitari basati sulla direzione del documento (es. `docivanormale`, `fatturapassiva`, `acquisti` per gli acquisti).
+- **Validazione anticipata**: inserita una guardia in `index.jsx` che valida anticipatamente la presenza del tipo tecnico della causale IVA prima della persistenza.
+- **Log Test Lab**: aggiunto il log diagnostico `[TEST_LAB_COMMIT_IVA_TECHNICAL_TYPE]` in `index.jsx` per tracciare la risoluzione delle causali.
+
+### File
+- `src/modules/import_contabilita/domain/buildImportContabilitaCommitPayload.js`
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Selezionare società demo, aprire la working view di `TL-ACQ-01`.
+2. Fare clic su **Contabilizza documento demo** → confermare.
+3. Verificare in console il log `[TEST_LAB_COMMIT_IVA_TECHNICAL_TYPE]` che mostra `tipoTecnico=docivanormale`, `registro=acquisti`, `esito=success`.
+4. Accertarsi che la registrazione avvenga con successo ed aggiorni i registri IVA corretti.
+
+
+
 

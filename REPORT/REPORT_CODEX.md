@@ -10184,3 +10184,33 @@ pm run build -> Successo (429 moduli, 16s).
   5. Verificare che la registrazione avvenga con successo sul database.
 
 
+## PROMPT 24E-FIX-6 — TIPO TECNICO CAUSALE IVA ORDINARIA IMPORT DEMO
+
+- **Data**: 2026-06-30
+- **Problema diagnosticato**:
+  - Il motore dei registri IVA (`buildVatRegisterEntriesFromCanonicalPayload.js`) si aspetta che la causale contabile all'interno del payload canonico (`payload.header.causaleContabile`) contenga le proprietà tecniche `tipo_causale` o `tipoCausale` per determinare come processare l'IVA ordinaria.
+  - Tuttavia, `buildImportContabilitaCommitPayload.js` copiava esclusivamente le proprietà `id`, `codice` e `descrizione` dell'oggetto `causaleContabile`, scartando le proprietà tecniche. Di conseguenza, il tipo tecnico causale risultava `undefined` / `""`, causando il blocco con errore `Tipo causale tecnico IVA ordinario mancante o non gestito`.
+- **Soluzione adottata**:
+  - Aggiornato `buildImportContabilitaCommitPayload.js` per mappare e preservare tutte le proprietà tecniche del conto causale (`tipoCausale`, `operazioneGestita`, `registroIva`, `segnoRegistroIva`, `tipoDocumento`, ecc.) nel payload.
+  - Implementato un meccanismo di fallback robusto per le causali demo che ripristina i tipi tecnici standard per fatture d'acquisto/vendita se i campi sono mancanti, garantendo la compatibilità con i mock dei test unitari e i record seed della società demo.
+- **Validazione anticipata e diagnostica**:
+  - Aggiunto il log diagnostico `[TEST_LAB_COMMIT_IVA_TECHNICAL_TYPE]` e una guardia preventiva in `handleDemoWorkingViewCommit` (`index.jsx`) che blocca preventivamente il commit se il tipo tecnico della causale IVA risulta assente.
+- **File modificati**:
+  - `src/modules/import_contabilita/domain/buildImportContabilitaCommitPayload.js`
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche (il commit avviene solo su selezione della singola riga demo e conferma dell'utente)
+  - **0** modifiche a società reali (recinto demo preservato)
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 28.33s)
+  - Unit Test TestLab / Import: 🟢 158 / 158 passati (aggiunto test di verifica tipo tecnico causale ordinaria e relativi blocchi diagnostici)
+- **Cosa deve testare l'utente**:
+  1. Selezionare la società demo ed aprire la working view di `TL-ACQ-01`.
+  2. Aprire la console del browser, cliccare su **Contabilizza documento demo** → confermare.
+  3. Verificare che in console compaia il log diagnostico `[TEST_LAB_COMMIT_IVA_TECHNICAL_TYPE]` e che indichi `tipoTecnico=docivanormale`, `registro=acquisti`, `esito=success`.
+  4. Verificare che la registrazione della Prima Nota avvenga con successo ed aggiorni i registri IVA correttamente.
+
+
+

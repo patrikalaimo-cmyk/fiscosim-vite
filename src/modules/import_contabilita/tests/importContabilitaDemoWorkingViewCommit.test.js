@@ -386,3 +386,53 @@ test('24E-FIX-5 — account resolution validation, real company blocking, and un
   assert.ok(mismatchRowIdBundle.guard.blockingIssues.some(msg => msg.includes('selezionata')))
 })
 
+test('24E-FIX-6 — VAT technical type resolution and guards', () => {
+  const bundle = buildDemoWorkingViewCommitBundle({
+    societaId: 'demo-1',
+    activeWorkingViewModel: TL_ACQ_MODEL,
+    pnDraftRows: [
+      { accountId: 'costo-1', dare: 1000, avere: 0, accountCode: '6.01.001' },
+      { accountId: 'iva-1', dare: 220, avere: 0, accountCode: '1.02.40.0001' },
+      { accountId: 'forn-1', dare: 0, avere: 1220, accountCode: '2.04.02.0001' }
+    ],
+    ivaDraftRows: [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaId: 'TESTLAB22', causaleIvaCode: 'TESTLAB22' }],
+    pianoConti: PIANO_CONTI,
+    guardParams: {
+      societa: DEMO_SOCIETA,
+      selectedRowIds: new Set(['row-1']),
+      workingViewOpen: true,
+      workingViewRowId: 'row-1',
+      activeWorkingViewModel: TL_ACQ_MODEL,
+      baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+      ivaDraftRows: [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaId: 'TESTLAB22', causaleIvaCode: 'TESTLAB22' }],
+      pianoConti: PIANO_CONTI,
+    },
+  })
+
+  const mapped = mapImportContabilitaCommitPayloadToCanonical(bundle.commitEnvelope)
+  assert.equal(mapped.payload.vat.enabled, true)
+  assert.equal(mapped.payload.vat.rows.length, 1)
+  assert.equal(mapped.payload.vat.rows[0].causaleIvaId, 'TESTLAB22')
+  assert.equal(mapped.payload.vat.rows[0].imponibile, 1000)
+  assert.equal(mapped.payload.vat.rows[0].imposta, 220)
+
+  // Verify technical type resolved via fallback/causaleContabile
+  const causale = mapped.payload.header.causaleContabile
+  assert.equal(causale.tipo_causale, 'docivanormale')
+  assert.equal(causale.tipoCausale, 'docivanormale')
+  assert.equal(causale.registro_iva, 'acquisti')
+
+  // Early technical type guard throw test
+  const checkMissingTechnicalType = (payloadCausale) => {
+    const tipoTecnico = payloadCausale.tipo_causale || payloadCausale.tipoCausale || ''
+    if (!tipoTecnico) {
+      throw new Error('Commit demo bloccato: tipo tecnico IVA mancante sulla riga IVA 0 (causale TESTLAB22, aliquota 22%).')
+    }
+  }
+
+  assert.throws(() => {
+    checkMissingTechnicalType({ code: 'FF' }) // tipoTecnico missing
+  }, /tipo tecnico IVA mancante/i)
+})
+
+

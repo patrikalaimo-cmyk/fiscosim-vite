@@ -4696,6 +4696,24 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         }
       })
 
+      // 5. Diagnostica Test Lab - IVA Technical Type
+      console.log('[TEST_LAB_COMMIT_IVA_TECHNICAL_TYPE]')
+      const causaleRef = mapped.payload.header?.causaleContabile || {}
+      const tipoTecnico = causaleRef.tipo_causale || causaleRef.tipoCausale || ''
+      const tipoOperazione = causaleRef.operazione_gestita || causaleRef.operazioneGestita || ''
+      const registro = causaleRef.registro_iva || causaleRef.registroIva || ''
+      const tipoRegistro = mapped.payload.fiscalContext?.tipoRegistro || ''
+
+      const vatRowsList = mapped.payload.vat?.rows || []
+      vatRowsList.forEach((vr, idx) => {
+        const esito = tipoTecnico ? 'success' : 'failed'
+        console.log(`documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, causaleIvaId=${vr.causaleIvaId || ''}, causaleIvaCodice=${vr.causaleIva || ''}, tipoTecnico=${tipoTecnico}, tipoOperazione=${tipoOperazione}, registro=${registro}, tipoRegistro=${tipoRegistro}, aliquota=${vr.aliquota}, imponibile=${vr.imponibile}, imposta=${vr.imposta}, esito=${esito}`)
+
+        if (!tipoTecnico) {
+          throw new Error(`Commit demo bloccato: tipo tecnico IVA mancante sulla riga IVA ${idx} (causale ${vr.causaleIva || 'TESTLAB22'}, aliquota ${vr.aliquota || 22}%).`)
+        }
+      })
+
       if (!bundle.guard.allowed) {
         const blocker = bundle.guard.blockingIssues[0] || 'Commit demo 24E bloccato.'
         console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
