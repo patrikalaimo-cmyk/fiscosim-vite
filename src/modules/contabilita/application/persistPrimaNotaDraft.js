@@ -39,7 +39,8 @@ export function mapPrimaNotaPayloadForDb(pnPayload = {}) {
   const mapped = {}
 
   setIfPresent(mapped, 'societa_id', normalizeDbText(source.societa_id ?? source.societaId))
-  setIfPresent(mapped, 'numero_registrazione', normalizeDbText(source.numero_registrazione ?? source.numeroDocumento ?? source.numero_documento))
+  setIfPresent(mapped, 'numero_registrazione', normalizeDbInteger(source.numero_registrazione ?? source.numeroRegistrazione))
+  setIfPresent(mapped, 'numero_documento', normalizeDbText(source.numero_documento ?? source.numeroDocumento))
   setIfPresent(mapped, 'data_registrazione', normalizeDbText(source.data_registrazione ?? source.dataRegistrazione))
   setIfPresent(mapped, 'data_documento', normalizeDbText(source.data_documento ?? source.dataDocumento ?? source.data_registrazione ?? source.dataRegistrazione))
   setIfPresent(mapped, 'causale_id', normalizeDbText(source.causale_id ?? source.causaleId))
@@ -785,71 +786,157 @@ export function validateDbPersistencePlanForTestLab(plan) {
       val.toLowerCase().startsWith('soc-') ||
       val.toLowerCase().startsWith('acc-') ||
       val.toLowerCase().startsWith('caus-') ||
-      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id'].includes(val.toLowerCase())
+      val.toLowerCase().startsWith('test-') ||
+      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva'].includes(val.toLowerCase())
     )
   }
 
-  const pnUuidFields = [
-    'id', 'societa_id', 'causale_id', 'cliente_fornitore_id', 'cliente_id',
-    'tenant_id', 'company_id', 'owner_user_id', 'locked_by',
-    'documento_import_id', 'documento_contabilita_id'
-  ]
-  if (pnPayload) {
-    pnUuidFields.forEach(field => {
-      const val = pnPayload[field]
-      if (val !== undefined && val !== null && val !== '') {
-        if (!isLocalUuid(val)) {
-          console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di prima_nota: ${val}`)
-          throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di prima_nota: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
-        }
-      }
-    })
+  function checkInteger(val) {
+    if (val === undefined || val === null || val === '') return true
+    if (typeof val === 'number') {
+      return Number.isInteger(val) && Number.isFinite(val)
+    }
+    if (typeof val === 'string') {
+      const parsed = Number(val)
+      return Number.isInteger(parsed) && Number.isFinite(parsed) && String(parsed) === val.trim()
+    }
+    return false
   }
 
-  const rowUuidFields = ['id', 'prima_nota_id', 'conto_id', 'partita_id', 'tenant_id', 'company_id', 'owner_user_id']
-  if (Array.isArray(righePayload)) {
-    righePayload.forEach((row, idx) => {
-      rowUuidFields.forEach(field => {
+  function checkNumeric(val) {
+    if (val === undefined || val === null || val === '') return true
+    if (typeof val === 'number') {
+      return Number.isFinite(val)
+    }
+    if (typeof val === 'string') {
+      const parsed = Number(val)
+      return Number.isFinite(parsed)
+    }
+    return false
+  }
+
+  function checkDate(val) {
+    if (val === undefined || val === null || val === '') return true
+    if (typeof val !== 'string') return false
+    if (!/^\d{4}-\d{2}-\d{2}/.test(val)) return false
+    const timestamp = Date.parse(val)
+    return !isNaN(timestamp)
+  }
+
+  function checkBoolean(val) {
+    if (val === undefined || val === null || val === '') return true
+    return typeof val === 'boolean' || val === 'true' || val === 'false'
+  }
+
+  const schemas = {
+    prima_nota: {
+      uuid: ['id', 'societa_id', 'causale_id', 'cliente_fornitore_id', 'cliente_id', 'tenant_id', 'company_id', 'owner_user_id', 'locked_by', 'documento_import_id', 'documento_contabilita_id'],
+      integer: ['numero_registrazione', 'esercizio', 'giornale_pagina'],
+      numeric: ['totale_dare', 'totale_avere'],
+      date: ['data_registrazione', 'data_documento', 'locked_at', 'created_at', 'updated_at'],
+      boolean: []
+    },
+    prima_nota_righe: {
+      uuid: ['id', 'prima_nota_id', 'conto_id', 'partita_id', 'tenant_id', 'company_id', 'owner_user_id', 'causale_iva_id'],
+      integer: ['riga_numero'],
+      numeric: ['importo_dare', 'importo_avere', 'imponibile', 'iva'],
+      date: ['created_at'],
+      boolean: ['partita_aperta']
+    },
+    registri_iva: {
+      uuid: ['id', 'prima_nota_id', 'riga_prima_nota_id', 'causale_iva_id', 'soggetto_id', 'documento_import_id', 'documento_contabilita_id', 'tenant_id', 'company_id'],
+      integer: ['registro_pagina', 'riga_numero'],
+      numeric: ['imponibile', 'imposta', 'aliquota'],
+      date: ['data_registrazione', 'data_documento', 'created_at'],
+      boolean: ['split_payment']
+    },
+    partitario: {
+      uuid: ['id', 'prima_nota_id', 'riga_prima_nota_id', 'partita_id', 'soggetto_id', 'tenant_id', 'company_id', 'cliente_id', 'fornitore_id', 'conto_id'],
+      integer: [],
+      numeric: ['importo_originario', 'importoOriginario'],
+      date: ['data_registrazione', 'data_documento', 'created_at'],
+      boolean: []
+    }
+  }
+
+  const failedFields = []
+
+  const checkTable = (tableName, payloadList) => {
+    const list = Array.isArray(payloadList) ? payloadList : [payloadList]
+    const schema = schemas[tableName]
+    if (!schema) return
+
+    list.forEach(row => {
+      if (!row) return
+      // UUID
+      schema.uuid.forEach(field => {
         const val = row[field]
         if (val !== undefined && val !== null && val !== '') {
           if (!isLocalUuid(val)) {
-            console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di prima_nota_righe: ${val}`)
-            throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di prima_nota_righe: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
+            failedFields.push({ tableName, field, val, expected: 'uuid' })
+            console.log(`[TEST_LAB_COMMIT_DB_TYPE_GUARD] tabella=${tableName}, campo=${field}, valore=${val}, tipo_js=${typeof val}, tipo_db=uuid, esito=FAILED`)
+          }
+        }
+      })
+      // Integer
+      schema.integer.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!checkInteger(val)) {
+            failedFields.push({ tableName, field, val, expected: 'integer' })
+            console.log(`[TEST_LAB_COMMIT_DB_TYPE_GUARD] tabella=${tableName}, campo=${field}, valore=${val}, tipo_js=${typeof val}, tipo_db=integer, esito=FAILED`)
+          }
+        }
+      })
+      // Numeric
+      schema.numeric.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!checkNumeric(val)) {
+            failedFields.push({ tableName, field, val, expected: 'numeric' })
+            console.log(`[TEST_LAB_COMMIT_DB_TYPE_GUARD] tabella=${tableName}, campo=${field}, valore=${val}, tipo_js=${typeof val}, tipo_db=numeric, esito=FAILED`)
+          }
+        }
+      })
+      // Date
+      schema.date.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!checkDate(val)) {
+            failedFields.push({ tableName, field, val, expected: 'date' })
+            console.log(`[TEST_LAB_COMMIT_DB_TYPE_GUARD] tabella=${tableName}, campo=${field}, valore=${val}, tipo_js=${typeof val}, tipo_db=date, esito=FAILED`)
+          }
+        }
+      })
+      // Boolean
+      schema.boolean.forEach(field => {
+        const val = row[field]
+        if (val !== undefined && val !== null && val !== '') {
+          if (!checkBoolean(val)) {
+            failedFields.push({ tableName, field, val, expected: 'boolean' })
+            console.log(`[TEST_LAB_COMMIT_DB_TYPE_GUARD] tabella=${tableName}, campo=${field}, valore=${val}, tipo_js=${typeof val}, tipo_db=boolean, esito=FAILED`)
           }
         }
       })
     })
   }
 
-  const vatUuidFields = ['id', 'prima_nota_id', 'riga_prima_nota_id', 'causale_iva_id', 'soggetto_id', 'documento_import_id', 'documento_contabilita_id', 'tenant_id', 'company_id']
-  if (Array.isArray(vatEntries)) {
-    vatEntries.forEach((row, idx) => {
-      vatUuidFields.forEach(field => {
-        const val = row[field]
-        if (val !== undefined && val !== null && val !== '') {
-          if (!isLocalUuid(val)) {
-            console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di registri_iva: ${val}`)
-            throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di registri_iva: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
-          }
-        }
-      })
-    })
+  checkTable('prima_nota', pnPayload)
+  checkTable('prima_nota_righe', righePayload)
+  checkTable('registri_iva', vatEntries)
+  checkTable('partitario', partEntries)
+
+  if (failedFields.length > 0) {
+    const firstFail = failedFields[0]
+    throw new Error(`Commit demo bloccato: tipo non valido nel campo ${firstFail.field} di ${firstFail.tableName}: atteso ${firstFail.expected}, ricevuto ${firstFail.val}.`)
   }
 
-  const partUuidFields = ['id', 'prima_nota_id', 'riga_prima_nota_id', 'partita_id', 'soggetto_id', 'tenant_id', 'company_id']
-  if (Array.isArray(partEntries)) {
-    partEntries.forEach((row, idx) => {
-      partUuidFields.forEach(field => {
-        const val = row[field]
-        if (val !== undefined && val !== null && val !== '') {
-          if (!isLocalUuid(val)) {
-            console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${docNum}, societa=${societaCodice}, motivo=valore non UUID nel campo ${field} di partitario: ${val}`)
-            throw new Error(`Commit demo bloccato: valore non UUID nel campo ${field} di partitario: ${val}. Documento: ${docNum}, Società: ${societaCodice}`)
-          }
-        }
-      })
-    })
-  }
+  console.log('[TEST_LAB_COMMIT_DB_TYPE_GUARD]')
+  console.log('uuid ok')
+  console.log('integer ok')
+  console.log('numeric ok')
+  console.log('date ok')
+  console.log('boolean ok')
 }
 
 

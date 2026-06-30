@@ -662,6 +662,36 @@ A runtime da browser l'ID sintetico `'test_lab_24b_...'` aggirava il mapper cano
 4. Confermare e verificare l'avvenuta contabilizzazione su Supabase.
 
 
+## FASE 24E-HARDENING-RUNTIME-COMMIT-2 — Sanificazione completa campi numerici DB commit Import demo
+
+### Problema risolto
+A runtime da browser il commit demo falliva con errore di tipo `invalid input syntax for type integer: "TL-ACQ-01"`.
+
+### Causa
+Il campo `numero_registrazione` (colonna `integer`/`serial` del DB) riceveva la stringa testuale `"TL-ACQ-01"` in quanto il mapper `mapPrimaNotaPayloadForDb` prendeva `source.numeroDocumento` senza convertirlo o deviarlo, e mancava del tutto il mapping per la colonna testuale `numero_documento`.
+
+### Soluzione strutturale
+- **Mapping corretto**: In `persistPrimaNotaDraft.js` (`mapPrimaNotaPayloadForDb`), `numero_registrazione` viene ora normalizzato come intero (usando `normalizeDbInteger`), mentre il codice testuale `"TL-ACQ-01"` viene depositato correttamente all'interno del campo di testo `numero_documento` (usando `normalizeDbText`).
+- **Guardia sui Tipi DB**: Estesa `validateDbPersistencePlanForTestLab` per verificare i tipi di dato per tutti i campi delle tabelle del piano DB (`prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`):
+  - **UUID**: validità sintattica o prefisso mock.
+  - **Integer**: numeri interi.
+  - **Numeric**: decimali/numeri validi.
+  - **Date**: validità sintattica ISO (minimo `YYYY-MM-DD`).
+  - **Boolean**: boolean reali o stringhe equivalenti.
+- **Log diagnostici dei tipi**:
+  - `[TEST_LAB_COMMIT_DB_TYPE_GUARD]`: logs degli errori di validazione per singolo campo con esito `FAILED` o logs di successo (`uuid ok`, `integer ok`, `numeric ok`, `date ok`, `boolean ok`).
+
+### File modificati
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-01` per la società demo.
+2. Controllare in console il log `[TEST_LAB_COMMIT_DB_TYPE_GUARD]` dopo aver confermato il commit.
+3. Accertarsi che stampi "ok" per tutti i controlli dei tipi (senza errori) e che la scrittura a DB avvenga con successo.
+
+
+
 
 
 

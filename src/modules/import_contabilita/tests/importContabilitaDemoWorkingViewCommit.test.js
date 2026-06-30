@@ -503,11 +503,50 @@ test('24E-FIX-7 — UUID guard and synthetic ID exclusion', async () => {
   plan.pnPayload.causale_id = 'test_lab_invalid_uuid'
   assert.throws(() => {
     validateDbPersistencePlanForTestLab(plan)
-  }, /valore non UUID nel campo causale_id/i)
+  }, /tipo non valido nel campo causale_id di prima_nota: atteso uuid/i)
+
+  // Reset to valid for subsequent checks
+  plan.pnPayload.causale_id = 'caus-ff'
 
   // 4. Test that a real UUID is preserved
   const realUuid = '4a728851-be5a-412c-9ce6-ec07b72fcdfa'
   assert.equal(sanitizeUuidOrNull(realUuid), realUuid)
+
+  // 5. Test that guard blocks if integer gets "TL-ACQ-01"
+  plan.pnPayload.esercizio = 'TL-ACQ-01'
+  assert.throws(() => {
+    validateDbPersistencePlanForTestLab(plan)
+  }, /tipo non valido nel campo esercizio di prima_nota: atteso integer/i)
+
+  // Reset
+  plan.pnPayload.esercizio = 2026
+
+  // 6. Test that guard blocks if numeric gets non-numeric text
+  plan.pnPayload.totale_dare = 'non-numeric-text'
+  assert.throws(() => {
+    validateDbPersistencePlanForTestLab(plan)
+  }, /tipo non valido nel campo totale_dare di prima_nota: atteso numeric/i)
+
+  // Reset
+  plan.pnPayload.totale_dare = 1220
+
+  // 7. Test that guard blocks if date gets code document
+  plan.pnPayload.data_registrazione = 'TL-ACQ-01'
+  assert.throws(() => {
+    validateDbPersistencePlanForTestLab(plan)
+  }, /tipo non valido nel campo data_registrazione di prima_nota: atteso date/i)
+
+  // Reset
+  plan.pnPayload.data_registrazione = '2026-04-15'
+
+  // 8. Test that guard blocks if boolean gets non-boolean string
+  plan.righePayload[0].partita_aperta = 'invalid-boolean-text'
+  assert.throws(() => {
+    validateDbPersistencePlanForTestLab(plan)
+  }, /tipo non valido nel campo partita_aperta di prima_nota_righe: atteso boolean/i)
+
+  // Reset
+  plan.righePayload[0].partita_aperta = true
 })
 
 

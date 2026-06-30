@@ -10274,8 +10274,44 @@ pm run build -> Successo (429 moduli, 16s).
 - **Test e Build**:
   - Compilazione Vite: 🟢 Successo (`npm run build` — 56.70s)
   - Unit Test TestLab / Import: 🟢 159 / 159 passati (aggiornato il test specifico per verificare tutti i requisiti della sanificazione plan-wide e del blocco guard su campi UUID obbligatori)
-- **Prossimo test manuale richiesto**:
   - Cliccare su **Contabilizza documento demo** in browser e verificare che i log `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_AFTER_SANITIZE]` e `[TEST_LAB_COMMIT_DB_PERSISTENCE_PLAN]` indichino `documento_import_id = null`, quadratura quadratissima (1220 Dare / 1220 Avere), 3 righe PN, 1 IVA, 1 partitario, e che la scrittura DB avvenga con successo.
+
+
+## PROMPT 24E-HARDENING-RUNTIME-COMMIT-2 — SANIFICAZIONE COMPLETA CAMPI NUMERICI DB COMMIT IMPORT DEMO
+
+- **Data**: 2026-06-30
+- **Obiettivo**:
+  - Risolvere strutturalmente il blocco database `invalid input syntax for type integer: "TL-ACQ-01"` su commit demo del documento `TL-ACQ-01`.
+- **Errore browser ricevuto**:
+  - `[TEST_LAB_COMMIT_BLOCKED] documento=TL-ACQ-01, societa=__TEST__FISCOSIM_DEMO, motivo=invalid input syntax for type integer: "TL-ACQ-01"`
+- **Campo esatto che riceveva "TL-ACQ-01"**:
+  - Il campo `numero_registrazione` (che nel DB ha tipo `integer`/`serial`) riceveva la stringa testuale `"TL-ACQ-01"`.
+- **Punto esatto del codice / mapping errato**:
+  - In `persistPrimaNotaDraft.js` (riga 42), la funzione `mapPrimaNotaPayloadForDb` mappava `numero_registrazione` da `source.numeroDocumento` (che contiene `"TL-ACQ-01"`), e non mappava affatto la colonna `numero_documento` (di tipo `text`).
+- **Perché il precedente hardening non bastava**:
+  - Il precedente hardening verificava solo le colonne di tipo UUID, lasciando passare stringhe alfabetiche nei campi numerici/integer prima di colpire il driver PostgreSQL REST.
+- **Estensione della guardia tipi DB**:
+  - Estesa la funzione `validateDbPersistencePlanForTestLab(plan)` in `persistPrimaNotaDraft.js` per validare tutte le colonne dei quattro oggetti del piano finale (`prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`) contro i tipi DB:
+    - **UUID**: validità sintattica o pattern mock di test.
+    - **Integer**: validità intera o stringa convertibile a intero.
+    - **Numeric**: numeri finiti o decimali validi.
+    - **Date**: validità sintattica ISO (minimo formato `YYYY-MM-DD`).
+    - **Boolean**: boolean reali o stringhe `"true"`/`"false"`.
+- **Soluzione adottata**:
+  - Modificato `mapPrimaNotaPayloadForDb` in `persistPrimaNotaDraft.js` per mappare correttamente `numero_registrazione` come `integer` (usando `normalizeDbInteger`) e `numero_documento` come `text` (usando `normalizeDbText`), mantenendo la stringa `"TL-ACQ-01"` al sicuro nella colonna testuale.
+- **File modificati**:
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Sicurezza**:
+  - **0** UUID casuali generati
+  - **0** modifiche a file di configurazione (`.env`), migrazioni DB o politiche RLS/auth
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 37.55s)
+  - Unit Test TestLab / Import: 🟢 159 / 159 passati (aggiunti test che verificano il blocco esplicito di stringhe scorrette in colonne integer, numeric, date e boolean)
+- **Prossimo test manuale richiesto**:
+  - Eseguire il commit demo da browser per `TL-ACQ-01` e verificare che passi con successo, mostrando in console i log `[TEST_LAB_COMMIT_DB_TYPE_GUARD]` con la sintesi "ok" per tutti i tipi.
+
 
 
 
