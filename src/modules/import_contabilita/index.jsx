@@ -4676,6 +4676,26 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         throw new Error(`Commit demo bloccato: righe Prima Nota non allineate alla working view. Campi ricevuti in riga 0: dare=${sourceRows[0]?.dare ?? sourceRows[0]?.debit}, avere=${sourceRows[0]?.avere ?? sourceRows[0]?.credit}`)
       }
 
+      // 5. Diagnostica Test Lab - Account Resolution
+      console.log('[TEST_LAB_COMMIT_ACCOUNT_RESOLUTION]')
+      mapped.payload.accounting.rows.forEach((r, idx) => {
+        let tipoRiga = 'costo'
+        if (idx === 1) tipoRiga = 'IVA'
+        else if (idx === 2) tipoRiga = 'fornitore'
+        console.log(`index=${idx}, tipoRiga=${tipoRiga}, accountId=${r?.accountId || ''}, accountCode=${r?.accountCode || ''}, accountDescription=${r?.accountDescription || ''}, dare=${r?.dare ?? 0}, avere=${r?.avere ?? 0}`)
+      })
+
+      // 4. Validazione anticipata per accountId mancante
+      mapped.payload.accounting.rows.forEach((r, idx) => {
+        if (!r?.accountId) {
+          let tipoRiga = 'costo'
+          if (idx === 1) tipoRiga = 'IVA'
+          else if (idx === 2) tipoRiga = 'fornitore'
+          const info = `sottoconto mancante sulla riga PN ${idx} (tipo: ${tipoRiga}, codice: ${r?.accountCode || ''}, descrizione: ${r?.accountDescription || ''})`
+          throw new Error(`Commit demo bloccato: ${info}`)
+        }
+      })
+
       if (!bundle.guard.allowed) {
         const blocker = bundle.guard.blockingIssues[0] || 'Commit demo 24E bloccato.'
         console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)

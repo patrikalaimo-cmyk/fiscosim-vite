@@ -11,6 +11,7 @@ import {
 import {
   assessWorkingViewPartitarioDraft,
   buildDemoWorkingViewCommitConfirmMessage,
+  resolveDemoIvaCreditAccount,
 } from '../../domain/importContabilitaDemoWorkingViewCommit.js'
 
 let workingViewIvaDraftSequence = 0
@@ -333,9 +334,10 @@ export function ImportContabilitaWorkingView({
     causaliIvaById,
     { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId }
   ))
+  const ivaCreditAccount = useMemo(() => resolveDemoIvaCreditAccount(pianoConti), [pianoConti])
   const [pnDraftRows, setPnDraftRows] = useState(() => {
     if (!activeWorkingViewModel) return []
-    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel)
+    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel, ivaCreditAccount)
     if (baseRows[2]) {
       baseRows[2].note = `Causale: ${formatManualCausale(activeWorkingViewModel?.causale)}`
     }
@@ -347,12 +349,12 @@ export function ImportContabilitaWorkingView({
       setPnDraftRows([])
       return
     }
-    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel)
+    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel, ivaCreditAccount)
     if (baseRows[2]) {
       baseRows[2].note = `Causale: ${formatManualCausale(activeWorkingViewModel?.causale)}`
     }
     setPnDraftRows(baseRows)
-  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.causale, formatManualCausale])
+  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.causale, formatManualCausale, ivaCreditAccount])
 
   const [selectedIvaDraftRowId, setSelectedIvaDraftRowId] = useState(null)
   const [ivaCausalePickerRowId, setIvaCausalePickerRowId] = useState('')

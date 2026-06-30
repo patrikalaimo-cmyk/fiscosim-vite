@@ -9,6 +9,7 @@ import {
   buildDemoWorkingViewCommitConfirmMessage,
   parseNumberRobust,
   normalizeImportWorkingViewAccountingRow,
+  resolveDemoIvaCreditAccount,
 } from '../domain/importContabilitaDemoWorkingViewCommit.js'
 
 const DEMO_SOCIETA = { id: 'demo-1', codice: '__TEST__FISCOSIM_DEMO', denominazione: 'FiscoSim Demo Test Lab SRL' }
@@ -281,3 +282,107 @@ test('24E-FIX-3 — commit bundle uses normalized rows matching tab UI', () => {
   assert.equal(canonicalRows[2].dare, 0)
   assert.equal(canonicalRows[2].avere, 1220)
 })
+
+test('24E-FIX-5 — account resolution validation, real company blocking, and unselected row exclusion', () => {
+  // 1. Verify account resolution with resolveDemoIvaCreditAccount
+  const ivaAccount = resolveDemoIvaCreditAccount(PIANO_CONTI)
+  assert.equal(ivaAccount?.codice, '1 02 40 0001')
+
+  const bundle = buildDemoWorkingViewCommitBundle({
+    societaId: 'demo-1',
+    activeWorkingViewModel: TL_ACQ_MODEL,
+    pnDraftRows: [
+      { accountId: 'costo-1', dare: '1.000,00', avere: 0, accountCode: '6.01.001' },
+      { accountId: ivaAccount?.id, dare: '220,00', avere: 0, accountCode: '1.02.40.0001' },
+      { accountId: 'forn-1', dare: 0, avere: '1.220,00', accountCode: '2.04.02.0001' }
+    ],
+    ivaDraftRows: [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+    pianoConti: PIANO_CONTI,
+    guardParams: {
+      societa: DEMO_SOCIETA,
+      selectedRowIds: new Set(['row-1']),
+      workingViewOpen: true,
+      workingViewRowId: 'row-1',
+      activeWorkingViewModel: TL_ACQ_MODEL,
+      baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+      ivaDraftRows: [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+      pianoConti: PIANO_CONTI,
+    },
+  })
+
+  // Ensure all 3 rows have accountId
+  assert.ok(bundle.builderInput.primaNotaDraftRows[0].accountId)
+  assert.ok(bundle.builderInput.primaNotaDraftRows[1].accountId)
+  assert.ok(bundle.builderInput.primaNotaDraftRows[2].accountId)
+  assert.equal(bundle.builderInput.primaNotaDraftRows[1].accountId, ivaAccount?.id)
+
+  const mapped = mapImportContabilitaCommitPayloadToCanonical(bundle.commitEnvelope)
+  const canonicalRows = mapped.payload.accounting.rows
+
+  // Check validator does not block
+  assert.equal(canonicalRows.length, 3)
+  assert.equal(canonicalRows[0].dare, 1000)
+  assert.equal(canonicalRows[1].dare, 220)
+  assert.equal(canonicalRows[1].accountId, ivaAccount?.id)
+  assert.equal(canonicalRows[2].avere, 1220)
+
+  // 2. If accountId missing, early validation must fail/throw
+  const checkMissingAccountId = (rows) => {
+    rows.forEach((r, idx) => {
+      if (!r?.accountId) {
+        throw new Error(`Commit demo bloccato: sottoconto mancante sulla riga PN ${idx}`)
+      }
+    })
+  }
+
+  assert.throws(() => {
+    checkMissingAccountId([
+      { accountId: 'costo-1' },
+      { accountId: '' }, // missing
+      { accountId: 'forn-1' }
+    ])
+  }, /sottoconto mancante sulla riga PN 1/i)
+
+  // 3. Real company blocked
+  const realCompanyBundle = buildDemoWorkingViewCommitBundle({
+    societaId: 'real-1',
+    activeWorkingViewModel: TL_ACQ_MODEL,
+    pnDraftRows: [],
+    ivaDraftRows: [],
+    pianoConti: PIANO_CONTI,
+    guardParams: {
+      societa: { codice: 'REAL_CO', is_demo: false }, // real company
+      selectedRowIds: new Set(['row-1']),
+      workingViewOpen: true,
+      workingViewRowId: 'row-1',
+      activeWorkingViewModel: TL_ACQ_MODEL,
+      baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+      ivaDraftRows: [],
+      pianoConti: PIANO_CONTI,
+    },
+  })
+  assert.equal(realCompanyBundle.guard.allowed, false)
+  assert.ok(realCompanyBundle.guard.blockingIssues.some(msg => msg.includes('società demo')))
+
+  // 4. Unselected rows excluded (if rowKey does not match the active working view rowId)
+  const mismatchRowIdBundle = buildDemoWorkingViewCommitBundle({
+    societaId: 'demo-1',
+    activeWorkingViewModel: TL_ACQ_MODEL,
+    pnDraftRows: [],
+    ivaDraftRows: [],
+    pianoConti: PIANO_CONTI,
+    guardParams: {
+      societa: DEMO_SOCIETA,
+      selectedRowIds: new Set(['row-1']),
+      workingViewOpen: true,
+      workingViewRowId: 'row-mismatch',
+      activeWorkingViewModel: TL_ACQ_MODEL,
+      baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+      ivaDraftRows: [],
+      pianoConti: PIANO_CONTI,
+    },
+  })
+  assert.equal(mismatchRowIdBundle.guard.allowed, false)
+  assert.ok(mismatchRowIdBundle.guard.blockingIssues.some(msg => msg.includes('selezionata')))
+})
+

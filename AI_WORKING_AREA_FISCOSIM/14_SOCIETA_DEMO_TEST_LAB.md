@@ -556,3 +556,31 @@ Il mapper canonico `mapImportContabilitaCommitPayloadToCanonical` popolava la st
 4. Verificare che la validazione non sia più bloccata e che la Prima Nota venga registrata sul DB con successo.
 
 
+## FASE 24E-FIX-5 — Risoluzione accountId riga IVA nel Commit Import Demo
+
+### Problema risolto
+A runtime il commit demo si bloccava a causa del validatore canonico con l'errore: `motivo=accounting.rows[1].accountId mancante`. La riga 1 (quella IVA) non riceveva un `accountId` valido dalla UI.
+
+### Causa
+Nella working view, la riga IVA veniva generata staticamente con `account: null` all'interno di `WorkingViewPrimaNotaTable.jsx`, impostando solo campi di fallback testuali `'IVA'`. Di conseguenza, lo stato `pnDraftRows` della UI e poi il payload canonico ereditavano un `accountId` vuoto.
+
+### Soluzione
+- **Passaggio di ivaCreditAccount**: modificato `buildWorkingViewPrimaNotaRows` per accettare `ivaCreditAccount`.
+- **Risoluzione conto nel parent**: In `ImportContabilitaWorkingView.jsx`, usiamo l'helper `resolveDemoIvaCreditAccount(pianoConti)` (rielaborando la logica e il contratto della Registrazione Manuale) per trovare deterministicamente il conto IVA credito reale `'1 02 40 0001'` ("IVA ns credito") e passarlo per inizializzare e aggiornare la riga IVA.
+- **Validazione anticipata**: Inserito un controllo preventivo in `index.jsx` che scatta prima di chiamare il validatore canonico se una riga della Prima Nota è sprovvista di `accountId`.
+- **Log Test Lab**: Aggiunto il log diagnostico `[TEST_LAB_COMMIT_ACCOUNT_RESOLUTION]` in `index.jsx` per tracciare la risoluzione dei conti riga per riga.
+
+### File
+- `src/modules/import_contabilita/components/working_view/WorkingViewPrimaNotaTable.jsx`
+- `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-01` per la società demo.
+2. Controllare in console il log `[TEST_LAB_COMMIT_ACCOUNT_RESOLUTION]` dopo aver cliccato "Contabilizza documento demo".
+3. Accertarsi che la riga 1 (IVA) mostri il conto reale `'1 02 40 0001'` con il relativo `accountId`.
+4. Confermare il commit e accertarsi del successo della registrazione sul database.
+
+
+

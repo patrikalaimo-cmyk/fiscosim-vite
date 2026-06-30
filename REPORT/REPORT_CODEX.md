@@ -10146,3 +10146,41 @@ pm run build -> Successo (429 moduli, 16s).
   4. Verificare in console la presenza dei tre nuovi log di tracciamento (`[TEST_LAB_COMMIT_ROWS_SOURCE]`, `[TEST_LAB_COMMIT_ROWS_NORMALIZED]`, `[TEST_LAB_COMMIT_CANONICAL_ACCOUNTING_ROWS]`) e che gli importi corrispondano esattamente (1000/220/1220).
   5. Verificare che la registrazione avvenga con successo sul database.
 
+
+## PROMPT-24E-FIX-5-RISOLUZIONE-ACCOUNTID-RIGA-IVA-NEL-COMMIT-IMPORT-DEMO
+
+- **Data**: 2026-06-30
+- **Causa accountId mancante**:
+  - Nella tab Prima Nota della working view, la riga IVA (riga 1) veniva costruita in modo dinamico all'interno di `WorkingViewPrimaNotaTable.jsx` utilizzando una riga di fallback con `fallbackCode: 'IVA'` senza passare alcun oggetto conto (`account: null`).
+  - Di conseguenza, la riga IVA prodotta nello stato `pnDraftRows` della UI conteneva `accountId: ''` (vuoto). Al momento del commit, il payload canonico ereditava questo valore vuoto, causando il blocco del validatore su `accounting.rows[1].accountId mancante`.
+- **Riuso logica Manuale**:
+  - Sì, si riusa la logica e il contratto della Registrazione Manuale a livello di modellazione. Viene utilizzato l'helper condiviso del modulo domain `resolveDemoIvaCreditAccount(pianoConti)` (presente in `importContabilitaDemoWorkingViewCommit.js`) sia nel bridge di commit sia nel componente UI `ImportContabilitaWorkingView.jsx` per recuperare in modo deterministico e idempotente il sottoconto reale IVA a credito demo (`1 02 40 0001` - "IVA ns credito") dal piano dei conti.
+- **Risoluzione conto IVA credito**:
+  - Il sottoconto IVA credito risolto ha codice reale `'1 02 40 0001'` ("IVA ns credito") e relativo ID univoco caricato dal piano dei conti della società demo.
+- **Valori finali delle 3 righe PN (TL-ACQ-01)**:
+  - **Riga 0 (costo)**: accountId reale, `dare: 1000`, `avere: 0`.
+  - **Riga 1 (IVA credito)**: accountId reale del conto IVA credito (`1 02 40 0001`), `dare: 220`, `avere: 0`.
+  - **Riga 2 (fornitore)**: accountId reale del fornitore, `dare: 0`, `avere: 1220`.
+- **Validazione anticipata e diagnostica**:
+  - Aggiunto controllo preventivo in `handleDemoWorkingViewCommit` (`index.jsx`) che blocca con errore descrittivo prima della validazione canonica se una qualsiasi riga è sprovvista di `accountId`.
+  - Aggiunto log diagnostico `[TEST_LAB_COMMIT_ACCOUNT_RESOLUTION]` che stampa in console l'indice, il tipo di riga, l'accountId, l'accountCode, l'accountDescription, dare e avere di ciascuna riga PN del payload prima del commit.
+- **File modificati**:
+  - `src/modules/import_contabilita/components/working_view/WorkingViewPrimaNotaTable.jsx`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche (il commit avviene solo su selezione della singola riga demo e conferma dell'utente)
+  - **0** modifiche a società reali (recinto demo preservato)
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 8.83s)
+  - Unit Test TestLab / Import: 🟢 157 / 157 passati (aggiunti test di verifica risoluzione accountId riga IVA, errori anticipati e blocchi di sicurezza)
+- **Cosa deve testare l'utente**:
+  1. Selezionare società demo, aprire la working view di `TL-ACQ-01`.
+  2. Aprire la console del browser, fare clic su **Contabilizza documento demo** → confermare.
+  3. Verificare che non compaiano più errori per `accountId` mancante.
+  4. Verificare in console il log `[TEST_LAB_COMMIT_ACCOUNT_RESOLUTION]` che mostra la corretta risoluzione del conto IVA credito `'1 02 40 0001'`.
+  5. Verificare che la registrazione avvenga con successo sul database.
+
+

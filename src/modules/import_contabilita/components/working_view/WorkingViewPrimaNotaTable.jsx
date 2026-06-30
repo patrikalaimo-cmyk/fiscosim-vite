@@ -45,7 +45,7 @@ export function createWorkingViewPrimaNotaRow({ account = null, fallbackCode = '
   }
 }
 
-export function buildWorkingViewPrimaNotaRows(activeWorkingViewModel) {
+export function buildWorkingViewPrimaNotaRows(activeWorkingViewModel, ivaCreditAccount = null) {
   return [
     createWorkingViewPrimaNotaRow({
       account: activeWorkingViewModel?.costRevenueAccount || null,
@@ -53,8 +53,9 @@ export function buildWorkingViewPrimaNotaRows(activeWorkingViewModel) {
       note: 'Imponibile su conto costi/ricavi',
     }),
     createWorkingViewPrimaNotaRow({
-      fallbackCode: 'IVA',
-      fallbackDescription: 'Imposta sul valore aggiunto',
+      account: ivaCreditAccount || null,
+      fallbackCode: ivaCreditAccount ? '' : 'IVA',
+      fallbackDescription: ivaCreditAccount ? '' : 'Imposta sul valore aggiunto',
       dare: Number(activeWorkingViewModel?.iva || 0),
       note: 'IVA in detrazione',
     }),
