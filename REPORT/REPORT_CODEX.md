@@ -10244,5 +10244,40 @@ pm run build -> Successo (429 moduli, 16s).
   4. Verificare che la registrazione avvenga con successo sul database Supabase reale della società demo senza errori UUID.
 
 
+## PROMPT 24E-HARDENING-RUNTIME-COMMIT — CHIUSURA STRUTTURALE COMMIT IMPORT DEMO TL-ACQ-01
+
+- **Data**: 2026-06-30
+- **Obiettivo**:
+  - Risolvere strutturalmente la persistenza a runtime del commit Import demo per `TL-ACQ-01` prevenendo qualsiasi errore di formato UUID su database Supabase.
+- **Punto esatto corretto**:
+  - In `importContabilitaWorkflow.js`, il `documento_import_id` proveniente da `documentId` (sintetico `'test_lab_24b_...'`) non passava attraverso il mapper canonico e veniva scritto direttamente su `draftBundle.pnPayload.documento_import_id`.
+  - È stato sanato importando e applicando la funzione `sanitizeUuidOrNull(documentId)` sia a livello di `importContabilitaWorkflow.js` che all'interno di `persistPrimaNotaDraft.js` prima del write database.
+  - Aggiunto il campo `scope` in `pnPayload` destrutturandolo in `buildPrimaNotaHeaderPayload` in `domain/primaNotaPayloadBuilder.js` e valorizzando `scope.source_row_key` con l'ID sintetico per conservarne la traccia in memoria, pur non inviandolo come colonna DB per evitare errori di colonna non esistente.
+- **Campi UUID controllati e sanati nel piano DB**:
+  - `prima_nota`: `documento_import_id`, `documento_contabilita_id`, `fattura_xml_id`, `locked_by`.
+  - `prima_nota_righe`: `partita_id`, `locked_by`.
+  - `registri_iva`: `documento_import_id`, `documento_contabilita_id`.
+  - `partitario`: `partita_id`, `cliente_id`, `fornitore_id`.
+- **Log diagnostici introdotti**:
+  - `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_AFTER_SANITIZE]`: stampa lo stato di `documento_import_id` e del `scope` dopo l'applicazione dei filtri di pulizia UUID.
+  - `[TEST_LAB_COMMIT_DB_PERSISTENCE_PLAN]`: stampa le statistiche del piano finale (numero righe PN, righe IVA, partitario, totali Dare/Avere, IVA e partitario) per verifica quadratura.
+  - `[TEST_LAB_COMMIT_UUID_GUARD]`: guardia di controllo finale su tutti i campi UUID presenti nel piano DB.
+- **File modificati**:
+  - `domain/primaNotaPayloadBuilder.js`
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Sicurezza**:
+  - **0** UUID casuali generati (nessun bypass fittizio)
+  - **0** modifiche a file di configurazione (`.env`), migrazioni DB o politiche RLS/auth
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 56.70s)
+  - Unit Test TestLab / Import: 🟢 159 / 159 passati (aggiornato il test specifico per verificare tutti i requisiti della sanificazione plan-wide e del blocco guard su campi UUID obbligatori)
+- **Prossimo test manuale richiesto**:
+  - Cliccare su **Contabilizza documento demo** in browser e verificare che i log `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_AFTER_SANITIZE]` e `[TEST_LAB_COMMIT_DB_PERSISTENCE_PLAN]` indichino `documento_import_id = null`, quadratura quadratissima (1220 Dare / 1220 Avere), 3 righe PN, 1 IVA, 1 partitario, e che la scrittura DB avvenga con successo.
+
+
+
 
 

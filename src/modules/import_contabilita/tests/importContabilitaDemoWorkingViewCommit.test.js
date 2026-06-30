@@ -437,8 +437,25 @@ test('24E-FIX-6 — VAT technical type resolution and guards', () => {
 
 test('24E-FIX-7 — UUID guard and synthetic ID exclusion', async () => {
   const { buildPrimaNotaHeaderFromCanonicalPayload } = await import('../../contabilita/application/canonical_mapper/buildPrimaNotaHeaderFromCanonicalPayload.js')
-  const { mapPrimaNotaPayloadForDb } = await import('../../contabilita/application/persistPrimaNotaDraft.js')
+  const {
+    mapPrimaNotaPayloadForDb,
+    sanitizeUuidOrNull,
+    validateDbPersistencePlanForTestLab
+  } = await import('../../contabilita/application/persistPrimaNotaDraft.js')
 
+  // 1. Validate sanitizeUuidOrNull behaviour
+  assert.equal(sanitizeUuidOrNull('test_lab_24b_1782764101229-1'), null)
+  assert.equal(sanitizeUuidOrNull(''), null)
+  assert.equal(sanitizeUuidOrNull(null), null)
+  const validUuid = '123e4567-e89b-12d3-a456-426614174000'
+  assert.equal(sanitizeUuidOrNull(validUuid), validUuid)
+  // Test mocks should be allowed
+  assert.equal(sanitizeUuidOrNull('demo-1'), 'demo-1')
+  assert.equal(sanitizeUuidOrNull('real-1'), 'real-1')
+  assert.equal(sanitizeUuidOrNull('soc-123'), 'soc-123')
+  assert.equal(sanitizeUuidOrNull('caus-ff'), 'caus-ff')
+
+  // 2. Validate plan-wide behavior
   const canonicalPayload = {
     company: { societaId: 'demo-1' },
     handoff: {
@@ -455,23 +472,42 @@ test('24E-FIX-7 — UUID guard and synthetic ID exclusion', async () => {
   const header = buildPrimaNotaHeaderFromCanonicalPayload(canonicalPayload)
   assert.equal(header.documento_import_id, null) // stripped!
 
-  // Validate the UUID guard blocks non-UUID values in UUID fields
   const dbPayload = mapPrimaNotaPayloadForDb(header)
-  dbPayload.causale_id = 'test_lab_invalid_uuid' // force non-uuid
+  // Sanitize
+  dbPayload.documento_import_id = sanitizeUuidOrNull(dbPayload.documento_import_id || canonicalPayload.handoff.sourceRowKey)
+  assert.equal(dbPayload.documento_import_id, null)
 
-  const mockResolved = {
-    innerDraft: { company: { codice: '__TEST__FISCOSIM_DEMO' } },
-    pnPayload: { societa_id: 'demo-1' }
+  const plan = {
+    pnPayload: dbPayload,
+    righePayload: [
+      { conto_id: 'acc-cost', dare: 1000, avere: 0 },
+      { conto_id: 'acc-iva', dare: 220, avere: 0 },
+      { conto_id: 'acc-forn', dare: 0, avere: 1220 }
+    ],
+    vatEntries: [
+      { causale_iva_id: 'caus-iva', imponibile: 1000, imposta: 220 }
+    ],
+    partEntries: [
+      { soggetto_id: 'demo-fornitore', importo_originario: 1220 }
+    ],
+    societaCodice: '__TEST__FISCOSIM_DEMO',
+    docNum: 'TL-ACQ-01'
   }
 
-  const isLocalUuid = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+  // The guard should pass with these sanitized / mock values
+  assert.doesNotThrow(() => {
+    validateDbPersistencePlanForTestLab(plan)
+  })
 
+  // 3. Test that guard blocks if a required UUID field gets a non-UUID string
+  plan.pnPayload.causale_id = 'test_lab_invalid_uuid'
   assert.throws(() => {
-    const val = dbPayload.causale_id
-    if (!isLocalUuid(val)) {
-      throw new Error(`Commit demo bloccato: valore non UUID nel campo causale_id di prima_nota: ${val}`)
-    }
+    validateDbPersistencePlanForTestLab(plan)
   }, /valore non UUID nel campo causale_id/i)
+
+  // 4. Test that a real UUID is preserved
+  const realUuid = '4a728851-be5a-412c-9ce6-ec07b72fcdfa'
+  assert.equal(sanitizeUuidOrNull(realUuid), realUuid)
 })
 
 

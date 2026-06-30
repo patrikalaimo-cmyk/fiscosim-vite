@@ -23,6 +23,7 @@ export function buildPrimaNotaHeaderPayload({
   progressivo,
   stato,
   documento_import_id,
+  scope,
 }) {
   const payload = {
     societa_id,
@@ -41,6 +42,7 @@ export function buildPrimaNotaHeaderPayload({
   if (totale_avere !== undefined) payload.totale_avere = toMoneyNumber(totale_avere)
   if (progressivo !== undefined) payload.progressivo = progressivo ?? null
   if (documento_import_id !== undefined) payload.documento_import_id = documento_import_id || null
+  if (scope !== undefined) payload.scope = scope || null
 
   return payload
 }

@@ -600,7 +600,7 @@ import { isCespiteAccount } from '../../contabilita/domain/registrazione/resolve
 import { mapImportContabilitaCommitPayloadToCanonical } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { validateCanonicalAccountingPayload } from '../../contabilita/canonical/validateCanonicalAccountingPayload.js'
 import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRepo.js'
-import { persistPrimaNotaDraft } from '../../contabilita/application/persistPrimaNotaDraft.js'
+import { persistPrimaNotaDraft, sanitizeUuidOrNull } from '../../contabilita/application/persistPrimaNotaDraft.js'
 import { sb } from '../../../lib/supabase.js'
 import { buildCausaleContabilePolicy } from '../../contabilita/domain/causali/buildCausaleContabilePolicy.js'
 
@@ -883,7 +883,11 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
       totale_dare: totalDare,
       totale_avere: totalAvere,
       stato: 'confermata',
-      documento_import_id: documentId || null,
+      documento_import_id: sanitizeUuidOrNull(documentId),
+      scope: {
+        source_row_key: documentId || null,
+        documento: canonicalPayload.document?.numeroDocumento || 'TL-ACQ-01',
+      },
     },
     righePayload: finalRows,
     header: {

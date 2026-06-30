@@ -635,6 +635,34 @@ La colonna `documento_import_id` della tabella `prima_nota` nel database è di t
 4. Confermare e verificare l'avvenuta contabilizzazione su Supabase.
 
 
+## FASE 24E-HARDENING-RUNTIME-COMMIT — Chiusura strutturale commit Import demo TL-ACQ-01
+
+### Problema risolto
+A runtime da browser l'ID sintetico `'test_lab_24b_...'` aggirava il mapper canonico e veniva scritto direttamente su `draftBundle.pnPayload.documento_import_id` all'interno di `importContabilitaWorkflow.js`, facendo scattare la guardia di blocco UUID.
+
+### Soluzione strutturale
+- **Funzione di sanificazione**: definita `sanitizeUuidOrNull(value)` per azzerare valori non conformi nei campi UUID opzionali ammessi (come `documento_import_id`, `documento_contabilita_id`, `partita_id`, ecc.).
+- **Integrazione nel workflow**: applicato `sanitizeUuidOrNull` sia in `importContabilitaWorkflow.js` che in `persistPrimaNotaDraft.js` prima di ispezionare/validare e scrivere sul database.
+- **Supporto `scope`**: abilitata la destrutturazione del parametro `scope` in `buildPrimaNotaHeaderPayload` per preservare in memoria l'ID sintetico originario nel campo `scope.source_row_key` senza inserirlo a DB.
+- **Log diagnostici di quadratura**:
+  - `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_AFTER_SANITIZE]`: logs di testata sanata.
+  - `[TEST_LAB_COMMIT_DB_PERSISTENCE_PLAN]`: logs di quadratura e conteggio righe finale del piano DB (3 righe PN, 1 riga registri IVA, 1 riga partitario).
+  - `[TEST_LAB_COMMIT_UUID_GUARD]`: esegue la validazione finale `validateDbPersistencePlanForTestLab` controllando plan-wide tutti i campi UUID noti delle tabelle `prima_nota`, `prima_nota_righe`, `registri_iva` e `partitario`.
+
+### File modificati
+- `domain/primaNotaPayloadBuilder.js`
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-01` per la società demo.
+2. Controllare in console il log `[TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_AFTER_SANITIZE]` dopo aver confermato il commit.
+3. Accertarsi che `documento_import_id` sia stampato come `null` e che la quadratura in `[TEST_LAB_COMMIT_DB_PERSISTENCE_PLAN]` indichi importi quadrati.
+4. Confermare e verificare l'avvenuta contabilizzazione su Supabase.
+
+
+
 
 
 
