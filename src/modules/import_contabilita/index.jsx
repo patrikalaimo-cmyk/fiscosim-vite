@@ -4608,7 +4608,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     showActionBanner('success', `Apertura predisposizione contabile per il documento ${numeroDocumento}.`)
   }
 
-  const handleDemoWorkingViewCommit = async ({ ivaDraftRows = [] } = {}) => {
+  const handleDemoWorkingViewCommit = async ({ ivaDraftRows = [], pnDraftRows = [] } = {}) => {
     if (demoCommitBusy) return
 
     setDemoCommitBusy(true)
@@ -4626,6 +4626,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         sourceBatchId: result?.batchId || result?.report?.batchId || '',
         activeWorkingViewModel,
         ivaDraftRows,
+        pnDraftRows,
         pianoConti,
         automationMeta: activeWorkingViewModel?.automationMeta || null,
         guardParams: {

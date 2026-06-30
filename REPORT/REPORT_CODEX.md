@@ -10069,3 +10069,39 @@ pm run build -> Successo (429 moduli, 16s).
   2. Cliccare su **Contabilizza documento demo** → confermare nel prompt `window.confirm`.
   3. Verificare che la validazione non sia più bloccata da `header.stato non valido` e che il salvataggio proceda al database reale con successo (mostrando l'ID prima nota e il popup informativo di esito contabile).
   4. Verificare che la Prima Nota sia creata con stato contabile `confermata`, mentre il documento staging passi a `committed`.
+
+
+## PROMPT-24E-FIX-3-FIX-DEFINITIVO-MAPPING-IMPORTI-RIGHE-PN-WORKING-VIEW-PAYLOAD-CANONICO
+
+- **Data**: 2026-06-30
+- **Causa del mismatch importi**:
+  - In precedenza, `buildDemoWorkingViewCommitBundle` non leggeva lo stato reale modificato o visualizzato nella tab Prima Nota della working view, ma calcolava le righe partendo da un modello grezzo e restituendo campi `debit`/`credit` anziché `dare`/`avere`.
+  - Inoltre, la funzione `toNumber()` (utilizzata all'interno di `numberOrZero()` nel mapper canonico) usava `.replace(',', '.')` che, applicata a stringhe formattate all'italiana (es. `"1.000,00"`), produceva `"1.000.00"`. Questo valore, contenente due punti decimali, veniva valutato come `NaN` da `Number()`, azzerando gli importi contabili delle righe.
+- **Nomi campo prima/dopo**:
+  - Prima: La working view manteneva in modo stagno `dare` / `avere` nel proprio stato locale e generava `debit` / `credit` silenti.
+  - Dopo: La sorgente della tab UI Prima Nota e il payload del commit sono stati unificati. Entrambi usano `dare` / `avere` (sia a livello UI che a livello domain builder prima della canonicalizzazione). Il mapper canonical traduce robustamente in `debit` / `credit` gestendo sia float nativi sia formati italiani (`"1.000,00"`) o standard (`"1000.00"`).
+- **Fix centralizzato**:
+  - Creata la funzione `parseNumberRobust(value)` che decodifica correttamente i formati numerici (italiano con separatore di migliaia a punto e virgola decimale, americano con virgola migliaia e punto decimale, numeri float standard).
+  - Creata la funzione `normalizeImportWorkingViewAccountingRow(row)` che valida le righe PN sollevando errori chiari in caso di doppio importo su dare/avere o riga con importo a zero in entrambi i lati.
+  - Agganciata la sorgente dati della tab UI Prima Nota (stato `pnDraftRows` sollevato a livello parent `ImportContabilitaWorkingView.jsx`) al payload di commit e alle validazioni.
+- **File modificati**:
+  - `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js`
+  - `src/modules/import_contabilita/components/working_view/WorkingViewPrimaNotaTable.jsx`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche (il commit avviene solo su selezione della singola riga demo e conferma dell'utente)
+  - **0** documenti aggiuntivi generati
+  - **0** modifiche a società reali (recinto demo preservato)
+  - **0** delete/pulizia/migration/env/auth/RLS
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 18.27s)
+  - Unit Test TestLab / Import: 🟢 156 / 156 passati (aggiunti test per robust parsing, normalizzazione righe, e allineamento UI tab/commit)
+- **Cosa deve testare l'utente**:
+  1. Selezionare società demo → Import → aprire working view di `TL-ACQ-01`.
+  2. Modificare eventuali importi o conti nella tab Prima Nota, ad esempio modificando un importo in `"1.000,00"`.
+  3. Cliccare su **Contabilizza documento demo** → confermare.
+  4. Verificare in console la traccia `[TEST_LAB_COMMIT_ROWS_NORMALIZED]` che mostra l'esatto mapping riga per riga (con i valori raw e normalizzati corretti).
+  5. Verificare che la registrazione avvenga con successo sul database con importi Dare 1.000,00 e 220,00, ed Avere 1.220,00 (quadratura a 1.220,00).

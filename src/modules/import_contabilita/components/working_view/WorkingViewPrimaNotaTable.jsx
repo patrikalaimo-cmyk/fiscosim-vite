@@ -29,7 +29,7 @@ function formatWorkingViewAmountInput(value) {
   return numericValue.toFixed(2).replace('.', ',')
 }
 
-function createWorkingViewPrimaNotaRow({ account = null, fallbackCode = '', fallbackDescription = '', dare = 0, avere = 0, note = '' } = {}) {
+export function createWorkingViewPrimaNotaRow({ account = null, fallbackCode = '', fallbackDescription = '', dare = 0, avere = 0, note = '' } = {}) {
   const dareValue = Number(toWorkingViewAmount(dare) || 0) || 0
   const avereValue = Number(toWorkingViewAmount(avere) || 0) || 0
   return {
@@ -45,7 +45,7 @@ function createWorkingViewPrimaNotaRow({ account = null, fallbackCode = '', fall
   }
 }
 
-function buildWorkingViewPrimaNotaRows(activeWorkingViewModel) {
+export function buildWorkingViewPrimaNotaRows(activeWorkingViewModel) {
   return [
     createWorkingViewPrimaNotaRow({
       account: activeWorkingViewModel?.costRevenueAccount || null,
@@ -86,29 +86,21 @@ export function WorkingViewPrimaNotaTable({
   formatMoney,
   formatManualCausale,
   pianoConti,
+  rows = [],
+  setRows,
 }) {
-  const [rows, setRows] = useState(() => {
-    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel)
-    if (baseRows[2]) {
-      baseRows[2].note = `Causale: ${formatManualCausale(activeWorkingViewModel?.causale)}`
-    }
-    return baseRows
-  })
   const [selectedRowId, setSelectedRowId] = useState(null)
   const [accountPickerRowId, setAccountPickerRowId] = useState('')
   const [accountSearchTerm, setAccountSearchTerm] = useState('')
   const accountSearchInputRef = useRef(null)
 
   useEffect(() => {
-    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel)
-    if (baseRows[2]) {
-      baseRows[2].note = `Causale: ${formatManualCausale(activeWorkingViewModel?.causale)}`
+    if (rows && rows[0]) {
+      setSelectedRowId(rows[0].id)
     }
-    setRows(baseRows)
-    setSelectedRowId(baseRows[0]?.id || null)
     setAccountPickerRowId('')
     setAccountSearchTerm('')
-  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.causale, formatManualCausale])
+  }, [activeWorkingViewModel?.rowKey])
 
   useEffect(() => {
     if (!rows.length) {

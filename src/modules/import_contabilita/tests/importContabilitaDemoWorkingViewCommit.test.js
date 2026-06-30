@@ -7,6 +7,8 @@ import {
   buildDemoWorkingViewCommitBundle,
   formatDemoWorkingViewCommitReport,
   buildDemoWorkingViewCommitConfirmMessage,
+  parseNumberRobust,
+  normalizeImportWorkingViewAccountingRow,
 } from '../domain/importContabilitaDemoWorkingViewCommit.js'
 
 const DEMO_SOCIETA = { id: 'demo-1', codice: '__TEST__FISCOSIM_DEMO', denominazione: 'FiscoSim Demo Test Lab SRL' }
@@ -85,8 +87,8 @@ test('24E — commit bloccato su società reale', () => {
 
 test('24E — payload TL-ACQ-01 PN quadrata da working view model', () => {
   const pnRows = buildWorkingViewPrimaNotaDraftRowsFromModel(TL_ACQ_MODEL, PIANO_CONTI[1])
-  const dare = pnRows.reduce((sum, row) => sum + Number(row.debit || 0), 0)
-  const avere = pnRows.reduce((sum, row) => sum + Number(row.credit || 0), 0)
+  const dare = pnRows.reduce((sum, row) => sum + Number(row.dare || 0), 0)
+  const avere = pnRows.reduce((sum, row) => sum + Number(row.avere || 0), 0)
   assert.equal(dare, 1220)
   assert.equal(avere, 1220)
 })
@@ -205,4 +207,67 @@ test('24E-FIX-2 — resolveImportCommitPrimaNotaStato normalizza correttamente l
   assert.equal(resolveImportCommitPrimaNotaStato('bozza'), 'bozza')
   assert.equal(resolveImportCommitPrimaNotaStato('simulata'), 'simulata')
   assert.equal(resolveImportCommitPrimaNotaStato('qualcosa_a_caso'), 'confermata')
+})
+
+test('24E-FIX-3 — robust number parsing and Italian format normalization', () => {
+  assert.equal(parseNumberRobust('1.000,00'), 1000)
+  assert.equal(parseNumberRobust('1000.00'), 1000)
+  assert.equal(parseNumberRobust('220,15'), 220.15)
+  assert.equal(parseNumberRobust(1220), 1220)
+  assert.equal(parseNumberRobust('0'), 0)
+  assert.equal(parseNumberRobust(null), 0)
+})
+
+test('24E-FIX-3 — row mapping and validation errors', () => {
+  // riga valida dare
+  const r1 = normalizeImportWorkingViewAccountingRow({ dare: '1.000,00', accountId: 'conto-1' })
+  assert.equal(r1.debit, 1000)
+  assert.equal(r1.credit, 0)
+
+  // riga con doppio importo viene bloccata
+  assert.throws(() => {
+    normalizeImportWorkingViewAccountingRow({ dare: 100, avere: 50, accountId: 'conto-1' })
+  }, /doppio importo/i)
+
+  // riga con importo zero viene bloccata con errore chiaro
+  assert.throws(() => {
+    normalizeImportWorkingViewAccountingRow({ dare: 0, avere: 0, accountId: 'conto-1' })
+  }, /importo pari a zero/i)
+})
+
+test('24E-FIX-3 — commit bundle uses normalized rows matching tab UI', () => {
+  const bundle = buildDemoWorkingViewCommitBundle({
+    societaId: 'demo-1',
+    activeWorkingViewModel: TL_ACQ_MODEL,
+    pnDraftRows: [
+      { accountId: 'costo-1', dare: '1.000,00', avere: 0, accountCode: '6.01.001' },
+      { accountId: 'iva-1', dare: '220,00', avere: 0, accountCode: '1.02.40.0001' },
+      { accountId: 'forn-1', dare: 0, avere: '1.220,00', accountCode: '2.04.02.0001' }
+    ],
+    ivaDraftRows: [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+    pianoConti: PIANO_CONTI,
+    guardParams: {
+      societa: DEMO_SOCIETA,
+      selectedRowIds: new Set(['row-1']),
+      workingViewOpen: true,
+      workingViewRowId: 'row-1',
+      activeWorkingViewModel: TL_ACQ_MODEL,
+      baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+      ivaDraftRows: [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+      pianoConti: PIANO_CONTI,
+    },
+    pianoConti: PIANO_CONTI,
+  })
+
+  assert.equal(bundle.guard.allowed, true)
+  assert.equal(bundle.builderInput.primaNotaDraftRows.length, 3)
+  assert.equal(bundle.builderInput.primaNotaDraftRows[0].debit, 1000)
+  assert.equal(bundle.builderInput.primaNotaDraftRows[2].credit, 1220)
+  assert.equal(bundle.directValidation.blockers.length, 0)
+  
+  const mapped = mapImportContabilitaCommitPayloadToCanonical(bundle.commitEnvelope)
+  assert.equal(mapped.payload.header.stato, 'confermata')
+  assert.equal(mapped.payload.header.totals.totaleDare, 1220)
+  assert.equal(mapped.payload.header.totals.totaleAvere, 1220)
+  assert.equal(mapped.payload.header.totals.isBalanced, true)
 })

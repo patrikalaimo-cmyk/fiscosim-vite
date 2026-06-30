@@ -497,3 +497,33 @@ Il mapper canonico `mapImportContabilitaCommitPayloadToCanonical` assegnava al c
 1. Selezionare società demo → Import → aprire working view di `TL-ACQ-01`.
 2. Cliccare su **Contabilizza documento demo** → confermare.
 3. Verificare che la validazione non sia più bloccata da `header.stato non valido` e che il salvataggio contabile vada a buon fine generando la registrazione Prima Nota in stato `confermata` ed aggiornando lo staging a `committed`.
+
+
+## FASE 24E-FIX-3 — Fix definitivo mapping importi righe PN Working View → Payload Canonico
+
+### Problema risolto
+Il commit demo di TL-ACQ-01 veniva bloccato con l'errore: `motivo=accounting.rows[0] deve avere un importo in dare o avere maggiore di zero`.
+
+### Causa
+1. La sorgente dati delle righe di Prima Nota usata per compilare il payload di commit era scollegata dallo stato locale della tab UI Prima Nota, causando discrepanze e disallineamenti tra ciò che l'utente vedeva e ciò che veniva validato/inviato al database.
+2. La conversione degli importi stringa in numeri reali (in `toNumber()`) non gestiva i formati italiani (con punto per le migliaia e virgola per i decimali, es: `"1.000,00"`). Questo causava la produzione di valori `NaN` o `0` a valle del parsing numerico.
+
+### Soluzione
+- **Unificazione dello stato (Lifting State Up)**: lo stato delle righe di Prima Nota (`pnDraftRows`) è stato sollevato a livello parent `ImportContabilitaWorkingView.jsx` e sincronizzato con la tab UI, garantendo che i dati compilati o modificati in tabella siano esattamente gli stessi usati dal validatore e dal commit finali.
+- **Normalizzazione robusta degli importi**: implementate le funzioni `parseNumberRobust` (che converte correttamente i formati stringa italiani e internazionali) e `normalizeImportWorkingViewAccountingRow` (che valida la quadratura della riga escludendo importi a zero o doppi importi su dare/avere).
+- **Log diagnostico per il Test Lab**: aggiunta la traccia di diagnostica `[TEST_LAB_COMMIT_ROWS_NORMALIZED]` che stampa gli importi raw e normalizzati per ogni riga processata.
+
+### File
+- `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js`
+- `src/modules/import_contabilita/components/working_view/WorkingViewPrimaNotaTable.jsx`
+- `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Accedere alla società demo, aprire la working view di `TL-ACQ-01`.
+2. Nella tab Prima Nota, modificare facoltativamente gli importi scrivendo valori stringa in formato italiano (es. `"1.000,00"` e `"220,00"`).
+3. Fare clic su **Contabilizza documento demo** → confermare.
+4. Controllare in console il log diagnostico `[TEST_LAB_COMMIT_ROWS_NORMALIZED]` e accertarsi che gli importi normalizzati siano corretti (es. `1000` e `220` per il Dare, `1220` per l'Avere).
+5. Verificare che la registrazione avvenga con successo ed aggiorni lo staging.
+

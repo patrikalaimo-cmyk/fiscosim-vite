@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { WorkingViewApplyActionsPopover } from './WorkingViewApplyActionsPopover.jsx'
 import { WorkingViewInvoicePreviewTabs } from './WorkingViewInvoicePreviewTabs.jsx'
-import { WorkingViewPrimaNotaTable } from './WorkingViewPrimaNotaTable.jsx'
+import { WorkingViewPrimaNotaTable, buildWorkingViewPrimaNotaRows } from './WorkingViewPrimaNotaTable.jsx'
 import {
   resolveImportWorkingViewCausaleIvaId,
   assessWorkingViewIvaDraftRows,
@@ -333,6 +333,27 @@ export function ImportContabilitaWorkingView({
     causaliIvaById,
     { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId }
   ))
+  const [pnDraftRows, setPnDraftRows] = useState(() => {
+    if (!activeWorkingViewModel) return []
+    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel)
+    if (baseRows[2]) {
+      baseRows[2].note = `Causale: ${formatManualCausale(activeWorkingViewModel?.causale)}`
+    }
+    return baseRows
+  })
+
+  useEffect(() => {
+    if (!activeWorkingViewModel) {
+      setPnDraftRows([])
+      return
+    }
+    const baseRows = buildWorkingViewPrimaNotaRows(activeWorkingViewModel)
+    if (baseRows[2]) {
+      baseRows[2].note = `Causale: ${formatManualCausale(activeWorkingViewModel?.causale)}`
+    }
+    setPnDraftRows(baseRows)
+  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.causale, formatManualCausale])
+
   const [selectedIvaDraftRowId, setSelectedIvaDraftRowId] = useState(null)
   const [ivaCausalePickerRowId, setIvaCausalePickerRowId] = useState('')
   const [ivaCausaleSearchTerm, setIvaCausaleSearchTerm] = useState('')
@@ -870,7 +891,7 @@ export function ImportContabilitaWorkingView({
                     if (!isDemoSocieta || typeof onCommitDemoWorkingView !== 'function') return
                     const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, ivaDraftRows)
                     if (!window.confirm(message)) return
-                    onCommitDemoWorkingView({ ivaDraftRows })
+                    onCommitDemoWorkingView({ ivaDraftRows, pnDraftRows })
                   }}
                   style={{
                     ...headerSuccessActionStyle,
@@ -980,6 +1001,8 @@ export function ImportContabilitaWorkingView({
                     formatMoney={formatMoney}
                     formatManualCausale={formatManualCausale}
                     pianoConti={pianoConti}
+                    rows={pnDraftRows}
+                    setRows={setPnDraftRows}
                   />
                 </div>
               ) : null}

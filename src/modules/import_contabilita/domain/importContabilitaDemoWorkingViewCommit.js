@@ -42,6 +42,62 @@ export function resolveDemoIvaCreditAccount(pianoConti) {
  * @param {object|null|undefined} ivaCreditAccount
  * @returns {Array<object>}
  */
+export function parseNumberRobust(value) {
+  if (value === '' || value == null) return 0
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value * 100) / 100 : 0
+  }
+  
+  let str = String(value).trim()
+  if (!str) return 0
+
+  if (str.includes('.') && str.includes(',')) {
+    const dotIndex = str.indexOf('.')
+    const commaIndex = str.indexOf(',')
+    if (dotIndex < commaIndex) {
+      str = str.replace(/\./g, '').replace(',', '.')
+    } else {
+      str = str.replace(/,/g, '')
+    }
+  } else if (str.includes(',')) {
+    str = str.replace(',', '.')
+  }
+
+  const parsed = Number(str)
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0
+}
+
+export function normalizeImportWorkingViewAccountingRow(row) {
+  const accountId = String(row?.accountId || row?.conto_id || row?.contoId || '').trim()
+  const accountCode = String(row?.accountCode || row?.conto_codice || row?.contoCodice || '').trim()
+  const accountDescription = String(row?.accountDescription || row?.conto_descrizione || row?.contoDescrizione || '').trim()
+  const description = String(row?.description || row?.descrizione || row?.descrizione_riga || row?.note || '').trim()
+
+  const rawDare = row?.dare ?? row?.debit ?? row?.importoDare ?? row?.importo_dare ?? 0
+  const rawAvere = row?.avere ?? row?.credit ?? row?.importoAvere ?? row?.importo_avere ?? 0
+
+  const dareNum = parseNumberRobust(rawDare)
+  const avereNum = parseNumberRobust(rawAvere)
+
+  if (dareNum > 0 && avereNum > 0) {
+    throw new Error(`Riga contabile non valida: presenza di doppio importo Dare/Avere sulla stessa riga (conto: ${accountCode || accountId || 'non specificato'})`)
+  }
+
+  if (dareNum === 0 && avereNum === 0) {
+    throw new Error(`Riga contabile non valida: importo pari a zero sia in Dare che in Avere (conto: ${accountCode || accountId || 'non specificato'})`)
+  }
+
+  return {
+    lineNo: Number(row?.lineNo || row?.rowNumber || row?.riga || 1),
+    accountId,
+    accountCode,
+    accountDescription,
+    description,
+    debit: dareNum,
+    credit: avereNum,
+  }
+}
+
 export function buildWorkingViewPrimaNotaDraftRowsFromModel(model, ivaCreditAccount = null) {
   const imponibile = round2(model?.imponibile)
   const iva = round2(model?.iva)
@@ -53,23 +109,29 @@ export function buildWorkingViewPrimaNotaDraftRowsFromModel(model, ivaCreditAcco
     {
       lineNo: 1,
       accountId: normalizeText(costAccount?.id),
+      accountCode: normalizeText(costAccount?.codice || costAccount?.code),
+      accountDescription: normalizeText(costAccount?.descrizione || costAccount?.description),
       description: 'Imponibile su conto costi/ricavi',
-      debit: imponibile,
-      credit: 0,
+      dare: imponibile,
+      avere: 0,
     },
     {
       lineNo: 2,
       accountId: normalizeText(ivaCreditAccount?.id),
+      accountCode: normalizeText(ivaCreditAccount?.codice || ivaCreditAccount?.code),
+      accountDescription: normalizeText(ivaCreditAccount?.descrizione || ivaCreditAccount?.description),
       description: normalizeText(ivaCreditAccount?.descrizione) || 'IVA ns credito',
-      debit: iva,
-      credit: 0,
+      dare: iva,
+      avere: 0,
     },
     {
       lineNo: 3,
       accountId: normalizeText(counterpartyAccount?.id),
-      description: normalizeText(counterpartyAccount?.descrizione) || 'Fornitore',
-      debit: 0,
-      credit: totale,
+      accountCode: normalizeText(counterpartyAccount?.codice || counterpartyAccount?.code),
+      accountDescription: normalizeText(counterpartyAccount?.descrizione || counterpartyAccount?.description),
+      description: 'Fornitore',
+      dare: 0,
+      avere: totale,
     },
   ]
 }
@@ -213,6 +275,7 @@ export function buildDemoWorkingViewCommitBundle({
   sourceBatchId = '',
   activeWorkingViewModel = null,
   ivaDraftRows = [],
+  pnDraftRows = [],
   pianoConti = [],
   automationMeta = null,
   nowIso = new Date().toISOString(),
@@ -231,6 +294,16 @@ export function buildDemoWorkingViewCommitBundle({
   const parsedDocument = model.parsedDocument || {}
   const ivaCreditAccount = resolveDemoIvaCreditAccount(pianoConti)
 
+  const pnRowsToUse = Array.isArray(pnDraftRows) && pnDraftRows.length > 0
+    ? pnDraftRows
+    : buildWorkingViewPrimaNotaDraftRowsFromModel(model, ivaCreditAccount)
+
+  const mappedPnRows = pnRowsToUse.map((r, index) => {
+    const norm = normalizeImportWorkingViewAccountingRow(r)
+    console.log(`[TEST_LAB_COMMIT_ROWS_NORMALIZED] index=${index}, conto=${norm.accountCode || norm.accountId}, dareRaw=${r?.dare ?? r?.debit ?? r?.importoDare ?? r?.importo_dare ?? 0}, avereRaw=${r?.avere ?? r?.credit ?? r?.importoAvere ?? r?.importo_avere ?? 0}, dareNormalized=${norm.debit}, avereNormalized=${norm.credit}`)
+    return norm
+  })
+
   const builderInput = {
     societaId: normalizeText(societaId),
     operatorId: normalizeText(operatorId) || 'sistema',
@@ -242,7 +315,7 @@ export function buildDemoWorkingViewCommitBundle({
     counterpartyAccount: model.counterpartyAccount || null,
     costRevenueAccount: model.costRevenueAccount || null,
     causaleContabile: model.causale || null,
-    primaNotaDraftRows: buildWorkingViewPrimaNotaDraftRowsFromModel(model, ivaCreditAccount),
+    primaNotaDraftRows: mappedPnRows,
     ivaDraftRows: mapWorkingViewIvaDraftToCommitRows(ivaDraftRows),
     partitarioDraft: {
       enabled: true,
