@@ -270,4 +270,14 @@ test('24E-FIX-3 — commit bundle uses normalized rows matching tab UI', () => {
   assert.equal(mapped.payload.header.totals.totaleDare, 1220)
   assert.equal(mapped.payload.header.totals.totaleAvere, 1220)
   assert.equal(mapped.payload.header.totals.isBalanced, true)
+
+  // Assert dare/avere on canonical accounting rows
+  const canonicalRows = mapped.payload.accounting.rows
+  assert.equal(canonicalRows.length, 3)
+  assert.equal(canonicalRows[0].dare, 1000)
+  assert.equal(canonicalRows[0].avere, 0)
+  assert.equal(canonicalRows[1].dare, 220)
+  assert.equal(canonicalRows[1].avere, 0)
+  assert.equal(canonicalRows[2].dare, 0)
+  assert.equal(canonicalRows[2].avere, 1220)
 })

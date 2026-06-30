@@ -200,6 +200,8 @@ function normalizeAccountingRows(payload = {}) {
       description: text(row?.description || row?.descrizione || row?.descrizione_riga),
       debit,
       credit,
+      dare: debit,
+      avere: credit,
       amount: numberOrZero(row?.amount, debit, credit),
     }
   })

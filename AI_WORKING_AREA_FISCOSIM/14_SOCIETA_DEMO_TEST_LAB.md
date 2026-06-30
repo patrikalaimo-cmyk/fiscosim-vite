@@ -527,3 +527,32 @@ Il commit demo di TL-ACQ-01 veniva bloccato con l'errore: `motivo=accounting.row
 4. Controllare in console il log diagnostico `[TEST_LAB_COMMIT_ROWS_NORMALIZED]` e accertarsi che gli importi normalizzati siano corretti (es. `1000` e `220` per il Dare, `1220` per l'Avere).
 5. Verificare che la registrazione avvenga con successo ed aggiorni lo staging.
 
+
+## FASE 24E-FIX-4 — Verifica runtime reale Commit Demo e Blocco Ramo Sbagliato
+
+### Problema risolto
+Nonostante il fix precedente sugli importi della working view, a runtime il commit continuava a essere bloccato dal validatore con l'errore: `motivo=accounting.rows[0] deve avere un importo in dare o avere maggiore di zero`.
+
+### Causa
+Il mapper canonico `mapImportContabilitaCommitPayloadToCanonical` popolava la struttura delle righe Prima Nota inserendo solo i campi `debit` e `credit`. Tuttavia, il validatore contabile canonico `validateCanonicalAccountingPayload` esegue il controllo basandosi strettamente su `dare` e `avere`. Poiché questi ultimi campi mancavano nel payload mappato a canonical, essi venivano letti come `0`, causando il blocco di convalida.
+
+### Soluzione
+- **Allineamento dei campi nel Mapper**: modificata la normalizzazione interna del mapper canonico (`normalizeAccountingRows`) affinché assegni sia `debit` / `credit` sia `dare` / `avere` (cioè `dare: debit, avere: credit`).
+- **Verifica e log di allineamento runtime**: inseriti tre log espliciti prima della validazione all'interno di `handleDemoWorkingViewCommit` in `index.jsx`:
+  - `[TEST_LAB_COMMIT_ROWS_SOURCE]`
+  - `[TEST_LAB_COMMIT_ROWS_NORMALIZED]`
+  - `[TEST_LAB_COMMIT_CANONICAL_ACCOUNTING_ROWS]`
+  e inserito un controllo di allineamento robusto che confronta gli importi originali decodificati della working view e quelli del payload contabile finale, bloccando preventivamente con eccezione esplicita in caso di discrepanze.
+
+### File
+- `src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js`
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Selezionare società demo → Import → aprire working view di `TL-ACQ-01`.
+2. Cliccare su **Contabilizza documento demo** → confermare.
+3. Verificare in console la presenza dei tre log di tracciamento e che essi stampino gli importi corretti (1000/220/1220).
+4. Verificare che la validazione non sia più bloccata e che la Prima Nota venga registrata sul DB con successo.
+
+

@@ -12,8 +12,10 @@ import { filterCausaliIvaForDemoWorkingView } from './domain/importContabilitaDe
 import {
   buildDemoWorkingViewCommitBundle,
   formatDemoWorkingViewCommitReport,
+  parseNumberRobust,
 } from './domain/importContabilitaDemoWorkingViewCommit.js'
 import { sb } from '../../lib/supabase.js'
+import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
 import { ImportContabilitaAnagraficheDetail } from './components/ImportContabilitaAnagraficheDetail.jsx'
 import { ImportContabilitaKpiBar } from './components/ImportContabilitaKpiBar.jsx'
@@ -4640,6 +4642,39 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
           pianoConti,
         },
       })
+
+      // 3. Log rows source, normalized, and canonical for Test Lab
+      console.log('[TEST_LAB_COMMIT_ROWS_SOURCE]')
+      const sourceRows = pnDraftRows.length > 0 ? pnDraftRows : bundle.builderInput.primaNotaDraftRows
+      sourceRows.forEach((r, idx) => {
+        console.log(`riga ${idx} dare ${r?.dare ?? r?.debit ?? r?.importoDare ?? r?.importo_dare ?? 0} avere ${r?.avere ?? r?.credit ?? r?.importoAvere ?? r?.importo_avere ?? 0}`)
+      })
+
+      console.log('[TEST_LAB_COMMIT_ROWS_NORMALIZED]')
+      bundle.builderInput.primaNotaDraftRows.forEach((r, idx) => {
+        console.log(`riga ${idx} dare ${r?.debit ?? r?.dare ?? 0} avere ${r?.credit ?? r?.avere ?? 0}`)
+      })
+
+      console.log('[TEST_LAB_COMMIT_CANONICAL_ACCOUNTING_ROWS]')
+      const mapped = mapImportContabilitaCommitPayloadToCanonical(bundle.commitEnvelope)
+      mapped.payload.accounting.rows.forEach((r, idx) => {
+        console.log(`riga ${idx} dare ${r?.dare ?? r?.debit ?? 0} avere ${r?.avere ?? r?.credit ?? 0}`)
+      })
+
+      // Verification of alignment
+      const allAligned = mapped.payload.accounting.rows.every((r, idx) => {
+        const sourceR = sourceRows[idx]
+        if (!sourceR) return false
+        const sDare = parseNumberRobust(sourceR?.dare ?? sourceR?.debit ?? sourceR?.importoDare ?? sourceR?.importo_dare ?? 0)
+        const sAvere = parseNumberRobust(sourceR?.avere ?? sourceR?.credit ?? sourceR?.importoAvere ?? sourceR?.importo_avere ?? 0)
+        const mDare = Number(r?.dare ?? r?.debit ?? 0)
+        const mAvere = Number(r?.avere ?? r?.credit ?? 0)
+        return sDare === mDare && sAvere === mAvere
+      })
+
+      if (!allAligned) {
+        throw new Error(`Commit demo bloccato: righe Prima Nota non allineate alla working view. Campi ricevuti in riga 0: dare=${sourceRows[0]?.dare ?? sourceRows[0]?.debit}, avere=${sourceRows[0]?.avere ?? sourceRows[0]?.credit}`)
+      }
 
       if (!bundle.guard.allowed) {
         const blocker = bundle.guard.blockingIssues[0] || 'Commit demo 24E bloccato.'

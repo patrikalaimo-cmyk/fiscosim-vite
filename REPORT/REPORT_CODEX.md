@@ -10105,3 +10105,44 @@ pm run build -> Successo (429 moduli, 16s).
   3. Cliccare su **Contabilizza documento demo** → confermare.
   4. Verificare in console la traccia `[TEST_LAB_COMMIT_ROWS_NORMALIZED]` che mostra l'esatto mapping riga per riga (con i valori raw e normalizzati corretti).
   5. Verificare che la registrazione avvenga con successo sul database con importi Dare 1.000,00 e 220,00, ed Avere 1.220,00 (quadratura a 1.220,00).
+
+
+## PROMPT-24E-FIX-4-VERIFICA-RUNTIME-REALE-COMMIT-DEMO-E-BLOCCO-RAMO-SBAGLIATO
+
+- **Data**: 2026-06-30
+- **Causa runtime reale**:
+  - Il validator canonico `validateCanonicalAccountingPayload` si aspetta che le righe contabili contengano campi denominati `dare` e `avere` (come visto in `const dare = Number(row.dare ?? 0)`).
+  - Tuttavia, il mapper canonico `mapImportContabilitaCommitPayloadToCanonical.js` normalizzava le righe impostando `debit` e `credit` ma NON assegnando `dare` e `avere`.
+  - Questo portava il validatore a considerare `dare` e `avere` pari a `0`, bloccando con l'errore: `motivo=accounting.rows[0] deve avere un importo in dare o avere maggiore di zero`.
+- **Percorso reale del click**:
+  - Bottone "Contabilizza documento demo" (`ImportContabilitaWorkingView.jsx`) -> click -> window.confirm -> calls `onCommitDemoWorkingView` -> triggers `handleDemoWorkingViewCommit` (`index.jsx`) -> calls `buildDemoWorkingViewCommitBundle` -> calls `buildContabilitaPayloadFromImportRow` -> calls `buildImportContabilitaCommitPayload` -> returns envelope -> `runCommitWorkflow` -> `mapImportContabilitaCommitPayloadToCanonical` -> `validateCanonicalAccountingPayload`.
+- **Ramo legacy eliminato o corretto**:
+  - Corretto il mapper canonico `mapImportContabilitaCommitPayloadToCanonical.js` per esportare sia `debit`/`credit` sia `dare`/`avere` nel payload finale.
+  - Prima di procedere con la validazione in `handleDemoWorkingViewCommit`, viene ora effettuata una verifica di allineamento che confronta gli importi sorgente decodificati della working view e quelli del payload canonico, sollevando un errore bloccante in caso di discrepanze.
+- **Valori normalizzati riga per riga**:
+  - Stampa a console garantita dei log:
+    - `[TEST_LAB_COMMIT_ROWS_SOURCE]`
+    - `[TEST_LAB_COMMIT_ROWS_NORMALIZED]`
+    - `[TEST_LAB_COMMIT_CANONICAL_ACCOUNTING_ROWS]`
+  - Righe TL-ACQ-01:
+    - Riga 0: Dare 1000, Avere 0
+    - Riga 1: Dare 220, Avere 0
+    - Riga 2: Dare 0, Avere 1220
+- **File modificati**:
+  - `src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js`
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche (il commit avviene solo su selezione della singola riga demo e conferma dell'utente)
+  - **0** modifiche a società reali (recinto demo preservato)
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 15.02s)
+  - Unit Test TestLab / Import: 🟢 156 / 156 passati (aggiunti test di convalida dare/avere in payload canonico)
+- **Cosa deve testare l'utente**:
+  1. Selezionare società demo, aprire la working view di `TL-ACQ-01`.
+  2. Modificare facoltativamente gli importi scrivendo valori stringa in formato italiano (es. `"1.000,00"` e `"220,00"`).
+  3. Fare clic su **Contabilizza documento demo** → confermare.
+  4. Verificare in console la presenza dei tre nuovi log di tracciamento (`[TEST_LAB_COMMIT_ROWS_SOURCE]`, `[TEST_LAB_COMMIT_ROWS_NORMALIZED]`, `[TEST_LAB_COMMIT_CANONICAL_ACCOUNTING_ROWS]`) e che gli importi corrispondano esattamente (1000/220/1220).
+  5. Verificare che la registrazione avvenga con successo sul database.
+
