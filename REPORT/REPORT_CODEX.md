@@ -10003,3 +10003,40 @@ pm run build -> Successo (429 moduli, 16s).
   5. Tentare >1 riga selezionata → commit bloccato
   6. Società reale → commit bloccato
 
+
+## PROMPT-24E-FIX-1-DEBUG-COMMIT-DEMO-SILENZIOSO-WORKING-VIEW
+
+- **Data**: 2026-06-30
+- **Causa click silenzioso**: `buildDemoWorkingViewCommitBundle` veniva invocato all'esterno del blocco `try/catch` in `handleDemoWorkingViewCommit`. Qualsiasi eccezione lanciata durante la preparazione del bundle (ad es. per incongruenze di input, formati dati o lookup) interrompeva l'esecuzione in modo silente, non loggando nulla in console e lasciando lo spinner o lo stato UI invariato. Inoltre, in caso di errori di convalida interni a `runCommitWorkflow` o `persistPrimaNotaDraft`, i messaggi di blocco venivano catturati ma non stampati in console con log di sistema tracciabili.
+- **Soluzione applicata**:
+  - **Try-Catch allargato**: l'intera funzione `handleDemoWorkingViewCommit` in `index.jsx` è stata inserita in un blocco `try/catch/finally` unificato, garantendo che lo spinner `demoCommitBusy` venga sempre resettato a `false` ed eventuali errori imprevisti siano catturati ed esposti come banner d'errore visibili.
+  - **Log di diagnostica tracciabili**:
+    - log di inizio con tag `[TEST_LAB_COMMIT_START]`.
+    - in caso di blocco da guardie o validazioni, viene loggato `[TEST_LAB_COMMIT_BLOCKED]` in console con dettagli (documento, società, motivo specifico) e mostrato un banner di warning.
+    - in caso di eccezioni catch, viene loggato `[TEST_LAB_COMMIT_ERROR]` in console e mostrato un banner di errore.
+  - **Stato UI Commit**:
+    - aggiunta la prop `isCommittingDemoDocument` impostata al valore di `demoCommitBusy` e passata a `ImportContabilitaWorkingView`.
+    - durante il commit, il bottone in `ImportContabilitaWorkingView` viene disabilitato e il suo testo muta in `"Contabilizzazione demo in corso..."`.
+  - **Messaggio di successo completo**:
+    - mostra l'esito della contabilizzazione riportando ID prima nota, numero righe, righe registro IVA e partitario creati.
+  - **Aggiornamento di stato**:
+    - dopo il successo del commit reale (`runCommitWorkflow`), viene aggiornata nello staging solo la riga del documento contabilizzato (`state: 'committed'`), preservando le altre 9 righe.
+- **File modificati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Conferme sicurezza**:
+  - **0** contabilizzazioni automatiche
+  - **0** documenti aggiuntivi generati
+  - **0** modifiche a società reali (recinto demo preservato)
+  - **0** delete/pulizia/migration/env/auth/RLS
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 9.61s)
+  - Unit Test TestLab / Import: 🟢 152 / 152 passati
+- **Cosa deve testare l'utente**:
+  1. Accedere alla società demo `__TEST__FISCOSIM_DEMO` → aprire la working view del documento `TL-ACQ-01`.
+  2. Cliccare su **Contabilizza documento demo** → confermare nel prompt `window.confirm`.
+  3. Verificare che durante il salvataggio il bottone diventi disabilitato con dicitura `"Contabilizzazione demo in corso..."`.
+  4. All'esito positivo, verificare la presenza del pop-up informativo di successo con i conteggi di righe inserite, e verificare che lo stato della riga passi a `committed` nello staging.
+  5. In caso di errore o blocco (ad es. togliendo causale o conti necessari), verificare la comparsa del banner di errore/warning e la presenza dei log `[TEST_LAB_COMMIT_BLOCKED]` / `[TEST_LAB_COMMIT_ERROR]` in console.

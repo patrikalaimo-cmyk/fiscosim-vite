@@ -307,6 +307,7 @@ export function ImportContabilitaWorkingView({
   isDemoSocieta = false,
   onCommitDemoWorkingView,
   commitBusy = false,
+  isCommittingDemoDocument = false,
   demoCommitReport = null,
   getCounterpartyDisplayInfo,
   onPlaceholderAction,
@@ -859,7 +860,7 @@ export function ImportContabilitaWorkingView({
                 </button>
                 <button
                   type="button"
-                  disabled={!isDemoSocieta || commitBusy || mergedWorkingViewChecks.status !== 'ok'}
+                  disabled={!isDemoSocieta || commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok'}
                   title={isDemoSocieta
                     ? (mergedWorkingViewChecks.status === 'ok'
                       ? 'Contabilizza in DB solo questo documento demo (24E)'
@@ -873,12 +874,12 @@ export function ImportContabilitaWorkingView({
                   }}
                   style={{
                     ...headerSuccessActionStyle,
-                    opacity: (!isDemoSocieta || commitBusy || mergedWorkingViewChecks.status !== 'ok') ? 0.45 : 1,
-                    cursor: (!isDemoSocieta || commitBusy || mergedWorkingViewChecks.status !== 'ok') ? 'not-allowed' : 'pointer',
+                    opacity: (!isDemoSocieta || commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok') ? 0.45 : 1,
+                    cursor: (!isDemoSocieta || commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok') ? 'not-allowed' : 'pointer',
                   }}
                 >
                   ⟲
-                  <span>{commitBusy ? 'Contabilizzazione...' : 'Contabilizza documento demo'}</span>
+                  <span>{(commitBusy || isCommittingDemoDocument) ? 'Contabilizzazione demo in corso...' : 'Contabilizza documento demo'}</span>
                 </button>
                 <button type="button" onClick={() => onPlaceholderAction('Salva bozza')} style={headerGhostActionStyle}>
                   <span>◫</span>

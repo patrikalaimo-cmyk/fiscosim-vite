@@ -4611,51 +4611,67 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const handleDemoWorkingViewCommit = async ({ ivaDraftRows = [] } = {}) => {
     if (demoCommitBusy) return
 
-    const bundle = buildDemoWorkingViewCommitBundle({
-      societaId: selectedSocietaId,
-      operatorId: 'test_lab_import_24e',
-      sourceBatchId: result?.batchId || result?.report?.batchId || '',
-      activeWorkingViewModel,
-      ivaDraftRows,
-      pianoConti,
-      automationMeta: activeWorkingViewModel?.automationMeta || null,
-      guardParams: {
-        societa: selectedSocietaForDemo,
-        selectedRowIds,
-        workingViewOpen,
-        workingViewRowId,
-        activeWorkingViewModel,
-        baseWorkingViewChecks: activeWorkingViewChecks,
-        ivaDraftRows,
-        pianoConti,
-      },
-    })
-
-    if (!bundle.guard.allowed) {
-      showActionBanner('warning', bundle.guard.blockingIssues[0] || 'Commit demo 24E bloccato.')
-      return
-    }
-
-    const payloadBlockers = [
-      ...(Array.isArray(bundle.packaged.validation?.blockers) ? bundle.packaged.validation.blockers : []),
-      ...(Array.isArray(bundle.directValidation?.blockers) ? bundle.directValidation.blockers : []),
-    ]
-    if (payloadBlockers.length) {
-      showActionBanner('warning', payloadBlockers[0])
-      return
-    }
-
     setDemoCommitBusy(true)
     setDemoCommitReport(null)
+
     try {
+      console.log('[TEST_LAB_COMMIT_START]', {
+        documento: activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId,
+        societaId: selectedSocietaId,
+      })
+
+      const bundle = buildDemoWorkingViewCommitBundle({
+        societaId: selectedSocietaId,
+        operatorId: 'test_lab_import_24e',
+        sourceBatchId: result?.batchId || result?.report?.batchId || '',
+        activeWorkingViewModel,
+        ivaDraftRows,
+        pianoConti,
+        automationMeta: activeWorkingViewModel?.automationMeta || null,
+        guardParams: {
+          societa: selectedSocietaForDemo,
+          selectedRowIds,
+          workingViewOpen,
+          workingViewRowId,
+          activeWorkingViewModel,
+          baseWorkingViewChecks: activeWorkingViewChecks,
+          ivaDraftRows,
+          pianoConti,
+        },
+      })
+
+      if (!bundle.guard.allowed) {
+        const blocker = bundle.guard.blockingIssues[0] || 'Commit demo 24E bloccato.'
+        console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
+        showActionBanner('warning', blocker)
+        setDemoCommitBusy(false)
+        return
+      }
+
+      const payloadBlockers = [
+        ...(Array.isArray(bundle.packaged.validation?.blockers) ? bundle.packaged.validation.blockers : []),
+        ...(Array.isArray(bundle.directValidation?.blockers) ? bundle.directValidation.blockers : []),
+      ]
+      if (payloadBlockers.length) {
+        const blocker = payloadBlockers[0]
+        console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
+        showActionBanner('warning', blocker)
+        setDemoCommitBusy(false)
+        return
+      }
+
       const commitResult = await runCommitWorkflow(bundle.commitEnvelope, { db: sb })
       if (!commitResult.success) {
+        const blocker = commitResult.blockingReasons?.[0] || 'Commit demo fallito.'
+        console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
+        
         const failReport = {
           ok: false,
           blockingReasons: commitResult.blockingReasons || [],
         }
         setDemoCommitReport(failReport)
-        showActionBanner('error', commitResult.blockingReasons?.[0] || 'Commit demo fallito.')
+        showActionBanner('error', blocker)
+        setDemoCommitBusy(false)
         return
       }
 
@@ -4683,7 +4699,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       )
       window.alert(reportText)
     } catch (err) {
-      showActionBanner('error', `Commit demo 24E: ${err?.message || err}`)
+      console.error(`[TEST_LAB_COMMIT_ERROR] Errore imprevisto nel commit: ${err?.message || err}`)
+      showActionBanner('error', `Commit demo 24E fallito: ${err?.message || err}`)
     } finally {
       setDemoCommitBusy(false)
     }
@@ -5347,6 +5364,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         isDemoSocieta={isSelectedDemoSocieta}
         onCommitDemoWorkingView={handleDemoWorkingViewCommit}
         commitBusy={demoCommitBusy}
+        isCommittingDemoDocument={demoCommitBusy}
         demoCommitReport={demoCommitReport}
         getCounterpartyDisplayInfo={getCounterpartyDisplayInfo}
         onPlaceholderAction={onPlaceholderAction}

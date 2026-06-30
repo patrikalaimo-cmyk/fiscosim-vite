@@ -4,6 +4,8 @@ import {
   buildWorkingViewPrimaNotaDraftRowsFromModel,
   evaluateDemo24EWorkingViewCommitGuards,
   buildDemoWorkingViewCommitBundle,
+  formatDemoWorkingViewCommitReport,
+  buildDemoWorkingViewCommitConfirmMessage,
 } from '../domain/importContabilitaDemoWorkingViewCommit.js'
 
 const DEMO_SOCIETA = { id: 'demo-1', codice: '__TEST__FISCOSIM_DEMO', denominazione: 'FiscoSim Demo Test Lab SRL' }
@@ -135,4 +137,55 @@ test('24E — onStartAccounting non invoca runCommitWorkflow', async () => {
   assert.doesNotMatch(importSource, /onStartAccounting[\s\S]{0,1200}runCommitWorkflow/)
   assert.match(importSource, /handleDemoWorkingViewCommit/)
   assert.match(importSource, /runCommitWorkflow\(bundle\.commitEnvelope/)
+})
+
+test('24E — formatDemoWorkingViewCommitReport include primaNotaId su successo', () => {
+  const mockResult = {
+    success: true,
+    primaNotaId: 'pn-999',
+    numeroRighe: 3,
+    numeroRigheIva: 1,
+    partitaFornitoreCount: 1,
+    totaleDare: 1220,
+    totaleAvere: 1220,
+    status: 'processed',
+  }
+  const report = formatDemoWorkingViewCommitReport(mockResult, { numeroDocumento: 'TL-ACQ-01', unselectedCount: 9 })
+  assert.match(report, /pn-999/)
+  assert.match(report, /TL-ACQ-01/)
+  assert.match(report, /9 escluse/)
+})
+
+test('24E — formatDemoWorkingViewCommitReport riporta errore su fallimento', () => {
+  const mockResult = {
+    success: false,
+    blockingReasons: ['Conto IVA split payment non configurato'],
+  }
+  const report = formatDemoWorkingViewCommitReport(mockResult)
+  assert.match(report, /fallito/)
+  assert.match(report, /Conto IVA split payment non configurato/)
+})
+
+test('24E — confirm message contiene dettagli essenziali', () => {
+  const msg = buildDemoWorkingViewCommitConfirmMessage(TL_ACQ_MODEL, [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaLabel: 'TESTLAB22 · 22%' }])
+  assert.match(msg, /TL-ACQ-01/)
+  assert.match(msg, /Demo 22 S.r.l./)
+  assert.match(msg, /1000.00/)
+  assert.match(msg, /TESTLAB22/)
+})
+
+test('24E — evaluateDemo24EWorkingViewCommitGuards blocca se mancano parametri', () => {
+  const modelNoCosto = { ...TL_ACQ_MODEL, costRevenueAccount: null }
+  const guard = evaluateDemo24EWorkingViewCommitGuards({
+    societa: DEMO_SOCIETA,
+    selectedRowIds: new Set(['row-1']),
+    workingViewOpen: true,
+    workingViewRowId: 'row-1',
+    activeWorkingViewModel: modelNoCosto,
+    baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+    ivaDraftRows: [{ imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+    pianoConti: PIANO_CONTI,
+  })
+  assert.equal(guard.allowed, false)
+  assert.ok(guard.blockingIssues.some((item) => /costo/i.test(item)))
 })

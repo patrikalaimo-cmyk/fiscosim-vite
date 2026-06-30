@@ -437,3 +437,37 @@ Import working table → selezione **1** riga pronta → working view → valida
 2. Contabilizza documento demo → conferma → verifica DB (PN, IVA, partitario)
 3. TL-ACQ-02…10 non contabilizzate
 4. >1 riga o società reale → blocco
+
+
+## FASE 24E-FIX-1 — Debug commit demo silenzioso working view
+
+### Problema risolto
+Facendo click su "Contabilizza documento demo" e confermando, la contabilizzazione falliva in modo completamente silente, senza mostrare successi, errori o banner visibili, e lasciando lo spinner o la UI in stato di attesa indefinito.
+
+### Causa
+Qualsiasi errore o eccezione lanciata all'interno di `buildDemoWorkingViewCommitBundle` durante l'assemblaggio del payload (fuori dal vecchio try-catch di `handleDemoWorkingViewCommit`) bloccava in modo definitivo l'esecuzione. Inoltre, in caso di errori di convalida interni a `runCommitWorkflow`, i messaggi di blocco venivano catturati ma non stampati in console con log di sistema tracciabili.
+
+### Soluzione
+- **Try-Catch allargato e robusto**: l'intero flusso di `handleDemoWorkingViewCommit` in `index.jsx` è stato incapsulato in un blocco `try/catch/finally` globale. Lo spinner `demoCommitBusy` viene sempre resettato a `false` nel blocco `finally`, impedendo stati di pending infinito.
+- **Log di diagnostica tracciabili**:
+  - log di inizio con tag `[TEST_LAB_COMMIT_START]`.
+  - log in caso di blocco da guardie o validazioni con tag `[TEST_LAB_COMMIT_BLOCKED]` (con dettagli su documento, società, motivo).
+  - log in caso di eccezioni catch con tag `[TEST_LAB_COMMIT_ERROR]`.
+- **Rafforzamento stato UI**:
+  - passata la prop `isCommittingDemoDocument` impostata al valore di `demoCommitBusy` a `ImportContabilitaWorkingView`.
+  - durante il caricamento/commit, il bottone in `ImportContabilitaWorkingView` viene disabilitato ed il suo testo mostra `"Contabilizzazione demo in corso..."`.
+- **Successo e messaggi completi**:
+  - il pop-up alert e il banner di successo espongono l'esito reale della transazione contabile in DB (ID prima nota, numero righe, righe registro IVA e partitario creati).
+  - nello staging del modulo Import, solo la riga del documento contabilizzato viene aggiornata come `committed` (le restanti 9 rimangono invariate).
+
+### File
+- `src/modules/import_contabilita/index.jsx`
+- `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Accedere alla società demo `__TEST__FISCOSIM_DEMO` → aprire la working view del documento `TL-ACQ-01`.
+2. Cliccare su **Contabilizza documento demo** → confermare nel prompt `window.confirm`.
+3. Verificare che durante il salvataggio il bottone diventi disabilitato con dicitura `"Contabilizzazione demo in corso..."`.
+4. All'esito positivo, verificare la presenza del pop-up informativo di successo con i conteggi di righe inserite, e verificare che lo stato della riga passi a `committed` nello staging.
+5. In caso di errore o blocco (ad es. togliendo causale o conti necessari), verificare la comparsa del banner di errore/warning e la presenza dei log `[TEST_LAB_COMMIT_BLOCKED]` / `[TEST_LAB_COMMIT_ERROR]` in console.
