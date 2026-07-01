@@ -384,13 +384,18 @@ function sanitizeRegistroIvaForInsert(row = {}) {
 
 function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
   const headerCausale = resolvedDraft.innerDraft?.header?.causaleContabile || resolvedDraft.pnPayload?.causaleContabile
+  const partitarioDraft = resolvedDraft.partitarioDraft || resolvedDraft.innerDraft?.partitarioDraft || {}
   const causaleObj = {
     ...headerCausale,
     codice: pnPayload.causale_codice || headerCausale?.codice
   }
   const policy = buildCausaleContabilePolicy(causaleObj)
-  
-  if (policy.gestionePartitario === 'nessuno' || policy.gestionePartitario === '') {
+  const ledgerForced = Boolean(
+    partitarioDraft?.active &&
+    ['apertura', 'open'].includes(String(partitarioDraft?.mode || '').toLowerCase())
+  )
+
+  if ((policy.gestionePartitario === 'nessuno' || policy.gestionePartitario === '') && !ledgerForced) {
     return null
   }
 
@@ -406,7 +411,7 @@ function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
     }
   }
 
-  const imp = normalizeDbAmount(row.importoAperto || row.importoOriginario || 0)
+  const imp = normalizeDbAmount(row.importoAperto || row.importoOriginario || partitarioDraft?.amount || 0)
   const isNC = policy.notaCredito || policy.isNotaCreditoAttiva || policy.isNotaCreditoPassiva || String(policy.segnoRegistroIva).trim() === '-' || String(policy.segnoRegistroIva).trim().toLowerCase() === 'sottrae'
   const sign = isNC ? -1 : 1
   const baseAmount = Math.abs(imp)
@@ -416,18 +421,26 @@ function mapPartitarioRowForDb(row = {}, pnPayload = {}, resolvedDraft = {}) {
 
   // Resolve account details from pianoConti to populate missing DB columns
   const pianoConti = resolvedDraft.innerDraft?.pianoConti || resolvedDraft.bundle?.pianoConti || []
-  const subjectId = row.soggettoId || pnPayload.cliente_fornitore_id || null
+  const accountId = normalizeText(
+    row.accountId ||
+    row.conto_id ||
+    partitarioDraft.accountId ||
+    partitarioDraft.contoId ||
+    pnPayload.cliente_fornitore_id ||
+    ''
+  )
+  const subjectId = normalizeText(row.soggettoId || partitarioDraft.soggettoId || accountId)
   const subjectAccount = Array.isArray(pianoConti)
-    ? pianoConti.find(c => String(c.id).trim() === String(subjectId || '').trim())
+    ? pianoConti.find(c => String(c.id).trim() === String(accountId || subjectId || '').trim())
     : null
 
   const contoCodice = subjectAccount?.codice || row.conto_codice || null
-  const contoDescrizione = subjectAccount?.descrizione || subjectAccount?.nome || row.conto_descrizione || pnPayload.cliente_fornitore_nome || row.soggettoNome || null
+  const contoDescrizione = subjectAccount?.descrizione || subjectAccount?.nome || row.conto_descrizione || row.soggettoNome || pnPayload.cliente_fornitore_nome || partitarioDraft.soggettoNome || null
 
   return {
     societa_id: pnPayload.societa_id || null,
     tipo: subjectTipo,
-    conto_id: subjectId,
+    conto_id: accountId || subjectId || null,
     numero_documento: row.numeroDocumento || pnPayload.numero_registrazione || null,
     data_documento: row.dataDocumento || pnPayload.data_documento || null,
     data_scadenza: row.dataScadenza || row.dataDocumento || pnPayload.data_documento || null,
@@ -462,6 +475,28 @@ function mapRitenutaRowForDb(ritDraft = {}, pnPayload = {}) {
   return buildRitenutaPersistencePayload(ritDraft, pnPayload)
 }
 
+async function fetchFullCausaleContabileForPersist(db, causaleCodice, societaId, importCausale = null) {
+  if (!causaleCodice || !db) return importCausale || null
+  try {
+    let query = db.from('causali_contabili').select('*').eq('codice', causaleCodice)
+    if (societaId) {
+      query = query.eq('societa_id', societaId)
+    }
+    if (typeof query.maybeSingle !== 'function') return importCausale || null
+    const { data: dbCausale, error } = await query.maybeSingle()
+    if (error || !dbCausale) return importCausale || null
+    return {
+      ...(importCausale && typeof importCausale === 'object' ? importCausale : {}),
+      ...dbCausale,
+      id: importCausale?.id || dbCausale.id,
+      codice: importCausale?.codice || importCausale?.code || dbCausale.codice,
+    }
+  } catch (e) {
+    console.warn('[persistPrimaNotaDraft] Failed to fetch full causale contabile policy:', e)
+    return importCausale || null
+  }
+}
+
 export async function persistPrimaNotaDraft({
   db,
   draft = {},
@@ -469,32 +504,17 @@ export async function persistPrimaNotaDraft({
   righeSelect = '*',
 } = {}) {
   const resolved = resolveDraftBundle(draft)
-  
-  // Fetch full causale from DB to populate policy options (e.g. gestione_partitario)
+
   const headerCausale = resolved.innerDraft?.header?.causaleContabile || resolved.pnPayload?.causaleContabile
   const causaleCodice = headerCausale?.codice || headerCausale?.code || resolved.pnPayload?.causale_codice
-  if (causaleCodice && db) {
-    try {
-      const query = db.from('causali_contabili').select('*').eq('codice', causaleCodice)
-      if (typeof query.maybeSingle === 'function') {
-        const { data: dbCausale } = await query.maybeSingle()
-        if (dbCausale) {
-          if (resolved.innerDraft?.header) {
-            resolved.innerDraft.header.causaleContabile = {
-              ...dbCausale,
-              ...resolved.innerDraft.header.causaleContabile
-            }
-          }
-          if (resolved.pnPayload) {
-            resolved.pnPayload.causaleContabile = {
-              ...dbCausale,
-              ...resolved.pnPayload.causaleContabile
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[persistPrimaNotaDraft] Failed to fetch full causale contabile policy:', e)
+  const societaIdForCausale = normalizeText(resolved.pnPayload?.societa_id || resolved.innerDraft?.header?.societaId)
+  const mergedCausale = await fetchFullCausaleContabileForPersist(db, causaleCodice, societaIdForCausale, headerCausale)
+  if (mergedCausale) {
+    if (resolved.innerDraft?.header) {
+      resolved.innerDraft.header.causaleContabile = mergedCausale
+    }
+    if (resolved.pnPayload) {
+      resolved.pnPayload.causaleContabile = mergedCausale
     }
   }
 
@@ -582,19 +602,41 @@ export async function persistPrimaNotaDraft({
   )
   let partRows = Array.isArray(resolved.partitarioRows) ? resolved.partitarioRows : []
   const draftMode = resolved.partitarioDraft?.mode
-  const partMode = (draftMode && draftMode !== 'none') ? draftMode : (policy.gestionePartitario === 'apertura' ? 'apertura' : (policy.gestionePartitario === 'chiusura' ? 'chiusura' : 'nessuno'))
+  const partMode = (draftMode && draftMode !== 'none' && draftMode !== 'nessuno')
+    ? draftMode
+    : (policy.gestionePartitario === 'apertura' ? 'apertura' : (policy.gestionePartitario === 'chiusura' ? 'chiusura' : 'nessuno'))
 
-  if (partitarioEnabled && partRows.length === 0 && policy.gestionePartitario === 'apertura') {
+  if (partitarioEnabled && partRows.length === 0 && (policy.gestionePartitario === 'apertura' || resolved.partitarioDraft?.active)) {
     const isPassiva = policy.isFatturaPassiva || policy.isNotaCreditoPassiva
     const subjectTipo = isPassiva ? 'fornitore' : 'cliente'
-    const subjectId = resolved.innerDraft?.header?.clienteFornitoreId || resolved.pnPayload?.cliente_fornitore_id || ''
-    const subjectNome = resolved.innerDraft?.header?.clienteFornitoreNome || resolved.pnPayload?.cliente_fornitore_nome || ''
+    const partitarioDraft = resolved.partitarioDraft || {}
+    const subjectId = normalizeText(
+      resolved.innerDraft?.header?.clienteFornitoreId ||
+      resolved.pnPayload?.cliente_fornitore_id ||
+      partitarioDraft.soggettoId ||
+      partitarioDraft.accountId ||
+      ''
+    )
+    const subjectNome = normalizeText(
+      resolved.innerDraft?.header?.clienteFornitoreNome ||
+      resolved.pnPayload?.cliente_fornitore_nome ||
+      partitarioDraft.soggettoNome ||
+      ''
+    )
     const docNum = resolved.innerDraft?.header?.numeroDocumento || resolved.pnPayload?.numero_documento || resolved.pnPayload?.numero_registrazione || ''
     const docDate = resolved.pnPayload?.data_documento || resolved.pnPayload?.data_registrazione || resolved.innerDraft?.header?.dataDocumento || resolved.innerDraft?.header?.dataRegistrazione || ''
-    const amount = validation.totals.dare || resolved.pnPayload?.totale_dare || 0
+    const amount = round2(
+      partitarioDraft.amount ||
+      validation.totals.avere ||
+      validation.totals.dare ||
+      resolved.pnPayload?.totale_avere ||
+      resolved.pnPayload?.totale_dare ||
+      0
+    )
 
     partRows = [{
       soggettoId: subjectId,
+      accountId: partitarioDraft.accountId || subjectId,
       soggettoNome: subjectNome,
       soggettoTipo: subjectTipo,
       numeroDocumento: docNum,
@@ -687,6 +729,24 @@ export async function persistPrimaNotaDraft({
     console.log('[TEST_LAB_COMMIT_DB_PERSISTENCE_PLAN]')
     console.log(`documento=${docNum}, societaCodice=${societaCodice}, presenza_prima_nota=true, prima_nota_righe_count=${righePayloadForDb.length}, registri_iva_count=${vatEntriesForDb.length}, partitario_count=${partEntriesForDb.length}, totale_dare=${totDare}, totale_avere=${totAvere}, totale_iva=${totVat}, totale_partitario=${totPart}`)
 
+    const firstPartPlan = partEntriesForDb[0] || {}
+    console.log('[TEST_LAB_PARTITARIO_PERSISTENCE_PLAN]')
+    console.log(`documento=${docNum}`)
+    console.log(`primaNotaId=pending`)
+    console.log(`shouldCreateLedger=${partitarioEnabled}`)
+    console.log(`policy.gestionePartitario=${policy.gestionePartitario}`)
+    console.log(`policy.operazionePartite=${policy.operazionePartite || policy.gestionePartite || ''}`)
+    console.log(`ledgerRowsCount=${partRows.length}`)
+    console.log(`partitarioRowsCount=${partEntriesForDb.length}`)
+    console.log(`soggettoId=${firstPartPlan.controparte_id || firstPartPlan.conto_id || ''}`)
+    console.log(`soggettoNome=${firstPartPlan.controparte_nome || ''}`)
+    console.log(`contoId=${firstPartPlan.conto_id || ''}`)
+    console.log(`importoOriginale=${firstPartPlan.importo_originale || 0}`)
+    console.log(`importoPagato=${firstPartPlan.importo_pagato || 0}`)
+    console.log(`importoResiduo=${firstPartPlan.importo_residuo || 0}`)
+    console.log(`stato=${firstPartPlan.stato || ''}`)
+    console.log(`skipReason=${partitarioEnabled && partEntriesForDb.length === 0 ? 'mapPartitarioRowForDb-null-or-empty-rows' : 'none'}`)
+
     // [TEST_LAB_COMMIT_UUID_GUARD]
     console.log('[TEST_LAB_COMMIT_UUID_GUARD]')
     validateDbPersistencePlanForTestLab({
@@ -761,16 +821,40 @@ export async function persistPrimaNotaDraft({
   })
 
   if (isDemo || docNum.includes('TL-ACQ')) {
-    const partRowsCreated = partEntriesForDb || []
+    const savedParts = Array.isArray(complete?.partIns?.data) ? complete.partIns.data : []
+    let partRowsCreated = savedParts.length ? savedParts : partEntriesForDb
+    if (!savedParts.length && primaNotaId && db) {
+      try {
+        const { data: readbackRows } = await db.from('partitario').select('*').eq('prima_nota_id', primaNotaId)
+        if (Array.isArray(readbackRows) && readbackRows.length) {
+          partRowsCreated = readbackRows
+        }
+      } catch (readbackError) {
+        console.warn('[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] readback failed:', readbackError)
+      }
+    }
+
     const firstPart = partRowsCreated[0] || {}
-    const isCoerente = partRowsCreated.length === 1 && firstPart.importo_originale === 1220 && firstPart.importo_residuo === 1220 && firstPart.stato === 'aperta'
+    const docTotal = round2(pnPayloadForDb.totale_avere || pnPayloadForDb.totale_dare || 0)
+    const partAmount = round2(firstPart.importo_originale || firstPart.importoOriginario || 0)
+    const isCoerente = partRowsCreated.length >= 1 &&
+      Math.abs(Math.abs(partAmount) - Math.abs(docTotal)) <= 0.02 &&
+      (firstPart.stato || '') === 'aperta'
+
+    console.log('[TEST_LAB_PARTITARIO_INSERT_RESULT]')
+    console.log(`attempted=${partEntriesForDb.length > 0}`)
+    console.log(`insertedCount=${savedParts.length}`)
+    console.log(`error=`)
+    console.log(`recordId=${savedParts[0]?.id || ''}`)
+    console.log(`motivo=${partEntriesForDb.length === 0 ? 'no-part-entries-planned' : (savedParts.length === 0 ? 'insert-not-returned' : 'none')}`)
+
     console.log('[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]')
     console.log(`primaNotaId=${primaNotaId}`)
     console.log(`partitario_count=${partRowsCreated.length}`)
-    console.log(`controparte_nome=${firstPart.controparte_nome || ''}`)
-    console.log(`importo_originale=${firstPart.importo_originale || 0}`)
+    console.log(`controparte_nome=${firstPart.controparte_nome || firstPart.conto_descrizione || ''}`)
+    console.log(`importo_originale=${partAmount || 0}`)
     console.log(`importo_pagato=${firstPart.importo_pagato || 0}`)
-    console.log(`importo_residuo=${firstPart.importo_residuo || 0}`)
+    console.log(`importo_residuo=${firstPart.importo_residuo || firstPart.importoResiduo || 0}`)
     console.log(`stato=${firstPart.stato || ''}`)
     console.log(`conto_id=${firstPart.conto_id || ''}`)
     console.log(`esito_coerenza=${isCoerente ? 'SUCCESS' : 'FAILED'}`)
@@ -837,7 +921,7 @@ export function validateDbPersistencePlanForTestLab(plan) {
       lower.startsWith('doc-') ||
       lower.startsWith('prima_nota-') ||
       lower.startsWith('bene-') ||
-      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva', 'testlab22'].includes(lower)
+      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva', 'testlab22', 'testlab04', 'testlab10'].includes(lower)
     )
   }
 

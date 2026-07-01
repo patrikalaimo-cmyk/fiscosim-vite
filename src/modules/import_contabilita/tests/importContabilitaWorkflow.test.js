@@ -215,18 +215,35 @@ export class MockDbClient {
       return { data: this.responses.prima_nota, error: null }
     }
     if (table === 'causali_contabili') {
+      const societaId = filters?.societa_id
+      const codice = filters?.codice
+      if (societaId === 'wrong-societa' && codice === 'FF') {
+        return {
+          data: {
+            id: 'caus-ff-wrong',
+            societa_id: societaId,
+            codice: 'FF',
+            gestione_partite: 'ignora',
+            operazione_partite: '',
+            tipo_causale: 'docivanormale',
+          },
+          error: null,
+        }
+      }
       return {
         data: {
           id: 'caus-ff',
-          codice: 'FF',
+          societa_id: societaId || 'demo-societa',
+          codice: codice || 'FF',
           descrizione: 'Fattura passiva',
-          tipo_causale: 'docivanormale',
-          gestione_partitario: 'apertura',
-          operazione_partite: 'apre',
-          registro_iva: 'acquisti',
-          segno_registro_iva: '+'
+          tipo_causale: 'Doc. IVA normale',
+          gestione_partite: 'ignora',
+          operazione_partite: 'Apre',
+          codice_registro_iva: '01',
+          segno_registro_iva: 'Somma',
+          tipo_documento: 'Fattura passiva',
         },
-        error: null
+        error: null,
       }
     }
     return { data: { id: `${table}-id` }, error: null }

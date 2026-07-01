@@ -9,6 +9,10 @@ function normalizeText(value) {
   return String(value || '').trim()
 }
 
+function round2(value) {
+  return Math.round((Number(value || 0) || 0) * 100) / 100
+}
+
 function makeBatchId(options = {}) {
   const explicit = normalizeText(options.batchId)
   if (explicit) return explicit
@@ -942,18 +946,25 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     partitarioDraft: {
       active: canonicalPayload.ledger?.enabled || false,
       mode: canonicalPayload.ledger?.mode === 'open' ? 'apertura' : (canonicalPayload.ledger?.mode === 'close' ? 'chiusura' : 'nessuno'),
-      accountId: canonicalPayload.ledger?.accountId || '',
-      soggettoId: canonicalPayload.ledger?.subjectId || '',
+      accountId: canonicalPayload.ledger?.accountId || primarySubject.pianoContiIdPatrimoniale || primarySubject.anagraficaId || '',
+      soggettoId: canonicalPayload.ledger?.subjectId || primarySubject.anagraficaId || canonicalPayload.ledger?.accountId || '',
+      soggettoNome: primarySubject.denominazione || '',
+      amount: round2(canonicalPayload.document?.totals?.gross || canonicalPayload.ledger?.rows?.[0]?.amount || 0),
       rows: (canonicalPayload.ledger?.rows || []).map((r, index) => {
         const finalAmount = (isSplit && !isAcquisti) || (isReverse && isAcquisti)
           ? imponibileTotal
           : r.amount
         return {
           riga: r.rowNumber || index + 1,
+          soggettoId: canonicalPayload.ledger?.subjectId || primarySubject.anagraficaId || canonicalPayload.ledger?.accountId || '',
+          accountId: canonicalPayload.ledger?.accountId || primarySubject.pianoContiIdPatrimoniale || primarySubject.anagraficaId || '',
+          soggettoNome: primarySubject.denominazione || '',
+          soggettoTipo: isAcquisti ? 'fornitore' : 'cliente',
           importoOriginario: finalAmount,
           importoAperto: finalAmount,
           dataScadenza: r.dueDate,
-          numeroDocumento: r.documentRef,
+          dataDocumento: canonicalPayload.document?.dataDocumento || dataRegistrazione,
+          numeroDocumento: r.documentRef || canonicalPayload.document?.numeroDocumento || '',
         }
       })
     },
@@ -1137,6 +1148,17 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     warningsList.push(stagingUpdateWarning)
   }
 
+  const partiteSalvate = Array.isArray(persistResult.partIns?.data) ? persistResult.partIns.data.length : 0
+  const partitePreviste = draftBundle.partitarioDraft?.active
+    ? Math.max(Array.isArray(draftBundle.partitarioDraft?.rows) ? draftBundle.partitarioDraft.rows.length : 0, 1)
+    : 0
+
+  const societaCodice = normalizeText(commitPayload.societa?.codice || commitPayload.company?.codice || '')
+  const isDemoCommit = societaCodice.toLowerCase().includes('test') || societaCodice.includes('__TEST__')
+  if (isDemoCommit && draftBundle.partitarioDraft?.active && canonicalPayload.postCommitTargets?.shouldCreateLedger && partiteSalvate === 0) {
+    warningsList.push('Commit demo: partitario previsto ma nessuna partita salvata in DB.')
+  }
+
   // 7. Risultato
   return {
     success: true,
@@ -1147,7 +1169,9 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     blockingReasons: [],
     numeroRighe: persistResult.data?.numero_righe || 0,
     numeroRigheIva: persistResult.data?.numero_righe_iva || 0,
-    partitaFornitoreCount: (persistResult.partIns && persistResult.partIns.data && persistResult.partIns.data.length) || (persistResult.partIns?.count) || (draftBundle.partitarioDraft?.active ? draftBundle.partitarioDraft.rows.length : 0),
+    partitaFornitoreCount: partiteSalvate,
+    partitaFornitorePreviste: partitePreviste,
+    partitaFornitoreSalvate: partiteSalvate,
     totaleDare: persistResult.data?.totale_dare || 0,
     totaleAvere: persistResult.data?.totale_avere || 0,
     isBalanced: persistResult.data?.isBalanced || false,

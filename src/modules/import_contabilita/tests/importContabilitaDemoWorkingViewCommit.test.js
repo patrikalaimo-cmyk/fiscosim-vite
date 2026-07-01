@@ -708,9 +708,103 @@ test('24E-POSTCOMMIT-ENDTOEND — VERIFICA E CORREZIONE PN / REGISTRO IVA / PART
   assert.equal(insertedPart[0].importo_originale, 1220)
   assert.equal(insertedPart[0].importo_residuo, 1220)
   assert.equal(insertedPart[0].stato, 'aperta')
+  assert.equal(res.partitaFornitoreSalvate, 1)
+  assert.equal(res.partitaFornitorePreviste, 1)
 })
 
+test('24E-POSTCOMMIT-ENDTOEND-3 — TL-ACQ-03 crea PN 250/10/260 e partitario reale', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
 
+  const db = new MockDbClient()
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societaId = 'demo-societa'
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO', id: 'demo-societa' }
+  commitPayload.payload.company.societaId = 'demo-societa'
+  commitPayload.payload.document.number = 'TL-ACQ-03'
+  commitPayload.payload.document.totals = { gross: 260, taxable: 250, vat: 10 }
+  commitPayload.payload.accounting.rows = [
+    { accountId: 'acc-cost', debit: 250, credit: 0 },
+    { accountId: 'acc-iva-credit', debit: 10, credit: 0 },
+    { accountId: 'acc-supplier', debit: 0, credit: 260 },
+  ]
+  commitPayload.payload.accounting.totals = { debit: 260, credit: 260, dare: 260, avere: 260 }
+  commitPayload.payload.vat = {
+    enabled: true,
+    registerType: 'acquisti',
+    rows: [{ imponibile: 250, imposta: 10, aliquota: 4, causaleIvaId: 'TESTLAB04', causaleIva: 'IVA 4%' }],
+  }
+  commitPayload.payload.ledger = {
+    enabled: true,
+    mode: 'open',
+    accountId: 'acc-supplier',
+    amount: 260,
+    rows: [{ amount: 260, dueDate: '2026-04-30' }],
+  }
+  commitPayload.payload.accounting.causaleContabile = {
+    codice: 'FF',
+    tipo_causale: 'docivanormale',
+    registro_iva: 'acquisti',
+    segno_registro_iva: '+',
+    operazione_gestita: 'fatturapassiva',
+  }
 
+  const res = await runCommitWorkflow(commitPayload, { db })
+  assert.equal(res.success, true)
+  assert.equal(res.partitaFornitoreSalvate, 1)
+  assert.equal(res.partitaFornitorePreviste, 1)
+
+  const insertedRighe = db.log.find(l => l.table === 'prima_nota_righe' && l.action === 'insert')?.data
+  assert.equal(insertedRighe[0].importo_dare, 250)
+  assert.equal(insertedRighe[1].importo_dare, 10)
+  assert.equal(insertedRighe[2].importo_avere, 260)
+
+  const insertedVat = db.log.find(l => l.table === 'registri_iva' && l.action === 'insert')?.data[0]
+  assert.equal(insertedVat.imponibile, 250)
+  assert.equal(insertedVat.iva, 10)
+
+  const insertedPart = db.log.find(l => l.table === 'partitario' && l.action === 'insert')?.data[0]
+  assert.equal(insertedPart.importo_originale, 260)
+  assert.equal(insertedPart.importo_pagato, 0)
+  assert.equal(insertedPart.importo_residuo, 260)
+  assert.equal(insertedPart.stato, 'aperta')
+})
+
+test('24E-POSTCOMMIT-ENDTOEND-3 — causale FF demo con operazione Apre abilita partitario anche se gestione_partite ignora', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
+
+  const db = new MockDbClient()
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societaId = 'demo-societa'
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO', id: 'demo-societa' }
+  commitPayload.payload.company.societaId = 'demo-societa'
+  commitPayload.payload.ledger = { enabled: true, mode: 'open', accountId: 'acc-supplier', amount: 1220, rows: [{ amount: 1220 }] }
+  commitPayload.payload.accounting.causaleContabile = { codice: 'FF' }
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  assert.equal(res.success, true)
+  assert.equal(res.partitaFornitoreSalvate, 1)
+  const insertedPart = db.log.find(l => l.table === 'partitario' && l.action === 'insert')
+  assert.ok(insertedPart)
+})
+
+test('24E-POSTCOMMIT-ENDTOEND-3 — popup non usa fallback previste come salvate', async () => {
+  const { formatDemoWorkingViewCommitReport } = await import('../domain/importContabilitaDemoWorkingViewCommit.js')
+  const text = formatDemoWorkingViewCommitReport({
+    success: true,
+    primaNotaId: 'pn-1',
+    numeroRighe: 3,
+    numeroRigheIva: 1,
+    partitaFornitorePreviste: 1,
+    partitaFornitoreSalvate: 0,
+    totaleDare: 260,
+    totaleAvere: 260,
+    status: 'processed',
+  }, { numeroDocumento: 'TL-ACQ-03' })
+  assert.match(text, /Partite fornitore previste: 1/)
+  assert.match(text, /Partite fornitore salvate: 0/)
+  assert.doesNotMatch(text, /Partite fornitore: 1/)
+})
 
 

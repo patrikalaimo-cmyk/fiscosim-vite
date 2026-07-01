@@ -10404,6 +10404,37 @@ pm run build -> Successo (429 moduli, 16s).
   - Eseguire il commit demo da browser per `TL-ACQ-09` e verificare che l'operazione completi con successo stampando in console i log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] esito_coerenza=SUCCESS`, `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN] documentoImportIdIsUuid=false` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT] esito=skipped`.
 
 
+## PROMPT 24E-POSTCOMMIT-ENDTOEND-3 — FIX RUNTIME REALE PARTITARIO DOPO COMMIT IMPORT DEMO
+
+- **Data**: 2026-07-01
+- **Obiettivo**: Correggere il ramo runtime reale del partitario fornitore dopo commit Import demo (TL-ACQ-03: PN/IVA OK, partitario_count=0).
+- **Esito test manuale utente TL-ACQ-03**: PN creata, IVA OK, staging skip OK; `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] partitario_count=0 esito_coerenza=FAILED`; popup “Partite fornitore: 1” falso positivo (fallback draft).
+- **Perché ENDTOEND-2 era incompleto/falso positivo**:
+  - Fetch causale FF senza filtro `societa_id` poteva caricare causale altra società con solo `gestione_partite: ignora` → `policy.gestionePartitario=nessuno` → `mapPartitarioRowForDb` ritornava `null`.
+  - Merge causale `{...db, ...importHeader}` lasciava header import sovrascrivere policy DB.
+  - Check postcommit leggeva `partEntriesForDb` (piano) non `partIns.data`/DB readback.
+  - `partitaFornitoreCount` usava fallback `draftBundle.partitarioDraft.rows.length` se insert assente.
+- **Punto esatto scarto**: `persistPrimaNotaDraft.js` → `mapPartitarioRowForDb` (policy `nessuno`) + assenza righe partitario arricchite da working view.
+- **Fix applicato**:
+  - `fetchFullCausaleContabileForPersist`: fetch FF per `codice + societa_id`, merge DB-wins su policy.
+  - `mapPartitarioRowForDb`: bypass ledger attivo in working view; `conto_id` da `accountId` patrimoniale; importi da draft.
+  - Auto-gen partite se `partitarioDraft.active` anche con policy incerta.
+  - Log `[TEST_LAB_PARTITARIO_PERSISTENCE_PLAN]` e `[TEST_LAB_PARTITARIO_INSERT_RESULT]`.
+  - Postcommit check: readback `partIns.data` + query `partitario` per `prima_nota_id`; coerenza su totale documento reale (non hardcoded 1220).
+  - `runCommitWorkflow`: `partitaFornitorePreviste` / `partitaFornitoreSalvate` distinti; warning demo se previsto ma non salvato.
+  - `formatDemoWorkingViewCommitReport`: previste vs salvate.
+  - `buildCausaleContabilePolicy`: fallback documento IVA se partite non configurate.
+- **File modificati**:
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+  - `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+- **Test**: 36/36 commit Import demo + 89/89 suite Import/TestLab; `npm run build` OK.
+- **Sicurezza**: .env/auth/RLS/migration non toccati; società reali non toccate; Riconciliazione **BLOCCATA**.
+- **Rischi residui**: partitario usa conto patrimoniale fornitore (piano conti) — coerente con Registrazione Manuale; anagrafica fornitore UUID separata non richiesta se conto patrimoniale risolto.
+- **Prossimo test manuale**: Demo → TL-ACQ-03 → commit → console `[TEST_LAB_PARTITARIO_PERSISTENCE_PLAN] partitarioRowsCount=1`, `[TEST_LAB_PARTITARIO_INSERT_RESULT] insertedCount=1`, `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] importo_originale=260 esito_coerenza=SUCCESS`; popup “Partite fornitore salvate: 1”.
 
 
 

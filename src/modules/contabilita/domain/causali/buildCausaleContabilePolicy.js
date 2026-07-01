@@ -51,9 +51,10 @@ export function buildCausaleContabilePolicy(causale = {}) {
   const tipoDocumentoNormalized = normalizePolicyKey(tipoDocumento)
   const registroIva = normalizeText(item?.codice_registro_iva || item?.registroIva || item?.registro_iva || '')
 
-  const partiteOpen = isPolicyOneOf(operazionePartite, ['apre', 'apertura', 'aperti']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['apre', 'apertura']))
-  const partiteClose = isPolicyOneOf(operazionePartite, ['chiude', 'chiusura']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['chiude', 'chiusura']))
-  const partiteIgnore = isPolicyOneOf(operazionePartite, ['ignora', 'nessuna', 'nessuno']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['ignora', 'nessuna', 'nessuno']))
+  const hasPartiteConfig = Boolean(operazionePartite || gestionePartite)
+  let partiteOpen = isPolicyOneOf(operazionePartite, ['apre', 'apertura', 'aperti']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['apre', 'apertura']))
+  let partiteClose = isPolicyOneOf(operazionePartite, ['chiude', 'chiusura']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['chiude', 'chiusura']))
+  let partiteIgnore = isPolicyOneOf(operazionePartite, ['ignora', 'nessuna', 'nessuno']) || (!operazionePartite && isPolicyOneOf(gestionePartite, ['ignora', 'nessuna', 'nessuno']))
 
   const ritenuteDocument = isPolicyOneOf(opRitenute, ['documento', 'doc', 'document'])
   const ritenutePayment = isPolicyOneOf(opRitenute, ['pagamento', 'pag', 'payment'])
@@ -113,6 +114,12 @@ export function buildCausaleContabilePolicy(causale = {}) {
     notaCredito ||
     operazionePolicy.isDocumentoIva ||
     (ivaPerCassa && !isPagamentoIncasso)
+
+  if (!hasPartiteConfig && isDocumentoIva) {
+    partiteOpen = true
+    partiteClose = false
+    partiteIgnore = false
+  }
 
   const richiedeDataDocumento =
     isPolicyOneOf(dataDocumento, ['obbligatorio']) ||
