@@ -577,7 +577,8 @@ test('24E-HARDENING-RUNTIME-COMMIT-3 — documents_import safe staging update an
   // Build a valid payload using the helper
   const commitPayload = makeValidCommitPayload()
   commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO' }
-  commitPayload.payload.handoff.sourceRowKey = 'test_lab_24b_1782764101229-1'
+  commitPayload.payload.handoff.sourceRowKey = '9539bde9-b325-4246-a20d-6c1b9408b48e'
+  commitPayload.sourceRow = { id: '9539bde9-b325-4246-a20d-6c1b9408b48e' }
   commitPayload.payload.document.number = 'TL-ACQ-01'
 
   const res = await runCommitWorkflow(commitPayload, { db })
@@ -589,6 +590,27 @@ test('24E-HARDENING-RUNTIME-COMMIT-3 — documents_import safe staging update an
   const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
   // Verify NO rollback deletions occurred
   assert.equal(hasPnDelete, false)
+})
+
+test('24E-HARDENING-RUNTIME-COMMIT-3 — documents_import skip staging update for non-UUID synthetic ID', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
+
+  const db = new MockDbClient()
+
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO' }
+  commitPayload.payload.handoff.sourceRowKey = 'test_lab_24b_1782764101229-1'
+  commitPayload.sourceRow = { id: 'test_lab_24b_1782764101229-1' }
+  commitPayload.payload.document.number = 'TL-ACQ-01'
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  assert.equal(res.success, true)
+  assert.ok(res.warnings.some(w => w.includes('Aggiornamento staging import saltato')))
+  
+  // Verify no update was called on database
+  const hasUpdate = db.log.some(l => l.table === 'documenti_import' && l.action === 'update')
+  assert.equal(hasUpdate, false)
 })
 
 test('24E-POSTCOMMIT-ENDTOEND — VERIFICA E CORREZIONE PN / REGISTRO IVA / PARTITARIO TL-ACQ-01', async () => {

@@ -10375,6 +10375,36 @@ pm run build -> Successo (429 moduli, 16s).
   - Eseguire il commit demo da browser per `TL-ACQ-01` e verificare che l'operazione completi stampando i log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] esito_coerenza=SUCCESS`, `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]`.
 
 
+## PROMPT 24E-POSTCOMMIT-ENDTOEND-2 — FIX PARTITARIO REALE E STAGING TEST LAB DOPO COMMIT IMPORT
+
+- **Data**: 2026-07-01
+- **Obiettivo**:
+  - Correggere la mancata persistenza del partitario reale (partitario_count=0) e il crash dello staging (400 Bad Request su ID sintetico non UUID) durante il commit Import demo.
+- **Diagnosi Partitario**:
+  - `importContabilitaWorkflow.js` non carica preventivamente la configurazione completa della causale contabile dal database, fornendo solo un payload minimale `{ id, codice, description }`. Di conseguenza, `persistPrimaNotaDraft.js` risolveva `policy.gestionePartitario` come `'nessuno'`. Questo causava lo scarto della riga partitario dentro `mapPartitarioRowForDb` (la quale ritornava `null` se la policy non indicava esplicitamente `'apertura'`).
+- **Fix Partitario**:
+  - In `persistPrimaNotaDraft.js`, aggiunto un caricamento asincrono preventivo e automatico della causale completa dal database (`db.from('causali_contabili')`) all'inizio della persistenza. Questo garantisce che tutte le impostazioni contabili (inclusi `gestione_partitario`, `operazione_partite`, ecc.) vengano caricate e fuse nel payload, risolvendo correttamente la policy e abilitando il corretto salvataggio delle partite.
+- **Diagnosi Staging (400 Bad Request)**:
+  - Il workflow tentava di eseguire una PATCH su `documenti_import` usando l'id sintetico non UUID (es. `test_lab_24b_...`). Supabase rifiutava la richiesta con errore 400.
+- **Fix Staging**:
+  - In `importContabilitaWorkflow.js`, aggiunto un controllo regex preventivo sull'id per verificare che sia un UUID valido prima di chiamare il database. Se l'id è sintetico (non UUID), la PATCH viene tranquillamente bypassata (skip), registrando un warning informativo `Commit contabile riuscito. Aggiornamento staging import saltato: documento Test Lab senza ID staging reale.` ed evitando crash.
+- **File modificati**:
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Sicurezza**:
+  - **0** UUID casuali generati
+  - **0** modifiche a file di configurazione (`.env`), migrazioni DB o politiche RLS/auth
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 18.09s)
+  - Unit Test TestLab / Import: 🟢 174 / 174 passati (aggiunti test specifici per skip staging e persistenza partitario con causale reale)
+- **Prossimo test manuale richiesto**:
+  - Eseguire il commit demo da browser per `TL-ACQ-09` e verificare che l'operazione completi con successo stampando in console i log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] esito_coerenza=SUCCESS`, `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN] documentoImportIdIsUuid=false` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT] esito=skipped`.
+
+
+
 
 
 

@@ -214,6 +214,21 @@ export class MockDbClient {
     if (table === 'prima_nota') {
       return { data: this.responses.prima_nota, error: null }
     }
+    if (table === 'causali_contabili') {
+      return {
+        data: {
+          id: 'caus-ff',
+          codice: 'FF',
+          descrizione: 'Fattura passiva',
+          tipo_causale: 'docivanormale',
+          gestione_partitario: 'apertura',
+          operazione_partite: 'apre',
+          registro_iva: 'acquisti',
+          segno_registro_iva: '+'
+        },
+        error: null
+      }
+    }
     return { data: { id: `${table}-id` }, error: null }
   }
   resolveMultiple(table, data, filters) {
@@ -230,7 +245,7 @@ export class MockDbClient {
 export function makeValidCommitPayload() {
   const innerPayload = {
     handoff: {
-      sourceRowKey: 'doc-import-123',
+      sourceRowKey: '9539bde9-b325-4246-a20d-6c1b9408b48e',
       sourceFileName: 'invoice.xml',
       sourceBatchId: 'batch-test-123',
       contractVersion: 'P7B-v3',
@@ -323,7 +338,7 @@ export function makeValidCommitPayload() {
     societaId: 'soc-123',
     registrationDate: '2026-04-30',
     sourceRow: {
-      id: 'doc-import-123',
+      id: '9539bde9-b325-4246-a20d-6c1b9408b48e',
       filename: 'invoice.xml',
     },
     payload: innerPayload,
@@ -346,7 +361,7 @@ test('runCommitWorkflow: payload valido ordinario', async () => {
   const res = await runCommitWorkflow(payload, { db })
   assert.equal(res.success, true)
   assert.equal(res.primaNotaId, 'prima_nota-id')
-  assert.equal(res.documentoId, 'doc-import-123')
+  assert.equal(res.documentoId, '9539bde9-b325-4246-a20d-6c1b9408b48e')
   assert.equal(res.status, 'processed')
   
   const updates = db.log.filter(l => l.action === 'update' && l.table === 'documenti_import')
@@ -406,6 +421,7 @@ test('runCommitWorkflow: documento già contabilizzato in staging', async () => 
 
 test('runCommitWorkflow: fallimento update stato non causa rollback logico (staging accessorio)', async () => {
   const db = new MockDbClient()
+  db.responses.documenti_import = { id: '9539bde9-b325-4246-a20d-6c1b9408b48e', stato: 'pending', metadata: {} }
   // Mock query builder eq and single/maybeSingle responses to simulate update error
   const originalFrom = db.from;
   db.from = function(table) {
@@ -415,7 +431,7 @@ test('runCommitWorkflow: fallimento update stato non causa rollback logico (stag
         if (query.updatedData) {
           resolve({ data: null, error: new Error('Simulated update error') })
         } else {
-          resolve({ data: null, error: null })
+          resolve({ data: { id: '9539bde9-b325-4246-a20d-6c1b9408b48e', metadata: {} }, error: null })
         }
       }
     }
@@ -424,6 +440,7 @@ test('runCommitWorkflow: fallimento update stato non causa rollback logico (stag
   const payload = makeValidCommitPayload()
 
   const res = await runCommitWorkflow(payload, { db })
+  console.log('TEST DEBUG RES:', JSON.stringify(res, null, 2))
   assert.equal(res.success, true)
   assert.ok(res.warnings.some(w => w.includes('Aggiornamento staging import non eseguito')))
   

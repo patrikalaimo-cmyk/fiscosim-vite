@@ -1049,74 +1049,86 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   // 6. Aggiornamento stato documento
   let stagingUpdateWarning = null
   if (documentId) {
-    const societaCodice = String(commitPayload.societa?.codice || commitPayload.company?.codice || '').trim()
+    const isDocumentIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
     const docName = commitPayload.document?.number || 'TL-ACQ-01'
+    const societaCodice = String(commitPayload.societa?.codice || commitPayload.company?.codice || '').trim()
 
-    try {
-      let hasMetadata = false
-      let existingMeta = {}
+    // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
+    console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]')
+    console.log(`documento=${docName}`)
+    console.log(`documentoImportId=${documentId}`)
+    console.log(`sourceRowKey=${documentId}`)
+    console.log(`documentoImportIdIsUuid=${isDocumentIdUuid}`)
+    console.log(`action=${isDocumentIdUuid ? 'update' : 'skip'}`)
+    if (!isDocumentIdUuid) {
+      console.log('motivo=documento Test Lab senza ID staging reale (non UUID)')
+    }
+
+    if (!isDocumentIdUuid) {
+      stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import saltato: documento Test Lab senza ID staging reale.'
       
-      // Fetch existing metadata to check for its presence
-      const { data: existingDoc, error: fetchErr } = await db
-        .from('documenti_import')
-        .select('metadata')
-        .eq('id', documentId)
-        .maybeSingle()
-
-      if (!fetchErr && existingDoc) {
-        hasMetadata = true
-        existingMeta = existingDoc.metadata || {}
-      }
-
-      const updatePayload = { stato: 'processed' }
-      let columnsUsed = ['stato']
-
-      if (hasMetadata) {
-        updatePayload.metadata = {
-          ...existingMeta,
-          primaNotaId: primaNotaId,
-          dataCommit: new Date().toISOString(),
-          sourceDocumento: docName,
-          statoContabilizzato: 'processed'
-        }
-        columnsUsed.push('metadata')
-      }
-
-      // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
-      console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]')
-      console.log(`documento=${docName}`)
-      console.log(`societaCodice=${societaCodice}`)
-      console.log(`documentoImportId=${documentId}`)
-      console.log(`primaNotaId=${primaNotaId}`)
-      console.log(`colonne_update=${columnsUsed.join(',')}`)
-      console.log(`metadata_field=${hasMetadata ? 'primaNotaId,dataCommit,sourceDocumento,statoContabilizzato' : 'none'}`)
-
-      // Perform update using only the available columns
-      const { error: updateError } = await db
-        .from('documenti_import')
-        .update(updatePayload)
-        .eq('id', documentId)
-
-      if (updateError) {
-        throw updateError
-      }
-
       // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
       console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
-      console.log('esito=success')
-      console.log('action=executed')
-      console.log(`colonne_usate=${columnsUsed.join(',')}`)
+      console.log('esito=skipped')
       console.log('contabile_mantenuto=true')
+    } else {
+      try {
+        let hasMetadata = false
+        let existingMeta = {}
+        
+        // Fetch existing metadata to check for its presence
+        const { data: existingDoc, error: fetchErr } = await db
+          .from('documenti_import')
+          .select('metadata')
+          .eq('id', documentId)
+          .maybeSingle()
 
-    } catch (err) {
-      stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import non eseguito: campo non disponibile nello schema documenti_import.'
+        if (!fetchErr && existingDoc) {
+          hasMetadata = true
+          existingMeta = existingDoc.metadata || {}
+        }
 
-      // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
-      console.warn('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
-      console.warn('esito=failed')
-      console.warn('action=saltato')
-      console.warn(`errore=${err?.message || err}`)
-      console.warn('contabile_mantenuto=true')
+        const updatePayload = { stato: 'processed' }
+        let columnsUsed = ['stato']
+
+        if (hasMetadata) {
+          updatePayload.metadata = {
+            ...existingMeta,
+            primaNotaId: primaNotaId,
+            dataCommit: new Date().toISOString(),
+            sourceDocumento: docName,
+            statoContabilizzato: 'processed'
+          }
+          columnsUsed.push('metadata')
+        }
+
+        // Perform update using only the available columns
+        const { error: updateError } = await db
+          .from('documenti_import')
+          .update(updatePayload)
+          .eq('id', documentId)
+
+        if (updateError) {
+          throw updateError
+        }
+
+        // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
+        console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
+        console.log('esito=success')
+        console.log('action=executed')
+        console.log(`colonne_usate=${columnsUsed.join(',')}`)
+        console.log('contabile_mantenuto=true')
+
+      } catch (err) {
+        stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import non eseguito: campo non disponibile nello schema documenti_import.'
+
+        // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
+        console.warn('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
+        console.warn('esito=failed')
+        console.warn('action=saltato')
+        console.warn(`errore=${err?.message || err}`)
+        console.warn('contabile_mantenuto=true')
+      }
     }
   }
 

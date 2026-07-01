@@ -732,10 +732,29 @@ L'imposta delle righe IVA veniva salvata con valore 0.00 in `registri_iva`. Ques
 - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
 
 ### Test manuali utente
-1. Aprire la working view di `TL-ACQ-01` per la società demo.
+
+
+## FASE 24E-POSTCOMMIT-ENDTOEND-2 — Fix partitario reale e staging Test Lab dopo commit Import
+
+### Problema risolto
+1. **Partitario_count=0**: `persistPrimaNotaDraft.js` riceveva un payload causale parziale dall'import, con `gestionePartitario` non risolto (nessuno). Questo causava l'esclusione della riga partitario.
+2. **Staging 400 Bad Request**: Il workflow tentava una PATCH con id sintetico non UUID (es. `test_lab_24b_...`), che Supabase respingeva.
+
+### Soluzione strutturale
+- **Risoluzione completa Causale**: In `persistPrimaNotaDraft.js`, introdotto un caricamento asincrono preventivo dal DB (`causali_contabili`) per recuperare la causale completa. Questo risolve correttamente la policy del partitario contabile reale.
+- **Guardia UUID Staging**: In `importContabilitaWorkflow.js`, aggiunto controllo regex preventivo: se l'ID dello staging non è un UUID valido, l'update viene saltato (skip) evitando chiamate errate a Supabase e scongiurando errori 400.
+
+### File modificati
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+- `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-09` per la società demo.
 2. Eseguire il commit contabile.
-3. Controllare in console che il log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]` mostri `esito_coerenza=SUCCESS`.
-4. Nel Registro IVA Acquisti, verificare che la riga di `TL-ACQ-01` mostri imponibile 1000, IVA 220 e totale 1220.
+3. Controllare in console che il log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]` stampi `esito_coerenza=SUCCESS`.
+4. Controllare che l'aggiornamento dello staging stampi in console `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN] documentoImportIdIsUuid=false action=skip` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT] esito=skipped`.
 
 
 

@@ -469,10 +469,39 @@ export async function persistPrimaNotaDraft({
   righeSelect = '*',
 } = {}) {
   const resolved = resolveDraftBundle(draft)
+  
+  // Fetch full causale from DB to populate policy options (e.g. gestione_partitario)
   const headerCausale = resolved.innerDraft?.header?.causaleContabile || resolved.pnPayload?.causaleContabile
+  const causaleCodice = headerCausale?.codice || headerCausale?.code || resolved.pnPayload?.causale_codice
+  if (causaleCodice && db) {
+    try {
+      const query = db.from('causali_contabili').select('*').eq('codice', causaleCodice)
+      if (typeof query.maybeSingle === 'function') {
+        const { data: dbCausale } = await query.maybeSingle()
+        if (dbCausale) {
+          if (resolved.innerDraft?.header) {
+            resolved.innerDraft.header.causaleContabile = {
+              ...dbCausale,
+              ...resolved.innerDraft.header.causaleContabile
+            }
+          }
+          if (resolved.pnPayload) {
+            resolved.pnPayload.causaleContabile = {
+              ...dbCausale,
+              ...resolved.pnPayload.causaleContabile
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[persistPrimaNotaDraft] Failed to fetch full causale contabile policy:', e)
+    }
+  }
+
+  const updatedHeaderCausale = resolved.innerDraft?.header?.causaleContabile || resolved.pnPayload?.causaleContabile
   const causaleObj = {
-    ...headerCausale,
-    codice: resolved.pnPayload?.causale_codice || headerCausale?.codice
+    ...updatedHeaderCausale,
+    codice: resolved.pnPayload?.causale_codice || updatedHeaderCausale?.codice
   }
   const policy = buildCausaleContabilePolicy(causaleObj)
   const validation = buildPersistenceValidation(resolved)
