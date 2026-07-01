@@ -691,6 +691,31 @@ Il campo `numero_registrazione` (colonna `integer`/`serial` del DB) riceveva la 
 3. Accertarsi che stampi "ok" per tutti i controlli dei tipi (senza errori) e che la scrittura a DB avvenga con successo.
 
 
+## FASE 24E-HARDENING-RUNTIME-COMMIT-3 — Aggiornamento sicuro staging documenti_import dopo commit demo
+
+### Problema risolto
+L'aggiornamento post-commit dello staging falliva per colonna inesistente (`prima_nota_id` non presente nello schema fisico di `documenti_import`), provocando il rollback preventivo dell'intera Prima Nota contabile.
+
+### Soluzione strutturale
+- **Update sicuro sulle sole colonne fisiche**: Il post-commit aggiorna solo la colonna reale `stato` (valore `'processed'`) e memorizza la relazione `primaNotaId` all'interno della colonna JSONB `metadata` esistente.
+- **Rollback selettivo**: L'aggiornamento dello staging viene trattato come errore accessorio di post-commit non bloccante. Se fallisce, l'utente riceve un warning descrittivo ma la Prima Nota contabile core non viene cancellata/rollbackata.
+- **Log diagnostici di staging**:
+  - `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]`: indica i parametri e le colonne fisiche che si intende aggiornare.
+  - `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]`: indica l'esito dell'operazione di staging e se la contabilità core è stata mantenuta.
+
+### File modificati
+- `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+- `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-01` per la società demo.
+2. Confermare il commit e controllare in console i log `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]`.
+3. Verificare che l'aggiornamento avvenga correttamente e che la scrittura contabile sia salvata con successo.
+
+
+
 
 
 

@@ -141,7 +141,7 @@ test('workflow: deletedInStaging e deletedInAccounting vengono reimportati solo 
   assert.ok(String(res.report.deletedDetectionNote || '').includes('I casi cancellati'))
 })
 
-class MockDbQuery {
+export class MockDbQuery {
   constructor(table, client) {
     this.table = table
     this.client = client
@@ -191,7 +191,7 @@ class MockDbQuery {
   }
 }
 
-class MockDbClient {
+export class MockDbClient {
   constructor() {
     this.log = []
     this.responses = {
@@ -227,7 +227,7 @@ class MockDbClient {
   }
 }
 
-function makeValidCommitPayload() {
+export function makeValidCommitPayload() {
   const innerPayload = {
     handoff: {
       sourceRowKey: 'doc-import-123',
@@ -404,7 +404,7 @@ test('runCommitWorkflow: documento già contabilizzato in staging', async () => 
   assert.equal(inserts.length, 0)
 })
 
-test('runCommitWorkflow: fallimento update stato causa rollback logico', async () => {
+test('runCommitWorkflow: fallimento update stato non causa rollback logico (staging accessorio)', async () => {
   const db = new MockDbClient()
   // Mock query builder eq and single/maybeSingle responses to simulate update error
   const originalFrom = db.from;
@@ -424,14 +424,12 @@ test('runCommitWorkflow: fallimento update stato causa rollback logico', async (
   const payload = makeValidCommitPayload()
 
   const res = await runCommitWorkflow(payload, { db })
-  assert.equal(res.success, false)
-  assert.ok(res.blockingReasons[0].includes('aggiornamento stato documento import fallito'))
+  assert.equal(res.success, true)
+  assert.ok(res.warnings.some(w => w.includes('Aggiornamento staging import non eseguito')))
   
-  // Controlla rollback logico (delete della prima nota creata)
-  const deletes = db.log.filter(l => l.action === 'delete')
-  assert.ok(deletes.length > 0)
+  // Controlla che NON ci sia rollback logico (nessun delete della prima nota creata)
   const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
-  assert.ok(hasPnDelete)
+  assert.equal(hasPnDelete, false)
 })
 
 import { sb } from '../../../lib/supabase.js'

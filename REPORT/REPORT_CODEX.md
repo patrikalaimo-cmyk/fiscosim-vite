@@ -10309,8 +10309,41 @@ pm run build -> Successo (429 moduli, 16s).
 - **Test e Build**:
   - Compilazione Vite: 🟢 Successo (`npm run build` — 37.55s)
   - Unit Test TestLab / Import: 🟢 159 / 159 passati (aggiunti test che verificano il blocco esplicito di stringhe scorrette in colonne integer, numeric, date e boolean)
-- **Prossimo test manuale richiesto**:
   - Eseguire il commit demo da browser per `TL-ACQ-01` e verificare che passi con successo, mostrando in console i log `[TEST_LAB_COMMIT_DB_TYPE_GUARD]` con la sintesi "ok" per tutti i tipi.
+
+
+## PROMPT 24E-HARDENING-RUNTIME-COMMIT-3 — AGGIORNAMENTO SICURO STAGING DOCUMENTI_IMPORT DOPO COMMIT DEMO
+
+- **Data**: 2026-07-01
+- **Obiettivo**:
+  - Risolvere il blocco post-commit in cui l'aggiornamento dello stato dello staging su `documenti_import` falliva a causa della colonna inesistente `prima_nota_id` nello schema fisico.
+- **Errore browser ricevuto**:
+  - `[TEST_LAB_COMMIT_BLOCKED] documento=TL-ACQ-01, societa=__TEST__FISCOSIM_DEMO, motivo=Salvataggio contabile riuscito ma aggiornamento stato documento import fallito: Could not find the 'prima_nota_id' column of 'documenti_import' in the schema cache. Eseguito rollback.`
+- **Conferma salvataggio contabile**:
+  - Il salvataggio contabile (Prima Nota e righe correlate) arrivava a successo prima del fallimento staging, ma veniva eseguito un rollback preventivo logico.
+- **File/funzione che scriveva documenti_import.prima_nota_id**:
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js` (nella fase 6 del `runCommitWorkflow`).
+- **Colonne documenti_import usate dopo il fix**:
+  - Si aggiornano esclusivamente le colonne fisiche realmente esistenti: `stato` (valore `'processed'`) e `metadata` (oggetto JSONB).
+- **Salvataggio riferimento primaNotaId**:
+  - Il riferimento `primaNotaId`, insieme alla data di commit, al codice del documento demo e allo stato di contabilizzazione, viene salvato all'interno del campo JSONB `metadata` (mantenendo gli eventuali attributi preesistenti).
+- **Regola di Rollback adottata**:
+  - Distinzione tra errore core contabile (con rollback attivo) ed errore accessorio di staging (senza rollback, convertito in warning non bloccante per l'utente: *“Commit contabile riuscito. Aggiornamento staging import non eseguito: campo non disponibile nello schema documenti_import.”*).
+- **File modificati**:
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- **Sicurezza**:
+  - **0** UUID casuali generati
+  - **0** modifiche a file di configurazione (`.env`), migrazioni DB o politiche RLS/auth
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 7.62s)
+  - Unit Test TestLab / Import: 🟢 172 / 172 passati (inclusi test per la gestione degli errori accessori staging senza rollback)
+- **Prossimo test manuale richiesto**:
+  - Eseguire il commit demo di `TL-ACQ-01` e verificare che l'operazione si concluda con successo visualizzando i log `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]` con l'indicazione delle sole colonne fisicamente esistenti.
+
 
 
 

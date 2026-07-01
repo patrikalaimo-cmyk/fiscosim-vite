@@ -545,9 +545,49 @@ test('24E-FIX-7 — UUID guard and synthetic ID exclusion', async () => {
     validateDbPersistencePlanForTestLab(plan)
   }, /tipo non valido nel campo partita_aperta di prima_nota_righe: atteso boolean/i)
 
-  // Reset
   plan.righePayload[0].partita_aperta = true
 })
+
+test('24E-HARDENING-RUNTIME-COMMIT-3 — documents_import safe staging update and warning fallback on error', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
+
+  const db = new MockDbClient()
+  db.responses.documenti_import = { id: 'doc-import-123', stato: 'pending', metadata: {} }
+
+  // Override then on Query to simulate update error specifically for documenti_import
+  const originalFrom = db.from
+  db.from = function (table) {
+    const query = originalFrom.call(db, table)
+    if (table === 'documenti_import') {
+      const originalThen = query.then
+      query.then = (resolve, reject) => {
+        if (query.updatedData) {
+          resolve({ data: null, error: new Error('Simulated update error') })
+        } else {
+          originalThen.call(query, resolve, reject)
+        }
+      }
+    }
+    return query
+  }
+
+  // Build a valid payload using the helper
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO' }
+  commitPayload.payload.handoff.sourceRowKey = 'test_lab_24b_1782764101229-1'
+  commitPayload.payload.document.number = 'TL-ACQ-01'
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  console.log('res was:', JSON.stringify(res, null, 2))
+  assert.equal(res.success, true) // Must succeed contabile registration!
+  assert.ok(res.warnings.some(w => w.includes('Aggiornamento staging import non eseguito')))
+  
+  // Verify NO rollback deletions occurred
+  const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
+  assert.equal(hasPnDelete, false)
+})
+
 
 
 

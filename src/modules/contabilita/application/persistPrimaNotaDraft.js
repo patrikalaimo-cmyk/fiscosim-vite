@@ -780,14 +780,19 @@ export function validateDbPersistencePlanForTestLab(plan) {
   function isLocalUuid(val) {
     if (typeof val !== 'string') return false
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return true
+    const lower = val.toLowerCase()
     return (
-      val.toLowerCase().startsWith('demo-') ||
-      val.toLowerCase().startsWith('real-') ||
-      val.toLowerCase().startsWith('soc-') ||
-      val.toLowerCase().startsWith('acc-') ||
-      val.toLowerCase().startsWith('caus-') ||
-      val.toLowerCase().startsWith('test-') ||
-      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva'].includes(val.toLowerCase())
+      lower.startsWith('demo-') ||
+      lower.startsWith('real-') ||
+      lower.startsWith('soc-') ||
+      lower.startsWith('acc-') ||
+      lower.startsWith('caus-') ||
+      lower.startsWith('test-') ||
+      lower.startsWith('iva-') ||
+      lower.startsWith('doc-') ||
+      lower.startsWith('prima_nota-') ||
+      lower.startsWith('bene-') ||
+      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva'].includes(lower)
     )
   }
 

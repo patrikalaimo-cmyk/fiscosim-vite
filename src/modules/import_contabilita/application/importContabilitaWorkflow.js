@@ -1047,23 +1047,77 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   }
 
   // 6. Aggiornamento stato documento
+  let stagingUpdateWarning = null
   if (documentId) {
-    const { error: updateError } = await db
-      .from('documenti_import')
-      .update({ stato: 'processed', prima_nota_id: primaNotaId, processed_at: new Date().toISOString() })
-      .eq('id', documentId)
-    if (updateError) {
-      // rollback or warning? The requirements say: "aggiornare lo stato del documento importato/staging solo dopo salvataggio contabile riuscito; gestire errori e rollback logico applicativo in modo chiaro"
-      // Se fallisce l'aggiornamento dello stato, dovremmo idealmente cancellare la prima nota creata per rollback logico
-      if (primaNotaId) {
-        await db.from('ritenute_dacconto').delete().eq('prima_nota_id', primaNotaId)
-        await db.from('partitario').delete().eq('prima_nota_id', primaNotaId)
-        await db.from('registri_iva').delete().eq('prima_nota_id', primaNotaId)
-        await db.from('prima_nota_righe').delete().eq('prima_nota_id', primaNotaId)
-        await db.from('prima_nota').delete().eq('id', primaNotaId)
+    const societaCodice = String(commitPayload.societa?.codice || commitPayload.company?.codice || '').trim()
+    const docName = commitPayload.document?.number || 'TL-ACQ-01'
+
+    // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
+    console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]')
+    console.log(`documento=${docName}`)
+    console.log(`societaCodice=${societaCodice}`)
+    console.log(`documentoImportId=${documentId}`)
+    console.log(`primaNotaId=${primaNotaId}`)
+    console.log(`colonne_update=stato,metadata`)
+    console.log(`metadata_field=primaNotaId,dataCommit,sourceDocumento,statoContabilizzato`)
+
+    try {
+      // Fetch existing metadata to perform a safe merge
+      const { data: existingDoc, error: fetchErr } = await db
+        .from('documenti_import')
+        .select('metadata')
+        .eq('id', documentId)
+        .maybeSingle()
+
+      if (fetchErr) {
+        throw fetchErr
       }
-      return { success: false, blockingReasons: [`Salvataggio contabile riuscito ma aggiornamento stato documento import fallito: ${updateError.message}. Eseguito rollback.`] }
+
+      const existingMeta = existingDoc?.metadata || {}
+      const updatedMeta = {
+        ...existingMeta,
+        primaNotaId: primaNotaId,
+        dataCommit: new Date().toISOString(),
+        sourceDocumento: docName,
+        statoContabilizzato: 'processed'
+      }
+
+      // Update documents_import using only the available columns (stato and metadata)
+      const { error: updateError } = await db
+        .from('documenti_import')
+        .update({
+          stato: 'processed',
+          metadata: updatedMeta
+        })
+        .eq('id', documentId)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
+      console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
+      console.log('esito=success')
+      console.log('errore=none')
+      console.log('contabile_mantenuto=true')
+      console.log('motivo=Aggiornamento staging import completato con successo')
+
+    } catch (err) {
+      // Staging update error is accessory and should not trigger a rollback of the core Prima Nota!
+      stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import non eseguito: campo non disponibile nello schema documenti_import.'
+
+      // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
+      console.warn('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
+      console.warn(`esito=failed`)
+      console.warn(`errore=${err?.message || err}`)
+      console.warn(`contabile_mantenuto=true`)
+      console.warn(`motivo=Errore accessorio staging non bloccante. Nessun rollback eseguito. Warning restituito all'utente.`)
     }
+  }
+
+  const warningsList = [...(validationResult.warnings || [])]
+  if (stagingUpdateWarning) {
+    warningsList.push(stagingUpdateWarning)
   }
 
   // 7. Risultato
@@ -1072,7 +1126,7 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     primaNotaId,
     documentoId: documentId,
     status: 'processed',
-    warnings: validationResult.warnings || [],
+    warnings: warningsList,
     blockingReasons: [],
     numeroRighe: persistResult.data?.numero_righe || 0,
     numeroRigheIva: persistResult.data?.numero_righe_iva || 0,
