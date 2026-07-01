@@ -310,7 +310,7 @@ function normalizeVatRows(draft = {}) {
         causaleIvaId: civId.toLowerCase() === 'da selezionare' ? '' : civId,
         causaleIva: civ.toLowerCase() === 'da selezionare' ? '' : civ,
         imponibile: numberOrZero(row?.imponibile, row?.taxable, ivaDraft.imponibile, ivaDraft.totaleImponibile),
-        imposta: numberOrZero(row?.imposta, row?.tax, ivaDraft.totaleIva, ivaDraft.totaleImposta),
+        imposta: numberOrZero(row?.imposta, row?.tax, row?.iva, ivaDraft.totaleIva, ivaDraft.totaleImposta),
         aliquota: row?.aliquota ?? row?.rate ?? ivaDraft.aliquota ?? ivaDraft.aliquotaIva ?? '',
         natura: text(row?.natura || ivaDraft.natura || ivaDraft.naturaIva),
         detraibilitaPercent: numberOrZero(row?.detraibilitaPercent, row?.percentualeDetraibilita, ivaDraft.percentualeDetraibilita),

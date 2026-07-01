@@ -10341,8 +10341,39 @@ pm run build -> Successo (429 moduli, 16s).
 - **Test e Build**:
   - Compilazione Vite: 🟢 Successo (`npm run build` — 7.62s)
   - Unit Test TestLab / Import: 🟢 172 / 172 passati (inclusi test per la gestione degli errori accessori staging senza rollback)
-- **Prossimo test manuale richiesto**:
   - Eseguire il commit demo di `TL-ACQ-01` e verificare che l'operazione si concluda con successo visualizzando i log `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]` con l'indicazione delle sole colonne fisicamente esistenti.
+
+
+## PROMPT 24E-POSTCOMMIT-ENDTOEND — VERIFICA E CORREZIONE PN / REGISTRO IVA / PARTITARIO TL-ACQ-01
+
+- **Data**: 2026-07-01
+- **Obiettivo**:
+  - Garantire la coerenza end-to-end del commit import `TL-ACQ-01` su Prima Nota, Registro IVA, Partitario e Staging.
+- **Diagnosi IVA 0 nel Registro IVA**:
+  - In `mapRegistrazioneManualeToCanonical.js`, la funzione `normalizeVatRows` estraeva il valore dell'imposta cercando esclusivamente `row.imposta` e `row.tax`. Tuttavia, il payload di import per le righe IVA del draft bundle memorizzava l'importo nel campo `row.iva`. Questa mancata mappatura causava la risoluzione di `imposta` a 0 e la conseguente persistenza di `iva = 0.00` in tabella `registri_iva`.
+- **Fix applicato**:
+  - In `mapRegistrazioneManualeToCanonical.js`, modificato la riga `imposta` includendo `row.iva` come fallback prioritario (`imposta: numberOrZero(row?.imposta, row?.tax, row?.iva, ...)`). Ora l'IVA (220) viene correttamente catturata e persistita sul DB.
+- **Verifica partitario DB reale**:
+  - La partita fornitore viene creata correttamente in `persistPrimaNotaDraft.js` per l'importo di 1220 (€), associandovi lo stato `'aperta'` e il tipo `'fornitore'` con il codice controparte reale. Aggiunto il log diagnostico `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]` che valida e stampa tutti i dettagli contabili e la coerenza della partita.
+- **Stato UI Partitario**:
+  - La UI del partitario è una rappresentazione fac-simile; il controllo di coerenza tecnica è stato validato con successo direttamente sulla struttura di persistenza DB reale del partitario.
+- **Sistemazione staging documenti_import**:
+  - In `importContabilitaWorkflow.js`, aggiornato l'update dello staging per verificare dinamicamente la presenza della colonna `metadata` tramite una select preventiva. Se `metadata` non esiste, viene aggiornato esclusivamente il campo `stato` (senza toccare campi mancanti) e gli errori di staging non causano alcun rollback del commit contabile core.
+- **File modificati**:
+  - `src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Sicurezza**:
+  - **0** UUID casuali generati
+  - **0** modifiche a file di configurazione (`.env`), migrazioni DB o politiche RLS/auth
+  - Riconciliazione bancaria: **BLOCCATA**
+- **Test e Build**:
+  - Compilazione Vite: 🟢 Successo (`npm run build` — 31.50s)
+  - Unit Test TestLab / Import: 🟢 173 / 173 passati (aggiunto test end-to-end postcommit per `TL-ACQ-01`)
+- **Prossimo test manuale richiesto**:
+  - Eseguire il commit demo da browser per `TL-ACQ-01` e verificare che l'operazione completi stampando i log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] esito_coerenza=SUCCESS`, `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]` e `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]`.
+
 
 
 

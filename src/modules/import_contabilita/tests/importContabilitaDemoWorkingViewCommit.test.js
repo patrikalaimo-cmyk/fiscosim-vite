@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mapImportContabilitaCommitPayloadToCanonical, resolveImportCommitPrimaNotaStato } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
+import { runCommitWorkflow } from '../application/importContabilitaWorkflow.js'
+import { MockDbClient, makeValidCommitPayload } from './importContabilitaWorkflow.test.js'
 import {
   buildWorkingViewPrimaNotaDraftRowsFromModel,
   evaluateDemo24EWorkingViewCommitGuards,
@@ -585,8 +587,107 @@ test('24E-HARDENING-RUNTIME-COMMIT-3 — documents_import safe staging update an
   
   // Verify NO rollback deletions occurred
   const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
+  // Verify NO rollback deletions occurred
   assert.equal(hasPnDelete, false)
 })
+
+test('24E-POSTCOMMIT-ENDTOEND — VERIFICA E CORREZIONE PN / REGISTRO IVA / PARTITARIO TL-ACQ-01', async () => {
+  const db = new MockDbClient()
+
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO' }
+  commitPayload.payload.handoff.sourceRowKey = 'test-row-key'
+  commitPayload.payload.document.number = 'TL-ACQ-01'
+  commitPayload.payload.document.totals = {
+    gross: 1220,
+    taxable: 1000,
+    vat: 220
+  }
+  commitPayload.payload.ledger = {
+    enabled: true,
+    mode: 'open',
+    accountId: 'acc-supplier',
+    amount: 1220,
+    rows: [
+      { amount: 1220, dueDate: '2026-04-30' }
+    ]
+  }
+
+  // Set precise accounting rows
+  commitPayload.payload.accounting.rows = [
+    { accountId: 'acc-cost', debit: 1000, credit: 0 },
+    { accountId: 'acc-iva-credit', debit: 220, credit: 0 },
+    { accountId: 'acc-supplier', debit: 0, credit: 1220 }
+  ]
+  commitPayload.payload.accounting.totals = { dare: 1220, avere: 1220, debit: 1220, credit: 1220 }
+
+  // Set precise VAT rows: imponibile 1000, imposta 220, aliquota 22, causale TESTLAB22
+  commitPayload.payload.vat = {
+    enabled: true,
+    registerType: 'acquisti',
+    rows: [
+      {
+        imponibile: 1000,
+        imposta: 220,
+        aliquota: 22,
+        causaleIvaId: 'TESTLAB22',
+        causaleIva: 'IVA ordinaria 22%'
+      }
+    ]
+  }
+
+  // Define causaleContabile configuration policy
+  commitPayload.payload.accounting.causaleContabile = {
+    codice: 'TESTLAB22',
+    tipo_causale: 'docivanormale',
+    registro_iva: 'acquisti',
+    segno_registro_iva: '+',
+    gestione_partitario: 'apertura'
+  }
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  assert.equal(res.success, true)
+  assert.equal(res.numeroRighe, 3)
+  assert.equal(res.numeroRigheIva, 1)
+
+  // 1. Verify PN Rows: Dare 1000, Dare 220, Avere 1220
+  const insertedRigheLog = db.log.filter(l => l.table === 'prima_nota_righe' && l.action === 'insert')
+  assert.equal(insertedRigheLog.length, 1)
+  const insertedRighe = insertedRigheLog[0].data
+  assert.equal(insertedRighe.length, 3)
+  assert.equal(insertedRighe[0].importo_dare, 1000)
+  assert.equal(insertedRighe[1].importo_dare, 220)
+  assert.equal(insertedRighe[2].importo_avere, 1220)
+
+  // 2. Verify registri_iva: imponibile 1000, iva 220, aliquota 22, causale_iva_id TESTLAB22
+  const insertedVatLog = db.log.filter(l => l.table === 'registri_iva' && l.action === 'insert')
+  assert.equal(insertedVatLog.length, 1)
+  const insertedVat = insertedVatLog[0].data
+  assert.equal(insertedVat.length, 1)
+  assert.equal(insertedVat[0].imponibile, 1000)
+  assert.equal(insertedVat[0].iva, 220)
+  assert.equal(insertedVat[0].aliquota, 22)
+  assert.equal(insertedVat[0].causale_iva_id, 'TESTLAB22')
+
+  // 3. Verify buildRegistroIvaRowsModel reads IVA 220
+  const { buildRegistroIvaRowsModel } = await import('../../contabilita/application/stampe/buildRegistroIvaRowsModel.js')
+  const model = buildRegistroIvaRowsModel(insertedVat)
+  assert.equal(model.rows.length, 1)
+  assert.equal(model.rows[0].iva, 220)
+  assert.equal(model.rows[0].imponibile, 1000)
+  assert.equal(model.totaleIva, 220)
+  assert.equal(model.totaleImponibile, 1000)
+
+  // 4. Verify partitario entry is created with importo_originale = 1220, residuo = 1220, stato = 'aperta'
+  const insertedPartLog = db.log.filter(l => l.table === 'partitario' && l.action === 'insert')
+  assert.equal(insertedPartLog.length, 1)
+  const insertedPart = insertedPartLog[0].data
+  assert.equal(insertedPart.length, 1)
+  assert.equal(insertedPart[0].importo_originale, 1220)
+  assert.equal(insertedPart[0].importo_residuo, 1220)
+  assert.equal(insertedPart[0].stato, 'aperta')
+})
+
 
 
 

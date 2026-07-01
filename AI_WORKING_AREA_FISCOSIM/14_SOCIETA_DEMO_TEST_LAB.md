@@ -715,6 +715,30 @@ L'aggiornamento post-commit dello staging falliva per colonna inesistente (`prim
 3. Verificare che l'aggiornamento avvenga correttamente e che la scrittura contabile sia salvata con successo.
 
 
+## FASE 24E-POSTCOMMIT-ENDTOEND — Verifica e correzione PN / Registro IVA / Partitario TL-ACQ-01
+
+### Problema risolto
+L'imposta delle righe IVA veniva salvata con valore 0.00 in `registri_iva`. Questo accadeva perché `normalizeVatRows` cercava `row.imposta` e `row.tax` nel payload import, mentre l'importo corretto era memorizzato in `row.iva`.
+
+### Soluzione strutturale
+- **Allineamento mappatura IVA**: Aggiunto `row.iva` come fallback in `normalizeVatRows` all'interno di `mapRegistrazioneManualeToCanonical.js`.
+- **Logger diagnostico Partitario**: Introdotto `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]` in `persistPrimaNotaDraft.js` per verificare al termine del commit che la partita fornitore sia stata creata in modo coerente (importo 1220, stato `'aperta'`, tipo `'fornitore'`).
+- **Sanificazione Staging documenti_import**: L'update dello staging controlla preventivamente se la colonna `metadata` esiste fisicamente prima di inviare il payload di update, aggiornando solo la colonna `stato` se necessario ed evitando crash da colonna mancante.
+
+### File modificati
+- `src/modules/contabilita/canonical/mappers/mapRegistrazioneManualeToCanonical.js`
+- `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+- `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+- `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+
+### Test manuali utente
+1. Aprire la working view di `TL-ACQ-01` per la società demo.
+2. Eseguire il commit contabile.
+3. Controllare in console che il log `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]` mostri `esito_coerenza=SUCCESS`.
+4. Nel Registro IVA Acquisti, verificare che la riga di `TL-ACQ-01` mostri imponibile 1000, IVA 220 e totale 1220.
+
+
+
 
 
 

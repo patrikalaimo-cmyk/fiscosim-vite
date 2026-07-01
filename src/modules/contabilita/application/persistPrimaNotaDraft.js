@@ -731,6 +731,22 @@ export async function persistPrimaNotaDraft({
     timestamp: new Date().toISOString(),
   })
 
+  if (isDemo || docNum.includes('TL-ACQ')) {
+    const partRowsCreated = partEntriesForDb || []
+    const firstPart = partRowsCreated[0] || {}
+    const isCoerente = partRowsCreated.length === 1 && firstPart.importo_originale === 1220 && firstPart.importo_residuo === 1220 && firstPart.stato === 'aperta'
+    console.log('[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK]')
+    console.log(`primaNotaId=${primaNotaId}`)
+    console.log(`partitario_count=${partRowsCreated.length}`)
+    console.log(`controparte_nome=${firstPart.controparte_nome || ''}`)
+    console.log(`importo_originale=${firstPart.importo_originale || 0}`)
+    console.log(`importo_pagato=${firstPart.importo_pagato || 0}`)
+    console.log(`importo_residuo=${firstPart.importo_residuo || 0}`)
+    console.log(`stato=${firstPart.stato || ''}`)
+    console.log(`conto_id=${firstPart.conto_id || ''}`)
+    console.log(`esito_coerenza=${isCoerente ? 'SUCCESS' : 'FAILED'}`)
+  }
+
   return {
     data: {
       prima_nota_id: primaNotaId,
@@ -792,7 +808,7 @@ export function validateDbPersistencePlanForTestLab(plan) {
       lower.startsWith('doc-') ||
       lower.startsWith('prima_nota-') ||
       lower.startsWith('bene-') ||
-      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva'].includes(lower)
+      ['c1', 'c2', 't1', 't2', 'test-id', 'test_id', 'demo-fornitore', 'caus-iva', 'testlab22'].includes(lower)
     )
   }
 

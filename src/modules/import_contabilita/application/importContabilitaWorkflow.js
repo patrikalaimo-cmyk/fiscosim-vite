@@ -1052,43 +1052,49 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     const societaCodice = String(commitPayload.societa?.codice || commitPayload.company?.codice || '').trim()
     const docName = commitPayload.document?.number || 'TL-ACQ-01'
 
-    // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
-    console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]')
-    console.log(`documento=${docName}`)
-    console.log(`societaCodice=${societaCodice}`)
-    console.log(`documentoImportId=${documentId}`)
-    console.log(`primaNotaId=${primaNotaId}`)
-    console.log(`colonne_update=stato,metadata`)
-    console.log(`metadata_field=primaNotaId,dataCommit,sourceDocumento,statoContabilizzato`)
-
     try {
-      // Fetch existing metadata to perform a safe merge
+      let hasMetadata = false
+      let existingMeta = {}
+      
+      // Fetch existing metadata to check for its presence
       const { data: existingDoc, error: fetchErr } = await db
         .from('documenti_import')
         .select('metadata')
         .eq('id', documentId)
         .maybeSingle()
 
-      if (fetchErr) {
-        throw fetchErr
+      if (!fetchErr && existingDoc) {
+        hasMetadata = true
+        existingMeta = existingDoc.metadata || {}
       }
 
-      const existingMeta = existingDoc?.metadata || {}
-      const updatedMeta = {
-        ...existingMeta,
-        primaNotaId: primaNotaId,
-        dataCommit: new Date().toISOString(),
-        sourceDocumento: docName,
-        statoContabilizzato: 'processed'
+      const updatePayload = { stato: 'processed' }
+      let columnsUsed = ['stato']
+
+      if (hasMetadata) {
+        updatePayload.metadata = {
+          ...existingMeta,
+          primaNotaId: primaNotaId,
+          dataCommit: new Date().toISOString(),
+          sourceDocumento: docName,
+          statoContabilizzato: 'processed'
+        }
+        columnsUsed.push('metadata')
       }
 
-      // Update documents_import using only the available columns (stato and metadata)
+      // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
+      console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]')
+      console.log(`documento=${docName}`)
+      console.log(`societaCodice=${societaCodice}`)
+      console.log(`documentoImportId=${documentId}`)
+      console.log(`primaNotaId=${primaNotaId}`)
+      console.log(`colonne_update=${columnsUsed.join(',')}`)
+      console.log(`metadata_field=${hasMetadata ? 'primaNotaId,dataCommit,sourceDocumento,statoContabilizzato' : 'none'}`)
+
+      // Perform update using only the available columns
       const { error: updateError } = await db
         .from('documenti_import')
-        .update({
-          stato: 'processed',
-          metadata: updatedMeta
-        })
+        .update(updatePayload)
         .eq('id', documentId)
 
       if (updateError) {
@@ -1098,20 +1104,19 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
       // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
       console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
       console.log('esito=success')
-      console.log('errore=none')
+      console.log('action=executed')
+      console.log(`colonne_usate=${columnsUsed.join(',')}`)
       console.log('contabile_mantenuto=true')
-      console.log('motivo=Aggiornamento staging import completato con successo')
 
     } catch (err) {
-      // Staging update error is accessory and should not trigger a rollback of the core Prima Nota!
       stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import non eseguito: campo non disponibile nello schema documenti_import.'
 
       // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
       console.warn('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
-      console.warn(`esito=failed`)
+      console.warn('esito=failed')
+      console.warn('action=saltato')
       console.warn(`errore=${err?.message || err}`)
-      console.warn(`contabile_mantenuto=true`)
-      console.warn(`motivo=Errore accessorio staging non bloccante. Nessun rollback eseguito. Warning restituito all'utente.`)
+      console.warn('contabile_mantenuto=true')
     }
   }
 
