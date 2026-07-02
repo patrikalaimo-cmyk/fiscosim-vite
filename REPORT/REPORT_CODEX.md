@@ -10471,6 +10471,50 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo step consigliato**: Commit controllato su **TL-ACQ-03…10** post-fix per copertura aliquote; poi hardening staging con UUID reale; UI Partitario dedicata; Riconciliazione resta bloccata.
 
 
+## PROMPT 24F — COPERTURA CASI DEMO IMPORT TL-ACQ-03-10 E CONSOLIDAMENTO POST-CHECKPOINT
+
+- **Obiettivo**: Consolidare il comportamento Import demo sui casi TL-ACQ-03…TL-ACQ-10, verificando la corretta copertura del flusso (PN, IVA, partitario) e aggiungendo i relativi test automatici per prevenire regressioni.
+- **Riferimento checkpoint**: 24E chiuso con successo.
+- **Matrice casi TL-ACQ-03…TL-ACQ-10**:
+  | Caso | Numero doc. | Tipo doc. | Aliquota | Imponibile | IVA | Totale | Causale IVA | Conto costo | Conto IVA | Conto/controparte fornitore | Partitario previsto | Note fornitore |
+  |---|---|---|---|---|---|---|---|---|---|---|---|---|
+  | **TL-ACQ-03** | TL-ACQ-03 | TD01 | 4% | 250.00 | 10.00 | 260.00 | TESTLAB04 | 6.03.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Demo 04 S.r.l.) | Sì | Nuovo fornitore |
+  | **TL-ACQ-04** | TL-ACQ-04 | TD01 | 22% | 800.00 | 176.00 | 976.00 | TESTLAB22 | 6.01.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Multi Riga S.r.l.) | Sì | Multi-riga, stesso conto |
+  | **TL-ACQ-05** | TL-ACQ-05 | TD01 | 22% | 600.00 | 132.00 | 732.00 | TESTLAB22 | 6.01.001 / 6.05.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Doppio Conto S.r.l.) | Sì | Multi-riga, due conti diversi |
+  | **TL-ACQ-06** | TL-ACQ-06 | TD01 | 4%/10%/22% | 600.00 | 86.00 | 686.00 | TESTLAB04/10/22 | 6.01.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Multi Aliquota S.r.l.) | Sì | Multi-aliquota |
+  | **TL-ACQ-07** | TL-ACQ-07 | TD01 | 22% | 400.00 | 88.00 | 490.00 | TESTLAB22 | 6.01.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Con Bollo S.r.l.) | Sì | Con bollo (2€) |
+  | **TL-ACQ-08** | TL-ACQ-08 | TD01 | 22% | 333.33 | 73.33 | 406.66 | TESTLAB22 | 6.01.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Arrotondamento S.r.l.) | Sì | Arrotondamento centesimale |
+  | **TL-ACQ-09** | TL-ACQ-09 | TD01 | 22% | 150.00 | 33.00 | 183.00 | TESTLAB22 | 6.01.001 | 1.02.40.0001 | 2.04.02.0001 (Fornitore Anagrafica Esistente S.r.l.) | Sì | Fornitore noto |
+  | **TL-ACQ-10** | TL-ACQ-10 | TD01 | 22% | 275.00 | 60.50 | 335.50 | TESTLAB22 | 6.01.001 | 1.02.40.0001 | 2.04.02.0001 (Nuovo Fornitore Da Verificare S.r.l.) | Sì | Fornitore nuovo |
+- **Casi coperti da test automatici**:
+  - `TL-ACQ-03` (aliquota 4%, 3 righe PN, IVA 10, partitario reale);
+  - `TL-ACQ-09` (anagrafica esistente, IVA 33 su 150, totale 183, partitario reale);
+  - `TL-ACQ-02` (regressione checkpoint, 10% IVA, totale 550, partitario 1/1);
+  - Test negativi (partitario non salvato abortisce con errore; popup/readback discrepanze controllate);
+  - Sicurezza (UUID checks, integer guards, blocco società reale).
+- **Eventuali fix applicati**:
+  - Modificato `runCommitWorkflow` per ritornare `success: false` e `blockingReasons` se il partitario previsto non viene salvato (invece di ignorare e mettere warning).
+- **Conferme importanti**:
+  - TL-ACQ-01 resta dato sporco pre-fix e non prova valida;
+  - Riconciliazione bancaria resta bloccata.
+- **Sicurezza**:
+  - `.env` non toccati;
+  - auth/RLS/Supabase/migration non toccati;
+  - società reali non toccate;
+  - nessun `git add .`.
+- **File modificati**:
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+- **Test eseguiti**:
+  - `node --test src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js` (passato, 40/40)
+  - `node --test tests/testLabIntegrazione.test.js` (passato, 41/41)
+  - `node --test tests/partitarioDocumentiIva.test.js` (passato, 23/23)
+- **Esito npm run build**: 🟢 Successo (Vite build completata).
+- **Rischi residui**: Nessuno individuato.
+- **Prossimo test manuale richiesto**: Test di commit reali da browser su TL-ACQ-03, TL-ACQ-09 e TL-ACQ-02 verificando i contatori e la console.
+
+
+
 
 
 

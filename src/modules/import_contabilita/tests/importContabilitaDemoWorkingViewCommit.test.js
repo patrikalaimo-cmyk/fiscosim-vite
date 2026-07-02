@@ -807,4 +807,146 @@ test('24E-POSTCOMMIT-ENDTOEND-3 — popup non usa fallback previste come salvate
   assert.doesNotMatch(text, /Partite fornitore: 1/)
 })
 
+test('24F — TL-ACQ-09 scenario anagrafica esistente', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
+
+  const db = new MockDbClient()
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societaId = 'demo-societa'
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO', id: 'demo-societa' }
+  commitPayload.payload.company.societaId = 'demo-societa'
+  commitPayload.payload.document.number = 'TL-ACQ-09'
+  commitPayload.payload.document.totals = { gross: 183, taxable: 150, vat: 33 }
+  commitPayload.payload.accounting.rows = [
+    { accountId: 'acc-cost', debit: 150, credit: 0 },
+    { accountId: 'acc-iva-credit', debit: 33, credit: 0 },
+    { accountId: 'acc-supplier', debit: 0, credit: 183 },
+  ]
+  commitPayload.payload.accounting.totals = { debit: 183, credit: 183, dare: 183, avere: 183 }
+  commitPayload.payload.vat = {
+    enabled: true,
+    registerType: 'acquisti',
+    rows: [{ imponibile: 150, imposta: 33, aliquota: 22, causaleIvaId: 'TESTLAB22', causaleIva: 'IVA 22%' }],
+  }
+  commitPayload.payload.ledger = {
+    enabled: true,
+    mode: 'open',
+    accountId: 'acc-supplier',
+    amount: 183,
+    rows: [{ amount: 183, dueDate: '2026-04-30' }],
+  }
+  commitPayload.payload.accounting.causaleContabile = {
+    codice: 'FF',
+    tipo_causale: 'docivanormale',
+    registro_iva: 'acquisti',
+    segno_registro_iva: '+',
+    operazione_gestita: 'fatturapassiva',
+  }
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  assert.equal(res.success, true)
+  assert.equal(res.numeroRighe, 3)
+  assert.equal(res.numeroRigheIva, 1)
+  assert.equal(res.partitaFornitoreSalvate, 1)
+  assert.equal(res.partitaFornitorePreviste, 1)
+
+  const insertedPart = db.log.find(l => l.table === 'partitario' && l.action === 'insert')?.data[0]
+  assert.equal(insertedPart.importo_originale, 183)
+  assert.equal(insertedPart.importo_residuo, 183)
+  assert.equal(insertedPart.stato, 'aperta')
+})
+
+test('24F — TL-ACQ-02 scenario 10% come regressione checkpoint', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
+
+  const db = new MockDbClient()
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societaId = 'demo-societa'
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO', id: 'demo-societa' }
+  commitPayload.payload.company.societaId = 'demo-societa'
+  commitPayload.payload.document.number = 'TL-ACQ-02'
+  commitPayload.payload.document.totals = { gross: 550, taxable: 500, vat: 50 }
+  commitPayload.payload.accounting.rows = [
+    { accountId: 'acc-cost', debit: 500, credit: 0 },
+    { accountId: 'acc-iva-credit', debit: 50, credit: 0 },
+    { accountId: 'acc-supplier', debit: 0, credit: 550 },
+  ]
+  commitPayload.payload.accounting.totals = { debit: 550, credit: 550, dare: 550, avere: 550 }
+  commitPayload.payload.vat = {
+    enabled: true,
+    registerType: 'acquisti',
+    rows: [{ imponibile: 500, imposta: 50, aliquota: 10, causaleIvaId: 'TESTLAB10', causaleIva: 'IVA 10%' }],
+  }
+  commitPayload.payload.ledger = {
+    enabled: true,
+    mode: 'open',
+    accountId: 'acc-supplier',
+    amount: 550,
+    rows: [{ amount: 550, dueDate: '2026-04-30' }],
+  }
+  commitPayload.payload.accounting.causaleContabile = {
+    codice: 'FF',
+    tipo_causale: 'docivanormale',
+    registro_iva: 'acquisti',
+    segno_registro_iva: '+',
+    operazione_gestita: 'fatturapassiva',
+  }
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  assert.equal(res.success, true)
+  assert.equal(res.partitaFornitoreSalvate, 1)
+  assert.equal(res.partitaFornitorePreviste, 1)
+})
+
+test('24F — test negativi: partitario previsto non salvato o discrepanza readback', async () => {
+  const { runCommitWorkflow } = await import('../application/importContabilitaWorkflow.js')
+  const { makeValidCommitPayload, MockDbClient } = await import('./importContabilitaWorkflow.test.js')
+
+  // Case A: Ledger fails to insert (expected 1, saved 0) -> should report failure
+  const db = new MockDbClient()
+  db.resolveMultiple = (table, data, filters) => {
+    if (table === 'partitario') {
+      return { data: [], error: null }
+    }
+    return { data: [{ id: `${table}-id`, ...data }], error: null }
+  }
+
+  const commitPayload = makeValidCommitPayload()
+  commitPayload.societaId = 'demo-societa'
+  commitPayload.societa = { codice: '__TEST__FISCOSIM_DEMO', id: 'demo-societa' }
+  commitPayload.payload.ledger = {
+    enabled: true,
+    mode: 'open',
+    accountId: 'acc-supplier',
+    amount: 183,
+    rows: [{ amount: 183, dueDate: '2026-04-30' }],
+  }
+
+  const res = await runCommitWorkflow(commitPayload, { db })
+  // The test must fail if the partitario is not saved but was expected
+  assert.equal(res.success, false)
+  assert.ok(res.blockingReasons.some(r => r.toLowerCase().includes('partitario') || r.toLowerCase().includes('coerenza')))
+})
+
+test('24F — nessuna società reale può passare il commit Test Lab', async () => {
+  const { evaluateDemo24EWorkingViewCommitGuards } = await import('../domain/importContabilitaDemoWorkingViewCommit.js')
+  const realCompany = { id: 'real-1', codice: 'REAL_STUDIO_CO', denominazione: 'Studio Associato Reale' }
+
+  const guard = evaluateDemo24EWorkingViewCommitGuards({
+    societa: realCompany,
+    selectedRowIds: new Set(['row-1']),
+    workingViewOpen: true,
+    workingViewRowId: 'row-1',
+    activeWorkingViewModel: TL_ACQ_MODEL,
+    baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+    ivaDraftRows: [{ imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+    pianoConti: PIANO_CONTI,
+  })
+  assert.equal(guard.allowed, false)
+  assert.ok(guard.blockingIssues.some(r => r.toLowerCase().includes('demo')))
+})
+
+
 

@@ -1155,8 +1155,23 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
 
   const societaCodice = normalizeText(commitPayload.societa?.codice || commitPayload.company?.codice || '')
   const isDemoCommit = societaCodice.toLowerCase().includes('test') || societaCodice.includes('__TEST__')
-  if (isDemoCommit && draftBundle.partitarioDraft?.active && canonicalPayload.postCommitTargets?.shouldCreateLedger && partiteSalvate === 0) {
-    warningsList.push('Commit demo: partitario previsto ma nessuna partita salvata in DB.')
+  if (isDemoCommit && draftBundle.partitarioDraft?.active && partiteSalvate === 0) {
+    return {
+      success: false,
+      primaNotaId,
+      documentoId: documentId,
+      status: 'failed',
+      warnings: warningsList,
+      blockingReasons: ['Commit demo fallito: partitario previsto (previste: ' + partitePreviste + ') ma nessuna partita salvata in DB (salvate: 0).'],
+      numeroRighe: persistResult.data?.numero_righe || 0,
+      numeroRigheIva: persistResult.data?.numero_righe_iva || 0,
+      partitaFornitoreCount: 0,
+      partitaFornitorePreviste: partitePreviste,
+      partitaFornitoreSalvate: 0,
+      totaleDare: persistResult.data?.totale_dare || 0,
+      totaleAvere: persistResult.data?.totale_avere || 0,
+      isBalanced: persistResult.data?.isBalanced || false,
+    }
   }
 
   // 7. Risultato
