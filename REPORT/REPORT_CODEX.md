@@ -10437,6 +10437,38 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo test manuale**: Demo → TL-ACQ-03 → commit → console `[TEST_LAB_PARTITARIO_PERSISTENCE_PLAN] partitarioRowsCount=1`, `[TEST_LAB_PARTITARIO_INSERT_RESULT] insertedCount=1`, `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] importo_originale=260 esito_coerenza=SUCCESS`; popup “Partite fornitore salvate: 1”.
 
 
+## PROMPT 24E-CHECKPOINT — CHIUSURA PRIMO CICLO REALE IMPORT DEMO PN IVA PARTITARIO
+
+- **Data**: 2026-07-02
+- **Obiettivo checkpoint**: Consolidare e documentare il primo ciclo reale Import Contabilità demo validato manualmente dall’utente (nessun nuovo sviluppo funzionale).
+- **Test manuale utente — TL-ACQ-02** (recepito dal checkpoint, non eseguito da AI):
+  - Commit Working View: documento **TL-ACQ-02**, PN `12ca516c-3612-4837-858c-6c62468a3001`, 3 righe PN, 1 IVA, partite previste/salvate **1/1**, Dare/Avere **550/550**, stato `processed`.
+  - Console: `[TEST_LAB_PARTITARIO_INSERT_RESULT] attempted=true insertedCount=1`; `[TEST_LAB_POSTCOMMIT_PARTITARIO_CHECK] partitario_count=1 importo_originale=550 importo_residuo=550 stato=aperta controparte_nome=Fornitore Demo 10 S.r.l. esito_coerenza=SUCCESS`.
+  - Staging: `[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN] documentoImportIdIsUuid=false action=skip`; `[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT] esito=skipped contabile_mantenuto=true`.
+- **Consultazione Prima Nota** (verifica utente): TL-ACQ-02, N. PN **34**, righe costo Dare **500** + IVA Dare **50** + fornitore Avere **550**, stato **Registrata**.
+- **Registro IVA Acquisti** (verifica utente): imponibile **500**, IVA **50**, aliquota **10%**, totale **550**.
+- **Partitario reale** (verifica utente via log/readback): 1 riga, importo_originale/residuo **550**, stato **aperta**, fornitore Demo 10 S.r.l.
+- **Staging documenti_import**: skip controllato per ID Test Lab sintetico (non UUID) — contabile mantenuto.
+- **Nota TL-ACQ-01**: registrazione demo **pre-fix** (IVA a zero / partitario assente) — **non** riferimento valido del nuovo flusso. Casi validi post-fix: **TL-ACQ-02** e successivi.
+- **Ciclo core validato**: Import → Working View → Commit reale → Prima Nota → Registro IVA → Partitario.
+- **File inclusi nel checkpoint** (serie commit `59a893e`…`eca9fc0`, già in repo):
+  - `src/modules/import_contabilita/` (workflow, working view, domain demo commit/causali IVA, index, repo, test)
+  - `src/modules/test_mode/` (demoCompanyGuard, TestLabPanel, testLabPreparaWorkflow)
+  - `src/modules/contabilita/application/persistPrimaNotaDraft.js`
+  - `src/modules/contabilita/domain/causali/buildCausaleContabilePolicy.js`
+  - `src/modules/contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js`
+  - `tests/testLabIntegrazione.test.js`
+  - `AI_WORKING_AREA_FISCOSIM/14_SOCIETA_DEMO_TEST_LAB.md`, `PROJECT_STATE.md`
+- **Esclusi dal checkpoint** (modifiche accidentali non pertinenti): `ImportContabilitaAnagraficheDetail.jsx`, `tests/partitarioDocumentiIva.test.js`.
+- **Test automatici**: 95/95 Import/TestLab/PostCommit; `npm run build` OK.
+- **Backup ZIP**: `fiscosim-checkpoint-24e-primo-ciclo-reale-import-demo-pn-iva-partitario-2026-07-02-2153.zip`
+- **Commit checkpoint**: `checkpoint: import demo first real commit cycle` (documentazione).
+- **Sicurezza**: .env/auth/RLS/Supabase/migration non toccati; società reali non toccate; nessun `git add .`; Riconciliazione **BLOCCATA**.
+- **Rischi residui**:
+  - TL-ACQ-01 sporco pre-fix, non rappresentativo.
+  - UI Partitario da completare in fase dedicata; record DB verificato via log/readback.
+  - Test Lab: staging `documenti_import` saltato con ID sintetico; flussi reali con UUID staging richiedono verifica dedicata.
+- **Prossimo step consigliato**: Commit controllato su **TL-ACQ-03…10** post-fix per copertura aliquote; poi hardening staging con UUID reale; UI Partitario dedicata; Riconciliazione resta bloccata.
 
 
 

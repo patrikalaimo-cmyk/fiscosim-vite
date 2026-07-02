@@ -438,6 +438,22 @@ Import working table → selezione **1** riga pronta → working view → valida
 3. TL-ACQ-02…10 non contabilizzate
 4. >1 riga o società reale → blocco
 
+## FASE 24E-CHECKPOINT — Primo ciclo reale validato (TL-ACQ-02)
+
+### Validazione manuale utente (2026-07-02)
+- Documento: **TL-ACQ-02**
+- PN: `12ca516c-3612-4837-858c-6c62468a3001` (N. registrazione 34)
+- Righe: costo Dare 500 · IVA Dare 50 · fornitore Avere 550
+- Registro IVA acquisti: imponibile 500 · IVA 50 · 10% · totale 550
+- Partitario: 1 riga, importo 550, stato aperta, Fornitore Demo 10 S.r.l.
+- Staging documenti_import: skip (ID sintetico Test Lab)
+
+### Nota TL-ACQ-01
+Registrazione pre-fix (IVA zero / partitario assente). Non usare come prova del flusso corrente.
+
+### Casi validi post-fix
+TL-ACQ-02 … TL-ACQ-10 (commit uno alla volta).
+
 
 ## FASE 24E-FIX-1 — Debug commit demo silenzioso working view
 
