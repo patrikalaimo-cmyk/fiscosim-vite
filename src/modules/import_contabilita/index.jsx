@@ -4505,21 +4505,109 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     if (selectedRowIds.size === 0) {
       showActionBanner(
         'warning',
-        'Predisposizione contabile: seleziona esattamente 1 riga per procedere.'
-      )
-      return
-    }
-    if (selectedRowIds.size > 1) {
-      showActionBanner(
-        'warning',
-        'Predisposizione contabile: seleziona esattamente 1 riga. Azioni massive disabilitate.'
+        'Seleziona almeno un documento pronto.'
       )
       return
     }
 
+    // A. Single selection (size === 1)
+    if (selectedRowIds.size === 1) {
+      const launchRows = stagingRows.filter((row) => {
+        const key = getRowKey(row)
+        return selectedRowIds.has(key)
+      })
+
+      const eligibleRows = launchRows.filter((row) => {
+        const key = getRowKey(row)
+        return workingTableReadinessByRowId[key]?.ready && row.state !== 'registered' && row.state !== 'committed'
+      })
+
+      if (eligibleRows.length !== 1) {
+        showActionBanner(
+          'warning',
+          'La riga selezionata non è pronta per la contabilizzazione. Completa la riga prima di procedere.'
+        )
+        return
+      }
+
+      const row = eligibleRows[0]
+      const key = getRowKey(row)
+      const parsedDocument = row?.parsedDocument || {}
+      const preferredCounterparty = getPreferredCounterparty(parsedDocument)
+      const counterparty = preferredCounterparty?.counterparty || {}
+      const counterpartyAccount = counterpartyAccountByRowId[key] || null
+      const costRevenueAccount = manualAccountByRowId[key] || null
+      const causale = manualCausaleByRowId[key] || null
+      const registrationDate = manualRegistrationDateByRowId[key] || parsedDocument?.dataDocumento || registrationDateDraft
+      const automationMeta = automationMetaByRowId[key] || null
+
+      const imponibile = Number(parsedDocument?.imponibile ?? 0)
+      const iva = Number(parsedDocument?.iva ?? 0)
+      const totale = Number(parsedDocument?.totale ?? 0)
+      const dataDocumento = parsedDocument?.dataDocumento
+      const numeroDocumento = parsedDocument?.numeroDocumento
+
+      if (!row) {
+        showActionBanner('error', 'Errore bloccante: documento importato non trovato.')
+        return
+      }
+      if (!parsedDocument || Object.keys(parsedDocument).length === 0) {
+        showActionBanner('error', 'Errore bloccante: anteprima/XML documento non disponibile.')
+        return
+      }
+      if (!counterparty || Object.keys(counterparty).length === 0) {
+        showActionBanner('error', 'Errore bloccante: fornitore collegato non trovato.')
+        return
+      }
+      if (!costRevenueAccount && !counterpartyAccount) {
+        showActionBanner('error', 'Errore bloccante: conto contabile selezionato non trovato.')
+        return
+      }
+      if (!causale) {
+        showActionBanner('error', 'Errore bloccante: causale contabile FF demo non impostata.')
+        return
+      }
+      if (!imponibile || imponibile <= 0) {
+        showActionBanner('error', 'Errore bloccante: imponibile documento non valido o pari a zero.')
+        return
+      }
+      if (iva === undefined || iva === null) {
+        showActionBanner('error', 'Errore bloccante: importo IVA mancante.')
+        return
+      }
+      if (!totale || totale <= 0) {
+        showActionBanner('error', 'Errore bloccante: totale documento non valido o pari a zero.')
+        return
+      }
+      if (!dataDocumento) {
+        showActionBanner('error', 'Errore bloccante: data documento non specificata.')
+        return
+      }
+      if (!registrationDate) {
+        showActionBanner('error', 'Errore bloccante: data registrazione non specificata.')
+        return
+      }
+      if (!numeroDocumento) {
+        showActionBanner('error', 'Errore bloccante: numero documento non specificato.')
+        return
+      }
+      if (!automationMeta) {
+        showActionBanner('error', 'Errore bloccante: metadata test_lab non trovati per la riga.')
+        return
+      }
+
+      setWorkingViewRowIds([key])
+      setWorkingViewRowId(key)
+      setWorkingViewOpen(true)
+      setWorkingViewTab('prima_nota')
+      showActionBanner('success', `Apertura predisposizione contabile per il documento ${numeroDocumento}.`)
+      return
+    }
+
+    // B. Multi-selection (size > 1)
     const launchRows = stagingRows.filter((row) => {
       const key = getRowKey(row)
-      return selectedRowIds.size ? selectedRowIds.has(key) : false
+      return selectedRowIds.has(key)
     })
 
     const eligibleRows = launchRows.filter((row) => {
@@ -4527,87 +4615,29 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       return workingTableReadinessByRowId[key]?.ready && row.state !== 'registered' && row.state !== 'committed'
     })
 
-    if (eligibleRows.length !== 1) {
+    if (eligibleRows.length === 0) {
       showActionBanner(
         'warning',
-        'La riga selezionata non è pronta per la contabilizzazione. Completa la riga prima di procedere.'
+        'Nessuno dei documenti selezionati è pronto per la contabilizzazione.'
       )
       return
     }
 
-    const row = eligibleRows[0]
-    const key = getRowKey(row)
-    const parsedDocument = row?.parsedDocument || {}
-    const preferredCounterparty = getPreferredCounterparty(parsedDocument)
-    const counterparty = preferredCounterparty?.counterparty || {}
-    const counterpartyAccount = counterpartyAccountByRowId[key] || null
-    const costRevenueAccount = manualAccountByRowId[key] || null
-    const causale = manualCausaleByRowId[key] || null
-    const registrationDate = manualRegistrationDateByRowId[key] || parsedDocument?.dataDocumento || registrationDateDraft
-    const automationMeta = automationMetaByRowId[key] || null
-
-    const imponibile = Number(parsedDocument?.imponibile ?? 0)
-    const iva = Number(parsedDocument?.iva ?? 0)
-    const totale = Number(parsedDocument?.totale ?? 0)
-    const dataDocumento = parsedDocument?.dataDocumento
-    const numeroDocumento = parsedDocument?.numeroDocumento
-
-    // Step 4 Validation
-    if (!row) {
-      showActionBanner('error', 'Errore bloccante: documento importato non trovato.')
-      return
-    }
-    if (!parsedDocument || Object.keys(parsedDocument).length === 0) {
-      showActionBanner('error', 'Errore bloccante: anteprima/XML documento non disponibile.')
-      return
-    }
-    if (!counterparty || Object.keys(counterparty).length === 0) {
-      showActionBanner('error', 'Errore bloccante: fornitore collegato non trovato.')
-      return
-    }
-    if (!costRevenueAccount && !counterpartyAccount) {
-      showActionBanner('error', 'Errore bloccante: conto contabile selezionato non trovato.')
-      return
-    }
-    if (!causale) {
-      showActionBanner('error', 'Errore bloccante: causale contabile FF demo non impostata.')
-      return
-    }
-    if (!imponibile || imponibile <= 0) {
-      showActionBanner('error', 'Errore bloccante: imponibile documento non valido o pari a zero.')
-      return
-    }
-    if (iva === undefined || iva === null) {
-      showActionBanner('error', 'Errore bloccante: importo IVA mancante.')
-      return
-    }
-    if (!totale || totale <= 0) {
-      showActionBanner('error', 'Errore bloccante: totale documento non valido o pari a zero.')
-      return
-    }
-    if (!dataDocumento) {
-      showActionBanner('error', 'Errore bloccante: data documento non specificata.')
-      return
-    }
-    if (!registrationDate) {
-      showActionBanner('error', 'Errore bloccante: data registrazione non specificata.')
-      return
-    }
-    if (!numeroDocumento) {
-      showActionBanner('error', 'Errore bloccante: numero documento non specificato.')
-      return
-    }
-    if (!automationMeta) {
-      showActionBanner('error', 'Errore bloccante: metadata test_lab non trovati per la riga.')
-      return
+    const excludedCount = launchRows.length - eligibleRows.length
+    if (excludedCount > 0) {
+      showActionBanner(
+        'warning',
+        `Attenzione: ${excludedCount} document${excludedCount === 1 ? 'o' : 'i'} non pront${excludedCount === 1 ? 'o' : 'i'} o già contabilizzat${excludedCount === 1 ? 'o' : 'i'} escluso.`
+      )
+    } else {
+      showActionBanner('success', `Apertura sessione contabile per ${eligibleRows.length} documenti.`)
     }
 
-    // Step 5: Transition to preview (working view) rather than committing
-    setWorkingViewRowIds([key])
-    setWorkingViewRowId(key)
+    const eligibleKeys = eligibleRows.map(row => getRowKey(row))
+    setWorkingViewRowIds(eligibleKeys)
+    setWorkingViewRowId(eligibleKeys[0])
     setWorkingViewOpen(true)
     setWorkingViewTab('prima_nota')
-    showActionBanner('success', `Apertura predisposizione contabile per il documento ${numeroDocumento}.`)
   }
 
   const handleDemoWorkingViewCommit = async ({ ivaDraftRows = [], pnDraftRows = [] } = {}) => {
@@ -4772,6 +4802,42 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         `Documento demo contabilizzato: ${activeWorkingViewModel?.parsedDocument?.numeroDocumento || committedKey}.`,
       )
       window.alert(reportText)
+
+      // Transition to next active document in session if any
+      const currentQueue = workingViewRowIds || []
+      const currentIdx = currentQueue.indexOf(committedKey)
+      
+      const getNextActiveIdInQueue = (queue, currentIndex, rows) => {
+        const getRowState = (key) => {
+          const r = rows.find(x => getRowKey(x) === key)
+          return r ? r.state || r.stato : ''
+        }
+        for (let i = currentIndex + 1; i < queue.length; i++) {
+          const key = queue[i]
+          const state = getRowState(key)
+          if (state !== 'committed' && state !== 'registered') {
+            return key
+          }
+        }
+        for (let i = 0; i < currentIndex; i++) {
+          const key = queue[i]
+          const state = getRowState(key)
+          if (state !== 'committed' && state !== 'registered') {
+            return key
+          }
+        }
+        return null
+      }
+
+      const nextActiveId = getNextActiveIdInQueue(currentQueue, currentIdx, nextRows)
+      if (nextActiveId) {
+        setWorkingViewRowId(nextActiveId)
+      } else {
+        showActionBanner(
+          'success',
+          'Sessione completata. Tutti i documenti selezionati sono stati gestiti.'
+        )
+      }
     } catch (err) {
       console.error(`[TEST_LAB_COMMIT_ERROR] Errore imprevisto nel commit: ${err?.message || err}`)
       showActionBanner('error', `Commit demo 24E fallito: ${err?.message || err}`)

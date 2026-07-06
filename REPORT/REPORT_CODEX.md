@@ -10544,7 +10544,62 @@ pm run build -> Successo (429 moduli, 16s).
 - **Sicurezza**: .env/auth/RLS/Supabase/migration/società reali non toccati; Riconciliazione **BLOCCATA**.
 - **Prossimo test manuale**: Patrik ricarica Test Lab → verifica assenza crash → run demo 24F visibile → Prepara test ri-eseguibile.
 
+## PROMPT 24F-FIX-3 — PULIZIA STAGING TEST LAB E DROPDOWN IMPORT WORKING TABLE
 
+- **Obiettivo**: Pulire anomalie tecniche del Test Lab (chiamate 400 Bad Request preventive, log errati con nome fallback TL-ACQ-01) e ottimizzare la UX bloccante del dropdown della Working Table (autoclose, click-outside, posizionamento automatico viewport).
+- **Problemi Risolti**:
+  1. **UUID precheck guard su documenti_import**: Introdotto un controllo preventivo su `runCommitWorkflow` per stabilire se l'ID è sintetico (non UUID, es. `test_lab_24f_*`). Se non è un UUID valido, la chiamata server a `documenti_import` viene saltata bypassando la query e loggando `[TEST_LAB_COMMIT_PRECHECK_SKIPPED]`.
+  2. **Log staging con docName corretto**: Corretto il tracciamento di `docName` nei log del piano di aggiornamento staging. La variabile cerca prioritariamente la proprietà `numeroDocumento` dentro `parsedDocument` o `payload.document` per stampare ad esempio `documento=TL-ACQ-09` invece del fallback fisso `TL-ACQ-01`.
+  3. **Dropdown Autocomplete robusto nella Working Table**:
+     - **Posizionamento smart**: Calcola se l'altezza residua dello schermo al di sotto del campo di testo è inferiore a 300px, e in tal caso posiziona il portale fluttuante per aprirsi verso l'alto (upward) invece che verso il basso.
+     - **Chiusura su Escape e Click-Outside**: Collegato un listener globale di tipo `keydown` per il tasto `Escape` ed un listener `mousedown` sul documento per chiudere la finestrella attiva se si fa clic fuori dalla cella o dal dropdown di autocompletamento.
+- **File Modificati / Creati**:
+  - [`src/modules/import_contabilita/application/importContabilitaWorkflow.js`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/application/importContabilitaWorkflow.js)
+  - [`src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx)
+  - [`tests/testLabIntegrazione.test.js`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/testLabIntegrazione.test.js)
+  - [`REPORT/REPORT_CODEX.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+- **Test Eseguiti**:
+  - `node --test tests/testLabIntegrazione.test.js` (passato, 44/44) 🟢
+  - Esecuzione complessiva di tutte le suite di test del progetto: 55/55 passati con successo (100% SUCCESS) 🟢
+- **Esito npm run build**: Compilazione completata correttamente (442 moduli trasformati, zero errori) 🟢
+- **Rischi Residui**: Nessuno. La UX della Working Table è fluida ed i precheck delle query del database sono ora sicuri per ID sintetici.
 
+## PROMPT 24F-FIX-4 — IMPORT MULTI-SELEZIONE PRONTE E SESSIONE WORKING VIEW MULTI-DOCUMENTO
 
+- **Problema rilevato**: Se l'utente seleziona più fatture pronte e clicca "Avvia contabilizzazione", la Working View non si apre e l'azione non fa nulla (era limitata a selezionare esattamente 1 riga).
+- **Diagnosi**: Nel codice originale di `onStartAccounting` era presente una guardia rigida `if (selectedRowIds.size > 1)` che bloccava silenziosamente la transizione restituendo un avviso di "azioni massive disabilitate". Inoltre, `eligibleRows.length !== 1` forzava l'interruzione se più di una riga era pronta per la sessione.
+- **Soluzione adottata**:
+  - **Import Accounting Session**: Abilitato il flusso di sessione di lavoro multi-documento selezionato.
+  - **Comportamento per numero documenti selezionati**:
+    - **0 selezioni**: Mostra il warning "Seleziona almeno un documento pronto."
+    - **1 selezione**: Comportamento originale completamente preservato.
+    - **Selezioni multiple (> 1)**: Filtra e seleziona solo i documenti in stato pronto (`ready && !== 'registered' && !== 'committed'`). Se tra le selezionate sono presenti righe incomplete o già processate, le esclude automaticamente mostrando un warning informativo e avvia la sessione con i soli documenti pronti. Se nessuna è pronta, si interrompe mostrando un errore.
+  - **Toolbar Sessione Working View**: Aggiunto un pannello di navigazione in testata che indica chiaramente:
+    - `"Documento X di Y"` (es. `"Documento 1 di 2"`).
+    - Codice caso (`caseCode` es. `TL-ACQ-09`) estratto dalla chiave sintetica, con numero di documento in parentesi.
+    - Stato corrente della riga visualizzata con badge colorato (`processed`, `pronta`, `incompleta`, `errore`).
+    - Pulsanti per navigare velocemente tra i documenti ("Prec.", "Succ.", "Torna all'elenco").
+  - **Transizione automatica dopo il Commit**: Dopo che l'utente contabilizza e conferma con successo il documento corrente, lo stato del documento viene marcato `committed`. Il workflow scansiona in avanti la coda della sessione per proporre automaticamente la riga successiva non ancora processata. Se non rimangono righe attive, mostra il messaggio "Sessione completata. Tutti i documenti selezionati sono stati gestiti."
+  - **Keyboard Shortcuts**: Registrati gestori eventi `keydown` per consentire la navigazione rapida tramite tastiera:
+    - `Alt + ArrowRight` -> Documento successivo.
+    - `Alt + ArrowLeft` -> Documento precedente.
+- **Flusso contabile e sicurezza**:
+  - Nessuna contabilizzazione massiva automatica cieca (ogni documento viene aperto, revisionato e confermato singolarmente dall'operatore).
+  - Il motore di commit contabile rimane quello canonico già validato.
+- **File Modificati**:
+  - [`src/modules/import_contabilita/index.jsx`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/index.jsx)
+  - [`src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx)
+  - [`tests/testLabIntegrazione.test.js`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/testLabIntegrazione.test.js)
+  - [`REPORT/REPORT_CODEX.md`](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/REPORT/REPORT_CODEX.md)
+- **Test Eseguiti**:
+  - Eseguito il comando di test: `node --test tests/testLabIntegrazione.test.js` (passato, 45/45) 🟢
+  - Eseguito l'intero set di test di regressione: 56/56 superati (100% SUCCESS) 🟢
+- **Esito npm run build**: Compilazione Vite completata correttamente (442 moduli trasformati, zero errori) 🟢
+- **Sicurezza e vincoli ambientali**:
+  - `.env` e `.env.local` non modificati.
+  - Nessun tocco su RLS, auth, Supabase policy o migration.
+  - Nessuna cancellazione di registrazioni contabili, registri IVA o partitari esistenti.
+  - Nessun `git add .` indiscriminato.
+- **Rischi Residui**: Nessuno.
+- **Prossimo test manuale richiesto**: Eseguire una run demo in Test Lab, selezionare sia `TL-ACQ-03` che `TL-ACQ-09` nella Working Table, cliccare "Avvia contabilizzazione" ed effettuare la contabilizzazione assistita in sequenza verificando il passaggio automatico e i badge di stato.
 

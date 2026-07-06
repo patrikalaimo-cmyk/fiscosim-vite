@@ -356,6 +356,25 @@ export function ImportContabilitaWorkingView({
     setPnDraftRows(baseRows)
   }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.causale, formatManualCausale, ivaCreditAccount])
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault()
+        if (hasPreviousWorkingViewRow && typeof onGoToPreviousWorkingViewRow === 'function') {
+          onGoToPreviousWorkingViewRow()
+        }
+      }
+      if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (hasNextWorkingViewRow && typeof onGoToNextWorkingViewRow === 'function') {
+          onGoToNextWorkingViewRow()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [hasPreviousWorkingViewRow, hasNextWorkingViewRow, onGoToPreviousWorkingViewRow, onGoToNextWorkingViewRow])
+
   const [selectedIvaDraftRowId, setSelectedIvaDraftRowId] = useState(null)
   const [ivaCausalePickerRowId, setIvaCausalePickerRowId] = useState('')
   const [ivaCausaleSearchTerm, setIvaCausaleSearchTerm] = useState('')
@@ -744,6 +763,32 @@ export function ImportContabilitaWorkingView({
     gap: '.42rem',
   }
 
+  const getCaseCode = (model) => {
+    const key = model?.handoff?.sourceRowKey || model?.sourceRowKey || model?.id || ''
+    if (key.includes('TL-ACQ')) {
+      const match = key.match(/(TL-ACQ-\d+)/)
+      if (match) return match[1]
+    }
+    return ''
+  }
+  const caseCode = getCaseCode(activeWorkingViewModel)
+  const numeroDocumento = activeWorkingViewModel?.parsedDocument?.numeroDocumento || activeWorkingViewModel?.numeroDocumento || '—'
+
+  const getRowStatusLabel = () => {
+    const state = activeWorkingViewModel?.state || activeWorkingViewModel?.stato || ''
+    if (state === 'committed' || state === 'registered' || activeWorkingViewModel?.committed) {
+      return { text: 'processed', color: '#7ab8ff' }
+    }
+    if (mergedWorkingViewChecks?.status === 'ok') {
+      return { text: 'pronta', color: '#79e595' }
+    }
+    if (mergedWorkingViewChecks?.errors?.length || mergedWorkingViewChecks?.blocking?.length) {
+      return { text: 'errore', color: '#ff6b6b' }
+    }
+    return { text: 'incompleta', color: '#ffca57' }
+  }
+  const statusInfo = getRowStatusLabel()
+
   return (
     <div style={{ padding: '.24rem .42rem .46rem', maxWidth: 1480, margin: '0 auto', display: 'grid', gap: '.16rem' }}>
       <header
@@ -803,29 +848,49 @@ export function ImportContabilitaWorkingView({
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(380px, .66fr) minmax(680px, 1fr)', gap: '.22rem', alignItems: 'stretch', minHeight: 0 }}>
           <section style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: '.14rem', alignContent: 'stretch', minHeight: 0 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.12rem', padding: '.12rem', borderRadius: 14, border: '1px solid rgba(124,157,202,.14)', background: 'linear-gradient(180deg, rgba(16,39,61,.76), rgba(11,30,48,.82))' }}>
-              <button
-                type="button"
-                onClick={hasPreviousWorkingViewRow ? onGoToPreviousWorkingViewRow : undefined}
-                disabled={!hasPreviousWorkingViewRow}
-                style={hasPreviousWorkingViewRow ? headerNavButtonStyle : headerDisabledButtonStyle}
-              >
-                ← Prec.
-              </button>
-              <button
-                type="button"
-                onClick={hasNextWorkingViewRow ? onGoToNextWorkingViewRow : undefined}
-                disabled={!hasNextWorkingViewRow}
-                style={hasNextWorkingViewRow ? headerNavButtonStyle : headerDisabledButtonStyle}
-              >
-                Succ. →
-              </button>
-              <div style={{ padding: '.14rem .18rem', borderRadius: 12, border: '1px solid rgba(124,157,202,.12)', background: 'rgba(255,255,255,.03)', fontSize: '.76rem', fontWeight: 700, color: '#e6eeff', minWidth: 82, textAlign: 'center' }}>
-                {Math.max(workingViewCurrentIndex, 0) + 1} / {workingViewTotal || 1}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.4rem', padding: '.16rem .3rem', borderRadius: 14, border: '1px solid rgba(124,157,202,.14)', background: 'linear-gradient(180deg, rgba(16,39,61,.76), rgba(11,30,48,.82))' }}>
+              <div style={{ fontSize: '.72rem', color: '#b0cbef', fontWeight: 600 }}>
+                Documento {Math.max(workingViewCurrentIndex, 0) + 1} di {workingViewTotal || 1}
               </div>
-              <button type="button" onClick={closeWorkingView} style={headerPrimaryButtonStyle}>
-                Torna all'elenco
-              </button>
+              
+              <div style={{ padding: '.08rem .24rem', borderRadius: 8, border: '1px solid rgba(124,157,202,.12)', background: 'rgba(255,255,255,.03)', fontSize: '.72rem', fontWeight: 700, color: '#e6eeff' }}>
+                {caseCode ? `${caseCode} (${numeroDocumento})` : numeroDocumento}
+              </div>
+
+              <span style={{
+                padding: '.06rem .24rem',
+                borderRadius: 999,
+                fontSize: '.58rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                background: `${statusInfo.color}15`,
+                color: statusInfo.color,
+                border: `1px solid ${statusInfo.color}35`
+              }}>
+                {statusInfo.text}
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.1rem', marginLeft: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={hasPreviousWorkingViewRow ? onGoToPreviousWorkingViewRow : undefined}
+                  disabled={!hasPreviousWorkingViewRow}
+                  style={hasPreviousWorkingViewRow ? headerNavButtonStyle : headerDisabledButtonStyle}
+                >
+                  ← Prec.
+                </button>
+                <button
+                  type="button"
+                  onClick={hasNextWorkingViewRow ? onGoToNextWorkingViewRow : undefined}
+                  disabled={!hasNextWorkingViewRow}
+                  style={hasNextWorkingViewRow ? headerNavButtonStyle : headerDisabledButtonStyle}
+                >
+                  Succ. →
+                </button>
+                <button type="button" onClick={closeWorkingView} style={headerPrimaryButtonStyle}>
+                  Torna all'elenco
+                </button>
+              </div>
             </div>
 
             <WorkingViewInvoicePreviewTabs

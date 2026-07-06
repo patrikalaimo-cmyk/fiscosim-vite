@@ -648,3 +648,153 @@ test('24F-FIX-2 — TestLabPanel importa tutti gli hook React usati', async () =
   assert.doesNotMatch(panelSource, /\buseRef\s*\(/)
 })
 
+test('24F-FIX-3 — UUID precheck guard su documenti_import e docName corretto nei log', async () => {
+  // Mock db to check if select/eq were bypassed for non-UUID
+  let calledSelect = false
+  const mockDb = {
+    from: (table) => {
+      if (table === 'documenti_import') {
+        return {
+          select: (fields) => {
+            calledSelect = true
+            return {
+              eq: () => ({
+                maybeSingle: async () => ({ data: null, error: null })
+              })
+            }
+          }
+        }
+      }
+      // Return chainable dummy for other tables (e.g. stampe_definitive, prima_nota, etc)
+      const chain = {}
+      chain.select = () => chain
+      chain.eq = () => chain
+      chain.maybeSingle = async () => ({ data: { id: 'mock-id' }, error: null })
+      chain.single = async () => ({ data: { id: 'mock-id' }, error: null })
+      chain.order = () => chain
+      chain.range = async () => ({ data: [], error: null })
+      chain.insert = () => chain
+      chain.then = (fn) => Promise.resolve({ data: [], error: null }).then(fn)
+      return chain
+    }
+  }
+
+  // Create commit payload with synthetic non-UUID sourceRow.id and valid canonical structure
+  const payloadNonUuid = {
+    societaId: 'demo-1',
+    registrationDate: '2026-07-02',
+    sourceRow: {
+      id: 'test_lab_24f_123456789_TL-ACQ-09',
+      parsedDocument: {
+        numeroDocumento: 'TL-ACQ-09'
+      }
+    },
+    payload: {
+      handoff: {
+        contractVersion: '1.0.0',
+        sourceFileName: 'test.xml',
+        sourceRowKey: 'test_lab_24f_123456789_TL-ACQ-09',
+        sourceBatchId: 'batch-1',
+        operatorId: 'test-user',
+        createdAt: '2026-07-07T00:00:00Z'
+      },
+      company: {
+        societaId: 'demo-1',
+        esercizioId: '2026'
+      },
+      document: {
+        number: 'TL-ACQ-09',
+        documentDate: '2026-07-02',
+        registrationDate: '2026-07-02',
+        totals: {
+          taxable: 100,
+          vat: 22,
+          gross: 122
+        },
+        counterparty: {
+          name: 'Supplier',
+          accountId: 'acc-forn'
+        }
+      },
+      accounting: {
+        causaleContabile: { id: 'caus-ff', codice: 'FF', tipo_causale: 'documentoiva', registro_iva: 'acquisti', segno_registro_iva: '+' },
+        description: 'Fattura acquisto',
+        totals: { debit: 122, credit: 122 },
+        isBalanced: true,
+        rows: [
+          { dare: 100, credit: 0, accountId: 'acc-cost' },
+          { dare: 22, credit: 0, accountId: 'acc-iva' },
+          { dare: 0, credit: 122, accountId: 'acc-forn' }
+        ]
+      },
+      vat: {
+        enabled: true,
+        registerType: 'acquisti',
+        rows: [
+          { imponibile: 100, imposta: 22, aliquota: 22, causaleIvaId: '00000000-0000-0000-0000-000000000000' }
+        ]
+      },
+      ledger: {
+        enabled: true,
+        accountId: 'acc-forn'
+      }
+    }
+  }
+
+  // Intercept console.log to inspect [TEST_LAB_COMMIT_PRECHECK_SKIPPED] and [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
+  const logs = []
+  const originalLog = console.log
+  console.log = (...args) => {
+    logs.push(args.join(' '))
+  }
+
+  try {
+    const { runCommitWorkflow } = await import('../src/modules/import_contabilita/application/importContabilitaWorkflow.js')
+    
+    // We run it with our mockDb
+    const res = await runCommitWorkflow(payloadNonUuid, { db: mockDb })
+
+    // 1. Verify db query for documents_import was bypassed (calledSelect is false)
+    assert.equal(calledSelect, false, 'Dovrebbe bypassare la query documenti_import per ID non UUID')
+
+    // 2. Verify precheck skipped log
+    assert.ok(logs.some(l => l.includes('[TEST_LAB_COMMIT_PRECHECK_SKIPPED]')), 'Dovrebbe loggare skipping precheck')
+    assert.ok(logs.some(l => l.includes('documento=TL-ACQ-09')), 'Dovrebbe contenere il nome corretto del documento (TL-ACQ-09) nel log')
+    assert.ok(!logs.some(l => l.includes('documento=TL-ACQ-01')), 'Non dovrebbe mostrare la causale di fallback TL-ACQ-01 per TL-ACQ-09')
+
+  } finally {
+    console.log = originalLog
+  }
+})
+
+test('24F-FIX-4 — import multi-selezione pronte e sessione working view multi-documento', async () => {
+  const indexSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/index.jsx', import.meta.url), 'utf8')
+  )
+
+  // 1. Verify selectedRowIds size check logic inside onStartAccounting
+  assert.match(indexSource, /selectedRowIds\.size === 0/, 'Dovrebbe controllare selezione vuota')
+  assert.match(indexSource, /selectedRowIds\.size === 1/, 'Dovrebbe controllare selezione singola')
+  assert.match(indexSource, /\/\/ B\. Multi-selection/, 'Dovrebbe gestire selezione multipla')
+
+  // 2. Verify queue setup in index.jsx
+  assert.match(indexSource, /setWorkingViewRowIds\(eligibleKeys\)/, 'Dovrebbe inizializzare coda di sessione con eligibleKeys')
+  assert.match(indexSource, /setWorkingViewRowId\(eligibleKeys\[0\]\)/, 'Dovrebbe impostare primo documento come attivo')
+
+  // 3. Verify next document transition after commit
+  assert.match(indexSource, /getNextActiveIdInQueue/, 'Dovrebbe definire helper per trovare documento successivo nella coda')
+  assert.match(indexSource, /setWorkingViewRowId\(nextActiveId\)/, 'Dovrebbe passare al prossimo ID attivo in sessione')
+  assert.match(indexSource, /Sessione completata\. Tutti i documenti selezionati sono stati gestiti/, 'Dovrebbe mostrare messaggio di fine sessione')
+
+  // 4. Verify keyboard shortcut hooks inside WorkingView
+  const workingViewSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx', import.meta.url), 'utf8')
+  )
+  assert.match(workingViewSource, /e\.altKey && e\.key === 'ArrowLeft'/, 'Dovrebbe intercettare Alt+ArrowLeft')
+  assert.match(workingViewSource, /e\.altKey && e\.key === 'ArrowRight'/, 'Dovrebbe intercettare Alt+ArrowRight')
+  assert.match(workingViewSource, /onGoToPreviousWorkingViewRow\(\)/, 'Dovrebbe attivare trigger precedente')
+  assert.match(workingViewSource, /onGoToNextWorkingViewRow\(\)/, 'Dovrebbe attivare trigger successivo')
+})
+
+
+
