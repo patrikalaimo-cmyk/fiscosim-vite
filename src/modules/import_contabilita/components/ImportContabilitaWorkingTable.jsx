@@ -77,7 +77,7 @@ export function ImportContabilitaWorkingTable({
   setPreviewRowId,
   getRowKey,
 }) {
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
+  const [coords, setCoords] = useState({ top: 0, bottom: null, left: 0, width: 0, showAbove: false })
 
   useEffect(() => {
     const activeKey = accountEditorRowId || causaleEditorRowId
@@ -87,18 +87,55 @@ export function ImportContabilitaWorkingTable({
       if (btn) {
         const updateCoords = () => {
           const rect = btn.getBoundingClientRect()
+          const viewportHeight = window.innerHeight
+          const spaceBelow = viewportHeight - rect.bottom
+          const showAbove = spaceBelow < 300 && rect.top > spaceBelow
+
           setCoords({
-            top: rect.bottom,
+            top: showAbove ? null : rect.bottom + 4,
+            bottom: showAbove ? (viewportHeight - rect.top + 4) : null,
             left: rect.left,
             width: rect.width,
+            showAbove,
           })
         }
         updateCoords()
+
+        const handleKeyDown = (e) => {
+          if (e.key === 'Escape') {
+            setAccountEditorRowId('')
+            setCausaleEditorRowId('')
+            setAccountSearchTerm('')
+            setCausaleSearchTerm('')
+          }
+        }
+
+        const handleClickOutside = (e) => {
+          const portalClass = accountEditorRowId ? 'conto-portal-container' : 'causale-portal-container'
+          const portals = document.getElementsByClassName(portalClass)
+          if (portals.length) {
+            for (let i = 0; i < portals.length; i++) {
+              if (portals[i].contains(e.target)) return
+            }
+          }
+          if (btn.contains(e.target)) return
+
+          setAccountEditorRowId('')
+          setCausaleEditorRowId('')
+          setAccountSearchTerm('')
+          setCausaleSearchTerm('')
+        }
+
         window.addEventListener('resize', updateCoords)
         window.addEventListener('scroll', updateCoords, true)
+        window.addEventListener('keydown', handleKeyDown)
+        document.addEventListener('mousedown', handleClickOutside, true)
+
         return () => {
           window.removeEventListener('resize', updateCoords)
           window.removeEventListener('scroll', updateCoords, true)
+          window.removeEventListener('keydown', handleKeyDown)
+          document.removeEventListener('mousedown', handleClickOutside, true)
         }
       }
     }
@@ -405,9 +442,11 @@ export function ImportContabilitaWorkingTable({
 
                         {isAccountEditorOpen ? createPortal(
                           <div
+                            className="conto-portal-container"
                             style={{
                               position: 'fixed',
-                              top: coords.top + 4,
+                              top: coords.top !== null ? coords.top : undefined,
+                              bottom: coords.bottom !== null ? coords.bottom : undefined,
                               left: coords.left,
                               width: 360,
                               maxWidth: 'min(360px, 95vw)',
@@ -446,7 +485,7 @@ export function ImportContabilitaWorkingTable({
                             ) : pianoContiError ? (
                               <MessageBox tone="error">{pianoContiError}</MessageBox>
                             ) : filteredPianoConti.length ? (
-                              <div style={{ display: 'grid', gap: '.18rem', maxHeight: 240, overflow: 'auto' }}>
+                              <div style={{ display: 'grid', gap: '.18rem', maxHeight: 260, overflowY: 'auto' }}>
                                 {filteredPianoConti.map((conto) => (
                                   <button
                                     key={conto.id}
@@ -531,9 +570,11 @@ export function ImportContabilitaWorkingTable({
 
                         {isCausaleEditorOpen ? createPortal(
                           <div
+                            className="causale-portal-container"
                             style={{
                               position: 'fixed',
-                              top: coords.top + 4,
+                              top: coords.top !== null ? coords.top : undefined,
+                              bottom: coords.bottom !== null ? coords.bottom : undefined,
                               left: coords.left,
                               width: 360,
                               maxWidth: 'min(360px, 88vw)',
@@ -572,7 +613,7 @@ export function ImportContabilitaWorkingTable({
                             ) : causaliContabiliError ? (
                               <MessageBox tone="error">{causaliContabiliError}</MessageBox>
                             ) : filteredCausaliContabili.length ? (
-                              <div style={{ display: 'grid', gap: '.18rem', maxHeight: 240, overflow: 'auto' }}>
+                              <div style={{ display: 'grid', gap: '.18rem', maxHeight: 260, overflowY: 'auto' }}>
                                 {filteredCausaliContabili.map((causale) => (
                                   <button
                                     key={causale.id}

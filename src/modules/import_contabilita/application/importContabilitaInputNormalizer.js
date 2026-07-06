@@ -175,6 +175,7 @@ function deriveXmlFilename(originalName) {
 }
 
 function createPreparedXmlFile({
+  id,
   name,
   originFilename,
   sourceHash,
@@ -185,6 +186,7 @@ function createPreparedXmlFile({
   const text = String(xmlText || '')
   const bytes = encodeText(text)
   return {
+    id: id || null,
     name: normalizeText(name || originFilename || 'import.xml'),
     originFilename: normalizeText(originFilename || name || ''),
     containerFilename: normalizeText(containerFilename || ''),
@@ -213,6 +215,7 @@ async function normalizeSingleXmlInput(fileLike, options = {}) {
   return {
     preparedFiles: [
       createPreparedXmlFile({
+        id: fileLike?.id || null,
         name: finalName,
         originFilename: originalName,
         sourceHash,
@@ -238,6 +241,7 @@ async function normalizeSingleP7mInput(fileLike, options = {}) {
   return {
     preparedFiles: [
       createPreparedXmlFile({
+        id: fileLike?.id || null,
         name: finalName,
         originFilename: originalName,
         sourceHash,

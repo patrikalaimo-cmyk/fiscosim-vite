@@ -54,6 +54,7 @@ export function ImportContabilitaAnagraficheDetail({
     onCreatePercipienteForRow,
     onSelectExistingAnagraficaAccount,
     onUpdateExistingAnagraficaAccount,
+    onConfirmSingleAnagrafica,
     AnagraficaExistingAccountPicker,
   } = anagraficheHelpers
 
@@ -94,6 +95,7 @@ export function ImportContabilitaAnagraficheDetail({
             <Th style={{ width: 146 }}>Azione</Th>
             <Th style={{ width: 210 }}>Conto collegato</Th>
             <Th align="right" style={{ width: 84 }}>Fatture</Th>
+            <Th align="center" style={{ width: 110 }}>Conferma</Th>
             <Th align="center" style={{ width: 102 }}>Anteprima</Th>
           </tr>
         </thead>
@@ -129,7 +131,7 @@ export function ImportContabilitaAnagraficheDetail({
             const accountUpdateSummary = [
               ...(((accountUpdateInfo.labels || [])).slice ? (accountUpdateInfo.labels || []).slice(0, 3) : []),
               ...(((accountUpdateInfo.warnings || [])).slice ? (accountUpdateInfo.warnings || []).slice(0, 2) : []),
-            ].filter(Boolean).join(' · ')
+            ].filter(Boolean).join(' ï¿½ ')
             const percipienteState = buildPercipienteStatusForAnagraficaRow(row, decision, percipienti)
             const previewTargetRowKey = normalizeText(row?.previewRowKey || '')
             const identifierText = formatAnagraficaIdentifiers(row)
@@ -201,7 +203,7 @@ export function ImportContabilitaAnagraficheDetail({
                         </span>
                         {percipienteState.codiceFiscale || percipienteState.denominazione ? (
                           <div style={{ color: 'var(--mu)', fontSize: '.54rem', lineHeight: 1.12 }}>
-                            {[percipienteState.codiceFiscale ? `CF ${percipienteState.codiceFiscale}` : null, percipienteState.denominazione || null].filter(Boolean).join(' · ')}
+                            {[percipienteState.codiceFiscale ? `CF ${percipienteState.codiceFiscale}` : null, percipienteState.denominazione || null].filter(Boolean).join(' ï¿½ ')}
                           </div>
                         ) : null}
                         {Array.isArray(percipienteState.reasons) && percipienteState.reasons.length ? (
@@ -344,6 +346,38 @@ export function ImportContabilitaAnagraficheDetail({
                   )}
                 </Td>
                 <Td align="right">{formatCount(row?.fattureCount)}</Td>
+                <Td align="center">
+                  {isPercipienteRow ? (
+                    <span style={{ fontSize: '.58rem', color: 'var(--mu)' }}>Gestione percipiente</span>
+                  ) : decision.decisionStatus === 'confirmed' || decision.decisionStatus === 'ignored' ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '.12rem .35rem',
+                      borderRadius: 6,
+                      background: 'rgba(52,194,122,.1)',
+                      color: '#34c27a',
+                      fontSize: '.62rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(52,194,122,.2)'
+                    }}>
+                      Confermata
+                    </span>
+                  ) : (
+                    <ActionButton
+                      label="Conferma"
+                      onClick={() => onConfirmSingleAnagrafica(row)}
+                      kind="success"
+                      small
+                      disabled={busy || (validation.status !== 'ready' && validation.status !== 'linked' && validation.status !== 'ignored')}
+                      title={
+                        validation.status !== 'ready' && validation.status !== 'linked' && validation.status !== 'ignored'
+                          ? `Non pronta: ${validation.blockingReasons?.[0] || 'seleziona azione'}`
+                          : 'Conferma questa singola anagrafica'
+                      }
+                    />
+                  )}
+                </Td>
                 <Td align="center">
                   <ActionButton
                     label={previewTargetRowKey ? 'Anteprima' : 'N/D'}

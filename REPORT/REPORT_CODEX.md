@@ -10603,3 +10603,37 @@ pm run build -> Successo (429 moduli, 16s).
 - **Rischi Residui**: Nessuno.
 - **Prossimo test manuale richiesto**: Eseguire una run demo in Test Lab, selezionare sia `TL-ACQ-03` che `TL-ACQ-09` nella Working Table, cliccare "Avvia contabilizzazione" ed effettuare la contabilizzazione assistita in sequenza verificando il passaggio automatico e i badge di stato.
 
+## PROMPT 24F-CHECKPOINT — CHIUSURA FASE DEMO IMPORT CONTABILITÀ
+
+- **Riepilogo Funzionale Fase 24F**:
+  - Validata l'integrazione del ciclo di contabilizzazione demo in Test Lab sui casi da `TL-ACQ-02` fino a `TL-ACQ-10` coprendo molteplici casistiche di aliquote IVA (4%, 10%, 22%), spese con bollo, arrotondamenti centesimali, multi-riga e multi-conto, fornitore preesistente e nuovo fornitore.
+  - Risolti i precheck errati di query `documenti_import` con ID non UUID saltandoli in modo controllato.
+  - Corretto il tracciamento del nome del documento nei log per mostrare la riga esatta anziché il fallback.
+  - Perfezionata la UX della Working Table risolvendo problemi sui dropdown autocomplete dei conti con autoclose click-outside, Escape, ed apertura upward se vicini al limite inferiore del viewport.
+  - Introdotta la sessione di lavoro multi-documento selezionato che consente di navigare tra le fatture pronte visualizzate in Working View con shortcut (`Alt+ArrowLeft` / `Alt+ArrowRight`) e di passare in avanti in modo asincrono a valle di ogni commit riuscito.
+- **Conferme Manuali Utente**:
+  - Generazione run univoca `runId`/`sourceRowKey` funzionante.
+  - Contabilizzazione e commit reali andati a buon fine su `TL-ACQ-03` e `TL-ACQ-09` verificati via DB.
+  - Bypasse query REST non bloccanti con ID sintetici.
+  - Navigazione e toolbar di sessione pienamente operativi.
+- **Elenco Fix Inclusi**:
+  - Da 24F a 24F-FIX-4.
+- **File Modificati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `tests/testLabIntegrazione.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- **Test Eseguiti**:
+  - Eseguite tutte le suite del progetto (`tests/*.test.js`). 56/56 test superati (100% SUCCESS) 🟢
+- **Esito npm run build**: Compilazione Vite completata con successo (zero errori) 🟢
+- **Backup ZIP checkpoint creato**: `fiscosim-checkpoint-24f-chiusura-demo-import-2026-07-07.zip`
+- **Commit Hash**: `8f369e5`
+- **Sicurezza e Vincoli Ambientali**:
+  - Nessuna società reale contaminata.
+  - Nessuna cancellazione in DB.
+  - `.env` intatto.
+  - Riconciliazione bancaria resta bloccata.
+- **Prossimo Blocco Operativo**:
+  - Passaggio all'Import reale: transizioni di stato a Pronta, gestione anagrafiche, associazione automatica conto/causale reale, consultazione archivio contabilizzate con UUID reali.
+
+

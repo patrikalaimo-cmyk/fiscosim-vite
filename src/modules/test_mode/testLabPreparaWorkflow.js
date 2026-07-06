@@ -68,8 +68,18 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
   assertDemoCompanyForTestLab(societa, 'runTestLabPreparaOrdinariaAcquisto')
   if (!societaId) throw new Error('Test Lab: societaId obbligatorio')
 
-  const cases = generateOrdinariaAcquisto10Cases(societa)
-  const files = cases.map(({ name, size, text }) => ({ name, size, text }))
+  const dateObj = new Date()
+  const runId = dateObj.getFullYear() +
+    String(dateObj.getMonth() + 1).padStart(2, '0') +
+    String(dateObj.getDate()).padStart(2, '0') +
+    '_' +
+    String(dateObj.getHours()).padStart(2, '0') +
+    String(dateObj.getMinutes()).padStart(2, '0') +
+    String(dateObj.getSeconds()).padStart(2, '0') +
+    String(dateObj.getMilliseconds()).padStart(3, '0')
+
+  const cases = generateOrdinariaAcquisto10Cases(societa, runId)
+  const files = cases.map(({ id, name, size, text }) => ({ id, name, size, text }))
 
   const importResult = await runImportWorkflow(files, {
     societaId,
@@ -80,7 +90,8 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
   })
 
   const { automationMetaByRowId } = attachTestLabMetaToImportResult(importResult, cases)
-  const stagingCount = Array.isArray(importResult?.stagingRows) ? importResult.stagingRows.length : 0
+  const stagingRows = Array.isArray(importResult?.stagingRows) ? importResult.stagingRows : []
+  const stagingCount = stagingRows.length
   const parseErrors = (importResult?.report?.items || []).filter((i) => i?.outcome === 'parse_error')
   const warnings = (importResult?.report?.items || []).filter((i) => i?.severity === 'warning')
 
@@ -89,6 +100,24 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
   for (const e of parseErrors) {
     errori.push(`${e.filename}: ${e.reasonCode || 'parse_error'}`)
   }
+
+  // [TEST_LAB_RUN_GENERATED] log
+  console.log('[TEST_LAB_RUN_GENERATED]')
+  console.log(`runId=${runId}`)
+  console.log(`societaCodice=${societa.codice}`)
+  console.log(`countDocumenti=${cases.length}`)
+  console.log(`elencoCaseCode=${cases.map(c => c.meta?.numeroDocumento || c.caseId).join(',')}`)
+  console.log(`sourceRowKeyGenerati=${cases.map(c => c.id).join(',')}`)
+
+  // [TEST_LAB_RUN_DOCUMENT_STATUS] log
+  console.log('[TEST_LAB_RUN_DOCUMENT_STATUS]')
+  stagingRows.forEach((row) => {
+    const caseCode = row.parsedDocument?.numeroDocumento || ''
+    const sourceRowKey = row.id
+    const state = row.state || 'ready'
+    const isContabilizzabile = !['processed', 'committed', 'registered'].includes(state.toLowerCase())
+    console.log(`caseCode=${caseCode}, sourceRowKey=${sourceRowKey}, stato=${state}, contabilizzabile=${isContabilizzabile}, motivo=${isContabilizzabile ? 'none' : 'già contabilizzato'}`)
+  })
 
   const report = {
     scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
@@ -119,6 +148,7 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
       filename: c.name,
       meta: c.meta,
     })),
+    runId,
   }
 
   return {
@@ -126,6 +156,7 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
     importResult,
     cases,
     automationMetaByRowId,
+    runId,
   }
 }
 
@@ -133,7 +164,7 @@ export async function runTestLabPreparaOrdinariaAcquisto({ societa, societaId })
  * Scrive snapshot compatibile con Import Contabilità (solo sessionStorage, no DB).
  * @returns {boolean}
  */
-export function writeTestLabImportSnapshot(societaId, importResult, automationMetaByRowId = {}) {
+export function writeTestLabImportSnapshot(societaId, importResult, automationMetaByRowId = {}, runId = '') {
   if (typeof window === 'undefined' || !societaId || !importResult) return false
   const payload = {
     storageVersion: 4,
@@ -149,6 +180,7 @@ export function writeTestLabImportSnapshot(societaId, importResult, automationMe
       scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
       phase: TEST_LAB_PHASE_24E.id,
       preparedAt: new Date().toISOString(),
+      runId,
     },
   }
   try {

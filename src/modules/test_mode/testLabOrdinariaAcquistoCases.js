@@ -107,14 +107,18 @@ function buildXml({
 </p:FatturaElettronica>`
 }
 
-function toFileLike(caseDef, xml) {
+function toFileLike(caseDef, xml, runId = null) {
+  const caseCode = caseDef.meta?.numeroDocumento || caseDef.caseId
+  const uniqueName = runId ? `test_lab_24f_${runId}_${caseCode}.xml` : caseDef.filename
+  const uniqueId = runId ? `test_lab_24f_${runId}_${caseCode}` : caseDef.caseId
   return {
+    id: uniqueId,
     caseId: caseDef.caseId,
     label: caseDef.label,
     scenario: TEST_LAB_SCENARIO_ORDINARIA_ACQUISTO,
     source: TEST_LAB_SOURCE,
     testLabMarker: TEST_LAB_MARKER,
-    name: caseDef.filename,
+    name: uniqueName,
     size: xml.length,
     text: async () => xml,
     meta: caseDef.meta,
@@ -124,9 +128,10 @@ function toFileLike(caseDef, xml) {
 /**
  * Definizione dei 10 casi obbligatori — fattura ordinaria acquisto.
  * @param {object} societa
+ * @param {string|null} runId
  * @returns {Array<object>}
  */
-export function buildOrdinariaAcquisto10CaseDefinitions(societa) {
+export function buildOrdinariaAcquisto10CaseDefinitions(societa, runId = null) {
   assertDemoCompanyForTestLab(societa, 'buildOrdinariaAcquisto10CaseDefinitions')
   const myPiva = societa.partita_iva || '99999999999'
   const myDenom = resolveSocietaDisplayName(societa)
@@ -487,11 +492,12 @@ export function buildOrdinariaAcquisto10CaseDefinitions(societa) {
 /**
  * Genera i 10 file XML con metadati test_lab.
  * @param {object} societa
+ * @param {string|null} runId
  */
-export function generateOrdinariaAcquisto10Cases(societa) {
-  const defs = buildOrdinariaAcquisto10CaseDefinitions(societa)
+export function generateOrdinariaAcquisto10Cases(societa, runId = null) {
+  const defs = buildOrdinariaAcquisto10CaseDefinitions(societa, runId)
   return defs.map((def) => {
     const xml = def.build()
-    return toFileLike(def, xml)
+    return toFileLike(def, xml, runId)
   })
 }

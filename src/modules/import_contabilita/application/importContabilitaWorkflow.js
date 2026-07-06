@@ -413,6 +413,7 @@ export async function runImportWorkflow(files = [], options = {}) {
         const parsed = await parseFatturaFile(fileLike)
         parsedDocs.push({
           ...parsed,
+          id: fileLike?.id || parsed?.id || null,
           filename: normalizeText(fileLike?.name || parsed?.filename || ''),
           sourceHash: normalizeText(parsed?.sourceHash || options.sourceHash || ''),
         })
@@ -643,13 +644,18 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   // Check double commit
   const documentId = commitPayload.sourceRow?.id || commitPayload.sourceRowId || (commitPayload.payload && (commitPayload.payload.sourceRow?.id || commitPayload.payload.sourceRowId))
   if (documentId) {
-    const { data: existingDoc, error: checkError } = await db
-      .from('documenti_import')
-      .select('stato')
-      .eq('id', documentId)
-      .maybeSingle()
-    if (!checkError && existingDoc && ['processed', 'committed'].includes(existingDoc.stato)) {
-      return { success: false, blockingReasons: ['Documento già contabilizzato.'] }
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
+    if (!isUuid) {
+      console.log(`[TEST_LAB_COMMIT_PRECHECK_SKIPPED] documentId=${documentId} motivo="documento Test Lab senza ID staging reale (non UUID)"`)
+    } else {
+      const { data: existingDoc, error: checkError } = await db
+        .from('documenti_import')
+        .select('stato')
+        .eq('id', documentId)
+        .maybeSingle()
+      if (!checkError && existingDoc && ['processed', 'committed'].includes(existingDoc.stato)) {
+        return { success: false, blockingReasons: ['Documento già contabilizzato.'] }
+      }
     }
   }
 
@@ -1061,7 +1067,7 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   let stagingUpdateWarning = null
   if (documentId) {
     const isDocumentIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
-    const docName = commitPayload.document?.number || 'TL-ACQ-01'
+    const docName = commitPayload.sourceRow?.parsedDocument?.numeroDocumento || commitPayload.payload?.document?.numeroDocumento || commitPayload.document?.number || 'TL-ACQ-01'
     const societaCodice = String(commitPayload.societa?.codice || commitPayload.company?.codice || '').trim()
 
     // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]

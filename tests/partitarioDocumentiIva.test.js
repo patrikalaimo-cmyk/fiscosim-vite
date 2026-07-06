@@ -163,6 +163,7 @@ class MockDbClient {
 
 function buildBaseDraft(causale = {}, subject = {}) {
   const isAcq = ['01', 'acquisti'].includes(String(causale.registroIva || causale.codice_registro_iva || '').toLowerCase())
+  const isIva = causale.tipo_causale !== 'generale'
   return {
     isSimulata: false,
     header: {
@@ -214,23 +215,23 @@ function buildBaseDraft(causale = {}, subject = {}) {
     ],
     documentData: { divisa: 'EUR' },
     ivaDraft: {
-      active: true,
+      active: isIva,
       registroIva: isAcq ? 'acquisti' : 'vendite',
-      segnoRegistro: causale.segnoRegistroIva === '-' ? '-' : '+',
+      segnoRegistro: (causale.segnoRegistroIva === '-' || causale.segno_registro_iva === '-') ? '-' : '+',
       totaleDocumento: 122.00,
       totaleImponibile: 100.00,
       totaleImposta: 22.00,
-      rows: [
+      rows: isIva ? [
         {
           causaleIvaId: 'iva-22',
           imponibile: 100.00,
           imposta: 22.00,
           aliquota: 22,
           registroIva: isAcq ? 'acquisti' : 'vendite',
-          segnoRegistro: causale.segnoRegistroIva === '-' ? '-' : '+',
+          segnoRegistro: (causale.segnoRegistroIva === '-' || causale.segno_registro_iva === '-') ? '-' : '+',
           percentualeDetraibilita: 100
         }
-      ]
+      ] : []
     },
     partitarioDraft: {
       active: true,
@@ -253,9 +254,9 @@ function buildBaseDraft(causale = {}, subject = {}) {
       createdAt: '2026-05-29T10:00:00Z',
       behavior: {
         code: causale.codice || 'TEST',
-        family: 'docivanormale',
-        showDocumentPanel: true,
-        showIvaPanel: true,
+        family: isIva ? 'docivanormale' : 'generale',
+        showDocumentPanel: isIva,
+        showIvaPanel: isIva,
         showPartitario: true,
         showRitenute: false
       }
