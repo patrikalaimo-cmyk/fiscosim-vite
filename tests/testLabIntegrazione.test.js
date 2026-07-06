@@ -544,3 +544,107 @@ test('24D-FIX-1 — onStartAccounting Import usa guardia con codice, non commit'
   assert.doesNotMatch(importSource, /onStartAccounting[\s\S]{0,800}runCommitWorkflow/)
 })
 
+test('24F-FIX — scenario Test Lab ri-eseguibile con runId differenti', async () => {
+  const { runTestLabPreparaOrdinariaAcquisto } = await import('../src/modules/test_mode/testLabPreparaWorkflow.js')
+  const { evaluateDemo24EWorkingViewCommitGuards } = await import('../src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js')
+
+  const societaDemo = {
+    id: 'demo-societa',
+    codice: '__TEST__FISCOSIM_DEMO',
+    denominazione: 'FiscoSim Demo Test Lab SRL',
+    partita_iva: '99999999999',
+  }
+
+  // 1. First preparation run
+  const run1 = await runTestLabPreparaOrdinariaAcquisto({ societa: societaDemo, societaId: 'demo-societa' })
+  assert.ok(run1.runId)
+  assert.equal(run1.cases.length, 10)
+
+  // Find TL-ACQ-02 in run 1
+  const doc1 = run1.importResult.stagingRows.find(r => r.parsedDocument.numeroDocumento === 'TL-ACQ-02')
+  assert.ok(doc1)
+  // Verify it contains the runId in its technical ID
+  assert.ok(doc1.id.includes(run1.runId))
+  assert.ok(doc1.id.includes('TL-ACQ-02'))
+
+  // Verify fiscal amounts remain exact
+  assert.equal(doc1.parsedDocument.imponibile, 500)
+  assert.equal(doc1.parsedDocument.iva, 50)
+  assert.equal(doc1.parsedDocument.totale, 550)
+
+  // 2. Simulare TL-ACQ-02 processed nella prima run (state = committed/processed)
+  doc1.state = 'committed'
+
+  // 3. Second preparation run
+  const run2 = await runTestLabPreparaOrdinariaAcquisto({ societa: societaDemo, societaId: 'demo-societa' })
+  assert.ok(run2.runId)
+  assert.notEqual(run1.runId, run2.runId)
+
+  // Find TL-ACQ-02 in run 2
+  const doc2 = run2.importResult.stagingRows.find(r => r.parsedDocument.numeroDocumento === 'TL-ACQ-02')
+  assert.ok(doc2)
+  assert.ok(doc2.id.includes(run2.runId))
+  assert.notEqual(doc1.id, doc2.id) // unique ID per run
+
+  // 4. Verify the new one is importable (state is ready/pending, not committed)
+  assert.notEqual(doc2.state, 'committed')
+
+  // Verify evaluateDemo24EWorkingViewCommitGuards blocks real company but allows demo
+  const pianoContiMock = [
+    { id: 'acc-cost', codice: '6 01 001' },
+    { id: 'acc-iva', codice: '1 02 40 0001', is_iva: true },
+    { id: 'acc-forn', codice: '2 04 02 0001' },
+  ]
+  const activeModel = {
+    rowKey: doc2.id,
+    row: doc2,
+    readiness: { ready: true },
+    parsedDocument: doc2.parsedDocument,
+    costRevenueAccount: { id: 'acc-cost', codice: '6 01 001' },
+    counterpartyAccount: { id: 'acc-forn', codice: '2 04 02 0001' },
+    causale: { id: 'caus-ff', codice: 'FF' },
+    totale: 550,
+    imponibile: 500,
+    iva: 50,
+  }
+
+  const guardDemo = evaluateDemo24EWorkingViewCommitGuards({
+    societa: societaDemo,
+    selectedRowIds: new Set([doc2.id]),
+    workingViewOpen: true,
+    workingViewRowId: doc2.id,
+    activeWorkingViewModel: activeModel,
+    baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+    ivaDraftRows: [{ imponibile: 500, imposta: 50, causaleIvaId: 'tl10' }],
+    pianoConti: pianoContiMock,
+  })
+  assert.equal(guardDemo.allowed, true) // Allowed on demo!
+
+  const guardReal = evaluateDemo24EWorkingViewCommitGuards({
+    societa: { id: 'real', codice: 'REAL_CO', denominazione: 'Real Company' },
+    selectedRowIds: new Set([doc2.id]),
+    workingViewOpen: true,
+    workingViewRowId: doc2.id,
+    activeWorkingViewModel: activeModel,
+    baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
+    ivaDraftRows: [{ imponibile: 500, imposta: 50, causaleIvaId: 'tl10' }],
+    pianoConti: pianoContiMock,
+  })
+  assert.equal(guardReal.allowed, false) // Blocked on real!
+})
+
+test('24F-FIX-2 — TestLabPanel importa tutti gli hook React usati', async () => {
+  const panelSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/test_mode/TestLabPanel.jsx', import.meta.url), 'utf8')
+  )
+  const importMatch = panelSource.match(/import\s*\{([^}]+)\}\s*from\s*['"]react['"]/)
+  assert.ok(importMatch, 'import React hooks mancante')
+  const imported = importMatch[1].split(',').map((s) => s.trim())
+  for (const hook of ['useState', 'useCallback', 'useEffect']) {
+    assert.ok(imported.includes(hook), `hook ${hook} usato ma non importato`)
+    assert.match(panelSource, new RegExp(`\\b${hook}\\(`))
+  }
+  assert.doesNotMatch(panelSource, /\buseMemo\s*\(/)
+  assert.doesNotMatch(panelSource, /\buseRef\s*\(/)
+})
+

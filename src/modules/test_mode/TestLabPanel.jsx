@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
 import {
   isDemoCompany,
@@ -129,6 +129,29 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
   const [accountingReport, setAccountingReport] = useState(null)
   const [lastError, setLastError] = useState(null)
   const [demoMessage, setDemoMessage] = useState(null)
+  const [activeRunId, setActiveRunId] = useState(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && societaId) {
+      try {
+        const raw = window.sessionStorage.getItem(`import_contabilita.last_result.${societaId}`)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (parsed?.testLab?.runId) {
+            setActiveRunId(parsed.testLab.runId)
+          } else {
+            setActiveRunId(null)
+          }
+        } else {
+          setActiveRunId(null)
+        }
+      } catch (e) {
+        setActiveRunId(null)
+      }
+    } else {
+      setActiveRunId(null)
+    }
+  }, [societaId])
 
   const casePreview = isDemo && currentSocieta
     ? buildOrdinariaAcquisto10CaseDefinitions(currentSocieta).map((d) => ({
@@ -194,8 +217,9 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
         societa: currentSocieta,
         societaId,
       })
-      writeTestLabImportSnapshot(societaId, result.importResult, result.automationMetaByRowId)
+      writeTestLabImportSnapshot(societaId, result.importResult, result.automationMetaByRowId, result.runId)
       setReport(result.report)
+      setActiveRunId(result.runId)
     } catch (err) {
       setLastError(err?.message || String(err))
     } finally {
@@ -317,8 +341,16 @@ export function TestLabPanel({ societaId, currentSocieta, utente, societaList = 
         <div style={{ fontWeight: 700, fontSize: '.85rem', marginBottom: '.35rem' }}>
           📥 Fattura ordinaria acquisto — 10 casi
         </div>
-        <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.65rem' }}>
+        <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.45rem' }}>
           Modalità: <strong>Prepara test</strong> — genera XML, parsing reale, staging in sessionStorage. Nessuna prima nota.
+        </div>
+        {activeRunId && (
+          <div style={{ fontSize: '.72rem', color: '#34c27a', marginBottom: '.45rem' }}>
+            Run demo corrente: <strong>{activeRunId}</strong>
+          </div>
+        )}
+        <div style={{ fontSize: '.72rem', color: 'var(--gold)', marginBottom: '.65rem', padding: '.35rem .45rem', border: '1px solid rgba(200,164,94,.25)', borderRadius: 4, background: 'rgba(200,164,94,.05)' }}>
+          ⚠️ <strong>Nota:</strong> La rigenerazione crea nuovi documenti demo testabili e non cancella registrazioni già contabilizzate.
         </div>
         <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <button

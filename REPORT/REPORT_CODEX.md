@@ -10514,6 +10514,36 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo test manuale richiesto**: Test di commit reali da browser su TL-ACQ-03, TL-ACQ-09 e TL-ACQ-02 verificando i contatori e la console.
 
 
+## PROMPT 24F-FIX — TEST LAB IMPORT RI-ESEGUIBILE SENZA CANCELLARE PN GIÀ CONTABILIZZATE
+
+- **Obiettivo**: Rendere il Test Lab Import ri-eseguibile per test manuali browser senza cancellare manualmente Prima Nota, Registri IVA o Partitario già contabilizzati nelle run precedenti, bypassando i blocchi di "documento già contabilizzato" a livello tecnico (sourceRowKey / documentoImportId) pur preservando visualmente e funzionalmente la nomenclatura dei casi (TL-ACQ-02, TL-ACQ-03, ecc.).
+- **Soluzione Implementata**:
+  - Introdotto un identificativo temporale preciso a livello di millisecondi come `runId` (es. `20260702_224213733`).
+  - Generato per ogni run del Test Lab un `sourceRowKey` / `documentoImportId` sintetico unico: `test_lab_24f_<runId>_<caseCode>` (dove `caseCode` è `TL-ACQ-XX`).
+  - Aggiornato `importContabilitaInputNormalizer.js` e `importContabilitaWorkflow.js` per far fluire e preservare l'ID sintetico (sourceRowKey) della riga fino all'inserimento/commit, mantenendo il numero di documento visibile intatto.
+  - Aggiornato il workflow di preparazione in `testLabPreparaWorkflow.js` stampando in console i log diagnostici `[TEST_LAB_RUN_GENERATED]` (con runId, count, caseCodes e sourceRowKeys generati) e `[TEST_LAB_RUN_DOCUMENT_STATUS]` (stato e contabilizzabilità di ogni riga).
+- **UI/UX Integrata**:
+  - Aggiunto nel box "Fattura ordinaria acquisto" di [TestLabPanel.jsx](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/test_mode/TestLabPanel.jsx) l'indicazione della run corrente ("Run demo corrente: 20260702_224213733").
+  - Aggiunto l'avviso normativo: *"La rigenerazione crea nuovi documenti demo testabili e non cancella registrazioni già contabilizzate."*
+- **Test Automatici Aggiunti**:
+  - Suite integrata [testLabIntegrazione.test.js](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/tests/testLabIntegrazione.test.js) aggiornata con il test `'24F-FIX — scenario Test Lab ri-eseguibile con runId differenti'`.
+  - Verifica che la rigenerazione produca ID differenti e che gli stessi documenti ritornino contabilizzabili in run consecutive mantenendo intatti i valori fiscali attesi (imponibile/iva/totale).
+  - Tutti i 42 test di integrazione ed i 40 test di commit sono passati con successo (🟢).
+- **Build di Produzione**: Vite compilato correttamente con `npm run build` (🟢).
+- **Backup generato**: `fiscosim-checkpoint-24f-fix-test-lab-rieseguibile-2026-07-02.zip` (🟢).
+
+
+## PROMPT 24F-FIX-2 — RIPRISTINO TEST LAB UI DOPO ERRORE useEffect NON IMPORTATO
+
+- **Errore browser utente**: `Uncaught ReferenceError: useEffect is not defined` in `TestLabPanel.jsx:134` — crash immediato del componente Test Lab.
+- **Causa**: `useEffect` usato per leggere `activeRunId` da sessionStorage ma non incluso nell'import React (`useState`, `useCallback` soltanto).
+- **Fix**: `import { useState, useCallback, useEffect } from 'react'` in `TestLabPanel.jsx`. Verificati altri hook: nessun `useMemo`/`useRef`/`useCallback` mancante.
+- **500 /api/ai**: servizio AI indipendente dal Test Lab — rumore non bloccante per questa fase; non risolto qui.
+- **File modificati**: `src/modules/test_mode/TestLabPanel.jsx`, `tests/testLabIntegrazione.test.js`, `REPORT/REPORT_CODEX.md`.
+- **Test**: suite TestLab/Import/PostCommit pertinenti + test statico hook React; `npm run build` OK.
+- **Sicurezza**: .env/auth/RLS/Supabase/migration/società reali non toccati; Riconciliazione **BLOCCATA**.
+- **Prossimo test manuale**: Patrik ricarica Test Lab → verifica assenza crash → run demo 24F visibile → Prepara test ri-eseguibile.
+
 
 
 
