@@ -270,6 +270,7 @@ export function ImportContabilitaWorkingView({
   formatManualCausale,
   causaliContabili,
   causaliIva,
+  causaliIvaById: causaliIvaByIdProp = null,
   isDemoSocieta = false,
   onCommitDemoWorkingView,
   commitBusy = false,
@@ -289,7 +290,10 @@ export function ImportContabilitaWorkingView({
 }) {
   const [applyPopoverOpen, setApplyPopoverOpen] = useState(false)
   const [previewTab, setPreviewTab] = useState('fattura_fiscosim')
-  const causaliIvaById = new Map((Array.isArray(causaliIva) ? causaliIva : []).map((item) => [String(item?.id || '').trim(), item]))
+  const causaliIvaById = useMemo(() => {
+    if (causaliIvaByIdProp instanceof Map && causaliIvaByIdProp.size) return causaliIvaByIdProp
+    return new Map((Array.isArray(causaliIva) ? causaliIva : []).map((item) => [String(item?.id || '').trim(), item]))
+  }, [causaliIvaByIdProp, causaliIva])
   const resolveDefaultWorkingViewCausaleIvaId = (sourceRow = {}) => resolveImportWorkingViewStandardCausaleIvaId({
     source: sourceRow,
     counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
@@ -620,7 +624,7 @@ export function ImportContabilitaWorkingView({
     ivaCausaleSearchInputRef.current?.select?.()
   }, [ivaCausalePickerRowId])
 
-  const filteredCausaliIva = (() => {
+  const filteredCausaliIva = useMemo(() => {
     const rows = Array.isArray(causaliIva) ? [...causaliIva] : []
     const rawQuery = String(ivaCausaleSearchTerm || '').trim()
     const query = normalizeWorkingViewCausaleIvaSearchValue(rawQuery)
@@ -638,7 +642,7 @@ export function ImportContabilitaWorkingView({
     }
 
     return rows.filter((causale) => getWorkingViewCausaleIvaSearchText(causale).includes(query))
-  })()
+  }, [causaliIva, ivaCausaleSearchTerm])
 
   const updateIvaDraftRow = (rowId, field, value) => {
     setIvaDraftRows((currentRows) => normalizeImportVatRows(currentRows.map((row) => {

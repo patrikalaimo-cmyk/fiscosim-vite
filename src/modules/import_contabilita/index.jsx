@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { buildStagingRow } from './application/importContabilitaBuilders.js'
 import { runImportWorkflow, runCommitWorkflow } from './application/importContabilitaWorkflow.js'
@@ -18,6 +18,17 @@ import {
   getImportCommitLogTag,
   resolveImportCommitFlowKind,
 } from './domain/importContabilitaCommitFlow.js'
+import {
+  WORKING_TABLE_PAGE_SIZE,
+  buildCausaliIvaLookupIndexes,
+  buildPianoContiLookup,
+  classifyCounterparty,
+  createCounterpartyClassificationResolver,
+  getAnagraficaDecisionKeyFromCounterparty,
+  normalizeAnagraficaIdentifier,
+  normalizeAnagraficaText,
+  paginateWorkingTableRows,
+} from './domain/importContabilitaPerformanceIndexes.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
@@ -700,7 +711,7 @@ function getRowReadiness(row, manualAccount = null, manualCausale = null) {
   }
 }
 
-function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null, decisions = {}, list = []) {
+function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null, decisions = {}, list = [], perfContext = {}) {
   const state = String(row?.state || row?.stato || '').toLowerCase()
   const isProcessed = state === 'registered' || state === 'committed' || state === 'processed' || row?.committed
   if (isProcessed) {
@@ -752,8 +763,10 @@ function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale
   }
 
   // 2. Classificazione Anagrafica
-  const pianoLookup = buildPianoContiLookup(list && list.length ? list : (typeof pianoConti !== 'undefined' ? pianoConti : []))
-  const classification = classifyCounterparty(counterparty, pianoLookup)
+  const pianoLookup = perfContext?.pianoLookup || buildPianoContiLookup(list && list.length ? list : (typeof pianoConti !== 'undefined' ? pianoConti : []))
+  const classification = perfContext?.classifyCounterparty
+    ? perfContext.classifyCounterparty(counterparty)
+    : classifyCounterparty(counterparty, pianoLookup)
   
   const decisionKey = normalizeAnagraficaDecisionKey(
     row?.decisionKey || getAnagraficaDecisionKeyFromCounterparty(counterparty)
@@ -823,8 +836,8 @@ function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale
   }
 }
 
-function getWorkingTableRowReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null, decisions = {}, list = []) {
-  return resolveImportDocumentReadiness(row, manualAccount, manualCausale, counterpartyAccount, decisions, list)
+function getWorkingTableRowReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null, decisions = {}, list = [], perfContext = {}) {
+  return resolveImportDocumentReadiness(row, manualAccount, manualCausale, counterpartyAccount, decisions, list, perfContext)
 }
 
 const WORKING_VIEW_BLOCK_EPS = 0.01
@@ -1151,24 +1164,6 @@ function buildReimportParsedDocSnapshot(source) {
   }
 }
 
-function normalizeAnagraficaText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function normalizeAnagraficaIdentifier(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .trim()
-}
-
 function getCounterpartyUsefulScore(counterparty) {
   if (!counterparty || typeof counterparty !== 'object') return 0
   return [
@@ -1193,86 +1188,8 @@ function getPreferredCounterparty(parsedDocument) {
   return { role: 'fornitore', counterparty: fornitore || cliente || {} }
 }
 
-function getAnagraficaDecisionKeyFromCounterparty(counterparty) {
-  const piva = normalizeAnagraficaIdentifier(counterparty?.partitaIva)
-  if (piva) return `piva:${piva}`
-  const cf = normalizeAnagraficaIdentifier(counterparty?.codiceFiscale)
-  if (cf) return `cf:${cf}`
-  const name = normalizeAnagraficaText(counterparty?.denominazione)
-  if (name) return `name:${name}`
-  return ''
-}
-
-function buildPianoContiLookup(rows) {
-  const byPiva = new Map()
-  const byCf = new Map()
-  const normalizedRows = []
-
-  ;(Array.isArray(rows) ? rows : []).forEach((row) => {
-    const normalizedRow = {
-      ...row,
-      normalizedDenominazione: normalizeAnagraficaText(row?.descrizione),
-      normalizedPiva: normalizeAnagraficaIdentifier(row?.partitaIva || row?.anagraficaPiva),
-      normalizedCf: normalizeAnagraficaIdentifier(row?.codiceFiscale || row?.anagraficaCf),
-    }
-
-    normalizedRows.push(normalizedRow)
-    if (normalizedRow.normalizedPiva) byPiva.set(normalizedRow.normalizedPiva, normalizedRow)
-    if (normalizedRow.normalizedCf) byCf.set(normalizedRow.normalizedCf, normalizedRow)
-  })
-
-  return { rows: normalizedRows, byPiva, byCf }
-}
-
-function classifyCounterparty(candidate, pianoLookup) {
-  const pivaKey = normalizeAnagraficaIdentifier(candidate?.partitaIva)
-  const cfKey = normalizeAnagraficaIdentifier(candidate?.codiceFiscale)
-  const nameKey = normalizeAnagraficaText(candidate?.denominazione)
-
-  const strongMatch = (pivaKey && pianoLookup.byPiva.get(pivaKey))
-    || (cfKey && pianoLookup.byCf.get(cfKey))
-    || null
-
-  if (strongMatch) {
-    return {
-      status: 'già presente',
-      rank: 3,
-      matchedPianoConto: strongMatch,
-    }
-  }
-
-  const weakMatch = nameKey
-    ? pianoLookup.rows.find((row) => {
-      const normalizedName = row?.normalizedDenominazione || ''
-      return normalizedName && (normalizedName.includes(nameKey) || nameKey.includes(normalizedName))
-    }) || null
-    : null
-
-  if (weakMatch) {
-    return {
-      status: 'possibile match',
-      rank: 2,
-      matchedPianoConto: weakMatch,
-    }
-  }
-
-  if (!pivaKey && !cfKey && !nameKey) {
-    return {
-      status: 'dati incompleti',
-      rank: 0,
-      matchedPianoConto: null,
-    }
-  }
-
-  return {
-    status: 'nuova',
-    rank: 1,
-    matchedPianoConto: null,
-  }
-}
-
-function buildAnagraficheDaVerificare(rows, pianoContiRows) {
-  const pianoLookup = buildPianoContiLookup(pianoContiRows)
+function buildAnagraficheDaVerificare(rows, pianoContiRows, pianoLookupOverride = null) {
+  const pianoLookup = pianoLookupOverride || buildPianoContiLookup(pianoContiRows)
   const groups = []
   const groupByToken = new Map()
 
@@ -2156,13 +2073,15 @@ function getExistingAccountForDecision(row, decision, pianoContiList) {
   return null
 }
 
-function getConfirmedCounterpartyAccountForRow(row, anagraficheDecisioniByKey, pianoContiList) {
+function getConfirmedCounterpartyAccountForRow(row, anagraficheDecisioniByKey, pianoContiList, perfContext = {}) {
   const parsedDocument = row?.parsedDocument || {}
   const preferredCounterparty = getPreferredCounterparty(parsedDocument)
   const counterparty = preferredCounterparty?.counterparty || getCounterpartyDataForAnagraficaRow(row)
-  
-  const pianoLookup = buildPianoContiLookup(pianoContiList)
-  const classification = classifyCounterparty(counterparty, pianoLookup)
+
+  const pianoLookup = perfContext?.pianoLookup || buildPianoContiLookup(pianoContiList)
+  const classification = perfContext?.classifyCounterparty
+    ? perfContext.classifyCounterparty(counterparty)
+    : classifyCounterparty(counterparty, pianoLookup)
   
   const decisionKey = normalizeAnagraficaDecisionKey(
     row?.decisionKey || getAnagraficaDecisionKeyFromCounterparty(counterparty),
@@ -2415,6 +2334,7 @@ function getNextVisibleRows(rows, {
   manualAccountByRowId = {},
   manualCausaleByRowId = {},
   counterpartyAccountByRowId = {},
+  readinessByRowId = null,
   getWorkingTableRowReadiness: customGetReadiness = null,
 }) {
   const query = searchTerm.trim().toLowerCase()
@@ -2426,7 +2346,7 @@ function getNextVisibleRows(rows, {
 
   return rows.filter((row) => {
     const key = getRowKey(row)
-    const readiness = getReadiness(
+    const readiness = readinessByRowId?.[key] ?? getReadiness(
       row,
       manualAccountByRowId[key],
       manualCausaleByRowId[key],
@@ -2484,9 +2404,10 @@ function getWorkingTableCellValue(row, columnKey, context = {}) {
   const counterpartyAccount = context?.counterpartyAccountByRowId?.[key] || null
   const fornitoreDisplay = getCounterpartyDisplayInfo(row?.parsedDocument?.fornitore, 'fornitore')
   const clienteDisplay = getCounterpartyDisplayInfo(row?.parsedDocument?.cliente, 'cliente')
-  const readiness = context?.getWorkingTableRowReadiness
-    ? context.getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccount)
-    : getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccount)
+  const readiness = context?.readinessByRowId?.[key]
+    ?? (context?.getWorkingTableRowReadiness
+      ? context.getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccount)
+      : getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccount))
 
   switch (columnKey) {
     case 'supplier':
@@ -2719,6 +2640,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [columnFilters, setColumnFilters] = useState({})
   const [columnSort, setColumnSort] = useState(null)
   const [openColumnFilter, setOpenColumnFilter] = useState('')
+  const [workingTablePage, setWorkingTablePage] = useState(1)
   const [registrationDateDraft, setRegistrationDateDraft] = useState(() => getLocalIsoDate())
   const [showGoToMenu, setShowGoToMenu] = useState(false)
   const [demoCommitBusy, setDemoCommitBusy] = useState(false)
@@ -2736,6 +2658,31 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const report = result?.report || null
   const selectedReimportCount = reimportSelectedRowIds.size
 
+  const pianoLookup = useMemo(
+    () => buildPianoContiLookup(Array.isArray(pianoConti) ? pianoConti : []),
+    [pianoConti],
+  )
+
+  const classifyCounterpartyCached = useMemo(
+    () => createCounterpartyClassificationResolver({ societaId: selectedSocietaId, pianoLookup }),
+    [selectedSocietaId, pianoLookup],
+  )
+
+  const importPerfContext = useMemo(() => ({
+    pianoLookup,
+    classifyCounterparty: classifyCounterpartyCached,
+  }), [pianoLookup, classifyCounterpartyCached])
+
+  const causaliIvaIndexes = useMemo(
+    () => buildCausaliIvaLookupIndexes(causaliIva),
+    [causaliIva],
+  )
+
+  const workingViewCausaliIvaById = useMemo(
+    () => causaliIvaIndexes.byId,
+    [causaliIvaIndexes],
+  )
+
   const counterpartyAccountByRowId = useMemo(() => {
     const rows = Array.isArray(stagingRows) ? stagingRows : []
     if (!selectedSocietaId || !rows.length) return {}
@@ -2744,23 +2691,24 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     rows.forEach((row) => {
       const rowKey = getRowKey(row)
       if (!rowKey) return
-      const confirmed = getConfirmedCounterpartyAccountForRow(row, anagraficheDecisioniByKey, pianoConti)
+      const confirmed = getConfirmedCounterpartyAccountForRow(row, anagraficheDecisioniByKey, pianoConti, importPerfContext)
       if (!confirmed?.id || !confirmed?.codice) return
       next[rowKey] = confirmed
     })
     return next
-  }, [stagingRows, anagraficheDecisioniByKey, pianoConti, selectedSocietaId])
+  }, [stagingRows, anagraficheDecisioniByKey, pianoConti, selectedSocietaId, importPerfContext])
 
-  const getWorkingTableRowReadiness = (row, manualAccount = null, manualCausale = null, counterpartyAccount = null) => {
+  const getWorkingTableRowReadiness = useCallback((row, manualAccount = null, manualCausale = null, counterpartyAccount = null) => {
     return resolveImportDocumentReadiness(
       row,
       manualAccount,
       manualCausale,
       counterpartyAccount,
       anagraficheDecisioniByKey,
-      pianoConti
+      pianoConti,
+      importPerfContext,
     )
-  }
+  }, [anagraficheDecisioniByKey, pianoConti, importPerfContext])
 
   const workingTableReadinessByRowId = useMemo(() => {
     const rows = Array.isArray(stagingRows) ? stagingRows : []
@@ -2776,7 +2724,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       )
     })
     return next
-  }, [stagingRows, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, anagraficheDecisioniByKey, pianoConti])
+  }, [stagingRows, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, getWorkingTableRowReadiness])
 
   const workingTableReadyCount = useMemo(() => (
     Object.values(workingTableReadinessByRowId).filter((readiness) => readiness?.ready).length
@@ -2795,25 +2743,33 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       manualAccountByRowId,
       manualCausaleByRowId,
       counterpartyAccountByRowId,
-      getWorkingTableRowReadiness,
+      readinessByRowId: workingTableReadinessByRowId,
     }),
-    [searchTerm, stagingRows, viewMode, quickFilter, selectedRowIds, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, getWorkingTableRowReadiness],
+    [searchTerm, stagingRows, viewMode, quickFilter, selectedRowIds, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, workingTableReadinessByRowId],
   )
 
+  const workingTableFilterContext = useMemo(() => ({
+    manualAccountByRowId,
+    manualCausaleByRowId,
+    counterpartyAccountByRowId,
+    readinessByRowId: workingTableReadinessByRowId,
+  }), [manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, workingTableReadinessByRowId])
+
   const visibleRows = useMemo(() => {
-    const filtered = applyWorkingTableColumnFilters(baseVisibleRows, columnFilters, {
-      manualAccountByRowId,
-      manualCausaleByRowId,
-      counterpartyAccountByRowId,
-      getWorkingTableRowReadiness,
-    })
-    return applyWorkingTableColumnSort(filtered, columnSort, {
-      manualAccountByRowId,
-      manualCausaleByRowId,
-      counterpartyAccountByRowId,
-      getWorkingTableRowReadiness,
-    })
-  }, [baseVisibleRows, columnFilters, columnSort, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, getWorkingTableRowReadiness])
+    const filtered = applyWorkingTableColumnFilters(baseVisibleRows, columnFilters, workingTableFilterContext)
+    return applyWorkingTableColumnSort(filtered, columnSort, workingTableFilterContext)
+  }, [baseVisibleRows, columnFilters, columnSort, workingTableFilterContext])
+
+  useEffect(() => {
+    setWorkingTablePage(1)
+  }, [searchTerm, viewMode, quickFilter, columnFilters, columnSort, stagingRows.length])
+
+  const workingTablePagination = useMemo(
+    () => paginateWorkingTableRows(visibleRows, workingTablePage, WORKING_TABLE_PAGE_SIZE),
+    [visibleRows, workingTablePage],
+  )
+
+  const paginatedVisibleRows = workingTablePagination.rows
 
   const previewRow = useMemo(
     () => stagingRows.find((row) => getRowKey(row) === previewRowId) || null,
@@ -3037,8 +2993,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const anagraficheBase = useMemo(() => {
     if (!selectedSocietaId) return []
     if (!stagingRows.length) return []
-    return buildAnagraficheDaVerificare(stagingRows, pianoConti)
-  }, [selectedSocietaId, stagingRows, pianoConti])
+    return buildAnagraficheDaVerificare(stagingRows, pianoConti, pianoLookup)
+  }, [selectedSocietaId, stagingRows, pianoConti, pianoLookup])
 
   const anagraficheDaVerificareView = useMemo(() => {
     const rows = Array.isArray(anagraficheBase) ? anagraficheBase : []
@@ -3274,14 +3230,20 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     () => visibleRows.filter((row) => selectedRowIds.has(getRowKey(row))).length,
     [selectedRowIds, visibleRows],
   )
+  const paginatedVisibleSelectedCount = useMemo(
+    () => paginatedVisibleRows.filter((row) => selectedRowIds.has(getRowKey(row))).length,
+    [selectedRowIds, paginatedVisibleRows],
+  )
   const allVisibleSelected = visibleRows.length > 0 && visibleSelectedCount === visibleRows.length
+  const allPaginatedVisibleSelected = paginatedVisibleRows.length > 0 && paginatedVisibleSelectedCount === paginatedVisibleRows.length
   const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected
+  const somePaginatedVisibleSelected = paginatedVisibleSelectedCount > 0 && !allPaginatedVisibleSelected
 
   useEffect(() => {
     if (headerCheckboxRef.current) {
-      headerCheckboxRef.current.indeterminate = someVisibleSelected
+      headerCheckboxRef.current.indeterminate = somePaginatedVisibleSelected
     }
-  }, [someVisibleSelected])
+  }, [somePaginatedVisibleSelected])
 
   const applySocietaSnapshot = (snapshot) => {
     if (hasUsableResultSnapshot(snapshot)) {
@@ -4529,6 +4491,19 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     }
   }
 
+  const onTogglePaginatedVisibleSelection = () => {
+    if (!paginatedVisibleRows.length) return
+    if (allPaginatedVisibleSelected) {
+      const next = new Set(selectedRowIds)
+      paginatedVisibleRows.forEach((row) => next.delete(getRowKey(row)))
+      updateSelectedRows(next)
+      return
+    }
+    const next = new Set(selectedRowIds)
+    paginatedVisibleRows.forEach((row) => next.add(getRowKey(row)))
+    updateSelectedRows(next)
+  }
+
   const onToggleVisibleSelection = () => {
     if (!visibleRows.length) return
     if (allVisibleSelected) {
@@ -5477,8 +5452,9 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         const account = manualAccountByRowId[key] || null
         const causale = manualCausaleByRowId[key] || null
         const cacc = counterpartyAccountByRowId[key] || null
-        const readiness = getWorkingTableRowReadiness(row, account, causale, cacc)
-        inScope = readiness.status !== 'ready'
+        const readiness = workingTableReadinessByRowId[key]
+          || getWorkingTableRowReadiness(row, account, causale, cacc)
+        inScope = !readiness?.ready
       } else if (scope === 'all') {
         inScope = true
       }
@@ -5661,6 +5637,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         formatManualCausale={formatManualCausale}
         causaliContabili={causaliContabili}
         causaliIva={workingViewCausaliIva}
+        causaliIvaById={workingViewCausaliIvaById}
         isDemoSocieta={isSelectedDemoSocieta}
         onCommitDemoWorkingView={handleDemoWorkingViewCommit}
         commitBusy={demoCommitBusy}
@@ -5946,12 +5923,18 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
               >
                 <div style={{ minWidth: 0 }}>
                   <ImportContabilitaWorkingTable
-                    visibleRows={visibleRows}
+                    visibleRows={paginatedVisibleRows}
+                    totalFilteredRows={visibleRows.length}
+                    workingTablePage={workingTablePagination.page}
+                    workingTablePageSize={workingTablePagination.pageSize}
+                    workingTableTotalPages={workingTablePagination.totalPages}
+                    onWorkingTablePageChange={setWorkingTablePage}
                     stagingRows={stagingRows}
                     busy={busy}
-                    allVisibleSelected={allVisibleSelected}
+                    allVisibleSelected={allPaginatedVisibleSelected}
                     headerCheckboxRef={headerCheckboxRef}
-                    onToggleVisibleSelection={onToggleVisibleSelection}
+                    onToggleVisibleSelection={onTogglePaginatedVisibleSelection}
+                    workingTableReadinessByRowId={workingTableReadinessByRowId}
                     workingTableColumnFilters={WORKING_TABLE_COLUMN_FILTERS}
                     columnFilters={columnFilters}
                     columnSort={columnSort}
@@ -6025,6 +6008,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
                       manualAccountByRowId={manualAccountByRowId}
                       manualCausaleByRowId={manualCausaleByRowId}
                       counterpartyAccountByRowId={counterpartyAccountByRowId}
+                      workingTableReadinessByRowId={workingTableReadinessByRowId}
                       getWorkingTableRowReadiness={getWorkingTableRowReadiness}
                       getCounterpartyDisplayInfo={getCounterpartyDisplayInfo}
                       ViewToggle={ViewToggle}

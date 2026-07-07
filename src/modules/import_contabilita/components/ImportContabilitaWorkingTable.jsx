@@ -17,11 +17,17 @@ function getWorkingTableAutomationFieldLabels(fields = []) {
 
 export function ImportContabilitaWorkingTable({
   visibleRows,
+  totalFilteredRows = 0,
+  workingTablePage = 1,
+  workingTablePageSize = 100,
+  workingTableTotalPages = 1,
+  onWorkingTablePageChange,
   stagingRows,
   busy,
   allVisibleSelected,
   headerCheckboxRef,
   onToggleVisibleSelection,
+  workingTableReadinessByRowId = {},
   workingTableColumnFilters,
   columnFilters,
   columnSort,
@@ -309,7 +315,9 @@ export function ImportContabilitaWorkingTable({
                     || row?.contabilizedAt
                     || row?.registeredAt,
                 )
-                const readiness = getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccountByRowId[key] || null) || {}
+                const readiness = workingTableReadinessByRowId[key]
+                  || getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccountByRowId[key] || null)
+                  || {}
                 const readinessMissing = Array.isArray(readiness.missing) ? readiness.missing : []
                 const readinessTitle = readinessMissing.length ? readinessMissing.join(', ') : (readiness.label || '')
 
@@ -768,6 +776,56 @@ export function ImportContabilitaWorkingTable({
               })}
             </tbody>
           </table>
+          {totalFilteredRows > workingTablePageSize ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '.5rem',
+              padding: '.45rem .2rem 0',
+              color: 'rgba(226,232,240,.82)',
+              fontSize: '.78rem',
+            }}>
+              <span>
+                {totalFilteredRows} documenti · pagina {workingTablePage} di {workingTableTotalPages}
+                {' '}({workingTablePageSize} per pagina)
+              </span>
+              <div style={{ display: 'flex', gap: '.35rem' }}>
+                <button
+                  type="button"
+                  disabled={workingTablePage <= 1}
+                  onClick={() => onWorkingTablePageChange?.(Math.max(1, workingTablePage - 1))}
+                  style={{
+                    padding: '.22rem .55rem',
+                    borderRadius: 8,
+                    border: '1px solid rgba(148,163,184,.28)',
+                    background: 'rgba(15,37,60,.72)',
+                    color: 'inherit',
+                    cursor: workingTablePage <= 1 ? 'not-allowed' : 'pointer',
+                    opacity: workingTablePage <= 1 ? 0.45 : 1,
+                  }}
+                >
+                  Prec.
+                </button>
+                <button
+                  type="button"
+                  disabled={workingTablePage >= workingTableTotalPages}
+                  onClick={() => onWorkingTablePageChange?.(Math.min(workingTableTotalPages, workingTablePage + 1))}
+                  style={{
+                    padding: '.22rem .55rem',
+                    borderRadius: 8,
+                    border: '1px solid rgba(148,163,184,.28)',
+                    background: 'rgba(15,37,60,.72)',
+                    color: 'inherit',
+                    cursor: workingTablePage >= workingTableTotalPages ? 'not-allowed' : 'pointer',
+                    opacity: workingTablePage >= workingTableTotalPages ? 0.45 : 1,
+                  }}
+                >
+                  Succ.
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <EmptyState

@@ -8,6 +8,7 @@ export function ImportContabilitaPreviewDrawerContent({
   manualAccountByRowId,
   manualCausaleByRowId,
   counterpartyAccountByRowId,
+  workingTableReadinessByRowId = {},
   getWorkingTableRowReadiness,
   getCounterpartyDisplayInfo,
   ViewToggle,
@@ -20,7 +21,8 @@ export function ImportContabilitaPreviewDrawerContent({
 }) {
   const account = manualAccountByRowId[previewRowId] || null
   const causale = manualCausaleByRowId[previewRowId] || null
-  const readiness = getWorkingTableRowReadiness(previewRow, account, causale, counterpartyAccountByRowId[previewRowId] || null)
+  const readiness = workingTableReadinessByRowId[previewRowId]
+    || getWorkingTableRowReadiness(previewRow, account, causale, counterpartyAccountByRowId[previewRowId] || null)
   const warnings = Array.isArray(previewRow?.warnings) ? previewRow.warnings : []
   const blockingErrors = Array.isArray(previewRow?.blockingErrors) ? previewRow.blockingErrors : []
   const parsed = previewRow?.parsedDocument || {}

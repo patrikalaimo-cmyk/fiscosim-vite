@@ -864,8 +864,9 @@ test('25A-FIX-2 — Import reale: check readiness, anagrafiche, and sblocco avvi
   )
 
   // 1. Check local getWorkingTableRowReadiness in ModuloImportContabilita
-  assert.match(indexSource, /const getWorkingTableRowReadiness = \(row, manualAccount = null, manualCausale = null, counterpartyAccount = null\) => \{/, 'Dovrebbe definire getWorkingTableRowReadiness locale')
-  assert.match(indexSource, /resolveImportDocumentReadiness\(\s*row,\s*manualAccount,\s*manualCausale,\s*counterpartyAccount,\s*anagraficheDecisioniByKey,\s*pianoConti\s*\)/, 'Dovrebbe passare anagraficheDecisioniByKey e pianoConti alla readiness')
+  assert.match(indexSource, /const getWorkingTableRowReadiness = useCallback\(\(row, manualAccount = null, manualCausale = null, counterpartyAccount = null\) => \{/, 'Dovrebbe definire getWorkingTableRowReadiness locale memoizzata')
+  assert.match(indexSource, /resolveImportDocumentReadiness\(\s*row,\s*manualAccount,\s*manualCausale,\s*counterpartyAccount,\s*anagraficheDecisioniByKey,\s*pianoConti,\s*importPerfContext,\s*\)/, 'Dovrebbe passare anagraficheDecisioniByKey, pianoConti e contesto performance alla readiness')
+  assert.match(indexSource, /workingTableReadinessByRowId/, 'Dovrebbe calcolare readiness batch per documento')
 
   // 2. Check aligned warning and blocking labels
   assert.match(indexSource, /'Nuova anagrafica da confermare'/, 'Dovrebbe usare il messaggio di blocco corretto per nuova anagrafica')

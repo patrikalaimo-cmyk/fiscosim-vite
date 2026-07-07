@@ -10784,3 +10784,56 @@ pm run build -> Successo (429 moduli, 16s).
   6. Cambiare manualmente una causale IVA → ricaricare documento: scelta manuale preservata.
 
 
+## 25A-PERF-1 — IMPORT MASSIVO ZIP 498 FATTURE PERFORMANCE HARDENING
+
+- **Problema rilevato**: dopo import ZIP ~498 fatture, Working Table/View e matching anagrafiche degradavano sensibilmente — ogni interazione ricalcolava readiness e matching per tutte le righe.
+- **Cause principali**:
+  1. `buildPianoContiLookup` ricostruito **per ogni riga** dentro `resolveImportDocumentReadiness` e `getConfirmedCounterpartyAccountForRow` (O(498 × pianoConti) a ogni render).
+  2. `workingTableReadinessByRowId` calcolato ma **non usato** da tabella, filtri e `getNextVisibleRows` → readiness ricalcolata 3–4× per documento.
+  3. `getWorkingTableRowReadiness` non stabilizzato (`useCallback`) → invalidava memo `baseVisibleRows`/`visibleRows` a ogni render.
+  4. Working Table renderizzava **tutte** le righe filtrate senza paginazione (498 `<tr>` con JSX pesante).
+  5. `classifyCounterparty` ripetuto per stesso fornitore su decine/centinaia di fatture senza cache.
+  6. Bug collaterale: scope batch `incomplete` usava `readiness.status !== 'ready'` (campo inesistente) invece di `!readiness.ready`.
+- **Mappe/cache/memoizzazioni introdotte** (`importContabilitaPerformanceIndexes.js`):
+  - `buildPianoContiLookup` con `byPiva`, `byCf`, `byId`, `byCode` — costruito una volta via `useMemo`.
+  - `createCounterpartyClassificationResolver` — cache per chiave `societaId + tipo + piva/cf/denominazione`.
+  - `buildCausaliIvaLookupIndexes` — `byId`, `byAliquota` passati a Working View.
+  - `importPerfContext` condiviso tra readiness e counterparty account resolution.
+  - `workingTableReadinessByRowId` — unica passata batch, consumata da filtri/tabella/preview/batch apply.
+  - `getWorkingTableRowReadiness` stabilizzato con `useCallback`.
+- **Paginazione/rendering progressivo**: client-side 100 righe/pagina (`WORKING_TABLE_PAGE_SIZE`), contatore totale invariato, filtri su tutto il lotto, selezione header solo pagina corrente.
+- **Cosa NON è stato cambiato funzionalmente**:
+  - Regole match anagrafico (rank ≥ 3, P.IVA/CF, nessun blocco falso su aggancio forte).
+  - Warning conto/causale vuoti in Working Table; Working View editabile (25A-FIX-3).
+  - Pruning IVA zero/placeholder e auto-match standard (25A-FIX-5).
+  - Separazione Test Lab/reale; documenti registrati esclusi dalle viste operative.
+  - Nessuna virtualizzazione complessa; nessuna migration/RLS/.env.
+- **File modificati/creati**:
+  - `src/modules/import_contabilita/domain/importContabilitaPerformanceIndexes.js` (nuovo)
+  - `src/modules/import_contabilita/tests/importContabilitaBulkPerformance.test.js` (nuovo)
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/components/invoice_preview/ImportContabilitaPreviewDrawerContent.jsx`
+  - `tests/testLabIntegrazione.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- **Test eseguiti**:
+  - `importContabilitaBulkPerformance.test.js`: 6/6 pass (500 doc, cache matching, indici IVA).
+  - `tests/testLabIntegrazione.test.js`: 55/55 pass (regressione 25A-FIX-2/3/4/5).
+  - Suite IVA/workflow incluse nel run combinato: 84/84 pass.
+  - `npm run build` OK.
+- **Metriche manuali consigliate a Patrik** (con ZIP 498):
+  - Tempo rendering Working Table dopo import (target: interazione fluida, pagina 1 immediata).
+  - Tempo apertura Working View su singolo documento.
+  - Tempo cambio documento in sessione multi-doc (Alt+→).
+  - Tempo aggancio fornitore già presente (nessun lag su selezione anagrafica).
+- **Sicurezza/perimetro**: `.env`/auth/RLS/Supabase/migration/società reali non toccati; Riconciliazione **BLOCCATA**; nessun `git add .`.
+- **Stato working tree**: commit selettivo 25A-PERF-1 (post `2c35043` 25A-FIX-5).
+- **Test manuale richiesto a Patrik**:
+  1. Reimportare ZIP ~498 fatture su società reale.
+  2. Verificare Working Table reattiva con paginazione (100/pagina, totale 498).
+  3. Filtrare per fornitore ricorrente → match istantaneo, nessun falso "nuova anagrafica" su fornitore noto.
+  4. Aprire Working View, cambiare documento, editare conto/causale/IVA — comportamento invariato a 25A-FIX-3/5.
+  5. Applicare batch su scope "incomplete" → solo documenti realmente incompleti.
+
+
