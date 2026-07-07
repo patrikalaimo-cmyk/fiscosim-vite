@@ -687,6 +687,11 @@ export async function loadCausaliIvaBySocieta(societaId) {
           detraibile: row?.detraibile ?? null,
           percentualeDetraibilita: row?.percentuale_detraibilita ?? null,
           percentualeIndetraibilita: row?.percentuale_indetraibilita ?? null,
+          is_default_per_aliquota: row?.is_default_per_aliquota ?? false,
+          usa_per_automazione: row?.usa_per_automazione ?? false,
+          regime_iva: row?.regime_iva ?? null,
+          regime: row?.regime ?? null,
+          reverse_charge: row?.reverse_charge ?? false,
           note: String(row?.note || '').trim(),
           societaId: String(row?.societa_id || '').trim(),
         }))

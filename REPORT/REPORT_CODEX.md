@@ -10737,7 +10737,50 @@ pm run build -> Successo (429 moduli, 16s).
   - `REPORT/REPORT_CODEX.md`
 - **Test eseguiti**: 126/126 pass (inclusi 25A-FIX-4 Vergnano, UUID reale/sintetico, regressione 25A-FIX-3, Test Lab); `npm run build` OK.
 - **Sicurezza/perimetro**: `.env`/auth/RLS/Supabase/migration/società reali non toccati; Riconciliazione **BLOCCATA**.
-- **Stato working tree**: modifiche selettive su file import/test/report; ZIP checkpoint non ancora creato in questa sezione.
+- **Stato working tree**: commit `dda6ef7`; backup `fiscosim-checkpoint-25a-fix4-pruning-iva-isolamento-test-lab-2026-07-07-2225.zip`.
 - **Prossimo step consigliato**: Test manuale Patrik su Vergnano — verificare riga 0% ignorata, popup "import reale", commit con UUID staging, documento in Registrate; poi commit reale con documento da lista `documenti_import` (non sessione `ic-*`).
+
+
+## 25A-FIX-5 — IMPORT WORKING VIEW CAUSALI IVA STANDARD E PRUNING ZERO EFFETTIVI
+
+- **Causa del mancato effetto di 25A-FIX-4**:
+  1. *Auto-match causali IVA assente*: `loadCausaliIvaBySocieta` in `importContabilitaRepo.js` mappava le causali IVA ma **ometteva** `is_default_per_aliquota` (e campi correlati). Il resolver `resolveIva` / `resolveIvaOrNull` in `domain/resolveIva.js` usa quel flag per trovare la causale standard per aliquota — senza di esso l'auto-match non poteva funzionare.
+  2. *Pruning non collegato alla sorgente UI*: `normalizeImportVatRows` era applicato solo in `assessWorkingViewIvaDraftRows`, `mapWorkingViewIvaDraftToCommitRows` e `buildImportContabilitaCommitPayload`. Lo stato React `ivaDraftRows` nella Working View conteneva ancora tutte le righe XML (inclusa 0/0 placeholder). Badge, blockingReasons, tab IVA e abilitazione "Contabilizza documento" leggevano lo stato grezzo.
+  3. *Effetto collaterale 0%*: assegnando la causale standard 0% alle righe placeholder, queste diventavano "fiscalmente significative" e non venivano più prunate.
+- **Punto in cui il pruning era applicato prima**: solo a valle — `assessWorkingViewIvaDraftRows`, mapper commit, payload builder (25A-FIX-4).
+- **Punto corretto in cui è ora collegato**:
+  - Inizializzazione e rigenerazione bozza: `rebuildImportWorkingViewIvaDraftRows` in `importContabilitaWorkingViewIvaDraft.js` (auto-match + flag `causaleIvaManual`).
+  - Sorgente unificata UI/validazione/commit: `effectiveIvaDraftRows = normalizeImportVatRows(ivaDraftRows)` in `ImportContabilitaWorkingView.jsx` — usata da tab IVA, `assessWorkingViewIvaDraftRows`, totali, popup conferma, `onCommitDemoWorkingView`.
+- **Sorgente effettiva usata ora da UI/validazione/commit**: `effectiveIvaDraftRows` (righe normalizzate) derivate da `ivaDraftRows` ricostruite via `rebuildImportWorkingViewIvaDraftRows` con causali caricate da `loadCausaliIvaBySocieta`.
+- **Fonte dati causali IVA standard**: tabella `causali_iva` via `loadCausaliIvaBySocieta` → campo `is_default_per_aliquota` (Impostazioni Procedure / Studio). Resolver: `resolveImportWorkingViewStandardCausaleIvaId` → `resolveImportWorkingViewCausaleIvaId` → `resolveIvaOrNull` (`domain/resolveIva.js`). Filtro per società, registro acquisti, aliquota, natura.
+- **Regola priorità implementata**:
+  - P1: causale IVA standard da impostazioni (`is_default_per_aliquota`) — **implementata**.
+  - P2 storico / P3 AI — struttura predisposta in `resolveImportWorkingViewStandardCausaleIvaId`, non ancora collegata.
+  - Se standard e storico divergono in futuro: warning operativo non bloccante (non scelta silenziosa).
+- **Regola non sovrascrittura scelta manuale**: flag `causaleIvaManual: true` su riga quando l'operatore seleziona causale; `rebuildImportWorkingViewIvaDraftRows` preserva override via `getImportWorkingViewIvaRowIdentityKey`. Auto-match saltato su righe 0/0 senza natura (evita causale 0% su placeholder).
+- **Regola pruning placeholder**: `isEmptyImportVatRow` / `hasImportVatRowFiscalSignificance` — riga 0/0 senza imponibile/imposta/natura/flag manuali è esclusa; righe con natura reale o importi zero ma fiscalmente significativi restano e vengono validate.
+- **Scelta UX**: righe placeholder non compaiono in tab IVA / controlli / commit (rimosse da `effectiveIvaDraftRows`), non come riga editabile separata.
+- **File modificati/creati**:
+  - `src/modules/import_contabilita/domain/importContabilitaWorkingViewIvaDraft.js` (nuovo)
+  - `src/modules/import_contabilita/tests/importContabilitaWorkingViewIvaDraft.test.js` (nuovo)
+  - `src/modules/import_contabilita/data/importContabilitaRepo.js` — mapping `is_default_per_aliquota`, `usa_per_automazione`, `regime_iva`, `reverse_charge`
+  - `src/modules/import_contabilita/domain/importContabilitaVatRowNormalization.js` — `hasImportVatRowFiscalSignificance` raffinata (causale sola su 0/0 non significativa)
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx` — `rebuildImportWorkingViewIvaDraftRows`, `effectiveIvaDraftRows`, commit/checks/popup allineati
+  - `REPORT/REPORT_CODEX.md`
+- **Test eseguiti**:
+  - `importContabilitaWorkingViewIvaDraft.test.js`: 6/6 pass (auto-match 22%/10%, placeholder non blocca, Vergnano 2 movimenti IVA, override manuale, natura reale non prunata).
+  - `importContabilitaVatRowNormalization.test.js` + workflow/demo commit: 29/29 pass.
+  - `tests/testLabIntegrazione.test.js`: 49/49 pass.
+  - Regressione 25A-FIX-3/4 coperta nei test esistenti.
+- **Build**: `npm run build` OK (16.73s).
+- **Sicurezza/perimetro**: `.env`/auth/RLS/Supabase/migration/società reali non toccati; Riconciliazione **BLOCCATA**; nessun hardcode su codici causale; nessun `git add .`.
+- **Stato working tree**: commit selettivo 25A-FIX-5 (post `dda6ef7` 25A-FIX-4).
+- **Test manuale richiesto a Patrik**:
+  1. Import reale fattura Vergnano (acquisti, righe 22% + 10% + 0% placeholder).
+  2. Aprire Working View → tab IVA: causali 22% e 10% pre-compilate da Impostazioni Procedure; riga 0/0 assente o non bloccante.
+  3. Verificare badge "Bozza coerente" verde con conto PN e causale contabile compilati.
+  4. "Contabilizza documento" abilitato; popup mostra 2 causali IVA (non 3).
+  5. Commit con UUID `documenti_import` reale → staging aggiornato, 2 movimenti IVA in registri.
+  6. Cambiare manualmente una causale IVA → ricaricare documento: scelta manuale preservata.
 
 

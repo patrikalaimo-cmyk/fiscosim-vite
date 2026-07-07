@@ -3,16 +3,22 @@ import { WorkingViewApplyActionsPopover } from './WorkingViewApplyActionsPopover
 import { WorkingViewInvoicePreviewTabs } from './WorkingViewInvoicePreviewTabs.jsx'
 import { WorkingViewPrimaNotaTable, buildWorkingViewPrimaNotaRows } from './WorkingViewPrimaNotaTable.jsx'
 import {
-  resolveImportWorkingViewCausaleIvaId,
   assessWorkingViewIvaDraftRows,
   mergeWorkingViewChecksWithIvaDraft,
-  extractWorkingViewIvaSourceRows,
 } from '../../domain/importContabilitaDemoCausaliIva.js'
 import {
   assessWorkingViewPartitarioDraft,
   buildDemoWorkingViewCommitConfirmMessage,
   resolveDemoIvaCreditAccount,
 } from '../../domain/importContabilitaDemoWorkingViewCommit.js'
+import {
+  createImportWorkingViewIvaDraftRow,
+  getEffectiveImportWorkingViewIvaDraftRows,
+  rebuildImportWorkingViewIvaDraftRows,
+  recalculateImportWorkingViewIvaDraftRow,
+  resolveImportWorkingViewStandardCausaleIvaId,
+} from '../../domain/importContabilitaWorkingViewIvaDraft.js'
+import { normalizeImportVatRows } from '../../domain/importContabilitaVatRowNormalization.js'
 
 let workingViewIvaDraftSequence = 0
 
@@ -170,58 +176,17 @@ function getWorkingViewCausaleIvaNumericSearchRank(causale, queryNumber) {
 }
 
 function recalculateWorkingViewIvaDraftRow(row, causaliIvaById) {
-  const causaleIvaId = normalizeWorkingViewCausaleIvaId(row?.causaleIvaId || row?.causale_iva_id)
-  const causale = causaliIvaById.get(causaleIvaId) || null
-  const aliquotaFromCausale = getWorkingViewAliquotaFromCausale(causale)
-  const aliquota = aliquotaFromCausale != null ? aliquotaFromCausale : Number(toDraftNumber(row?.aliquota ?? 0) || 0) || 0
-  const imponibile = Number(toDraftNumber(row?.imponibile ?? 0) || 0) || 0
-  const imposta = roundWorkingViewAmount((imponibile * aliquota) / 100)
-  const detraibilePercent = causale ? getWorkingViewDetraibilePercentFromCausale(causale) : (aliquota === 0 ? 0 : 100)
-  const indetraibilePercent = Math.max(0, Math.min(100, 100 - detraibilePercent))
-  const detraibileImposta = roundWorkingViewAmount((imposta * detraibilePercent) / 100)
-  const indetraibileImposta = roundWorkingViewAmount(imposta - detraibileImposta)
-
-  return {
-    ...row,
-    causaleIvaId,
-    causaleIvaLabel: getWorkingViewCausaleIvaOptionLabel(causale),
-    aliquota,
-    imponibile,
-    imposta,
-    detraibilePercent,
-    indetraibilePercent,
-    detraibileImposta,
-    indetraibileImposta,
-  }
-}
-
-function getWorkingViewCounterpartyCausaleIvaId(counterpartyAccount) {
-  return normalizeWorkingViewCausaleIvaId(
-    counterpartyAccount?.causaleIvaId || counterpartyAccount?.causale_iva_id || ''
-  )
+  return recalculateImportWorkingViewIvaDraftRow(row, causaliIvaById)
 }
 
 function createWorkingViewIvaDraftRow(source = {}, causaliIvaById = new Map(), options = {}) {
-  const defaultCausaleIvaId = normalizeWorkingViewCausaleIvaId(
-    options?.resolveDefaultCausaleIvaId ? options.resolveDefaultCausaleIvaId(source) : ''
-  )
-  const baseRow = {
-    id: nextWorkingViewIvaDraftId(),
-    aliquota: toDraftNumber(source?.aliquota ?? 0),
-    imponibile: toDraftNumber(source?.imponibile ?? 0),
-    imposta: toDraftNumber(source?.imposta ?? source?.iva ?? 0),
-    esigibilita: String(source?.esigibilita || source?.esigibilitaIVA || 'Immediata').trim() || 'Immediata',
-    causaleIvaId: normalizeWorkingViewCausaleIvaId(source?.causaleIvaId || source?.causale_iva_id || defaultCausaleIvaId),
-  }
-
-  return recalculateWorkingViewIvaDraftRow(baseRow, causaliIvaById)
+  return createImportWorkingViewIvaDraftRow(source, causaliIvaById, options)
 }
 
 function buildWorkingViewIvaDraftRows(ivaRows = [], causaliIvaById = new Map(), options = {}) {
-  if (Array.isArray(ivaRows) && ivaRows.length) {
-    return ivaRows.map((item) => createWorkingViewIvaDraftRow(item, causaliIvaById, options))
-  }
-  return [createWorkingViewIvaDraftRow({}, causaliIvaById, options)]
+  const sources = Array.isArray(ivaRows) ? ivaRows : []
+  if (!sources.length) return []
+  return normalizeImportVatRows(sources.map((item) => createImportWorkingViewIvaDraftRow(item, causaliIvaById, options)))
 }
 
 function formatWorkingViewIvaRate(value) {
@@ -325,17 +290,25 @@ export function ImportContabilitaWorkingView({
   const [applyPopoverOpen, setApplyPopoverOpen] = useState(false)
   const [previewTab, setPreviewTab] = useState('fattura_fiscosim')
   const causaliIvaById = new Map((Array.isArray(causaliIva) ? causaliIva : []).map((item) => [String(item?.id || '').trim(), item]))
-  const resolveDefaultWorkingViewCausaleIvaId = (sourceRow = {}) => resolveImportWorkingViewCausaleIvaId({
+  const resolveDefaultWorkingViewCausaleIvaId = (sourceRow = {}) => resolveImportWorkingViewStandardCausaleIvaId({
     source: sourceRow,
     counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
     causaliIva,
     isDemoSocieta,
   })
-  const [ivaDraftRows, setIvaDraftRows] = useState(() => buildWorkingViewIvaDraftRows(
-    extractWorkingViewIvaSourceRows(activeWorkingViewModel?.parsedDocument),
+  const [ivaDraftRows, setIvaDraftRows] = useState(() => rebuildImportWorkingViewIvaDraftRows({
+    parsedDocument: activeWorkingViewModel?.parsedDocument,
+    previousRows: [],
+    causaliIva,
+    counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
+    isDemoSocieta,
     causaliIvaById,
-    { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId }
-  ))
+    createRowId: nextWorkingViewIvaDraftId,
+  }))
+  const effectiveIvaDraftRows = useMemo(
+    () => getEffectiveImportWorkingViewIvaDraftRows(ivaDraftRows),
+    [ivaDraftRows],
+  )
   const ivaCreditAccount = useMemo(() => resolveDemoIvaCreditAccount(pianoConti), [pianoConti])
   const [pnDraftRows, setPnDraftRows] = useState(() => {
     if (!activeWorkingViewModel) return []
@@ -398,10 +371,10 @@ export function ImportContabilitaWorkingView({
   const [ivaCausaleSearchTerm, setIvaCausaleSearchTerm] = useState('')
   const ivaCausaleSearchInputRef = useRef(null)
   const ivaDraftChecks = useMemo(
-    () => assessWorkingViewIvaDraftRows(ivaDraftRows, {
+    () => assessWorkingViewIvaDraftRows(effectiveIvaDraftRows, {
       documentVatTotal: Number(activeWorkingViewModel?.iva ?? activeWorkingViewModel?.parsedDocument?.iva ?? 0) || 0,
     }),
-    [ivaDraftRows, activeWorkingViewModel?.iva, activeWorkingViewModel?.parsedDocument?.iva],
+    [effectiveIvaDraftRows, activeWorkingViewModel?.iva, activeWorkingViewModel?.parsedDocument?.iva],
   )
   const partitarioDraftChecks = useMemo(
     () => assessWorkingViewPartitarioDraft(activeWorkingViewModel),
@@ -455,7 +428,7 @@ export function ImportContabilitaWorkingView({
   const currentAutomationMeta = activeWorkingViewModel?.automationMeta || null
   const currentAutomationLabels = getWorkingViewAutomationFieldLabels(currentAutomationMeta?.fields)
   const hasCurrentAutomationMeta = currentAutomationLabels.length > 0
-  const ivaDraftTotals = ivaDraftRows.reduce((accumulator, row) => {
+  const ivaDraftTotals = effectiveIvaDraftRows.reduce((accumulator, row) => {
     accumulator.imponibile += Number(row?.imponibile || 0) || 0
     accumulator.imposta += Number(row?.imposta || 0) || 0
     return accumulator
@@ -612,30 +585,34 @@ export function ImportContabilitaWorkingView({
   }
 
   useEffect(() => {
-    setIvaDraftRows(buildWorkingViewIvaDraftRows(
-      extractWorkingViewIvaSourceRows(activeWorkingViewModel?.parsedDocument),
+    setIvaDraftRows((previousRows) => rebuildImportWorkingViewIvaDraftRows({
+      parsedDocument: activeWorkingViewModel?.parsedDocument,
+      previousRows,
+      causaliIva,
+      counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
+      isDemoSocieta,
       causaliIvaById,
-      { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId }
-    ))
+      createRowId: nextWorkingViewIvaDraftId,
+    }))
     setSelectedIvaDraftRowId(null)
     setIvaCausalePickerRowId('')
     setIvaCausaleSearchTerm('')
   }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.counterpartyAccount?.id, activeWorkingViewModel?.counterpartyAccount?.causaleIvaId, causaliIva, isDemoSocieta])
 
   useEffect(() => {
-    if (!ivaDraftRows.length) {
+    if (!effectiveIvaDraftRows.length) {
       setSelectedIvaDraftRowId(null)
       setIvaCausalePickerRowId('')
       return
     }
-    if (!selectedIvaDraftRowId || !ivaDraftRows.some((row) => row.id === selectedIvaDraftRowId)) {
-      setSelectedIvaDraftRowId(ivaDraftRows[0].id)
+    if (!selectedIvaDraftRowId || !effectiveIvaDraftRows.some((row) => row.id === selectedIvaDraftRowId)) {
+      setSelectedIvaDraftRowId(effectiveIvaDraftRows[0].id)
     }
-    if (ivaCausalePickerRowId && !ivaDraftRows.some((row) => row.id === ivaCausalePickerRowId)) {
+    if (ivaCausalePickerRowId && !effectiveIvaDraftRows.some((row) => row.id === ivaCausalePickerRowId)) {
       setIvaCausalePickerRowId('')
       setIvaCausaleSearchTerm('')
     }
-  }, [ivaDraftRows, selectedIvaDraftRowId, ivaCausalePickerRowId])
+  }, [effectiveIvaDraftRows, selectedIvaDraftRowId, ivaCausalePickerRowId])
 
   useEffect(() => {
     if (!ivaCausalePickerRowId) return
@@ -664,20 +641,24 @@ export function ImportContabilitaWorkingView({
   })()
 
   const updateIvaDraftRow = (rowId, field, value) => {
-    setIvaDraftRows((currentRows) => currentRows.map((row) => {
+    setIvaDraftRows((currentRows) => normalizeImportVatRows(currentRows.map((row) => {
       if (row.id !== rowId) return row
-      return recalculateWorkingViewIvaDraftRow({
+      const nextRow = {
         ...row,
         [field]: field === 'imponibile'
           ? toDraftNumber(value)
           : value,
-      }, causaliIvaById)
-    }))
+      }
+      if (field === 'causaleIvaId') {
+        nextRow.causaleIvaManual = true
+      }
+      return recalculateWorkingViewIvaDraftRow(nextRow, causaliIvaById)
+    })))
   }
 
   const addIvaDraftRow = () => {
     const nextRow = createWorkingViewIvaDraftRow({}, causaliIvaById, { resolveDefaultCausaleIvaId: resolveDefaultWorkingViewCausaleIvaId })
-    setIvaDraftRows((currentRows) => [...currentRows, nextRow])
+    setIvaDraftRows((currentRows) => normalizeImportVatRows([...currentRows, nextRow]))
     setSelectedIvaDraftRowId(nextRow.id)
   }
 
@@ -974,9 +955,9 @@ export function ImportContabilitaWorkingView({
                     : 'Completa PN, IVA e partitario prima del commit'}
                   onClick={() => {
                     if (typeof onCommitDemoWorkingView !== 'function') return
-                    const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, ivaDraftRows, { isDemoSocieta })
+                    const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, effectiveIvaDraftRows, { isDemoSocieta })
                     if (!window.confirm(message)) return
-                    onCommitDemoWorkingView({ ivaDraftRows, pnDraftRows })
+                    onCommitDemoWorkingView({ ivaDraftRows: effectiveIvaDraftRows, pnDraftRows })
                   }}
                   style={{
                     ...headerSuccessActionStyle,
@@ -1161,7 +1142,7 @@ export function ImportContabilitaWorkingView({
                         </tr>
                       </thead>
                       <tbody>
-                        {ivaDraftRows.map((row) => {
+                        {effectiveIvaDraftRows.map((row) => {
                           const isSelected = row.id === selectedIvaDraftRowId
                           const isPickerOpen = ivaCausalePickerRowId === row.id
                           return (
@@ -1225,8 +1206,8 @@ export function ImportContabilitaWorkingView({
                                   event.stopPropagation()
                                   removeIvaDraftRow(row.id)
                                 }}
-                                disabled={ivaDraftRows.length <= 1}
-                                style={ivaDraftRows.length > 1 ? ivaIconButtonStyle : { ...ivaIconButtonStyle, opacity: 0.45, cursor: 'not-allowed' }}
+                                disabled={effectiveIvaDraftRows.length <= 1}
+                                style={effectiveIvaDraftRows.length > 1 ? ivaIconButtonStyle : { ...ivaIconButtonStyle, opacity: 0.45, cursor: 'not-allowed' }}
                               >
                                 ×
                               </button>
@@ -1288,7 +1269,7 @@ export function ImportContabilitaWorkingView({
 
                   <div style={{ display: 'flex', gap: '.1rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     <button type="button" onClick={addIvaDraftRow} style={{ ...workingTabButtonStyle, border: '1px solid rgba(61,211,110,.3)', background: 'linear-gradient(180deg, rgba(56,197,92,.18), rgba(44,171,75,.12))', color: '#dff9e7' }}>+ Aggiungi riga IVA</button>
-                    <button type="button" onClick={removeSelectedIvaDraftRow} disabled={!selectedIvaDraftRowId || ivaDraftRows.length <= 1} style={(!selectedIvaDraftRowId || ivaDraftRows.length <= 1) ? { ...workingTabDangerButtonStyle, opacity: 0.45, cursor: 'not-allowed' } : workingTabDangerButtonStyle}>Elimina riga selezionata</button>
+                    <button type="button" onClick={removeSelectedIvaDraftRow} disabled={!selectedIvaDraftRowId || effectiveIvaDraftRows.length <= 1} style={(!selectedIvaDraftRowId || effectiveIvaDraftRows.length <= 1) ? { ...workingTabDangerButtonStyle, opacity: 0.45, cursor: 'not-allowed' } : workingTabDangerButtonStyle}>Elimina riga selezionata</button>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '.12rem' }}>
@@ -1437,7 +1418,7 @@ export function ImportContabilitaWorkingView({
           formatManualCausale={formatManualCausale}
           formatMoney={formatMoney}
           causaliContabili={causaliContabili}
-          activeIvaDraftRows={ivaDraftRows}
+          activeIvaDraftRows={effectiveIvaDraftRows}
           currentAutomationMeta={currentAutomationMeta}
           onApply={(payload) => {
             setApplyPopoverOpen(false)

@@ -11,18 +11,30 @@ function roundAmount(value) {
 }
 
 /**
- * Riga con natura/causale/regime compilati dall'operatore o dal tracciato.
+ * Riga con natura/regime/codice fiscale reale, oppure importi > 0 con causale esplicita.
+ * La sola causale auto-assegnata su riga 0/0 non rende la riga fiscalmente significativa.
  * @param {object|null|undefined} row
  * @returns {boolean}
  */
 export function hasImportVatRowFiscalSignificance(row) {
   if (!row || typeof row !== 'object') return false
-  if (normalizeText(row?.causaleIvaId || row?.causale_iva_id)) return true
-  if (normalizeText(row?.causaleIvaCode || row?.causale_iva_codice)) return true
+
+  const imponibile = roundAmount(row?.imponibile ?? row?.taxable)
+  const imposta = roundAmount(row?.imposta ?? row?.iva ?? row?.tax)
+  const indetraibile = roundAmount(
+    row?.indetraibileImposta ?? row?.indetraibileTax ?? row?.iva_indetraibile,
+  )
+  const hasAmounts = imponibile > 0 || imposta > 0 || indetraibile > 0
+
   if (normalizeText(row?.natura ?? row?.nature)) return true
   if (normalizeText(row?.regime)) return true
   if (normalizeText(row?.codiceFiscale ?? row?.codice_fiscale)) return true
   if (row?.esente === true || row?.fuoriCampo === true) return true
+
+  if (hasAmounts && normalizeText(row?.causaleIvaId || row?.causale_iva_id)) return true
+  if (hasAmounts && normalizeText(row?.causaleIvaCode || row?.causale_iva_codice)) return true
+  if (row?.causaleIvaManual === true && normalizeText(row?.causaleIvaId || row?.causale_iva_id)) return true
+
   return false
 }
 
