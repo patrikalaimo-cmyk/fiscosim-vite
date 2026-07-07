@@ -319,6 +319,8 @@ export function ImportContabilitaWorkingView({
   manualCausaleByRowId,
   manualRegistrationDateByRowId,
   onApplyToBatch,
+  updateManualAccountForRow,
+  updateManualCausaleForRow,
 }) {
   const [applyPopoverOpen, setApplyPopoverOpen] = useState(false)
   const [previewTab, setPreviewTab] = useState('fattura_fiscosim')
@@ -355,6 +357,22 @@ export function ImportContabilitaWorkingView({
     }
     setPnDraftRows(baseRows)
   }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.causale, formatManualCausale, ivaCreditAccount])
+
+  const costRowAccount = pnDraftRows[0] ? {
+    id: pnDraftRows[0].accountId || pnDraftRows[0].contoId || '',
+    codice: pnDraftRows[0].accountCode || pnDraftRows[0].contoCodice || '',
+    descrizione: pnDraftRows[0].accountDescription || pnDraftRows[0].contoDescrizione || '',
+  } : null
+
+  useEffect(() => {
+    if (!activeWorkingViewModel) return
+    const currentAccount = manualAccountByRowId[activeWorkingViewModel.rowKey] || null
+    if (costRowAccount?.id !== currentAccount?.id) {
+      if (typeof updateManualAccountForRow === 'function') {
+        updateManualAccountForRow(activeWorkingViewModel.rowKey, costRowAccount?.id ? costRowAccount : null)
+      }
+    }
+  }, [costRowAccount?.id, activeWorkingViewModel?.rowKey, manualAccountByRowId, updateManualAccountForRow])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -948,26 +966,24 @@ export function ImportContabilitaWorkingView({
                 </button>
                 <button
                   type="button"
-                  disabled={!isDemoSocieta || commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok'}
-                  title={isDemoSocieta
-                    ? (mergedWorkingViewChecks.status === 'ok'
-                      ? 'Contabilizza in DB solo questo documento demo (24E)'
-                      : 'Completa PN, IVA e partitario prima del commit')
-                    : 'Commit demo disponibile solo su società Test Lab'}
+                  disabled={commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok'}
+                  title={mergedWorkingViewChecks.status === 'ok'
+                    ? 'Contabilizza in DB questo documento'
+                    : 'Completa PN, IVA e partitario prima del commit'}
                   onClick={() => {
-                    if (!isDemoSocieta || typeof onCommitDemoWorkingView !== 'function') return
+                    if (typeof onCommitDemoWorkingView !== 'function') return
                     const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, ivaDraftRows)
                     if (!window.confirm(message)) return
                     onCommitDemoWorkingView({ ivaDraftRows, pnDraftRows })
                   }}
                   style={{
                     ...headerSuccessActionStyle,
-                    opacity: (!isDemoSocieta || commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok') ? 0.45 : 1,
-                    cursor: (!isDemoSocieta || commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok') ? 'not-allowed' : 'pointer',
+                    opacity: (commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok') ? 0.45 : 1,
+                    cursor: (commitBusy || isCommittingDemoDocument || mergedWorkingViewChecks.status !== 'ok') ? 'not-allowed' : 'pointer',
                   }}
                 >
                   ⟲
-                  <span>{(commitBusy || isCommittingDemoDocument) ? 'Contabilizzazione demo in corso...' : 'Contabilizza documento demo'}</span>
+                  <span>{(commitBusy || isCommittingDemoDocument) ? 'Contabilizzazione in corso...' : 'Contabilizza documento'}</span>
                 </button>
                 <button type="button" onClick={() => onPlaceholderAction('Salva bozza')} style={headerGhostActionStyle}>
                   <span>◫</span>
@@ -984,6 +1000,39 @@ export function ImportContabilitaWorkingView({
               </div>
               <div style={{ fontSize: '.68rem', color: 'var(--mu)', lineHeight: 1.26 }}>
                 {workingDocumentMeta || 'Metadati documento non disponibili.'}
+              </div>
+
+              <div style={{ display: 'grid', gap: '.08rem', marginTop: '.24rem', maxWidth: 360 }}>
+                <span style={{ fontSize: '.58rem', color: 'rgba(188,204,226,.64)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '.04em' }}>Causale Contabile</span>
+                <select
+                  value={activeWorkingViewModel.causale?.id || ''}
+                  onChange={(e) => {
+                    const selectedId = e.target.value
+                    const found = (Array.isArray(causaliContabili) ? causaliContabili : []).find((c) => String(c.id) === selectedId) || null
+                    if (typeof updateManualCausaleForRow === 'function') {
+                      updateManualCausaleForRow(activeWorkingViewModel.rowKey, found)
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    minHeight: 32,
+                    borderRadius: 8,
+                    border: '1px solid rgba(124,157,202,.18)',
+                    background: 'rgba(11,33,51,.72)',
+                    color: '#edf4ff',
+                    fontSize: '.72rem',
+                    padding: '.15rem .25rem',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">-- Seleziona causale contabile --</option>
+                  {(Array.isArray(causaliContabili) ? causaliContabili : []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.codice} - {c.descrizione}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

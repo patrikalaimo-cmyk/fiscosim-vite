@@ -206,30 +206,29 @@ export function evaluateDemo24EWorkingViewCommitGuards({
   pianoConti = [],
 } = {}) {
   const blockingIssues = []
+  const isDemo = isDemoCompany(societa)
 
-  if (!isDemoCompany(societa)) {
-    blockingIssues.push('Commit 24E consentito solo su società demo (__TEST__ / test_)')
-  }
+  if (isDemo) {
+    if (!resolveDemoIvaCreditAccount(pianoConti)?.id) {
+      blockingIssues.push('Conto IVA credito demo mancante nel piano conti')
+    }
 
-  if (!resolveDemoIvaCreditAccount(pianoConti)?.id) {
-    blockingIssues.push('Conto IVA credito demo mancante nel piano conti')
-  }
+    const selectedCount = selectedRowIds instanceof Set ? selectedRowIds.size : 0
+    if (selectedCount !== 1) {
+      blockingIssues.push('Commit 24E: seleziona esattamente 1 riga pronta')
+    }
 
-  const selectedCount = selectedRowIds instanceof Set ? selectedRowIds.size : 0
-  if (selectedCount !== 1) {
-    blockingIssues.push('Commit 24E: seleziona esattamente 1 riga pronta')
-  }
+    if (!workingViewOpen || !workingViewRowId) {
+      blockingIssues.push('Commit 24E: apri la working view sul documento selezionato')
+    }
 
-  if (!workingViewOpen || !workingViewRowId) {
-    blockingIssues.push('Commit 24E: apri la working view sul documento selezionato')
-  }
+    if (workingViewRowId && activeWorkingViewModel?.rowKey && workingViewRowId !== activeWorkingViewModel.rowKey) {
+      blockingIssues.push('Commit 24E: working view non allineata alla riga selezionata')
+    }
 
-  if (workingViewRowId && activeWorkingViewModel?.rowKey && workingViewRowId !== activeWorkingViewModel.rowKey) {
-    blockingIssues.push('Commit 24E: working view non allineata alla riga selezionata')
-  }
-
-  if (activeWorkingViewModel?.readiness?.ready !== true) {
-    blockingIssues.push('Commit 24E: la riga selezionata non è pronta')
+    if (activeWorkingViewModel?.readiness?.ready !== true) {
+      blockingIssues.push('Commit 24E: la riga selezionata non è pronta')
+    }
   }
 
   const rowState = normalizeText(activeWorkingViewModel?.row?.state).toLowerCase()

@@ -10684,6 +10684,35 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo test manuale richiesto**:
   - Importare fatture per un fornitore già presente nel piano dei conti su società reale. Verificare che non compaiano anomalie anagrafiche da verificare, che lo stato sia coerente e che cliccando su "Avvia contabilizzazione" si apra correttamente la Working View.
 
+## PROMPT 25A-FIX-3 — IMPORT WORKING VIEW AUTONOMA: CAUSALE CONTABILE, CONTO PN E CAUSALI IVA EDITABILI
+
+- **Causa tecnica dei tre problemi**:
+  1. *Causale contabile non modificabile in Working View*: Mancava un selettore interattivo per impostare o modificare la causale contabile direttamente nella testata della Working View.
+  2. *Conto PN e controlli bloccanti*: Il ricalcolo dei controlli bloccanti della Working View (`activeWorkingViewChecks`) attingeva direttamente dalle proprietà statiche dell'elemento `activeWorkingViewModel` (il quale rifletteva solo i valori originali salvati sulla Working Table), ignorando le modifiche interattive apportate dall'utente sul conto della Prima Nota nella Working View.
+  3. *Causali IVA non modificabili*: Sebbene il selettore causali IVA fosse visibile, la validazione finale dei commit tramite `evaluateDemo24EWorkingViewCommitGuards` bloccava le società reali a priori ed impediva la finalizzazione in assenza di determinati metadati Test Lab demo.
+- **Sorgente stale letta dai controlli**:
+  - `manualAccountByRowId` e `manualCausaleByRowId` non venivano aggiornati in tempo reale dalle modifiche sui draft contabili della Working View prima del commit.
+- **Fix applicato**:
+  - Collegato un dropdown `<select>` di Causale Contabile direttamente nell'intestazione della Working View in [ImportContabilitaWorkingView.jsx](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx) per consentire all'utente di associare una causale contabile reale della società, aggiornando in tempo reale il genitore mediante `updateManualCausaleForRow`.
+  - Introdotto un `useEffect` di sincronizzazione automatica all'interno della Working View per rilevare i cambi del conto nella prima riga del draft PN (`pnDraftRows[0]`) e propagarli istantaneamente al genitore in `manualAccountByRowId` mediante `updateManualAccountForRow`. Ciò innesca il ricalcolo reattivo immediato di tutti i controlli visuali ed elimina all'istante il messaggio bloccante "Conto costo/ricavo mancante".
+  - Rimosso il blocco Test Lab `isDemoSocieta` per il bottone di salvataggio/commit nella Working View ed isolato i controlli demo in `evaluateDemo24EWorkingViewCommitGuards` in [importContabilitaDemoWorkingViewCommit.js](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js) per abilitare la contabilizzazione reale dei documenti con quadratura coerente delle causali IVA riga per riga.
+- **File modificati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js`
+  - `tests/testLabIntegrazione.test.js`
+- **Test eseguiti**:
+  - Eseguita la suite `node --test tests/testLabIntegrazione.test.js`. 49/49 test superati con successo (100% pass) 🟢.
+- **Esito build**:
+  - `npm run build` completato con successo in 21.32s con zero errori o warning critici 🟢.
+- **Sicurezza**:
+  - `.env` e politiche Supabase/migration non toccati.
+  - Nessuna società reale o scrittura contabile alterata.
+  - Nessun `git add .` indiscriminato.
+- **Prossimo test manuale richiesto**:
+  - Aprire la Working View per una fattura reale priva di conto e causale. Assegnare la causale contabile in testata e il conto di costo in Prima Nota. Verificare che i messaggi di errore spariscano istantaneamente e che il tasto "Contabilizza documento" si abiliti correttamente.
+
+
 
 
 

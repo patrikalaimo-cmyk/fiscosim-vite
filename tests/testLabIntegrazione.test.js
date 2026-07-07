@@ -630,7 +630,7 @@ test('24F-FIX — scenario Test Lab ri-eseguibile con runId differenti', async (
     ivaDraftRows: [{ imponibile: 500, imposta: 50, causaleIvaId: 'tl10' }],
     pianoConti: pianoContiMock,
   })
-  assert.equal(guardReal.allowed, false) // Blocked on real!
+  assert.equal(guardReal.allowed, true) // Allowed on real after 25A sblocco!
 })
 
 test('24F-FIX-2 — TestLabPanel importa tutti gli hook React usati', async () => {
@@ -877,6 +877,59 @@ test('25A-FIX-2 — Import reale: check readiness, anagrafiche, and sblocco avvi
   // 3. Check demoGuard bypass for real companies in onStartAccounting
   assert.match(indexSource, /if \(isSelectedDemoSocieta && !demoGuard\.allowed\)/, 'Le guardie Test Lab dovrebbero essere applicate solo alle societa demo')
 })
+
+test('25A-FIX-3 — Import Working View autonoma: check causale, conto PN, and causali IVA', async () => {
+  const indexSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/index.jsx', import.meta.url), 'utf8')
+  )
+  const viewSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx', import.meta.url), 'utf8')
+  )
+
+  // 1. Verify Causale contabile select field is present in WorkingView
+  assert.match(viewSource, /<select\s*value=\{activeWorkingViewModel\.causale\?\.id \|\| ''\}/, 'Dovrebbe includere il selettore causale contabile')
+  assert.match(viewSource, /updateManualCausaleForRow\(/, 'La selezione causale dovrebbe chiamare updateManualCausaleForRow')
+
+  // 2. Verify useEffect for syncing costRowAccount to parent exists in WorkingView
+  assert.match(viewSource, /const costRowAccount = pnDraftRows\[0\] \? \{/, 'Dovrebbe estrarre costRowAccount da pnDraftRows')
+  assert.match(viewSource, /updateManualAccountForRow\(activeWorkingViewModel\.rowKey, costRowAccount\?\.id \? costRowAccount : null\)/, 'Dovrebbe sincronizzare la modifica del conto al genitore')
+
+  // 3. Verify commit button disabled state doesn\'t hard-require isDemoSocieta
+  assert.match(viewSource, /disabled=\{commitBusy \|\| isCommittingDemoDocument \|\| mergedWorkingViewChecks\.status !== 'ok'\}/, 'Il bottone di commit deve abilitarsi in base allo stato delle checks')
+
+  // 4. Test evaluateDemo24EWorkingViewCommitGuards for real vs demo companies
+  const { evaluateDemo24EWorkingViewCommitGuards } = await import('../src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js')
+  
+  const modelReal = {
+    totale: 100,
+    costRevenueAccount: { id: 'conto-costo', codice: '4.01.01.001' },
+    counterpartyAccount: { id: 'conto-forn', codice: '1.05.01.001' },
+    causale: { id: 'caus-ff', codice: 'FF' },
+    parsedDocument: { numeroDocumento: '123/A', dataDocumento: '2026-07-07', imponibile: 100, iva: 0, totale: 100 },
+    readiness: { ready: true }
+  }
+  
+  const guardRealCompany = evaluateDemo24EWorkingViewCommitGuards({
+    societa: { codice: 'SOCIETA_REALE_123' }, // real company
+    selectedRowIds: new Set(['row1']),
+    workingViewOpen: true,
+    workingViewRowId: 'row1',
+    activeWorkingViewModel: modelReal,
+    baseWorkingViewChecks: { status: 'ok' },
+    pianoConti: [{ id: 'conto-iva', is_iva: true, codice: '2.03.04.001' }],
+    pnDraftRows: [
+      { id: 'cost', accountId: 'conto-costo', accountCode: '4.01.01.001', dare: 100 },
+      { id: 'iva', dare: 0 },
+      { id: 'forn', accountId: 'conto-forn', accountCode: '1.05.01.001', avere: 100 }
+    ],
+    ivaDraftRows: [
+      { id: 'iva-row', imponibile: 100, imposta: 0, causaleIvaId: 'some-causale' }
+    ]
+  })
+  
+  assert.equal(guardRealCompany.allowed, true, 'Le societa reali dovrebbero poter completare il commit se i dati contabili sono coerenti')
+})
+
 
 
 

@@ -5660,6 +5660,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         manualRegistrationDateByRowId={manualRegistrationDateByRowId}
         automationMetaByRowId={automationMetaByRowId}
         onApplyToBatch={onApplyToBatch}
+        updateManualAccountForRow={updateManualAccountForRow}
+        updateManualCausaleForRow={updateManualCausaleForRow}
       />
     )
   }
