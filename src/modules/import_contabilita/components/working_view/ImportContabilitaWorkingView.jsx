@@ -398,8 +398,10 @@ export function ImportContabilitaWorkingView({
   const [ivaCausaleSearchTerm, setIvaCausaleSearchTerm] = useState('')
   const ivaCausaleSearchInputRef = useRef(null)
   const ivaDraftChecks = useMemo(
-    () => assessWorkingViewIvaDraftRows(ivaDraftRows),
-    [ivaDraftRows],
+    () => assessWorkingViewIvaDraftRows(ivaDraftRows, {
+      documentVatTotal: Number(activeWorkingViewModel?.iva ?? activeWorkingViewModel?.parsedDocument?.iva ?? 0) || 0,
+    }),
+    [ivaDraftRows, activeWorkingViewModel?.iva, activeWorkingViewModel?.parsedDocument?.iva],
   )
   const partitarioDraftChecks = useMemo(
     () => assessWorkingViewPartitarioDraft(activeWorkingViewModel),
@@ -972,7 +974,7 @@ export function ImportContabilitaWorkingView({
                     : 'Completa PN, IVA e partitario prima del commit'}
                   onClick={() => {
                     if (typeof onCommitDemoWorkingView !== 'function') return
-                    const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, ivaDraftRows)
+                    const message = buildDemoWorkingViewCommitConfirmMessage(activeWorkingViewModel, ivaDraftRows, { isDemoSocieta })
                     if (!window.confirm(message)) return
                     onCommitDemoWorkingView({ ivaDraftRows, pnDraftRows })
                   }}

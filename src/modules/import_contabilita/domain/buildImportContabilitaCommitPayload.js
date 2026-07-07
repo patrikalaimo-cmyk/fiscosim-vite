@@ -1,3 +1,5 @@
+import { isEmptyImportVatRow } from './importContabilitaVatRowNormalization.js'
+
 function normalizeText(value) {
   return String(value || '').trim()
 }
@@ -284,7 +286,9 @@ function normalizePrimaNotaRows(rows) {
 
 function normalizeIvaRows(rows) {
   if (!Array.isArray(rows)) return []
-  return rows.map((row, index) => {
+  return rows
+    .filter((row) => !isEmptyImportVatRow(row))
+    .map((row, index) => {
     const taxable = round2(row?.taxable ?? row?.imponibile)
     const tax = round2(row?.tax ?? row?.imposta ?? row?.iva)
     const detraibilePercent = round2(row?.detraibilePercent ?? row?.percentualeDetraibilita ?? row?.percentuale_detraibilita ?? 100)
@@ -407,7 +411,11 @@ export function buildImportContabilitaCommitPayload(input = {}) {
     blockers.push('righe IVA mancanti se documento con IVA')
   }
 
-  if (vatRows.some((row) => row.tax > 0 && !normalizeText(row.causaleIvaId || row.causaleIvaCode))) {
+  if (vatRows.some((row) => {
+    const hasAmounts = row.taxable > 0 || row.tax > 0
+    const hasFiscal = Boolean(normalizeText(row.nature) || normalizeText(row.causaleIvaId) || normalizeText(row.causaleIvaCode))
+    return (hasAmounts || hasFiscal) && !normalizeText(row.causaleIvaId || row.causaleIvaCode)
+  })) {
     blockers.push('causale IVA mancante su riga IVA')
   }
 

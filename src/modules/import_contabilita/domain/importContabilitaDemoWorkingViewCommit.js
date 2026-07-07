@@ -12,6 +12,11 @@ import {
   assessWorkingViewIvaDraftRows,
   mergeWorkingViewChecksWithIvaDraft,
 } from './importContabilitaDemoCausaliIva.js'
+import {
+  evaluateRealImportStagingIdGuard,
+  resolveImportCommitFlowKind,
+} from './importContabilitaCommitFlow.js'
+import { normalizeImportVatRows } from './importContabilitaVatRowNormalization.js'
 
 function normalizeText(value) {
   return String(value || '').trim()
@@ -141,7 +146,7 @@ export function buildWorkingViewPrimaNotaDraftRowsFromModel(model, ivaCreditAcco
  * @returns {Array<object>}
  */
 export function mapWorkingViewIvaDraftToCommitRows(ivaDraftRows) {
-  return (Array.isArray(ivaDraftRows) ? ivaDraftRows : []).map((row, index) => ({
+  return normalizeImportVatRows(ivaDraftRows).map((row, index) => ({
     idx: index,
     rate: Number(row?.aliquota ?? 0) || 0,
     taxable: round2(row?.imponibile),
@@ -236,8 +241,18 @@ export function evaluateDemo24EWorkingViewCommitGuards({
     blockingIssues.push('Commit 24E: documento già contabilizzato')
   }
 
+  const documentId = normalizeText(activeWorkingViewModel?.row?.id || activeWorkingViewModel?.rowKey)
+  const stagingGuard = evaluateRealImportStagingIdGuard({ societa, documentId })
+  if (!stagingGuard.allowed) {
+    blockingIssues.push(stagingGuard.blockingIssue)
+  }
+
+  const documentVatTotal = round2(activeWorkingViewModel?.iva ?? activeWorkingViewModel?.parsedDocument?.iva)
   const merged = mergeWorkingViewChecksWithIvaDraft(
-    mergeWorkingViewChecksWithIvaDraft(baseWorkingViewChecks, assessWorkingViewIvaDraftRows(ivaDraftRows)),
+    mergeWorkingViewChecksWithIvaDraft(
+      baseWorkingViewChecks,
+      assessWorkingViewIvaDraftRows(ivaDraftRows, { documentVatTotal }),
+    ),
     partitarioChecks || assessWorkingViewPartitarioDraft(activeWorkingViewModel),
   )
 
@@ -363,6 +378,7 @@ export function buildDemoWorkingViewCommitBundle({
     directValidation: direct.validation,
     commitEnvelope: {
       societaId: builderInput.societaId,
+      societa: guardParams.societa || null,
       registrationDate: builderInput.registrationDate,
       sourceRow: builderInput.sourceRow,
       sourceRowKey: builderInput.sourceRowKey,
@@ -403,21 +419,31 @@ export function formatDemoWorkingViewCommitReport(commitResult, context = {}) {
   ].filter(Boolean).join('\n')
 }
 
-export function buildDemoWorkingViewCommitConfirmMessage(model, ivaDraftRows = []) {
+export function buildDemoWorkingViewCommitConfirmMessage(model, ivaDraftRows = [], options = {}) {
+  const { isDemoSocieta = false } = options
   const numero = normalizeText(model?.parsedDocument?.numeroDocumento) || model?.numeroDocumento || '—'
   const fornitore = normalizeText(model?.fornitoreCliente) || '—'
   const imponibile = round2(model?.imponibile)
   const iva = round2(model?.iva)
   const totale = round2(model?.totale)
-  const ivaLabel = (Array.isArray(ivaDraftRows) ? ivaDraftRows[0]?.causaleIvaLabel : '') || '—'
+  const effectiveRows = normalizeImportVatRows(ivaDraftRows)
+  const ivaLabels = effectiveRows.length
+    ? effectiveRows.map((row) => row.causaleIvaLabel || row.causaleIvaCode || '—').join(' · ')
+    : '—'
+  const intro = isDemoSocieta
+    ? 'Confermi la contabilizzazione del documento Test Lab/demo selezionato?'
+    : 'Confermi la contabilizzazione REALE del documento import selezionato?'
+  const footer = isDemoSocieta
+    ? 'Solo questo documento demo verrà registrato. Le altre righe staging restano non contabilizzate.'
+    : 'Solo questo documento verrà registrato e aggiornato in archivio import. Le altre righe restano non contabilizzate.'
   return [
-    'Confermi la contabilizzazione REALE del documento demo selezionato?',
+    intro,
     '',
     `Numero: ${numero}`,
     `Fornitore: ${fornitore}`,
     `Imponibile: ${imponibile.toFixed(2)} · IVA: ${iva.toFixed(2)} · Totale: ${totale.toFixed(2)}`,
-    `Causale IVA: ${ivaLabel}`,
+    `Causali IVA: ${ivaLabels}`,
     '',
-    'Solo questo documento verrà registrato. Le altre righe staging restano non contabilizzate.',
+    footer,
   ].join('\n')
 }

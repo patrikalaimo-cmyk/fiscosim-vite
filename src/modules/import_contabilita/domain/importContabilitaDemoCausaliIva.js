@@ -5,6 +5,10 @@
 
 import { resolveIvaOrNull } from '../../../../domain/resolveIva.js'
 import {
+  hasImportVatRowFiscalSignificance,
+  normalizeImportVatRows,
+} from './importContabilitaVatRowNormalization.js'
+import {
   DEMO_CAUSALI_IVA_CODICI,
   TEST_LAB_ACCOUNTING_MARKER,
 } from '../../test_mode/testLabAccountingSchema.js'
@@ -173,28 +177,37 @@ export function resolveImportWorkingViewCausaleIvaId({
 
 /**
  * @param {Array<object>|null|undefined} ivaDraftRows
+ * @param {object} [options]
+ * @param {number} [options.documentVatTotal]
  * @returns {{ status: 'ok'|'blocked', blockingIssues: string[], warnings: string[], checks: Array<object> }}
  */
-export function assessWorkingViewIvaDraftRows(ivaDraftRows) {
-  const rows = Array.isArray(ivaDraftRows) ? ivaDraftRows : []
+export function assessWorkingViewIvaDraftRows(ivaDraftRows, options = {}) {
+  const rows = normalizeImportVatRows(ivaDraftRows)
+  const documentVatTotal = Number(options.documentVatTotal ?? 0) || 0
   const blockingIssues = []
   const checks = []
 
   if (!rows.length) {
-    const issue = 'Causale IVA mancante'
-    blockingIssues.push(issue)
-    checks.push({ key: 'iva-causale', label: issue, status: 'blocked', detail: 'Nessuna riga IVA in bozza' })
-    return { status: 'blocked', blockingIssues, warnings: [], checks }
+    if (documentVatTotal > 0) {
+      const issue = 'Causale IVA mancante'
+      blockingIssues.push(issue)
+      checks.push({ key: 'iva-causale', label: issue, status: 'blocked', detail: 'Nessuna riga IVA significativa in bozza' })
+      return { status: 'blocked', blockingIssues, warnings: [], checks }
+    }
+    checks.push({ key: 'iva-causale', label: 'Nessuna riga IVA significativa', status: 'ok' })
+    return { status: 'ok', blockingIssues, warnings: [], checks }
   }
 
   rows.forEach((row, index) => {
     const causaleIvaId = normalizeCausaleIvaId(row?.causaleIvaId || row?.causale_iva_id)
     const imponibile = Number(row?.imponibile ?? 0) || 0
     const imposta = Number(row?.imposta ?? 0) || 0
-    const hasAmounts = imponibile > 0 || imposta > 0
+    const indetraibile = Number(row?.indetraibileImposta ?? row?.iva_indetraibile ?? 0) || 0
+    const hasAmounts = imponibile > 0 || imposta > 0 || indetraibile > 0
+    const hasFiscal = hasImportVatRowFiscalSignificance(row)
     const rowSuffix = rows.length > 1 ? ` (riga ${index + 1})` : ''
 
-    if (hasAmounts && !causaleIvaId) {
+    if ((hasAmounts || hasFiscal) && !causaleIvaId) {
       const issue = `Causale IVA mancante${rowSuffix}`
       blockingIssues.push(issue)
       checks.push({ key: `iva-causale-${index}`, label: issue, status: 'blocked' })

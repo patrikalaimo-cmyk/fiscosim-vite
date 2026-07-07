@@ -14,6 +14,10 @@ import {
   formatDemoWorkingViewCommitReport,
   parseNumberRobust,
 } from './domain/importContabilitaDemoWorkingViewCommit.js'
+import {
+  getImportCommitLogTag,
+  resolveImportCommitFlowKind,
+} from './domain/importContabilitaCommitFlow.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
@@ -4790,10 +4794,18 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     setDemoCommitBusy(true)
     setDemoCommitReport(null)
 
+    let flowKind = isSelectedDemoSocieta ? 'test_lab' : 'real_import'
+    let commitLogTag = getImportCommitLogTag(flowKind)
+
     try {
-      console.log('[TEST_LAB_COMMIT_START]', {
+      const documentId = activeWorkingViewModel?.row?.id || workingViewRowId
+      flowKind = resolveImportCommitFlowKind({ societa: selectedSocietaForDemo, documentId })
+      commitLogTag = getImportCommitLogTag(flowKind)
+
+      console.log(`[${commitLogTag}_START]`, {
         documento: activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId,
         societaId: selectedSocietaId,
+        flowKind,
       })
 
       const bundle = buildDemoWorkingViewCommitBundle({
@@ -4817,19 +4829,19 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         },
       })
 
-      // 3. Log rows source, normalized, and canonical for Test Lab
-      console.log('[TEST_LAB_COMMIT_ROWS_SOURCE]')
+      // 3. Log rows source, normalized, and canonical
+      console.log(`[${commitLogTag}_ROWS_SOURCE]`)
       const sourceRows = pnDraftRows.length > 0 ? pnDraftRows : bundle.builderInput.primaNotaDraftRows
       sourceRows.forEach((r, idx) => {
         console.log(`riga ${idx} dare ${r?.dare ?? r?.debit ?? r?.importoDare ?? r?.importo_dare ?? 0} avere ${r?.avere ?? r?.credit ?? r?.importoAvere ?? r?.importo_avere ?? 0}`)
       })
 
-      console.log('[TEST_LAB_COMMIT_ROWS_NORMALIZED]')
+      console.log(`[${commitLogTag}_ROWS_NORMALIZED]`)
       bundle.builderInput.primaNotaDraftRows.forEach((r, idx) => {
         console.log(`riga ${idx} dare ${r?.debit ?? r?.dare ?? 0} avere ${r?.credit ?? r?.avere ?? 0}`)
       })
 
-      console.log('[TEST_LAB_COMMIT_CANONICAL_ACCOUNTING_ROWS]')
+      console.log(`[${commitLogTag}_CANONICAL_ACCOUNTING_ROWS]`)
       const mapped = mapImportContabilitaCommitPayloadToCanonical(bundle.commitEnvelope)
       mapped.payload.accounting.rows.forEach((r, idx) => {
         console.log(`riga ${idx} dare ${r?.dare ?? r?.debit ?? 0} avere ${r?.avere ?? r?.credit ?? 0}`)
@@ -4851,7 +4863,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       }
 
       // 5. Diagnostica Test Lab - Account Resolution
-      console.log('[TEST_LAB_COMMIT_ACCOUNT_RESOLUTION]')
+      console.log(`[${commitLogTag}_ACCOUNT_RESOLUTION]`)
       mapped.payload.accounting.rows.forEach((r, idx) => {
         let tipoRiga = 'costo'
         if (idx === 1) tipoRiga = 'IVA'
@@ -4871,7 +4883,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       })
 
       // 5. Diagnostica Test Lab - IVA Technical Type
-      console.log('[TEST_LAB_COMMIT_IVA_TECHNICAL_TYPE]')
+      console.log(`[${commitLogTag}_IVA_TECHNICAL_TYPE]`)
       const causaleRef = mapped.payload.header?.causaleContabile || {}
       const tipoTecnico = causaleRef.tipo_causale || causaleRef.tipoCausale || ''
       const tipoOperazione = causaleRef.operazione_gestita || causaleRef.operazioneGestita || ''
@@ -4890,7 +4902,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
 
       if (!bundle.guard.allowed) {
         const blocker = bundle.guard.blockingIssues[0] || 'Commit demo 24E bloccato.'
-        console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
+        console.warn(`[${commitLogTag}_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
         showActionBanner('warning', blocker)
         setDemoCommitBusy(false)
         return
@@ -4902,7 +4914,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       ]
       if (payloadBlockers.length) {
         const blocker = payloadBlockers[0]
-        console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
+        console.warn(`[${commitLogTag}_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
         showActionBanner('warning', blocker)
         setDemoCommitBusy(false)
         return
@@ -4911,7 +4923,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       const commitResult = await runCommitWorkflow(bundle.commitEnvelope, { db: sb })
       if (!commitResult.success) {
         const blocker = commitResult.blockingReasons?.[0] || 'Commit demo fallito.'
-        console.warn(`[TEST_LAB_COMMIT_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
+        console.warn(`[${commitLogTag}_BLOCKED] documento=${activeWorkingViewModel?.parsedDocument?.numeroDocumento || workingViewRowId}, societa=${selectedSocietaForDemo?.codice || ''}, motivo=${blocker}`)
         
         const failReport = {
           ok: false,
@@ -4924,13 +4936,15 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       }
 
       const committedKey = workingViewRowId
+      const nextState = flowKind === 'real_import' ? 'registered' : 'committed'
       const nextRows = stagingRows.map((row) => {
         if (getRowKey(row) !== committedKey) return row
         return {
           ...row,
-          state: 'committed',
-          stato: 'committed',
+          state: nextState,
+          stato: nextState,
           committed: true,
+          registered: flowKind === 'real_import',
           primaNotaId: commitResult.primaNotaId || null,
         }
       })
@@ -4943,7 +4957,9 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       setDemoCommitReport({ ok: true, text: reportText, ...commitResult })
       showActionBanner(
         'success',
-        `Documento demo contabilizzato: ${activeWorkingViewModel?.parsedDocument?.numeroDocumento || committedKey}.`,
+        flowKind === 'real_import'
+          ? `Documento import contabilizzato: ${activeWorkingViewModel?.parsedDocument?.numeroDocumento || committedKey}.`
+          : `Documento demo contabilizzato: ${activeWorkingViewModel?.parsedDocument?.numeroDocumento || committedKey}.`,
       )
       window.alert(reportText)
 
@@ -4983,8 +4999,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         )
       }
     } catch (err) {
-      console.error(`[TEST_LAB_COMMIT_ERROR] Errore imprevisto nel commit: ${err?.message || err}`)
-      showActionBanner('error', `Commit demo 24E fallito: ${err?.message || err}`)
+      console.error(`[${commitLogTag}_ERROR] Errore imprevisto nel commit: ${err?.message || err}`)
+      showActionBanner('error', `Commit ${flowKind === 'real_import' ? 'import' : 'demo'} fallito: ${err?.message || err}`)
     } finally {
       setDemoCommitBusy(false)
     }

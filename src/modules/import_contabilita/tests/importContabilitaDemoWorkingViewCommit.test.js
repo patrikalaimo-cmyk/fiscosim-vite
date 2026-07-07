@@ -74,18 +74,28 @@ test('24E — commit bloccato se causale IVA mancante', () => {
   assert.ok(guard.blockingIssues.some((item) => /Causale IVA mancante/i.test(item)))
 })
 
-test('24E — commit bloccato su società reale', () => {
+test('24E — commit bloccato su società reale senza UUID staging', () => {
   const guard = evaluateDemo24EWorkingViewCommitGuards({
-    societa: { id: 'real', codice: 'SIRIA', denominazione: 'Demo fake name' },
+    societa: { id: 'real', codice: 'SIRIA', denominazione: 'Società reale' },
     selectedRowIds: new Set(['row-1']),
     workingViewOpen: true,
     workingViewRowId: 'row-1',
-    activeWorkingViewModel: TL_ACQ_MODEL,
+    activeWorkingViewModel: {
+      ...TL_ACQ_MODEL,
+      row: { id: 'ic-123', state: 'ready' },
+      rowKey: 'ic-123',
+    },
     baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
     ivaDraftRows: [{ imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
     pianoConti: PIANO_CONTI,
+    pnDraftRows: [
+      { accountId: 'acc-cost', dare: 1000 },
+      { accountId: 'acc-iva', dare: 220 },
+      { accountId: 'acc-forn', avere: 1220 },
+    ],
   })
   assert.equal(guard.allowed, false)
+  assert.ok(guard.blockingIssues.some((item) => /ID staging valido/i.test(item)))
 })
 
 test('24E — payload TL-ACQ-01 PN quadrata da working view model', () => {
@@ -176,11 +186,16 @@ test('24E — formatDemoWorkingViewCommitReport riporta errore su fallimento', (
 })
 
 test('24E — confirm message contiene dettagli essenziali', () => {
-  const msg = buildDemoWorkingViewCommitConfirmMessage(TL_ACQ_MODEL, [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaLabel: 'TESTLAB22 · 22%' }])
+  const msg = buildDemoWorkingViewCommitConfirmMessage(
+    TL_ACQ_MODEL,
+    [{ aliquota: 22, imponibile: 1000, imposta: 220, causaleIvaLabel: 'TESTLAB22 · 22%' }],
+    { isDemoSocieta: true },
+  )
   assert.match(msg, /TL-ACQ-01/)
   assert.match(msg, /Demo 22 S.r.l./)
   assert.match(msg, /1000.00/)
   assert.match(msg, /TESTLAB22/)
+  assert.match(msg, /Test Lab\/demo/)
 })
 
 test('24E — evaluateDemo24EWorkingViewCommitGuards blocca se mancano parametri', () => {
@@ -345,26 +360,43 @@ test('24E-FIX-5 — account resolution validation, real company blocking, and un
     ])
   }, /sottoconto mancante sulla riga PN 1/i)
 
-  // 3. Real company blocked
+  // 3. Real company without staging UUID is blocked
   const realCompanyBundle = buildDemoWorkingViewCommitBundle({
     societaId: 'real-1',
-    activeWorkingViewModel: TL_ACQ_MODEL,
-    pnDraftRows: [],
-    ivaDraftRows: [],
+    activeWorkingViewModel: {
+      ...TL_ACQ_MODEL,
+      row: { id: 'ic-999', state: 'ready' },
+      rowKey: 'ic-999',
+    },
+    pnDraftRows: [
+      { accountId: 'acc-cost', dare: 1000 },
+      { accountId: 'acc-iva', dare: 220 },
+      { accountId: 'acc-forn', avere: 1220 },
+    ],
+    ivaDraftRows: [{ imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
     pianoConti: PIANO_CONTI,
     guardParams: {
-      societa: { codice: 'REAL_CO', is_demo: false }, // real company
-      selectedRowIds: new Set(['row-1']),
+      societa: { codice: 'REAL_CO', denominazione: 'Real Company' },
+      selectedRowIds: new Set(['ic-999']),
       workingViewOpen: true,
-      workingViewRowId: 'row-1',
-      activeWorkingViewModel: TL_ACQ_MODEL,
+      workingViewRowId: 'ic-999',
+      activeWorkingViewModel: {
+        ...TL_ACQ_MODEL,
+        row: { id: 'ic-999', state: 'ready' },
+        rowKey: 'ic-999',
+      },
       baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
-      ivaDraftRows: [],
+      ivaDraftRows: [{ imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
       pianoConti: PIANO_CONTI,
+      pnDraftRows: [
+        { accountId: 'acc-cost', dare: 1000 },
+        { accountId: 'acc-iva', dare: 220 },
+        { accountId: 'acc-forn', avere: 1220 },
+      ],
     },
   })
   assert.equal(realCompanyBundle.guard.allowed, false)
-  assert.ok(realCompanyBundle.guard.blockingIssues.some(msg => msg.includes('società demo')))
+  assert.ok(realCompanyBundle.guard.blockingIssues.some((msg) => msg.includes('ID staging valido')))
 
   // 4. Unselected rows excluded (if rowKey does not match the active working view rowId)
   const mismatchRowIdBundle = buildDemoWorkingViewCommitBundle({
@@ -930,22 +962,31 @@ test('24F — test negativi: partitario previsto non salvato o discrepanza readb
   assert.ok(res.blockingReasons.some(r => r.toLowerCase().includes('partitario') || r.toLowerCase().includes('coerenza')))
 })
 
-test('24F — nessuna società reale può passare il commit Test Lab', async () => {
+test('24F — società reale senza UUID staging non può committare import reale', async () => {
   const { evaluateDemo24EWorkingViewCommitGuards } = await import('../domain/importContabilitaDemoWorkingViewCommit.js')
   const realCompany = { id: 'real-1', codice: 'REAL_STUDIO_CO', denominazione: 'Studio Associato Reale' }
 
   const guard = evaluateDemo24EWorkingViewCommitGuards({
     societa: realCompany,
-    selectedRowIds: new Set(['row-1']),
+    selectedRowIds: new Set(['ic-1']),
     workingViewOpen: true,
-    workingViewRowId: 'row-1',
-    activeWorkingViewModel: TL_ACQ_MODEL,
+    workingViewRowId: 'ic-1',
+    activeWorkingViewModel: {
+      ...TL_ACQ_MODEL,
+      row: { id: 'ic-1', state: 'ready' },
+      rowKey: 'ic-1',
+    },
     baseWorkingViewChecks: { status: 'ok', blockingIssues: [], warnings: [], checks: [] },
     ivaDraftRows: [{ imponibile: 1000, imposta: 220, causaleIvaId: 'tl22' }],
+    pnDraftRows: [
+      { accountId: 'acc-cost', dare: 1000 },
+      { accountId: 'acc-iva', dare: 220 },
+      { accountId: 'acc-forn', avere: 1220 },
+    ],
     pianoConti: PIANO_CONTI,
   })
   assert.equal(guard.allowed, false)
-  assert.ok(guard.blockingIssues.some(r => r.toLowerCase().includes('demo')))
+  assert.ok(guard.blockingIssues.some((r) => r.includes('ID staging valido')))
 })
 
 

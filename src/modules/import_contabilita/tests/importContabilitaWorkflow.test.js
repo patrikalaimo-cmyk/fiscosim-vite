@@ -436,10 +436,9 @@ test('runCommitWorkflow: documento già contabilizzato in staging', async () => 
   assert.equal(inserts.length, 0)
 })
 
-test('runCommitWorkflow: fallimento update stato non causa rollback logico (staging accessorio)', async () => {
+test('runCommitWorkflow: fallimento update staging su import reale è errore serio', async () => {
   const db = new MockDbClient()
   db.responses.documenti_import = { id: '9539bde9-b325-4246-a20d-6c1b9408b48e', stato: 'pending', metadata: {} }
-  // Mock query builder eq and single/maybeSingle responses to simulate update error
   const originalFrom = db.from;
   db.from = function(table) {
     const query = originalFrom.call(db, table);
@@ -455,13 +454,40 @@ test('runCommitWorkflow: fallimento update stato non causa rollback logico (stag
     return query;
   }
   const payload = makeValidCommitPayload()
+  payload.societa = { codice: 'STUDIO_REALE', denominazione: 'Studio Reale' }
 
   const res = await runCommitWorkflow(payload, { db })
-  console.log('TEST DEBUG RES:', JSON.stringify(res, null, 2))
+  assert.equal(res.success, false)
+  assert.ok(res.blockingReasons.some((reason) => /aggiornamento staging import fallito/i.test(reason)))
+
+  const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
+  assert.equal(hasPnDelete, false)
+})
+
+test('runCommitWorkflow: fallimento update staging su Test Lab resta non bloccante', async () => {
+  const db = new MockDbClient()
+  db.responses.documenti_import = { id: '9539bde9-b325-4246-a20d-6c1b9408b48e', stato: 'pending', metadata: {} }
+  const originalFrom = db.from;
+  db.from = function(table) {
+    const query = originalFrom.call(db, table);
+    if (table === 'documenti_import') {
+      query.then = (resolve, reject) => {
+        if (query.updatedData) {
+          resolve({ data: null, error: new Error('Simulated update error') })
+        } else {
+          resolve({ data: { id: '9539bde9-b325-4246-a20d-6c1b9408b48e', metadata: {} }, error: null })
+        }
+      }
+    }
+    return query;
+  }
+  const payload = makeValidCommitPayload()
+  payload.societa = { codice: '__TEST__FISCOSIM_DEMO', denominazione: 'Demo' }
+
+  const res = await runCommitWorkflow(payload, { db })
   assert.equal(res.success, true)
-  assert.ok(res.warnings.some(w => w.includes('Aggiornamento staging import non eseguito')))
-  
-  // Controlla che NON ci sia rollback logico (nessun delete della prima nota creata)
+  assert.ok(res.warnings.some((warning) => /Aggiornamento staging import non eseguito/i.test(warning)))
+
   const hasPnDelete = db.log.some(l => l.table === 'prima_nota' && l.action === 'delete')
   assert.equal(hasPnDelete, false)
 })

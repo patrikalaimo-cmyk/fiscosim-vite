@@ -608,6 +608,13 @@ import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRep
 import { persistPrimaNotaDraft, sanitizeUuidOrNull } from '../../contabilita/application/persistPrimaNotaDraft.js'
 import { sb } from '../../../lib/supabase.js'
 import { buildCausaleContabilePolicy } from '../../contabilita/domain/causali/buildCausaleContabilePolicy.js'
+import {
+  getImportCommitLogTag,
+  isDocumentiImportStagingUuid,
+  REAL_IMPORT_STAGING_ID_BLOCKER,
+  resolveImportCommitFlowKind,
+} from '../domain/importContabilitaCommitFlow.js'
+import { isDemoCompany } from '../../test_mode/demoCompanyGuard.js'
 
 function evaluatePeriodoStampaDefinita(dataRegistrazione, stampeDefinitive) {
   if (!dataRegistrazione || !stampeDefinitive || !stampeDefinitive.length) return false
@@ -643,10 +650,20 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
 
   // Check double commit
   const documentId = commitPayload.sourceRow?.id || commitPayload.sourceRowId || (commitPayload.payload && (commitPayload.payload.sourceRow?.id || commitPayload.payload.sourceRowId))
+  const societa = commitPayload.societa || commitPayload.company || null
+  const flowKind = resolveImportCommitFlowKind({ societa, documentId })
+  const commitLogTag = getImportCommitLogTag(flowKind)
+
+  if (flowKind === 'real_import' && documentId && !isDocumentiImportStagingUuid(documentId)) {
+    return { success: false, blockingReasons: [REAL_IMPORT_STAGING_ID_BLOCKER] }
+  }
+
   if (documentId) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
+    const isUuid = isDocumentiImportStagingUuid(documentId)
     if (!isUuid) {
-      console.log(`[TEST_LAB_COMMIT_PRECHECK_SKIPPED] documentId=${documentId} motivo="documento Test Lab senza ID staging reale (non UUID)"`)
+      if (flowKind === 'test_lab') {
+        console.log(`[${commitLogTag}_PRECHECK_SKIPPED] documentId=${documentId} motivo="documento Test Lab senza ID staging reale (non UUID)"`)
+      }
     } else {
       const { data: existingDoc, error: checkError } = await db
         .from('documenti_import')
@@ -1066,28 +1083,26 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   // 6. Aggiornamento stato documento
   let stagingUpdateWarning = null
   if (documentId) {
-    const isDocumentIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)
+    const isDocumentIdUuid = isDocumentiImportStagingUuid(documentId)
     const docName = commitPayload.sourceRow?.parsedDocument?.numeroDocumento || commitPayload.payload?.document?.numeroDocumento || commitPayload.document?.number || 'TL-ACQ-01'
-    const societaCodice = String(commitPayload.societa?.codice || commitPayload.company?.codice || '').trim()
 
-    // [TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]
-    console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_PLAN]')
+    console.log(`[${commitLogTag}_STAGING_UPDATE_PLAN]`)
     console.log(`documento=${docName}`)
     console.log(`documentoImportId=${documentId}`)
     console.log(`sourceRowKey=${documentId}`)
     console.log(`documentoImportIdIsUuid=${isDocumentIdUuid}`)
     console.log(`action=${isDocumentIdUuid ? 'update' : 'skip'}`)
-    if (!isDocumentIdUuid) {
+    if (!isDocumentIdUuid && flowKind === 'test_lab') {
       console.log('motivo=documento Test Lab senza ID staging reale (non UUID)')
     }
 
     if (!isDocumentIdUuid) {
-      stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import saltato: documento Test Lab senza ID staging reale.'
-      
-      // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
-      console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
-      console.log('esito=skipped')
-      console.log('contabile_mantenuto=true')
+      if (flowKind === 'test_lab') {
+        stagingUpdateWarning = 'Commit Test Lab riuscito. Aggiornamento staging import saltato: documento demo senza ID staging reale.'
+        console.log(`[${commitLogTag}_STAGING_UPDATE_RESULT]`)
+        console.log('esito=skipped')
+        console.log('contabile_mantenuto=true')
+      }
     } else {
       try {
         let hasMetadata = false
@@ -1130,17 +1145,34 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         }
 
         // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
-        console.log('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
+        console.log(`[${commitLogTag}_STAGING_UPDATE_RESULT]`)
         console.log('esito=success')
         console.log('action=executed')
         console.log(`colonne_usate=${columnsUsed.join(',')}`)
         console.log('contabile_mantenuto=true')
 
       } catch (err) {
+        const stagingErrorMessage = `Commit contabile persistito ma aggiornamento staging import fallito: ${err?.message || err}`
+        if (flowKind === 'real_import') {
+          return {
+            success: false,
+            primaNotaId,
+            documentoId: documentId,
+            status: 'failed',
+            warnings: [...(validationResult.warnings || [])],
+            blockingReasons: [stagingErrorMessage],
+            numeroRighe: persistResult.data?.numero_righe || 0,
+            numeroRigheIva: persistResult.data?.numero_righe_iva || 0,
+            partitaFornitoreCount: Array.isArray(persistResult.partIns?.data) ? persistResult.partIns.data.length : 0,
+            totaleDare: persistResult.data?.totale_dare || 0,
+            totaleAvere: persistResult.data?.totale_avere || 0,
+            isBalanced: persistResult.data?.isBalanced || false,
+          }
+        }
+
         stagingUpdateWarning = 'Commit contabile riuscito. Aggiornamento staging import non eseguito: campo non disponibile nello schema documenti_import.'
 
-        // [TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]
-        console.warn('[TEST_LAB_COMMIT_STAGING_UPDATE_RESULT]')
+        console.warn(`[${commitLogTag}_STAGING_UPDATE_RESULT]`)
         console.warn('esito=failed')
         console.warn('action=saltato')
         console.warn(`errore=${err?.message || err}`)
@@ -1160,7 +1192,7 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     : 0
 
   const societaCodice = normalizeText(commitPayload.societa?.codice || commitPayload.company?.codice || '')
-  const isDemoCommit = societaCodice.toLowerCase().includes('test') || societaCodice.includes('__TEST__')
+  const isDemoCommit = isDemoCompany(commitPayload.societa || commitPayload.company || { codice: societaCodice })
   if (isDemoCommit && draftBundle.partitarioDraft?.active && partiteSalvate === 0) {
     return {
       success: false,

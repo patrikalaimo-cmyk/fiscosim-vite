@@ -10713,6 +10713,31 @@ pm run build -> Successo (429 moduli, 16s).
   - Aprire la Working View per una fattura reale priva di conto e causale. Assegnare la causale contabile in testata e il conto di costo in Prima Nota. Verificare che i messaggi di errore spariscano istantaneamente e che il tasto "Contabilizza documento" si abiliti correttamente.
 
 
+## 25A-FIX-4 — IMPORT REALE PRUNING IVA ZERO E ISOLAMENTO TEST LAB COMPLETATO
 
+- **Obiettivo**: Chiudere il bordo operativo 25A — pruning righe IVA placeholder 0/0, separazione netta commit reale vs Test Lab, blocco commit reale senza UUID `documenti_import`, aggiornamento staging obbligatorio su import reale.
+- **Diagnosi**:
+  - Riga IVA 0%/0/0 senza causale bloccava con "Causale IVA mancante" (caso Vergnano multi-aliquota).
+  - Commit reale mostrava popup/log Test Lab (`documento demo`, `[TEST_LAB_COMMIT_*]`) e saltava staging con ID `ic-*` non UUID.
+- **Regola pruning IVA**: `isEmptyImportVatRow` / `normalizeImportVatRows` in `importContabilitaVatRowNormalization.js` — placeholder se importi zero e nessun dato fiscale; righe con natura/causale reale non prunate.
+- **Separazione flussi**: `importContabilitaCommitFlow.js` — `resolveImportCommitFlowKind`, guard UUID reale, log `[IMPORT_REAL_COMMIT_*]` vs `[TEST_LAB_COMMIT_*]`; popup distinto demo/reale; commit reale senza UUID bloccato prima del persist; fallimento staging su reale = errore serio.
+- **File modificati/creati**:
+  - `src/modules/import_contabilita/domain/importContabilitaVatRowNormalization.js` (nuovo)
+  - `src/modules/import_contabilita/domain/importContabilitaCommitFlow.js` (nuovo)
+  - `src/modules/import_contabilita/domain/importContabilitaDemoCausaliIva.js`
+  - `src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js`
+  - `src/modules/import_contabilita/domain/buildImportContabilitaCommitPayload.js`
+  - `src/modules/import_contabilita/application/importContabilitaWorkflow.js`
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/tests/importContabilitaVatRowNormalization.test.js` (nuovo)
+  - `src/modules/import_contabilita/tests/importContabilitaWorkflow.test.js`
+  - `src/modules/import_contabilita/tests/importContabilitaDemoWorkingViewCommit.test.js`
+  - `tests/testLabIntegrazione.test.js`
+  - `REPORT/REPORT_CODEX.md`
+- **Test eseguiti**: 126/126 pass (inclusi 25A-FIX-4 Vergnano, UUID reale/sintetico, regressione 25A-FIX-3, Test Lab); `npm run build` OK.
+- **Sicurezza/perimetro**: `.env`/auth/RLS/Supabase/migration/società reali non toccati; Riconciliazione **BLOCCATA**.
+- **Stato working tree**: modifiche selettive su file import/test/report; ZIP checkpoint non ancora creato in questa sezione.
+- **Prossimo step consigliato**: Test manuale Patrik su Vergnano — verificare riga 0% ignorata, popup "import reale", commit con UUID staging, documento in Registrate; poi commit reale con documento da lista `documenti_import` (non sessione `ic-*`).
 
 

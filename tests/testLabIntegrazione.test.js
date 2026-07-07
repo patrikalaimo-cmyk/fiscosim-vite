@@ -902,6 +902,8 @@ test('25A-FIX-3 — Import Working View autonoma: check causale, conto PN, and c
   
   const modelReal = {
     totale: 100,
+    row: { id: '9539bde9-b325-4246-a20d-6c1b9408b48e', state: 'ready' },
+    rowKey: '9539bde9-b325-4246-a20d-6c1b9408b48e',
     costRevenueAccount: { id: 'conto-costo', codice: '4.01.01.001' },
     counterpartyAccount: { id: 'conto-forn', codice: '1.05.01.001' },
     causale: { id: 'caus-ff', codice: 'FF' },
@@ -911,9 +913,9 @@ test('25A-FIX-3 — Import Working View autonoma: check causale, conto PN, and c
   
   const guardRealCompany = evaluateDemo24EWorkingViewCommitGuards({
     societa: { codice: 'SOCIETA_REALE_123' }, // real company
-    selectedRowIds: new Set(['row1']),
+    selectedRowIds: new Set(['9539bde9-b325-4246-a20d-6c1b9408b48e']),
     workingViewOpen: true,
-    workingViewRowId: 'row1',
+    workingViewRowId: '9539bde9-b325-4246-a20d-6c1b9408b48e',
     activeWorkingViewModel: modelReal,
     baseWorkingViewChecks: { status: 'ok' },
     pianoConti: [{ id: 'conto-iva', is_iva: true, codice: '2.03.04.001' }],
