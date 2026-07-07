@@ -200,7 +200,7 @@ export function ImportContabilitaPreviewDrawerContent({
                 Blocking: {blockingErrors.length}
               </div>
             </div>
-            {readiness.missing.length ? (
+            {Array.isArray(readiness?.missing) && readiness.missing.length ? (
               <div style={{ display: 'grid', gap: '.14rem', fontSize: '.68rem', color: 'var(--mu)' }}>
                 <div>Mancano: {readiness.missing.join(', ')}</div>
               </div>

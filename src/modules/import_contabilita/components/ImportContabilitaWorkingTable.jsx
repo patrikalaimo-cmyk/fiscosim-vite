@@ -288,6 +288,8 @@ export function ImportContabilitaWorkingTable({
               {visibleRows.map((row) => {
                 const key = getRowKey(row)
                 const checked = selectedRowIds.has(key)
+                const rowState = String(row?.state || row?.stato || '').toLowerCase()
+                const isProcessed = rowState === 'committed' || rowState === 'registered' || rowState === 'processed' || row?.committed
                 const manualAccount = manualAccountByRowId[key] || null
                 const isAccountEditorOpen = accountEditorRowId === key
                 const manualCausale = manualCausaleByRowId[key] || null
@@ -307,8 +309,9 @@ export function ImportContabilitaWorkingTable({
                     || row?.contabilizedAt
                     || row?.registeredAt,
                 )
-                const readiness = getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccountByRowId[key] || null)
-                const readinessTitle = readiness.missing.length ? readiness.missing.join(', ') : readiness.label
+                const readiness = getWorkingTableRowReadiness(row, manualAccount, manualCausale, counterpartyAccountByRowId[key] || null) || {}
+                const readinessMissing = Array.isArray(readiness.missing) ? readiness.missing : []
+                const readinessTitle = readinessMissing.length ? readinessMissing.join(', ') : (readiness.label || '')
 
                 return (
                   <tr
@@ -338,7 +341,7 @@ export function ImportContabilitaWorkingTable({
                           else next.delete(key)
                           updateSelectedRows(next)
                         }}
-                        disabled={busy}
+                        disabled={busy || isProcessed}
                       />
                     </Td>
                     <Td>
@@ -399,23 +402,25 @@ export function ImportContabilitaWorkingTable({
                           id={`btn-conto-${key}`}
                           type="button"
                           onClick={() => {
+                            if (isProcessed) return
                             setAccountEditorRowId(isAccountEditorOpen ? '' : key)
                             setAccountSearchTerm('')
                           }}
+                          disabled={isProcessed}
                           style={{
                             width: '100%',
                             border: '1px solid rgba(96,165,250,.12)',
-                            background: 'linear-gradient(180deg, rgba(16,42,68,.82), rgba(10,26,43,.94))',
-                            color: manualAccount ? '#dbeafe' : '#93a8bf',
+                            background: isProcessed ? 'rgba(255,255,255,.015)' : 'linear-gradient(180deg, rgba(16,42,68,.82), rgba(10,26,43,.94))',
+                            color: isProcessed ? '#94a8bd' : (manualAccount ? '#dbeafe' : '#93a8bf'),
                             borderRadius: 10,
                             padding: '.16rem .28rem',
                             textAlign: 'left',
-                            cursor: 'pointer',
+                            cursor: isProcessed ? 'not-allowed' : 'pointer',
                             fontSize: '.7rem',
                             lineHeight: 1.18,
                             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.02)',
                           }}
-                          title="Apri editor conto"
+                          title={isProcessed ? 'Registrazione contabilizzata' : 'Apri editor conto'}
                         >
                           {formatManualAccount(manualAccount)}
                         </button>
@@ -547,23 +552,25 @@ export function ImportContabilitaWorkingTable({
                           id={`btn-causale-${key}`}
                           type="button"
                           onClick={() => {
+                            if (isProcessed) return
                             setCausaleEditorRowId(isCausaleEditorOpen ? '' : key)
                             setCausaleSearchTerm('')
                           }}
+                          disabled={isProcessed}
                           style={{
                             width: '100%',
                             border: '1px solid rgba(96,165,250,.12)',
-                            background: 'linear-gradient(180deg, rgba(16,42,68,.82), rgba(10,26,43,.94))',
-                            color: manualCausale ? '#dbeafe' : '#93a8bf',
+                            background: isProcessed ? 'rgba(255,255,255,.015)' : 'linear-gradient(180deg, rgba(16,42,68,.82), rgba(10,26,43,.94))',
+                            color: isProcessed ? '#94a8bd' : (manualCausale ? '#dbeafe' : '#93a8bf'),
                             borderRadius: 10,
                             padding: '.16rem .28rem',
                             textAlign: 'left',
-                            cursor: 'pointer',
+                            cursor: isProcessed ? 'not-allowed' : 'pointer',
                             fontSize: '.7rem',
                             lineHeight: 1.18,
                             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.02)',
                           }}
-                          title="Apri editor causale"
+                          title={isProcessed ? 'Registrazione contabilizzata' : 'Apri editor causale'}
                         >
                           {formatManualCausale(manualCausale)}
                         </button>
@@ -667,65 +674,91 @@ export function ImportContabilitaWorkingTable({
                       </div>
                     </Td>
                     <Td>
-                      <div style={{ display: 'grid', gap: '.04rem', minWidth: 0 }}>
-                        <span
-                          title={readinessTitle}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            width: 'fit-content',
-                            padding: '.1rem .26rem',
-                            borderRadius: 999,
-                            border: readiness.label === 'Pronta'
-                              ? '1px solid rgba(34,197,94,.16)'
-                              : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
-                                ? '1px solid rgba(245,158,11,.18)'
-                                : '1px solid rgba(239,68,68,.18)',
-                            background: readiness.label === 'Pronta'
-                              ? 'rgba(34,197,94,.08)'
-                              : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
-                                ? 'rgba(245,158,11,.08)'
-                                : 'rgba(239,68,68,.08)',
-                            color: readiness.label === 'Pronta'
-                              ? '#a7f3d0'
-                              : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
-                                ? '#ffe2a8'
-                                : '#ffb9be',
-                            fontSize: '.58rem',
-                            fontWeight: 800,
-                            letterSpacing: '.02em',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {readiness.label}
-                        </span>
-                        {readiness.missing.length ? (
-                          <div style={{ color: '#93a8bf', fontSize: '.52rem', lineHeight: 1.08, maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {readiness.missing[0]}
-                          </div>
-                        ) : null}
-                        {automationFieldLabels.length ? (
+                      {isProcessed ? (
+                        <div style={{ display: 'grid', gap: '.04rem', minWidth: 0 }}>
                           <span
-                            title={`Automazione applicata: ${automationFieldLabels.join(', ')}`}
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               width: 'fit-content',
-                              padding: '.08rem .22rem',
+                              padding: '.1rem .26rem',
                               borderRadius: 999,
-                              border: '1px solid rgba(245,158,11,.28)',
-                              background: 'rgba(245,158,11,.1)',
-                              color: '#ffe2a8',
-                              fontSize: '.54rem',
+                              border: '1px solid rgba(59,130,246,.22)',
+                              background: 'rgba(59,130,246,.08)',
+                              color: '#bfdbfe',
+                              fontSize: '.58rem',
                               fontWeight: 800,
                               letterSpacing: '.02em',
                               textTransform: 'uppercase',
                             }}
                           >
-                            Auto
+                            Registrata
                           </span>
-                        ) : null}
-                      </div>
+                          <div style={{ color: '#93a8bf', fontSize: '.52rem', lineHeight: 1.08 }}>
+                            {row.primaNotaId ? `PN: ${row.primaNotaId}` : 'PN non disponibile'}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gap: '.04rem', minWidth: 0 }}>
+                          <span
+                            title={readinessTitle}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              width: 'fit-content',
+                              padding: '.1rem .26rem',
+                              borderRadius: 999,
+                              border: readiness.label === 'Pronta'
+                                ? '1px solid rgba(34,197,94,.16)'
+                                : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
+                                  ? '1px solid rgba(245,158,11,.18)'
+                                  : '1px solid rgba(239,68,68,.18)',
+                              background: readiness.label === 'Pronta'
+                                ? 'rgba(34,197,94,.08)'
+                                : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
+                                  ? 'rgba(245,158,11,.08)'
+                                  : 'rgba(239,68,68,.08)',
+                              color: readiness.label === 'Pronta'
+                                ? '#a7f3d0'
+                                : (readiness.label === 'Da completare' || readiness.label === 'Pronta con avviso')
+                                  ? '#ffe2a8'
+                                  : '#ffb9be',
+                              fontSize: '.58rem',
+                              fontWeight: 800,
+                              letterSpacing: '.02em',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {readiness.label}
+                          </span>
+                          {readinessMissing.length ? (
+                            <div style={{ color: '#93a8bf', fontSize: '.52rem', lineHeight: 1.08, maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {readinessMissing[0]}
+                            </div>
+                          ) : null}
+                          {automationFieldLabels.length ? (
+                            <span
+                              title={`Automazione applicata: ${automationFieldLabels.join(', ')}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                width: 'fit-content',
+                                padding: '.08rem .22rem',
+                                borderRadius: 999,
+                                border: '1px solid rgba(245,158,11,.28)',
+                                background: 'rgba(245,158,11,.1)',
+                                color: '#ffe2a8',
+                                fontSize: '.54rem',
+                                fontWeight: 800,
+                                letterSpacing: '.02em',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              Auto
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
                     </Td>
                     <Td>
                       <ActionButton label="Anteprima" onClick={() => setPreviewRowId(key)} kind="ghost" small />

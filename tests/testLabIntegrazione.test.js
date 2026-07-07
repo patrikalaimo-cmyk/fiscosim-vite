@@ -796,5 +796,69 @@ test('24F-FIX-4 — import multi-selezione pronte e sessione working view multi-
   assert.match(workingViewSource, /onGoToNextWorkingViewRow\(\)/, 'Dovrebbe attivare trigger successivo')
 })
 
+test('25A — Import reale: static analysis and domain validations', async () => {
+  const indexSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/index.jsx', import.meta.url), 'utf8')
+  )
+
+  // 1. Verify resolveImportDocumentReadiness definition and non-blocking conto/causale
+  assert.match(indexSource, /function resolveImportDocumentReadiness/, 'Dovrebbe definire resolveImportDocumentReadiness')
+  assert.match(indexSource, /requiresCausaleBeforeStart = false/, 'La causale non deve essere bloccante all\'avvio')
+  assert.match(indexSource, /requiresContoBeforeStart = false/, 'Il conto non deve essere bloccante all\'avvio')
+
+  // 2. Verify buildAnagraficheDaVerificare excludes matched subjects with complete data
+  assert.match(indexSource, /group\.stato === 'già presente' && group\.rank >= 3/, 'Dovrebbe identificare i soggetti già presenti')
+  assert.match(indexSource, /return false/, 'Dovrebbe escludere il soggetto dalle anagrafiche da confermare')
+
+  // 3. Verify matchesViewMode excludes processed rows from standard views
+  assert.match(indexSource, /const isProcessed = state === 'registered' || state === 'committed'/, 'Dovrebbe identificare i documenti contabilizzati')
+  assert.match(indexSource, /if \(isProcessed\) return false/, 'Dovrebbe nascondere i documenti contabilizzati dalla vista operativa')
+
+  // 4. Verify getConfirmedCounterpartyAccountForRow fallback
+  assert.match(indexSource, /classification\.rank >= 3 && classification\.matchedPianoConto/, 'Dovrebbe proporre match automatico per soggetti certi')
+
+  // 5. Run concrete domain tests using evaluateDemo24EWorkingViewCommitGuards
+  const { evaluateDemo24EWorkingViewCommitGuards } = await import('../src/modules/import_contabilita/domain/importContabilitaDemoWorkingViewCommit.js')
+  
+  const modelNoAccount = {
+    totale: 100,
+    costRevenueAccount: null,
+    causale: { id: 'caus-ff' },
+    readiness: { ready: true }
+  }
+  const guardNoAccount = evaluateDemo24EWorkingViewCommitGuards({
+    societa: { codice: '__TEST__FISCOSIM_DEMO' },
+    selectedRowIds: new Set(['row1']),
+    workingViewOpen: true,
+    workingViewRowId: 'row1',
+    activeWorkingViewModel: modelNoAccount,
+    baseWorkingViewChecks: { status: 'ok' },
+    pianoConti: [{ id: 'conto-iva', is_iva: true, codice: '2.03.04.001' }]
+  })
+  assert.equal(guardNoAccount.allowed, false)
+  assert.ok(guardNoAccount.blockingIssues.includes('Conto costo/ricavo mancante'), 'Commit deve essere bloccato se il conto è vuoto')
+})
+
+test('25A-FIX-1 — prevent working table crash on optional fields', async () => {
+  const tableSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx', import.meta.url), 'utf8')
+  )
+
+  // 1. Verify safe missing details check in table header/rows prep
+  assert.match(tableSource, /const readinessMissing = Array\.isArray\(readiness\.missing\) \? readiness\.missing : \[\]/, 'Dovrebbe definire readinessMissing in modo sicuro')
+  assert.match(tableSource, /readinessMissing\.length/, 'Dovrebbe usare la lunghezza sicura di missing')
+
+  // 2. Verify registered/committed without PN ID format
+  assert.match(tableSource, /row\.primaNotaId \? `PN: \${row\.primaNotaId}` : 'PN non disponibile'/, 'Dovrebbe gestire PN ID vuoto per righe registrate')
+
+  // 3. Verify safe checks in preview drawer
+  const drawerSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/components/invoice_preview/ImportContabilitaPreviewDrawerContent.jsx', import.meta.url), 'utf8')
+  )
+  assert.match(drawerSource, /Array\.isArray\(readiness\?\.missing\) && readiness\.missing\.length/, 'Il cassetto anteprima dovrebbe accedere in modo sicuro a readiness.missing')
+})
+
+
+
 
 

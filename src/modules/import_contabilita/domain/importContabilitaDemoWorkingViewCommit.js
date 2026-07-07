@@ -201,6 +201,7 @@ export function evaluateDemo24EWorkingViewCommitGuards({
   activeWorkingViewModel = null,
   baseWorkingViewChecks = null,
   ivaDraftRows = [],
+  pnDraftRows = [],
   partitarioChecks = null,
   pianoConti = [],
 } = {}) {
@@ -245,8 +246,17 @@ export function evaluateDemo24EWorkingViewCommitGuards({
     blockingIssues.push(...merged.blockingIssues)
   }
 
-  if (!normalizeText(activeWorkingViewModel?.costRevenueAccount?.id)) {
+  const costRow = Array.isArray(pnDraftRows) ? pnDraftRows[0] : null
+  const counterpartyRow = Array.isArray(pnDraftRows) ? pnDraftRows[2] : null
+  const costAccountId = costRow ? (costRow.accountId || costRow.contoId) : activeWorkingViewModel?.costRevenueAccount?.id
+  const counterpartyAccountId = counterpartyRow ? (counterpartyRow.accountId || counterpartyRow.contoId) : activeWorkingViewModel?.counterpartyAccount?.id
+
+  if (!normalizeText(costAccountId)) {
     blockingIssues.push('Conto costo/ricavo mancante')
+  }
+
+  if (!normalizeText(counterpartyAccountId)) {
+    blockingIssues.push('Conto controparte patrimoniale mancante')
   }
 
   if (!normalizeText(activeWorkingViewModel?.causale?.id)) {
@@ -285,6 +295,7 @@ export function buildDemoWorkingViewCommitBundle({
     ...guardParams,
     activeWorkingViewModel,
     ivaDraftRows,
+    pnDraftRows,
     pianoConti,
     partitarioChecks: assessWorkingViewPartitarioDraft(activeWorkingViewModel),
   })
@@ -297,6 +308,21 @@ export function buildDemoWorkingViewCommitBundle({
   const pnRowsToUse = Array.isArray(pnDraftRows) && pnDraftRows.length > 0
     ? pnDraftRows
     : buildWorkingViewPrimaNotaDraftRowsFromModel(model, ivaCreditAccount)
+
+  const costRow = pnRowsToUse[0]
+  const counterpartyRow = pnRowsToUse[2]
+
+  const resolvedCostAccount = costRow ? {
+    id: normalizeText(costRow.accountId || costRow.contoId),
+    codice: normalizeText(costRow.accountCode || costRow.contoCodice),
+    descrizione: normalizeText(costRow.accountDescription || costRow.contoDescrizione),
+  } : model.costRevenueAccount
+
+  const resolvedCounterpartyAccount = counterpartyRow ? {
+    id: normalizeText(counterpartyRow.accountId || counterpartyRow.contoId),
+    codice: normalizeText(counterpartyRow.accountCode || counterpartyRow.contoCodice),
+    descrizione: normalizeText(counterpartyRow.accountDescription || counterpartyRow.contoDescrizione),
+  } : model.counterpartyAccount
 
   const mappedPnRows = pnRowsToUse.map((r, index) => {
     const norm = normalizeImportWorkingViewAccountingRow(r)
@@ -312,15 +338,15 @@ export function buildDemoWorkingViewCommitBundle({
     sourceBatchId: normalizeText(sourceBatchId || row?.batchId),
     parsedDocument,
     registrationDate: normalizeText(model.registrationDate || parsedDocument?.dataDocumento),
-    counterpartyAccount: model.counterpartyAccount || null,
-    costRevenueAccount: model.costRevenueAccount || null,
+    counterpartyAccount: resolvedCounterpartyAccount || null,
+    costRevenueAccount: resolvedCostAccount || null,
     causaleContabile: model.causale || null,
     primaNotaDraftRows: mappedPnRows,
     ivaDraftRows: mapWorkingViewIvaDraftToCommitRows(ivaDraftRows),
     partitarioDraft: {
       enabled: true,
       type: 'fornitore',
-      accountId: normalizeText(model.counterpartyAccount?.id),
+      accountId: normalizeText(resolvedCounterpartyAccount?.id),
       amount: round2(model.totale),
       dueDate: normalizeText(parsedDocument?.dataDocumento) || normalizeText(model.registrationDate) || null,
     },

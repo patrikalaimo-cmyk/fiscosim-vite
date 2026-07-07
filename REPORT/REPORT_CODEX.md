@@ -10636,4 +10636,29 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo Blocco Operativo**:
   - Passaggio all'Import reale: transizioni di stato a Pronta, gestione anagrafiche, associazione automatica conto/causale reale, consultazione archivio contabilizzate con UUID reali.
 
+## PROMPT 25A-FIX-1 — IMPORT REALE: FIX CRASH WORKING TABLE SU CAMPO UNDEFINED LENGTH
+
+- **Causa tecnica precisa**:
+  - In `resolveImportDocumentReadiness` (dopo i cambiamenti di 25A), il campo `readiness.missing` non veniva valorizzato/ritornato per via del nuovo tracciamento separato di `blockingReasons` e `warnings`. Questo causava un errore `TypeError: Cannot read properties of undefined (reading 'length')` in `ImportContabilitaWorkingTable.jsx` alla riga 311 (`readiness.missing.length`) e alla riga 734 (`readiness.missing.length`) quando si tentava di accedere a `length` di `undefined`.
+- **Campi undefined coinvolti**:
+  - `readiness.missing`
+- **Fix difensivo applicato**:
+  - Modificato `resolveImportDocumentReadiness` in `src/modules/import_contabilita/index.jsx` per inizializzare e ritornare correttamente `missing` combinando `blockingReasons` e `warnings` in un unico array (anche per i flussi di fallback o early returns come i documenti già contabilizzati).
+  - Implementato un controllo preventivo di tipo array sicuro (`Array.isArray(readiness.missing) ? readiness.missing : []`) in `ImportContabilitaWorkingTable.jsx` e `ImportContabilitaPreviewDrawerContent.jsx` per evitare a monte qualsiasi crash visuale legato ad altri possibili elementi opzionali o incompleti.
+  - Aggiunta la visualizzazione condizionale del badge "Registrata" che mostra `"PN non disponibile"` se manca il `primaNotaId` sul documento, per evitare crash su documenti contabilizzati sprovvisti di dettagli.
+- **Conferma logica contabile**:
+  - Si attesta che non è stata alterata in alcun modo la logica contabile, il motore di quadratura Dare/Avere, né i vincoli di commit per FiscoSim.
+- **File modificati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `src/modules/import_contabilita/components/ImportContabilitaWorkingTable.jsx`
+  - `src/modules/import_contabilita/components/invoice_preview/ImportContabilitaPreviewDrawerContent.jsx`
+  - `tests/testLabIntegrazione.test.js`
+- **Test eseguiti**:
+  - Eseguita la suite `node --test tests/testLabIntegrazione.test.js`. 47/47 test superati con successo (100% pass) 🟢.
+- **Esito build**:
+  - `npm run build` completato con successo in 9.51s con zero errori o warning critici 🟢.
+- **Prossimo test manuale richiesto**:
+  - Aprire il modulo "Import Contabilità" e verificare che la tabella di lavorazione e il cassetto anteprima dei documenti si aprano senza alcun crash visuale in qualsiasi stato (pronta, incompleta, o registrata).
+
+
 

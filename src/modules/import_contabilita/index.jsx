@@ -696,47 +696,131 @@ function getRowReadiness(row, manualAccount = null, manualCausale = null) {
   }
 }
 
-function getWorkingTableRowReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null) {
-  const readiness = getRowReadiness(row, manualAccount, manualCausale)
-  if (!readiness.ready) return readiness
-  const missing = []
-  if (!counterpartyAccount?.id && !counterpartyAccount?.codice) missing.push('controparte patrimoniale collegata')
-  if (!manualAccount?.id && !manualAccount?.codice) missing.push('conto costo/ricavo mancante')
-  if (!manualCausale?.id && !manualCausale?.codice) missing.push('causale contabile mancante')
-  if (missing.length) {
+function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null, decisions = {}, list = []) {
+  const state = String(row?.state || row?.stato || '').toLowerCase()
+  const isProcessed = state === 'registered' || state === 'committed' || state === 'processed' || row?.committed
+  if (isProcessed) {
     return {
       ready: false,
-      missing,
-      severity: 'warning',
-      label: 'Incompleta',
-    }
-  }
-  if (!counterpartyAccount) {
-    return {
-      ready: false,
-      missing: ['controparte patrimoniale collegata'],
-      severity: 'warning',
-      label: 'Incompleta',
+      isReadyForWorkingView: false,
+      blockingReasons: [],
+      warnings: [],
+      info: [],
+      missing: [],
+      requiresNewAnagraficaConfirmation: false,
+      requiresAnagraficaReview: false,
+      requiresCausaleBeforeStart: false,
+      requiresContoBeforeStart: false,
+      severity: 'ok',
+      label: 'Registrata',
     }
   }
 
-  // Check if document is a credit note and the causale is incompatible
-  if (manualCausale) {
-    const policy = buildCausaleContabilePolicy(manualCausale)
-    const tipoDoc = String(row?.parsedDocument?.tipoDocumento || '').trim().toUpperCase()
-    const isNotaCreditoDoc = tipoDoc === 'TD04' || tipoDoc === 'TD08'
-    const isIncompatible = isNotaCreditoDoc && (!policy.notaCredito || policy.isFatturaPassiva || policy.isFatturaAttiva)
-    if (isIncompatible) {
-      return {
-        ready: true,
-        missing: ['causale incompatibile per nota credito'],
-        severity: 'warning',
-        label: 'Pronta con avviso',
+  const parsedDocument = row?.parsedDocument || {}
+  const preferred = getPreferredCounterparty(parsedDocument)
+  const counterparty = preferred?.counterparty || {}
+  
+  const blockingReasons = []
+  const warnings = []
+  const info = []
+  
+  // 1. Dati minimi documento
+  if (!String(parsedDocument?.numeroDocumento || '').trim()) blockingReasons.push('numero documento mancante')
+  if (!String(parsedDocument?.dataDocumento || '').trim()) blockingReasons.push('data documento mancante')
+  
+  const imponibile = Number(parsedDocument?.imponibile)
+  const iva = Number(parsedDocument?.iva)
+  const totale = Number(parsedDocument?.totale)
+  
+  if (parsedDocument?.imponibile === null || parsedDocument?.imponibile === undefined || parsedDocument?.imponibile === '' || Number.isNaN(imponibile)) {
+    blockingReasons.push('imponibile mancante o non valido')
+  }
+  if (parsedDocument?.iva === null || parsedDocument?.iva === undefined || parsedDocument?.iva === '' || Number.isNaN(iva)) {
+    blockingReasons.push('IVA mancante o non valida')
+  }
+  if (parsedDocument?.totale === null || parsedDocument?.totale === undefined || parsedDocument?.totale === '' || Number.isNaN(totale)) {
+    blockingReasons.push('totale mancante o non valido')
+  }
+  
+  const blockingErrorsCount = getBlockingErrorsCount(row)
+  if (blockingErrorsCount > 0) {
+    blockingReasons.push('errori bloccanti nel tracciato')
+  }
+
+  // 2. Classificazione Anagrafica
+  const pianoLookup = buildPianoContiLookup(list && list.length ? list : (typeof pianoConti !== 'undefined' ? pianoConti : []))
+  const classification = classifyCounterparty(counterparty, pianoLookup)
+  
+  const decisionKey = normalizeAnagraficaDecisionKey(
+    row?.decisionKey || getAnagraficaDecisionKeyFromCounterparty(counterparty)
+  )
+  const decisionsMap = decisions && Object.keys(decisions).length ? decisions : (typeof anagraficheDecisioniByKey !== 'undefined' ? anagraficheDecisioniByKey : {})
+  const decision = decisionKey ? decisionsMap?.[decisionKey] : null
+  const isConfirmed = decision?.decisionStatus === 'confirmed' || decision?.hiddenFromAnagrafiche
+  
+  let requiresNewAnagraficaConfirmation = false
+  let requiresAnagraficaReview = false
+  
+  if (!isConfirmed) {
+    if (classification.status === 'nuova') {
+      requiresNewAnagraficaConfirmation = true
+      blockingReasons.push('nuova anagrafica da confermare')
+    } else if (classification.status === 'possibile match') {
+      requiresAnagraficaReview = true
+      blockingReasons.push('match anagrafica incerto da verificare')
+    } else if (classification.status === 'dati incompleti') {
+      requiresAnagraficaReview = true
+      blockingReasons.push('dati anagrafica incompleti da verificare')
+    } else if (classification.status === 'già presente') {
+      const matched = classification.matchedPianoConto
+      const hasPiva = Boolean(normalizeAnagraficaIdentifier(matched.partitaIva || matched.anagraficaPiva))
+      const hasCf = Boolean(normalizeAnagraficaIdentifier(matched.codiceFiscale || matched.anagraficaCf))
+      if (!hasPiva && !hasCf) {
+        requiresAnagraficaReview = true
+        blockingReasons.push('anagrafica esistente priva di CF e P.IVA')
       }
     }
   }
+  
+  // 3. Causale contabile
+  let requiresCausaleBeforeStart = false
+  if (!manualCausale?.id && !manualCausale?.codice) {
+    requiresCausaleBeforeStart = false
+    warnings.push('causale contabile non impostata (necessaria per il commit)')
+  }
+  
+  // 4. Conto contabile
+  let requiresContoBeforeStart = false
+  if (!manualAccount?.id && !manualAccount?.codice) {
+    requiresContoBeforeStart = false
+    warnings.push('conto contabile costo/ricavo non impostato (necessario per il commit)')
+  }
 
-  return readiness
+  if (!counterpartyAccount?.id && !counterpartyAccount?.codice) {
+    warnings.push('conto controparte patrimoniale non impostato')
+  }
+
+  const isReadyForWorkingView = blockingReasons.length === 0
+  const missing = [...blockingReasons, ...warnings]
+  
+  return {
+    ready: isReadyForWorkingView,
+    isReadyForWorkingView,
+    blockingReasons,
+    warnings,
+    info,
+    missing,
+    requiresNewAnagraficaConfirmation,
+    requiresAnagraficaReview,
+    requiresCausaleBeforeStart,
+    requiresContoBeforeStart,
+    severity: blockingReasons.length ? 'error' : warnings.length ? 'warning' : 'ok',
+    label: blockingReasons.length ? 'Errore' : warnings.length ? 'Incompleta' : 'Pronta',
+  }
+}
+
+function getWorkingTableRowReadiness(row, manualAccount = null, manualCausale = null, counterpartyAccount = null, decisions = {}, list = []) {
+  return resolveImportDocumentReadiness(row, manualAccount, manualCausale, counterpartyAccount, decisions, list)
 }
 
 const WORKING_VIEW_BLOCK_EPS = 0.01
@@ -1267,6 +1351,16 @@ function buildAnagraficheDaVerificare(rows, pianoContiRows) {
   })
 
   return groups
+    .filter((group) => {
+      if (group.stato === 'già presente' && group.rank >= 3 && group.matchedPianoConto) {
+        const hasPiva = Boolean(normalizeAnagraficaIdentifier(group.matchedPianoConto.partitaIva || group.matchedPianoConto.anagraficaPiva))
+        const hasCf = Boolean(normalizeAnagraficaIdentifier(group.matchedPianoConto.codiceFiscale || group.matchedPianoConto.anagraficaCf))
+        if (hasPiva || hasCf) {
+          return false
+        }
+      }
+      return true
+    })
     .map((group) => {
       const matchedCode = normalizeText(group?.matchedPianoConto?.codice || '')
       const tipoSuggerito = group?.tipoSuggerito || 'fornitore'
@@ -2062,33 +2156,69 @@ function getConfirmedCounterpartyAccountForRow(row, anagraficheDecisioniByKey, p
   const parsedDocument = row?.parsedDocument || {}
   const preferredCounterparty = getPreferredCounterparty(parsedDocument)
   const counterparty = preferredCounterparty?.counterparty || getCounterpartyDataForAnagraficaRow(row)
+  
+  const pianoLookup = buildPianoContiLookup(pianoContiList)
+  const classification = classifyCounterparty(counterparty, pianoLookup)
+  
   const decisionKey = normalizeAnagraficaDecisionKey(
     row?.decisionKey || getAnagraficaDecisionKeyFromCounterparty(counterparty),
   )
-  if (!decisionKey) return null
 
   const decisionMap = anagraficheDecisioniByKey && typeof anagraficheDecisioniByKey === 'object'
     ? anagraficheDecisioniByKey
     : {}
-  const decision = decisionMap[decisionKey] || null
-  if (!decision || normalizeText(decision?.accountMode || '') !== 'existing') return null
+  const decision = decisionKey ? decisionMap[decisionKey] : null
 
-  const decisionStatus = normalizeText(decision?.decisionStatus || '')
-  if (decisionStatus !== 'confirmed' && !decision?.hiddenFromAnagrafiche) return null
+  if (decision) {
+    if (normalizeText(decision?.accountMode || '') !== 'existing') return null
+    
+    const decisionStatus = normalizeText(decision?.decisionStatus || '')
+    if (decisionStatus !== 'confirmed' && !decision?.hiddenFromAnagrafiche) {
+      if (classification.rank >= 3 && classification.matchedPianoConto) {
+        // Fallback below
+      } else {
+        return null
+      }
+    }
 
-  if (!normalizeText(decision?.existingAccountId || '') && !normalizeText(decision?.existingAccountCode || '')) {
-    return null
+    if (!normalizeText(decision?.existingAccountId || '') && !normalizeText(decision?.existingAccountCode || '')) {
+      if (classification.rank >= 3 && classification.matchedPianoConto) {
+        return {
+          id: normalizeText(classification.matchedPianoConto.id || ''),
+          codice: normalizeText(classification.matchedPianoConto.codice || ''),
+          descrizione: normalizeText(classification.matchedPianoConto.descrizione || ''),
+          tipo: normalizeText(classification.matchedPianoConto.anagraficaTipo || classification.matchedPianoConto.anagrafica_tipo || ''),
+        }
+      }
+      return null
+    }
+
+    const account = getExistingAccountForDecision(row, decision, pianoContiList)
+    if (account) {
+      return {
+        id: normalizeText(account?.id || decision?.existingAccountId || ''),
+        codice: normalizeText(account?.codice || decision?.existingAccountCode || ''),
+        descrizione: normalizeText(account?.descrizione || ''),
+        tipo: normalizeText(account?.anagraficaTipo || account?.anagrafica_tipo || decision?.tipo || ''),
+      }
+    }
   }
 
-  const account = getExistingAccountForDecision(row, decision, pianoContiList)
-  if (!account) return null
-
-  return {
-    id: normalizeText(account?.id || decision?.existingAccountId || ''),
-    codice: normalizeText(account?.codice || decision?.existingAccountCode || ''),
-    descrizione: normalizeText(account?.descrizione || ''),
-    tipo: normalizeText(account?.anagraficaTipo || account?.anagrafica_tipo || decision?.tipo || ''),
+  if (classification.rank >= 3 && classification.matchedPianoConto) {
+    const matched = classification.matchedPianoConto
+    const hasPiva = Boolean(normalizeAnagraficaIdentifier(matched.partitaIva || matched.anagraficaPiva))
+    const hasCf = Boolean(normalizeAnagraficaIdentifier(matched.codiceFiscale || matched.anagraficaCf))
+    if (hasPiva || hasCf) {
+      return {
+        id: normalizeText(matched.id || ''),
+        codice: normalizeText(matched.codice || ''),
+        descrizione: normalizeText(matched.descrizione || ''),
+        tipo: normalizeText(matched.anagraficaTipo || matched.anagrafica_tipo || ''),
+      }
+    }
   }
+
+  return null
 }
 
 function isClearlyLessInformativeDescription(description, counterpartyName, account) {
@@ -2228,12 +2358,17 @@ function hasBlockingAccountUpdateConflictWarnings(warnings) {
 }
 
 function matchesViewMode(row, viewMode, readiness = null) {
-  const state = String(row?.state || '').toLowerCase()
+  const state = String(row?.state || row?.stato || '').toLowerCase()
+  const isProcessed = state === 'registered' || state === 'committed' || state === 'processed' || row?.committed
+
+  if (viewMode === VIEW_MODES.registered) {
+    return isProcessed
+  }
+
+  if (isProcessed) return false
+
   if (viewMode === VIEW_MODES.ready) {
     return readiness ? readiness.ready : getRowReadiness(row).ready
-  }
-  if (viewMode === VIEW_MODES.registered) {
-    return state === 'registered' || state === 'committed'
   }
   return true
 }
@@ -4559,14 +4694,6 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         showActionBanner('error', 'Errore bloccante: fornitore collegato non trovato.')
         return
       }
-      if (!costRevenueAccount && !counterpartyAccount) {
-        showActionBanner('error', 'Errore bloccante: conto contabile selezionato non trovato.')
-        return
-      }
-      if (!causale) {
-        showActionBanner('error', 'Errore bloccante: causale contabile FF demo non impostata.')
-        return
-      }
       if (!imponibile || imponibile <= 0) {
         showActionBanner('error', 'Errore bloccante: imponibile documento non valido o pari a zero.')
         return
@@ -4591,7 +4718,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         showActionBanner('error', 'Errore bloccante: numero documento non specificato.')
         return
       }
-      if (!automationMeta) {
+      if (isSelectedDemoSocieta && !automationMeta) {
         showActionBanner('error', 'Errore bloccante: metadata test_lab non trovati per la riga.')
         return
       }
