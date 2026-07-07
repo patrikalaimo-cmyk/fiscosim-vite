@@ -764,20 +764,20 @@ function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale
   if (!isConfirmed) {
     if (classification.status === 'nuova') {
       requiresNewAnagraficaConfirmation = true
-      blockingReasons.push('nuova anagrafica da confermare')
+      blockingReasons.push('Nuova anagrafica da confermare')
     } else if (classification.status === 'possibile match') {
       requiresAnagraficaReview = true
-      blockingReasons.push('match anagrafica incerto da verificare')
+      blockingReasons.push('Match anagrafico incerto')
     } else if (classification.status === 'dati incompleti') {
       requiresAnagraficaReview = true
-      blockingReasons.push('dati anagrafica incompleti da verificare')
+      blockingReasons.push('Anagrafica da integrare')
     } else if (classification.status === 'già presente') {
       const matched = classification.matchedPianoConto
       const hasPiva = Boolean(normalizeAnagraficaIdentifier(matched.partitaIva || matched.anagraficaPiva))
       const hasCf = Boolean(normalizeAnagraficaIdentifier(matched.codiceFiscale || matched.anagraficaCf))
       if (!hasPiva && !hasCf) {
         requiresAnagraficaReview = true
-        blockingReasons.push('anagrafica esistente priva di CF e P.IVA')
+        blockingReasons.push('Anagrafica da integrare')
       }
     }
   }
@@ -786,18 +786,18 @@ function resolveImportDocumentReadiness(row, manualAccount = null, manualCausale
   let requiresCausaleBeforeStart = false
   if (!manualCausale?.id && !manualCausale?.codice) {
     requiresCausaleBeforeStart = false
-    warnings.push('causale contabile non impostata (necessaria per il commit)')
+    warnings.push('Causale da completare in Working View')
   }
   
   // 4. Conto contabile
   let requiresContoBeforeStart = false
   if (!manualAccount?.id && !manualAccount?.codice) {
     requiresContoBeforeStart = false
-    warnings.push('conto contabile costo/ricavo non impostato (necessario per il commit)')
+    warnings.push('Conto da completare in Working View')
   }
 
   if (!counterpartyAccount?.id && !counterpartyAccount?.codice) {
-    warnings.push('conto controparte patrimoniale non impostato')
+    warnings.push('Conto controparte da completare in Working View')
   }
 
   const isReadyForWorkingView = blockingReasons.length === 0
@@ -2411,15 +2411,18 @@ function getNextVisibleRows(rows, {
   manualAccountByRowId = {},
   manualCausaleByRowId = {},
   counterpartyAccountByRowId = {},
+  getWorkingTableRowReadiness: customGetReadiness = null,
 }) {
   const query = searchTerm.trim().toLowerCase()
   const selectedReferenceRow = Array.from(selectedRowIds)
     .map((id) => rows.find((row) => getRowKey(row) === id))
     .find(Boolean) || null
 
+  const getReadiness = customGetReadiness || getWorkingTableRowReadiness
+
   return rows.filter((row) => {
     const key = getRowKey(row)
-    const readiness = getWorkingTableRowReadiness(
+    const readiness = getReadiness(
       row,
       manualAccountByRowId[key],
       manualCausaleByRowId[key],
@@ -2744,6 +2747,17 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     return next
   }, [stagingRows, anagraficheDecisioniByKey, pianoConti, selectedSocietaId])
 
+  const getWorkingTableRowReadiness = (row, manualAccount = null, manualCausale = null, counterpartyAccount = null) => {
+    return resolveImportDocumentReadiness(
+      row,
+      manualAccount,
+      manualCausale,
+      counterpartyAccount,
+      anagraficheDecisioniByKey,
+      pianoConti
+    )
+  }
+
   const workingTableReadinessByRowId = useMemo(() => {
     const rows = Array.isArray(stagingRows) ? stagingRows : []
     const next = {}
@@ -2758,7 +2772,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       )
     })
     return next
-  }, [stagingRows, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId])
+  }, [stagingRows, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, anagraficheDecisioniByKey, pianoConti])
 
   const workingTableReadyCount = useMemo(() => (
     Object.values(workingTableReadinessByRowId).filter((readiness) => readiness?.ready).length
@@ -2777,8 +2791,9 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       manualAccountByRowId,
       manualCausaleByRowId,
       counterpartyAccountByRowId,
+      getWorkingTableRowReadiness,
     }),
-    [searchTerm, stagingRows, viewMode, quickFilter, selectedRowIds, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId],
+    [searchTerm, stagingRows, viewMode, quickFilter, selectedRowIds, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, getWorkingTableRowReadiness],
   )
 
   const visibleRows = useMemo(() => {
@@ -2786,13 +2801,15 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       manualAccountByRowId,
       manualCausaleByRowId,
       counterpartyAccountByRowId,
+      getWorkingTableRowReadiness,
     })
     return applyWorkingTableColumnSort(filtered, columnSort, {
       manualAccountByRowId,
       manualCausaleByRowId,
       counterpartyAccountByRowId,
+      getWorkingTableRowReadiness,
     })
-  }, [baseVisibleRows, columnFilters, columnSort, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId])
+  }, [baseVisibleRows, columnFilters, columnSort, manualAccountByRowId, manualCausaleByRowId, counterpartyAccountByRowId, getWorkingTableRowReadiness])
 
   const previewRow = useMemo(
     () => stagingRows.find((row) => getRowKey(row) === previewRowId) || null,
@@ -4632,7 +4649,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     )
     const demoGuard = evaluateDemoCompanyForImport(currentSocieta)
 
-    if (!demoGuard.allowed) {
+    if (isSelectedDemoSocieta && !demoGuard.allowed) {
       showActionBanner('warning', buildImportDemoGuardBlockMessage(demoGuard))
       return
     }

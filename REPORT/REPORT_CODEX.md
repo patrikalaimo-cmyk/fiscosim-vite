@@ -10660,5 +10660,30 @@ pm run build -> Successo (429 moduli, 16s).
 - **Prossimo test manuale richiesto**:
   - Aprire il modulo "Import Contabilità" e verificare che la tabella di lavorazione e il cassetto anteprima dei documenti si aprano senza alcun crash visuale in qualsiasi stato (pronta, incompleta, o registrata).
 
+## PROMPT 25A-FIX-2 — IMPORT REALE: ALLINEAMENTO READINESS/ANAGRAFICHE E SBLOCCO AVVIA CONTABILIZZAZIONE FUORI TEST LAB
+
+- **Causa tecnica precisa dei due problemi**:
+  1. *Incoerenza readiness/anagrafiche*: `getWorkingTableRowReadiness` e `resolveImportDocumentReadiness` erano definiti in scope globale e invocati nei vari memo/componenti senza che venissero passati `anagraficheDecisioniByKey` e `pianoConti`. Di conseguenza, i parametri `decisions` e `list` assumevano valori di default vuoti (`{}`, `[]`), classificando erroneamente i soggetti esistenti come `'nuova'` (provocando il falso errore "Nuova anagrafica da confermare").
+  2. *Blocco errato su Avvia contabilizzazione*: `onStartAccounting` applicava incondizionatamente la guardia demo `evaluateDemoCompanyForImport` bloccando l'apertura del flusso per tutte le società reali.
+- **Fix applicato**:
+  - Dichiarata localmente `getWorkingTableRowReadiness` all'interno di `ModuloImportContabilita` in [index.jsx](file:///c:/Users/patri/Desktop/fiscosim-viteBACKUPAntigravity/src/modules/import_contabilita/index.jsx) in modo che catturi automaticamente in chiusura lo stato fresco di `anagraficheDecisioniByKey` e `pianoConti`.
+  - Passata la local `getWorkingTableRowReadiness` nei contesti di `getNextVisibleRows`, `applyWorkingTableColumnFilters` e `applyWorkingTableColumnSort` per garantire una fonte di calcolo unica e allineata in tutta la visualizzazione.
+  - Modificata `onStartAccounting` per abilitare il controllo demoGuard solo se la società attiva è effettivamente una demo (`isSelectedDemoSocieta === true`), sbloccando così l'avvio della contabilizzazione per l'import reale.
+  - Normalizzati tutti i messaggi di blocco e warning (`Nuova anagrafica da confermare`, `Match anagrafico incerto`, `Anagrafica da integrare`, `Conto da completare in Working View`, `Causale da completare in Working View`).
+- **File modificati**:
+  - `src/modules/import_contabilita/index.jsx`
+  - `tests/testLabIntegrazione.test.js`
+- **Test eseguiti**:
+  - Eseguita la suite `node --test tests/testLabIntegrazione.test.js`. 48/48 test superati con successo (100% pass) 🟢.
+- **Esito build**:
+  - `npm run build` completato con successo in 39.85s con zero errori o warning critici 🟢.
+- **Sicurezza**:
+  - `.env` e politiche Supabase/migration non toccati.
+  - Nessuna società reale o scrittura contabile alterata.
+  - Nessun `git add .` indiscriminato.
+- **Prossimo test manuale richiesto**:
+  - Importare fatture per un fornitore già presente nel piano dei conti su società reale. Verificare che non compaiano anomalie anagrafiche da verificare, che lo stato sia coerente e che cliccando su "Avvia contabilizzazione" si apra correttamente la Working View.
+
+
 
 

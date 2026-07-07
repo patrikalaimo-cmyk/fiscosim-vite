@@ -858,6 +858,27 @@ test('25A-FIX-1 — prevent working table crash on optional fields', async () =>
   assert.match(drawerSource, /Array\.isArray\(readiness\?\.missing\) && readiness\.missing\.length/, 'Il cassetto anteprima dovrebbe accedere in modo sicuro a readiness.missing')
 })
 
+test('25A-FIX-2 — Import reale: check readiness, anagrafiche, and sblocco avvia contabilizzazione', async () => {
+  const indexSource = await import('node:fs/promises').then((fs) =>
+    fs.readFile(new URL('../src/modules/import_contabilita/index.jsx', import.meta.url), 'utf8')
+  )
+
+  // 1. Check local getWorkingTableRowReadiness in ModuloImportContabilita
+  assert.match(indexSource, /const getWorkingTableRowReadiness = \(row, manualAccount = null, manualCausale = null, counterpartyAccount = null\) => \{/, 'Dovrebbe definire getWorkingTableRowReadiness locale')
+  assert.match(indexSource, /resolveImportDocumentReadiness\(\s*row,\s*manualAccount,\s*manualCausale,\s*counterpartyAccount,\s*anagraficheDecisioniByKey,\s*pianoConti\s*\)/, 'Dovrebbe passare anagraficheDecisioniByKey e pianoConti alla readiness')
+
+  // 2. Check aligned warning and blocking labels
+  assert.match(indexSource, /'Nuova anagrafica da confermare'/, 'Dovrebbe usare il messaggio di blocco corretto per nuova anagrafica')
+  assert.match(indexSource, /'Match anagrafico incerto'/, 'Dovrebbe usare il messaggio di blocco corretto per match incerto')
+  assert.match(indexSource, /'Anagrafica da integrare'/, 'Dovrebbe usare il messaggio di blocco corretto per anagrafica incompleta')
+  assert.match(indexSource, /'Conto da completare in Working View'/, 'Dovrebbe usare il warning corretto per conto vuoto')
+  assert.match(indexSource, /'Causale da completare in Working View'/, 'Dovrebbe usare il warning corretto per causale vuota')
+
+  // 3. Check demoGuard bypass for real companies in onStartAccounting
+  assert.match(indexSource, /if \(isSelectedDemoSocieta && !demoGuard\.allowed\)/, 'Le guardie Test Lab dovrebbero essere applicate solo alle societa demo')
+})
+
+
 
 
 
