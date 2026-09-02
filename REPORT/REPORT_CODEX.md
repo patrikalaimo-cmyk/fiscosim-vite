@@ -10837,3 +10837,64 @@ pm run build -> Successo (429 moduli, 16s).
   5. Applicare batch su scope "incomplete" → solo documenti realmente incompleti.
 
 
+## GIT-SYNC-1A — CLASSIFICAZIONE WORKING TREE PRE-PUSH
+
+- **Obiettivo**: classificare il working tree sporco prima del push checkpoint remoto della baseline locale, senza creare branch, senza commit e senza push.
+- **Repo remoto**: `https://github.com/patrikalaimo-cmyk/fiscosim-vite.git`.
+- **Branch locale iniziale**: `mio-branch`.
+- **HEAD locale**: `fadb6e51904712829dcea2a20bdf678221ca8007` (`fix(import): optimize bulk import working performance`).
+- **HEAD remoto `origin/mio-branch`**: `d77fd8de943ae4351c07a284ea4eef57c2941bc6`.
+- **Distanza locale/remoto**: 120 commit avanti rispetto a `origin/mio-branch`.
+- **Stato Git iniziale**:
+  - 0 file tracciati modificati/staged.
+  - 63 elementi non tracciati.
+  - elementi ignorati già presenti: `.env`, `.env.local`, `.env - Copia.local`, `.vercel/`, `dist/`, `node_modules/`.
+- **Classificazione sintetica file sporchi**:
+  - Categoria A / escludere: 54 file `.zip` checkpoint/backup; `scratch/` con script diagnostici locali; `dist/` e `node_modules/` già ignorati.
+  - Categoria B / commit documentale da valutare: `AI_WORKING_AREA_FISCOSIM/14_TEST_LAB_CONTABILE_REALE.md`, `REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md`, `REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md`, `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md`, `ROADMAP_Copilot.md`, `promptmancanti09.06.2026.txt`.
+  - Categoria C / commit tecnico da valutare: `supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql`, `supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql`.
+  - Categoria D / non toccare: `.env`, `.env.local`, `.env - Copia.local`, eventuali credenziali.
+- **Dettaglio migration SQL non tracciate**:
+  - `20260615100000_fix_liquidazione_iva_consolidata_state.sql`: migration incrementale `CREATE OR REPLACE FUNCTION public.consolida_periodo_iva_transazionale`; usa colonna `stato` e campi `periodo_tipo/periodo_anno/periodo_numero`. Classificazione: patch proposta/documentale coerente con report, ma probabilmente superata dal successivo riallineamento schema; non applicata.
+  - `20260615103000_fix_liquidazione_iva_stato_column_alignment.sql`: migration incrementale `CREATE OR REPLACE FUNCTION public.consolida_periodo_iva_transazionale`; usa marker `[stato:provvisoria]` / `[stato:definitiva]` nel campo `note` e campi `periodicita/anno/mese/trimestre`. Classificazione: patch tecnica potenzialmente necessaria al codice/schema attuale, ma da validare prima del commit o applicazione; non applicata.
+- **Scratch**: contiene solo script diagnostici/debug locali (`db_check.js`, `db_live_diagnostic.js`, `db_provision_and_seed.js`, `introspect_accounting_schema.js`, `query_demo_refs.js`, `test_loader.js`, `verify_db_live.js`); consigliata esclusione dal commit.
+- **Decisione consigliata**:
+  1. Non committare gli ZIP.
+  2. Lasciare `scratch/` locale non tracciata o aggiungerla a `.gitignore` in un commit dedicato, previa approvazione.
+  3. Valutare commit documentale separato per i report/roadmap utili.
+  4. Valutare separatamente le due migration, preferendo una sola migration coerente con lo schema reale.
+  5. Dopo pulizia/classificazione approvata, rieseguire GIT-SYNC-1 per creare e pushare il branch checkpoint.
+- **Conferme sicurezza**: nessun push, nessun force push, nessun branch creato, nessun reset, nessuna cancellazione, nessuna migration applicata, nessun codice applicativo modificato.
+- **Prossimo step**: approvazione esplicita della politica su documenti, `.gitignore`, `scratch/`, ZIP e migration prima di qualsiasi commit o push.
+
+## GIT-SYNC-1B — MINI-PULIZIA PRE-PUSH CHECKPOINT
+
+- **Obiettivo**: mini-pulizia non distruttiva del working tree e commit documentale preparatorio al push checkpoint remoto, senza creare branch e senza push.
+- **Stato iniziale**:
+  - Branch locale: `mio-branch`.
+  - HEAD locale: `fadb6e51904712829dcea2a20bdf678221ca8007`.
+  - HEAD remoto `origin/mio-branch`: `d77fd8de943ae4351c07a284ea4eef57c2941bc6`.
+  - Distanza locale/remoto: 120 commit avanti.
+  - Working tree prima della mini-pulizia: `REPORT/REPORT_CODEX.md` modificato; 63 elementi non tracciati.
+- **Regole `.gitignore`**:
+  - Già presenti: `node_modules/`, `dist/`, `.env`, `.vercel/`, `*.local`.
+  - Aggiunte in modo minimale: `*.zip`, `scratch/`.
+- **File inclusi nel commit selettivo**:
+  - `REPORT/REPORT_CODEX.md`.
+  - `.gitignore`.
+- **Documenti/report non tracciati lasciati fuori**:
+  - `AI_WORKING_AREA_FISCOSIM/14_TEST_LAB_CONTABILE_REALE.md`: fuori dal perimetro richiesto `REPORT/` o `docs/` per questo commit.
+  - `REPORT/HANDOFF_NUOVA_CHAT_FISCOSIM.md`: handoff storico; il documento stesso indica di lasciare fuori report paralleli e handoff.
+  - `REPORT/NUOVA_CHAT_FISCOSIM_STATO_E_PROSSIMI_STEP.md`: report/handoff storico esplicitamente indicato come fuori checkpoint nei suoi contenuti.
+  - `REPORT/LIQUIDAZIONE_IVA_DEFINITIVA_ESECUZIONE_MANUALE_SUPABASE.md`: guida operativa SQL reale; lasciata fuori per non trascinare materiale migration-like in un commit di sola pulizia.
+  - `ROADMAP_Copilot.md`: file root non `REPORT/`/`docs/`, lasciato fuori.
+  - `promptmancanti09.06.2026.txt`: nota temporanea/testuale, lasciata fuori.
+- **File esclusi**:
+  - Tutti gli ZIP checkpoint/backup tramite `*.zip`.
+  - `scratch/` tramite `.gitignore`; nessuna cancellazione effettuata.
+  - `.env`, `.env.local`, `.env - Copia.local`, `.vercel/`, `dist/`, `node_modules/` non toccati.
+- **Migration SQL lasciate fuori**:
+  - `supabase/migrations/20260615100000_fix_liquidazione_iva_consolidata_state.sql`: probabilmente superata perché usa colonna `stato`.
+  - `supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql`: potenzialmente più coerente, ma da validare in task dedicato prima di commit o applicazione.
+- **Conferme sicurezza**: nessun push, nessun force push, nessun branch creato, nessun reset, nessuna cancellazione, nessuna migration applicata, nessun codice applicativo modificato.
+- **Prossimo step**: rieseguire il push sicuro su branch checkpoint remoto dopo verifica finale dello stato residuo.
