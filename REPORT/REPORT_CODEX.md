@@ -11019,3 +11019,20 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna logica fiscale o priorità P1/P2 modificata; nessun test escluso o indebolito.
 - CI da rilanciare sul commit correttivo.
 
+### IMPORT-25A-HISTORY-1 — CI RUN #2: BLOCCO CHIUSO VERDE
+
+- GitHub Actions run `37525648566` sul commit `2f8ca9bf979409f422d347f96872e1b880553cab`: **SUCCESS**.
+- Linux: `test:import` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- Windows: `test:import` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- **IMPORT-25A-HISTORY-1 è CHIUSO** a livello automatico.
+- Confermati:
+  - P1 causale IVA standard Studio;
+  - P2 storico controparte read-only;
+  - warning non bloccante su discrepanza P1/P2;
+  - proposta percentuale detraibile da storico;
+  - override manuali preservati;
+  - storico separato per direzione e aliquota;
+  - nessuna migration o scrittura DB aggiuntiva.
+- Test browser/manuali reali: **NON eseguiti**; restano nel collaudo finale del blocco Import.
+- Prossimo sottoblocco: `IMPORT-25A-HISTORY-2` — storico assistito conto costo/ricavo e causale contabile.
+
