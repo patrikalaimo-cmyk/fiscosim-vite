@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { fmtCurrency as fmt, fmtDate } from '../ui/formatters.js'
 import { getBankConnectionBadgeClass, getRiconciliazioneBadgeClass } from '../ui/viewMappers.js'
+import RiconciliazioneBancariaView from './RiconciliazioneBancariaView.jsx'
 
 export default function BankingView({ contTab, societaAttiva, setContTab }) {
   if (!societaAttiva) return null
+  if (contTab === 'riconciliazione') return <RiconciliazioneBancariaView />
   if (contTab !== 'movimenti_banca' && contTab !== 'riconciliazione') return null
   return <ModuloBanche societaId={societaAttiva?.id} contTab={contTab} setContTab={setContTab} />
 }
@@ -20,9 +22,38 @@ function ModuloBanche({societaId,contTab,setContTab}){
   const [selectedConto,setSelectedConto]=useState(null);
   const [modalCollegaBanca,setModalCollegaBanca]=useState(false);
   const [matches,setMatches]=useState([]);
+  const [pendingBankCallback,setPendingBankCallback]=useState(false);
   const [subView,setSubView]=useState('conti'); // conti, movimenti, riconcilia
 
   useEffect(()=>{if(societaId)caricaDati();},[societaId]);
+  useEffect(()=>{
+    try{
+      const params=new URLSearchParams(window.location.search);
+      if(params.get('bank_callback')){
+        setPendingBankCallback(true);
+        params.delete('bank_callback');
+        const base=window.location.pathname+(params.toString()?`?${params.toString()}`:'');
+        window.history.replaceState(null,'',base);
+      }
+    }catch(e){
+      // ignore in environments without window
+    }
+  },[]);
+
+  useEffect(()=>{
+    if(!pendingBankCallback||!conti.length)return;
+    const pendings=conti.filter(c=>c.stato==='pending');
+    if(!pendings.length){
+      setPendingBankCallback(false);
+      return;
+    }
+    (async ()=>{
+      for(const conto of pendings){
+        await verificaCollegamento(conto);
+      }
+      setPendingBankCallback(false);
+    })();
+  },[pendingBankCallback,conti]);
 
   const caricaDati=async()=>{
     setLoading(true);

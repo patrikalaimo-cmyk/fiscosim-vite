@@ -170,8 +170,8 @@ export const NAV = [
   {
     section: 'DOCUMENT HUB',
     items: [
+      { id: 'import_contabilita',  ico: '📁', label: 'Import Contabilità' },
       { id: 'import_unificato',    ico: '📁', label: 'Import Documenti' },
-      { id: 'import_nuovo',        ico: '📥', label: 'Import Nuovo' },
       { id: 'export_dati',         ico: '📤', label: 'Export Dati' },
       { id: 'fatture_ade',         ico: '📥', label: 'Fatture Massive ADE' },
       { id: 'lettura_mail',        ico: '📧', label: 'Lettura Mail' },
@@ -182,7 +182,6 @@ export const NAV = [
     section: 'CONTABILITÀ',
     items: [
       { id: 'contabilita', ico: '📒', label: 'Prima Nota' },
-      { id: 'piano_conti', ico: '🗂️', label: 'Piano dei Conti' },
       { id: 'partitario',  ico: '💳', label: 'Partitario' },
       { id: 'bilancio',    ico: '📊', label: 'Bilancio' }
     ]
@@ -190,7 +189,6 @@ export const NAV = [
   {
     section: 'STRUMENTI',
     items: [
-      { id: 'iva',          ico: '💧', label: 'Liquidazione IVA' },
       { id: 'f24',          ico: '📋', label: 'Gestione F24' },
       { id: 'simulatore',   ico: '📊', label: 'Simulatore Fiscale' },
       { id: 'ammortamenti', ico: '🏢', label: 'Ammortamenti' },
@@ -218,6 +216,7 @@ export const PERMESSI_MODULI = [
   { id: 'agenda',           label: 'Agenda Invii',         ico: '📅', hasSoloAssegnati: false },
   { id: 'simulatore',       label: 'Simulatore',           ico: '📊', hasSoloAssegnati: false },
   { id: 'import',           label: 'Import Excel',         ico: '📤', hasSoloAssegnati: false },
+  { id: 'import_contabilita', label: 'Import Contabilità', ico: '📁', hasSoloAssegnati: false },
   { id: 'import_documenti', label: 'Import Documenti',     ico: '📁', hasSoloAssegnati: false },
   { id: 'dashboard',        label: 'Dashboard',            ico: '🏠', hasSoloAssegnati: false },
   { id: 'cu',               label: 'Certificazioni Uniche',ico: '📜', hasSoloAssegnati: false },
@@ -248,3 +247,6 @@ export const MODULI_DISPONIBILI = [
 ]
 
 export const MODULI_DEFAULT = ['iva', 'f24', 'ammortamenti', 'adempimenti', 'simulatore']
+
+export * from './uiText.js'
+export * from './fiscalCatalog.js'

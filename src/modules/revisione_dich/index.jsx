@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { useAIStatus } from '../../context/AIStatusContext'
 import { renderPDFPagesToImages } from '../../shared/utils'
+import { ModuleHeader } from '../../shared/components'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 
@@ -120,10 +121,11 @@ FORMATO RISPOSTA — Rispondi SOLO con JSON valido:
 Per ogni controllo: "ok" = tutto corretto, "warning" = da valutare/approfondire, "error" = dato errato/mancante critico.
 Sii specifico nei dettagli: indica importi, quadri, righi quando possibile.`
 
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      action: 'claude',
       model: 'claude-sonnet-4-20250514', // Sonnet per analisi complessa
       max_tokens: 4000,
       system: 'Sei un esperto commercialista italiano. Rispondi SEMPRE e SOLO con JSON valido, zero testo aggiuntivo.',
@@ -276,16 +278,17 @@ export function ModuloRevisioneDich({ utente }) {
   // ── RENDER ──────────────────────────────────────────────────
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div>
-          <div className="page-title">🔍 Revisione Dichiarativi</div>
-          <div className="page-sub">Analisi AI · Controlli incrociati · Aree critiche · Confronto storico</div>
-        </div>
-        <div style={{ display: 'flex', gap: '.5rem' }}>
-          {fase !== 'upload' && <button className="btn-sec" onClick={reset}>+ Nuova revisione</button>}
-          <button className="btn-sec" onClick={() => { setFase('storico'); loadStorico() }}>📚 Storico</button>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Controllo"
+        title="🔍 Revisione Dichiarativi"
+        context="Analisi AI · Controlli incrociati · Aree critiche · Confronto storico"
+        secondaryAction={
+          <div style={{ display: 'flex', gap: '.5rem' }}>
+            {fase !== 'upload' && <button className="btn-sec" onClick={reset}>+ Nuova revisione</button>}
+            <button className="btn-sec" onClick={() => { setFase('storico'); loadStorico() }}>📚 Storico</button>
+          </div>
+        }
+      />
 
       {/* ── FASE UPLOAD ───────────────────────────────────── */}
       {fase === 'upload' && (

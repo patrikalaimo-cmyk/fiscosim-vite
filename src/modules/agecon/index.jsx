@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { analyzeWithClaude } from '../../shared/utils/parseDoc'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 // ─── COSTANTI ────────────────────────────────────────────────
 const TIPI_AVVISO = [
@@ -334,10 +335,11 @@ function ModalCivisAI({ avviso, onClose }) {
     if (!descrizione.trim()) return alert('Inserisci una descrizione della situazione')
     setLoading(true)
     try {
-      const res = await fetch('/api/claude', {
+      const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'claude',
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1500,
           system: `Sei un esperto commercialista italiano specializzato nella gestione degli avvisi ADE e nella redazione di istanze CIVIS per conto dei contribuenti. Redigi testi formali, precisi e professionali in italiano.`,
@@ -452,10 +454,11 @@ function ModalAnalisiAI({ avviso, onClose }) {
   useEffect(() => {
     const analizza = async () => {
       try {
-        const res = await fetch('/api/claude', {
+        const res = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'claude',
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 1200,
             system: 'Sei un esperto commercialista italiano. Rispondi in italiano con analisi precise e pratiche.',
@@ -779,16 +782,13 @@ export function ModuloAgeCon({ utente, ruolo }) {
       {modalAnalisi && <ModalAnalisiAI avviso={modalAnalisi} onClose={() => setModalAnalisi(null)} />}
 
       {/* Header */}
-      <div className="page-hdr">
-        <div>
-          <div className="page-title">⚡ AgeCon — Avvisi ADE</div>
-          <div className="page-sub">Gestione comunicazioni e avvisi Agenzia delle Entrate · AI-assisted</div>
-        </div>
-        <div style={{display:'flex',gap:'.5rem'}}>
-          <button className="btn-sec" onClick={() => setModalImportPDF(true)}>📄 Import PDF</button>
-          <button className="btn" onClick={() => setModalAvviso({})}>➕ Nuovo avviso</button>
-        </div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Controllo"
+        title="⚡ AgeCon — Avvisi ADE"
+        context="Gestione comunicazioni e avvisi Agenzia delle Entrate · AI-assisted"
+        primaryAction={<button className="btn" onClick={() => setModalAvviso({})}>➕ Nuovo avviso</button>}
+        secondaryAction={<button className="btn-sec" onClick={() => setModalImportPDF(true)}>📄 Import PDF</button>}
+      />
 
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: '1rem' }}>

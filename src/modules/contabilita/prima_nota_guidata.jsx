@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { traceStep, traceDiff, traceIva, insertCausaleIvaMeta } from '../../utils/pipelineLogger.js'
-import { parseIvaPercent } from '../../../domain/resolveIva.js'
+import { parseIvaPercent, classifyIvaRegime, formatIvaRegimeLabel } from '../../../domain/resolveIva.js'
 import {
   buildScritturaContabileFromDraft,
   buildPrimaNotaPayloadFromState,
@@ -9,9 +9,20 @@ import {
   normalizePartitarioEntry,
   normalizeRigaForPrimaNotaPayload,
 } from '../../../domain/primaNotaPayloadBuilder.js'
+import { loadIvaInsightsForSocieta } from './application/ivaInsightsClient.js'
 import * as contabilitaRepo from './data/contabilitaRepo.js'
 import { createPrimaNotaCompleta } from '../../../services/primaNotaService.js'
 import { fmtCurrency as fmtMoney, fmtDate } from './ui/formatters.js'
+import { ModuleHeader } from '../../shared/components'
+import { BaseInput, BaseTable } from './ui/BaseControls.jsx'
+import { BaseCombobox } from './ui/BaseDropdown.jsx'
+import { DocumentPreviewModal } from '../../shared/ui/DocumentPreviewModal.jsx'
+import { suggestContiPerDocumento } from '../../shared/utils/pianoContiSuggestions.js'
+import { buildHistoricalContoSuggestions, extractHistoricalSearchIdentity } from '../../shared/utils/historicalContoSuggestions.js'
+import { buildOperatorAssistItems, appendOperatorClarification } from '../../shared/utils/operatorAssist.js'
+import { OperatorAssistPanel } from '../../shared/components/OperatorAssistPanel.jsx'
+import { OperatorClarificationModal } from '../../shared/components/OperatorClarificationModal.jsx'
+import { evaluateDraftReliability } from '../../../domain/draftReliability.js'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
 
@@ -51,7 +62,9 @@ function normalizeIvaRowsFromDraft(initialDraft) {
       iva: toMoneyNumber(r.iva),
       causale_iva_id: r.causale_iva_id ? String(r.causale_iva_id) : null,
       codice_interno: r.codice_interno ?? null,
-      autoResolved: r.autoResolved === true
+      autoResolved: r.autoResolved === true,
+      natura: r.natura ?? null,
+      regime_iva: r.regime_iva ?? null
     }))
   }
   const u = initialDraft?.ivaUi
@@ -67,7 +80,9 @@ function normalizeIvaRowsFromDraft(initialDraft) {
       iva: toMoneyNumber(u.iva),
       causale_iva_id: u.causale_iva_id ? String(u.causale_iva_id) : null,
       codice_interno: null,
-      autoResolved: false
+      autoResolved: false,
+      natura: u.natura ?? null,
+      regime_iva: u.regime_iva ?? null
     }]
   }
   return []
@@ -92,7 +107,7 @@ function buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo
       avere: r?.avere,
       causale_iva_id: r?.causale_iva_id ?? null
     })),
-    partitarioClosedMap_count: Object.keys(partitarioClosedMap || {}).length
+    partitarioClosedMap_count: Object.keys(partitarioClosedMap || {}).length,
   }
 }
 
@@ -127,27 +142,24 @@ function SearchSelect({ label, value, onChange, options, placeholder = 'Cerca…
         }}
         placeholder={placeholder}
       />
-      <select
-        value={value || ''}
-        onChange={e => {
-          const v = e.target.value
-          traceStep('UI_INPUT_CHANGE', { value: v, payload: { field: label, control: 'SearchSelect' } })
-          onChange(v)
-        }}
-        style={{ marginTop: '.35rem' }}
-      >
-        <option value="">— Seleziona —</option>
-        {filtered.map(o => (
-          <option key={o.id} value={o.id}>
-            {formatOption ? formatOption(o) : (o.label || o.name || o.descrizione || o.codice || o.id)}
-          </option>
-        ))}
-      </select>
+      <div style={{ marginTop: '.35rem' }}>
+        <BaseCombobox
+          value={value || ''}
+          onChange={(v) => {
+            traceStep('UI_INPUT_CHANGE', { value: v, payload: { field: label, control: 'SearchSelect' } })
+            onChange(v)
+          }}
+          options={filtered}
+          getOptionId={(o) => o.id}
+          getOptionLabel={(o) => (formatOption ? formatOption(o) : (o.label || o.name || o.descrizione || o.codice || o.id || ''))}
+          placeholder="— Seleziona —"
+          searchable={false}
+        />
+      </div>
     </div>
   )
 }
 
-/** Combobox: input + filtro + elenco (un solo controllo, niente doppio select + stringa operatore). */
 function CausaleIvaCombobox({
   value,
   onChange,
@@ -157,26 +169,9 @@ function CausaleIvaCombobox({
   parseAliquota,
   disabled
 }) {
-  const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState('')
-  const wrapRef = useRef(null)
-  const selected = causaliIva.find(c => String(c.id) === String(value))
-
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (!wrapRef.current?.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-
-  const displayLabel = selected
-    ? `${buildCausaleIvaLabel(selected)} — ${selected.descrizione || ''}`.trim()
-    : ''
-
   const options = useMemo(() => {
     const ra = Math.round(Number(rowAliquota))
-    const sorted = [...(causaliIva || [])].sort((a, b) => {
+    return [...(causaliIva || [])].sort((a, b) => {
       const ma = parseAliquota(a?.aliquota)
       const mb = parseAliquota(b?.aliquota)
       const sa = ma === ra ? 0 : 1
@@ -186,93 +181,27 @@ function CausaleIvaCombobox({
       const lb = `${buildCausaleIvaLabel(b)} ${b?.descrizione || ''}`.toLowerCase()
       return la.localeCompare(lb, 'it')
     })
-    const q = (filter || '').trim().toLowerCase()
-    if (!q) return sorted
-    return sorted.filter(c => {
-      const t = `${buildCausaleIvaLabel(c)} ${c?.descrizione || ''} ${c?.codice || ''}`.toLowerCase()
-      return t.includes(q)
-    })
-  }, [causaliIva, filter, rowAliquota, buildCausaleIvaLabel, parseAliquota])
+  }, [causaliIva, rowAliquota, buildCausaleIvaLabel, parseAliquota])
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', minWidth: 0 }}>
-      <div style={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-        <input
-          type="text"
-          readOnly={!open}
-          value={open ? filter : displayLabel}
-          placeholder="Cerca causale IVA…"
-          disabled={disabled}
-          onFocus={() => {
-            setOpen(true)
-            setFilter(displayLabel)
-          }}
-          onChange={e => {
-            setFilter(e.target.value)
-            setOpen(true)
-            traceStep('UI_INPUT_CHANGE', { value: e.target.value, payload: { field: 'causale_iva_combobox_filter', rowAliquota } })
-          }}
-          style={{ flex: 1, minWidth: 0 }}
-        />
-        <button
-          type="button"
-          className="btn-sec"
-          disabled={disabled}
-          aria-label="Apri elenco causali IVA"
-          onClick={() => {
-            setOpen(o => !o)
-            if (!open) setFilter(displayLabel)
-          }}
-          style={{ padding: '.25rem .45rem', fontSize: '.7rem' }}
-        >
-          ▼
-        </button>
-      </div>
-      {open && (
-        <ul
-          style={{
-            position: 'absolute',
-            zIndex: 50,
-            left: 0,
-            right: 0,
-            maxHeight: 220,
-            overflowY: 'auto',
-            margin: '.2rem 0 0',
-            padding: '.25rem 0',
-            listStyle: 'none',
-            background: 'var(--card, #fff)',
-            border: '1px solid var(--bd)',
-            borderRadius: 4,
-            boxShadow: '0 4px 12px rgba(0,0,0,.12)'
-          }}
-        >
-          {options.map(c => (
-            <li
-              key={c.id}
-              style={{
-                padding: '.35rem .6rem',
-                cursor: 'pointer',
-                fontSize: '.78rem',
-                background: String(c.id) === String(value) ? 'rgba(212,175,55,.12)' : undefined
-              }}
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => {
-                onChange(c.id)
-                setOpen(false)
-                setFilter('')
-                traceStep('UI_INPUT_CHANGE', { value: c.id, payload: { field: 'causale_iva_combobox', rowAliquota } })
-              }}
-            >
-              {buildCausaleIvaLabel(c)} — {c.descrizione || ''}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <BaseCombobox
+      value={value || ''}
+      onChange={(id) => {
+        traceStep('UI_INPUT_CHANGE', { value: id, payload: { field: 'causale_iva_combobox', rowAliquota } })
+        onChange(id)
+      }}
+      options={options}
+      getOptionId={(c) => c.id}
+      getOptionLabel={(c) => `${buildCausaleIvaLabel(c)} — ${c.descrizione || ''}`.trim()}
+      placeholder="Cerca causale IVA…"
+      searchable={true}
+      maxItems={140}
+      disabled={disabled}
+    />
   )
 }
 
-/** Riga tabella scrittura guidata — log props per binding causale_iva_id (anche a livello riga se presente). */
+/** Riga tabella scrittura guidata â€” log props per binding causale_iva_id (anche a livello riga se presente). */
 function PrimaNotaGuidataRigaRow({
   r,
   rowIndex,
@@ -302,26 +231,23 @@ function PrimaNotaGuidataRigaRow({
   return (
     <tr style={!totalsBilanciata ? { background: 'rgba(255,92,92,.05)' } : undefined}>
       <td onFocus={() => onFocusRow(r.id)}>
-        <select
+        <BaseCombobox
           value={r.conto_id || ''}
-          onChange={e => {
-            const value = e.target.value
+          onChange={(value) => {
             traceStep('UI_INPUT_CHANGE', { value, payload: { field: 'conto_id', rowId: r.id, rowIndex } })
             updateRow(r.id, { conto_id: value })
           }}
           disabled={stato === 'confermata'}
-          style={{ width: '100%' }}
-        >
-          <option value="">— Seleziona conto —</option>
-          {pianoConti.map(c => (
-            <option key={c.id} value={c.id}>
-              {(c.codice ? `${c.codice} · ` : '') + (c.descrizione || c.nome || '')}
-            </option>
-          ))}
-        </select>
+          options={pianoConti}
+          getOptionId={(c) => c.id}
+          getOptionLabel={(c) => (c.codice ? `${c.codice} · ` : '') + (c.descrizione || c.nome || '')}
+          placeholder="— Seleziona conto —"
+          searchable={true}
+          maxItems={140}
+        />
       </td>
       <td onFocus={() => onFocusRow(r.id)}>
-        <input
+        <BaseInput
           value={r.descrizione || ''}
           onChange={e => {
             const value = e.target.value
@@ -333,7 +259,7 @@ function PrimaNotaGuidataRigaRow({
         />
       </td>
       <td style={{ textAlign: 'right' }} onFocus={() => onFocusRow(r.id)}>
-        <input
+        <BaseInput
           inputMode="decimal"
           style={{ textAlign: 'right' }}
           value={moneyInputValue(r.dare)}
@@ -348,7 +274,7 @@ function PrimaNotaGuidataRigaRow({
         />
       </td>
       <td style={{ textAlign: 'right' }} onFocus={() => onFocusRow(r.id)}>
-        <input
+        <BaseInput
           inputMode="decimal"
           style={{ textAlign: 'right' }}
           value={moneyInputValue(r.avere)}
@@ -369,7 +295,7 @@ function PrimaNotaGuidataRigaRow({
           style={{ padding: '.25rem .45rem', fontSize: '.72rem' }}
           title="Elimina riga"
         >
-          🗑️
+          Elimina
         </button>
       </td>
     </tr>
@@ -418,7 +344,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
       setError(null)
       try {
         // Nota: niente backend nuovo. Usiamo in lettura `documenti_contabilita` filtrando per soggetto.
-        // "Aperte" qui = fatture del soggetto con totale>0 e non già “chiuse” nella UI corrente.
+        // "Aperte" qui = fatture del soggetto con totale>0 e non giÃ  â€œchiuseâ€ nella UI corrente.
         const { data, error: e } = soggettoKey.piva
           ? await contabilitaRepo.getDocumentiContabilitaBySoggettoPiva(soggettoKey.piva)
           : await contabilitaRepo.getDocumentiContabilitaBySoggettoCf(soggettoKey.cf)
@@ -494,7 +420,7 @@ function Partitario({ clienteFornitoreId, clientiFornitori, closedMap, setClosed
       </div>
 
       <div style={{ marginTop: '.75rem' }}>
-        {loading && <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>⏳ Carico fatture…</div>}
+        {loading && <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>Carico fatture…</div>}
         {!loading && error && <div style={{ fontSize: '.8rem', color: 'var(--rd)' }}>{error}</div>}
         {!loading && !error && items.length === 0 && (
           <div style={{ fontSize: '.8rem', color: 'var(--mu)' }}>Nessuna fattura aperta trovata.</div>
@@ -561,6 +487,7 @@ export function PrimaNotaGuidata({
   causaliIva = [],
   clientiFornitori = [],
   initialDraft = null,
+  sourceDoc = null,
   fromImport = false
   // societaId viene passato dal parent (no backend change)
   ,societaId = null
@@ -570,14 +497,14 @@ export function PrimaNotaGuidata({
   ,canNext = false
   ,onDraftChange = null
 }) {
-  // ─── HEADER (semplice) ────────────────────────────────────────
+  // â”€â”€â”€ HEADER (semplice) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [header, setHeaderInternal] = useState(() => ({
     data_registrazione: initialDraft?.header?.data_registrazione || todayStr(),
     causale_id: initialDraft?.header?.causale_id || '',
     cliente_fornitore_id: initialDraft?.header?.cliente_fornitore_id || ''
   }))
 
-  // ─── RIGHE (core) ─────────────────────────────────────────────
+  // â”€â”€â”€ RIGHE (core) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [rows, setRowsInternal] = useState(() => {
     const start = initialDraft?.rows?.length ? initialDraft.rows : []
     if (start.length) return start.map(r => ({ ...newRow(), ...r }))
@@ -595,7 +522,10 @@ export function PrimaNotaGuidata({
 
   const [stato, setStatoInternal] = useState(() => initialDraft?.stato || 'bozza') // bozza | confermata
   const [progressivo, setProgressivoInternal] = useState(() => initialDraft?.progressivo || null)
+  const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTabInternal] = useState('scrittura')
+  const [docPreviewOpen, setDocPreviewOpen] = useState(false)
+  const [clarificationModalItem, setClarificationModalItem] = useState(null)
 
   const [ivaRows, setIvaRowsInternal] = useState(() => normalizeIvaRowsFromDraft(initialDraft))
 
@@ -603,15 +533,161 @@ export function PrimaNotaGuidata({
     causale_iva_id: initialDraft?.ivaUi?.causale_iva_id || initialDraft?.meta?.causale_iva_id || '',
     label: '',
     aliquota: null,
-    percDetraibile: 100,
+    percDetraibile: initialDraft?.ivaUi?.percDetraibile ?? 100,
     imponibile: null,
     iva: null,
-    ivaIndetraibile: 0,
+    ivaIndetraibile: initialDraft?.ivaUi?.ivaIndetraibile ?? 0,
+    regime_iva: initialDraft?.ivaUi?.regime_iva ?? null,
     multi_riepilogo: initialDraft?.ivaUi?.multi_riepilogo === true
   }))
+  const [ivaInsights, setIvaInsights] = useState([])
+  const [ivaInsightsLoading, setIvaInsightsLoading] = useState(false)
+  const [historicalContoSuggestions, setHistoricalContoSuggestions] = useState([])
+  const [historicalContoLoading, setHistoricalContoLoading] = useState(false)
+  const [historicalLearningRows, setHistoricalLearningRows] = useState([])
+  const [operatorClarifications, setOperatorClarifications] = useState(() => initialDraft?.operatorClarifications || [])
+  const ivaInsightsDisplay = useMemo(() => {
+    if (!Array.isArray(ivaInsights)) return []
+    const seen = new Set()
+    const out = []
+    for (const ins of ivaInsights) {
+      const key = ins.fingerprint || ins.titolo || ins.descrizione
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      out.push(ins)
+    }
+    return out
+  }, [ivaInsights])
+  const ivaInsightsLimited = useMemo(() => ivaInsightsDisplay.slice(0, 3), [ivaInsightsDisplay])
+  const ivaInsightsExtraCount = ivaInsightsDisplay.length > ivaInsightsLimited.length ? (ivaInsightsDisplay.length - ivaInsightsLimited.length) : 0
 
   const latestGuidataRef = useRef({})
   latestGuidataRef.current = { header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap }
+
+  const sourceDatiEstratti = useMemo(() => {
+    if (!sourceDoc?.dati_estratti) return {}
+    if (typeof sourceDoc.dati_estratti === 'object') return sourceDoc.dati_estratti
+    try {
+      return JSON.parse(sourceDoc.dati_estratti)
+    } catch {
+      return {}
+    }
+  }, [sourceDoc?.dati_estratti])
+
+  const sourceFileUrl = useMemo(() => {
+    if (!sourceDoc) return ''
+    if (sourceDoc.file_url) return sourceDoc.file_url
+    if (sourceDoc.file_path) {
+      const { data } = contabilitaRepo.getDocumentoPublicUrl(sourceDoc.file_path)
+      return data?.publicUrl || ''
+    }
+    return ''
+  }, [sourceDoc?.id, sourceDoc?.file_url, sourceDoc?.file_path])
+
+  const preferPdfPreview = useMemo(() => {
+    const mt = String(sourceDoc?.mime_type || '').toLowerCase()
+    const name = String(sourceDoc?.filename || '').toLowerCase()
+    const url = String(sourceFileUrl || '').toLowerCase()
+    return Boolean(sourceFileUrl) && (mt.includes('pdf') || name.endsWith('.pdf') || url.includes('.pdf'))
+  }, [sourceDoc?.mime_type, sourceDoc?.filename, sourceFileUrl])
+
+  const canPreviewSource = Boolean(sourceDoc && (sourceFileUrl || sourceDatiEstratti?.xml_content))
+
+  const contoSuggestions = useMemo(
+    () => suggestContiPerDocumento({ doc: sourceDoc, pianoConti, maxResults: 3 }),
+    [
+      sourceDoc?.id,
+      sourceDoc?.tipo_documento,
+      sourceDoc?.soggetto_denominazione,
+      sourceDoc?.soggetto_piva,
+      sourceDoc?.soggetto_cf,
+      sourceDoc?.dati_estratti,
+      pianoConti,
+    ]
+  )
+
+  const historicalIdentity = useMemo(
+    () => extractHistoricalSearchIdentity(sourceDoc),
+    [sourceDoc?.id, sourceDoc?.soggetto_piva, sourceDoc?.soggetto_cf, sourceDoc?.soggetto_denominazione, sourceDoc?.dati_estratti, sourceDoc?.ai_raw_response]
+  )
+
+  useEffect(() => {
+    let alive = true
+    if (!societaId) {
+      setHistoricalLearningRows([])
+      return () => {
+        alive = false
+      }
+    }
+    contabilitaRepo
+      .getArchivioStoricoAiLearning([societaId], { limit: 5000 })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[PrimaNotaGuidata] historical learning rows', error.message)
+          setHistoricalLearningRows([])
+          return
+        }
+        setHistoricalLearningRows(Array.isArray(data) ? data : [])
+      })
+      .catch((error) => {
+        if (!alive) return
+        console.warn('[PrimaNotaGuidata] historical learning rows', error?.message || error)
+        setHistoricalLearningRows([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [societaId])
+
+  useEffect(() => {
+    let alive = true
+    const { piva, cf, nomeLike, nome } = historicalIdentity || {}
+    if (!sourceDoc?.id || (!piva && !cf && !nomeLike)) {
+      setHistoricalContoSuggestions([])
+      return () => {
+        alive = false
+      }
+    }
+    setHistoricalContoLoading(true)
+    contabilitaRepo
+      .getHistoricalConfirmedDocumentsForCounterparty({
+        piva,
+        cf,
+        nomeLike: nomeLike || nome,
+        limit: 80,
+      })
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          console.warn('[PrimaNotaGuidata] historical conto suggestions', error.message)
+          setHistoricalContoSuggestions([])
+          return
+        }
+        const label = piva
+          ? `${(data || []).length} fatture confermate con stessa P.IVA`
+          : cf
+            ? `${(data || []).length} fatture confermate con stesso CF`
+            : `${(data || []).length} documenti confermati con ragione sociale simile`
+        setHistoricalContoSuggestions(
+          buildHistoricalContoSuggestions({
+            historicalDocs: data || [],
+            learningRows: historicalLearningRows,
+            pianoConti,
+            maxResults: 3,
+            sourceLabel: label,
+            currentDoc: sourceDoc,
+            currentSocietaId: societaId,
+          })
+        )
+      })
+      .finally(() => {
+        if (alive) setHistoricalContoLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [sourceDoc?.id, historicalIdentity?.piva, historicalIdentity?.cf, historicalIdentity?.nomeLike, historicalLearningRows, pianoConti, societaId])
 
   const runSetHeader = useCallback((updaterOrValue) => {
     setHeaderInternal(prevH => {
@@ -710,10 +786,106 @@ export function PrimaNotaGuidata({
     })
   }, [])
 
+  const reliability = useMemo(() => {
+    if (!sourceDoc) return null
+    const raw = Number(sourceDoc?.ai_confidence)
+    const score = Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : 0
+    const tier = score >= 75 ? 'high' : score >= 50 ? 'medium' : 'low'
+    return { score, tier }
+  }, [sourceDoc?.ai_confidence])
+
+  const engineSource = useMemo(() => {
+    const metodo = String(sourceDoc?.ai_raw_response?.metodo || '').toLowerCase()
+    if (metodo.includes('ollama') || metodo.includes('xml_deterministico') || metodo.includes('local')) return 'locale'
+    if (metodo.includes('openai') || metodo.includes('online') || metodo.includes('gateway') || metodo.includes('api')) return 'online'
+    return 'sconosciuto'
+  }, [sourceDoc?.ai_raw_response?.metodo])
+
+  const operatorAssistItems = useMemo(
+    () =>
+      buildOperatorAssistItems({
+        doc: sourceDoc,
+        form: {
+          cliente_fornitore_id: header.cliente_fornitore_id,
+          causale_iva_id: ivaUi.causale_iva_id,
+          operator_clarifications: operatorClarifications,
+        },
+        reliability,
+        contoSuggestions,
+        historicalContoSuggestions,
+        causaliIva,
+        includeDocumentType: false,
+        includeAccountMapping: true,
+        includeVatCausale: true,
+        accountFieldName: 'cliente_fornitore_id',
+        accountSearchFieldName: null,
+        aiSourceFieldName: 'cliente_fornitore_da_ai',
+        historicalSourceFieldName: 'cliente_fornitore_da_storico',
+      }),
+    [
+      sourceDoc,
+      header.cliente_fornitore_id,
+      ivaUi.causale_iva_id,
+      operatorClarifications,
+      reliability,
+      contoSuggestions,
+      historicalContoSuggestions,
+      causaliIva,
+    ]
+  )
+
+  const resolveOperatorAssist = (item, option, manualText = '', context = {}) => {
+    if (!item) return
+    if (item.type === 'uncertain_account_mapping') {
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'cliente_fornitore_id')) {
+        runSetHeader((prev) => ({
+          ...prev,
+          cliente_fornitore_id: option?.patch?.cliente_fornitore_id ?? '',
+        }))
+      }
+    }
+    if (item.type === 'uncertain_vat_causale') {
+      if (option?.patch && Object.prototype.hasOwnProperty.call(option.patch, 'causale_iva_id')) {
+        runSetIvaUi((prev) => ({
+          ...prev,
+          causale_iva_id: option?.patch?.causale_iva_id || '',
+        }))
+      }
+    }
+    setOperatorClarifications((prev) => appendOperatorClarification(prev, item, option, manualText, {
+      issue_type: item.type,
+      shown_options: item.options,
+      selected_answer: option?.label || manualText || 'Manuale',
+      rerun_result: context.rerun_result || 'continue',
+      engine_source: engineSource,
+    }))
+    setClarificationModalItem(null)
+  }
+
   useEffect(() => {
     traceStep('STATE_UPDATED', buildGuidataSnapshot({ header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap }))
     traceIva('STATE_AFTER_COMMIT', 'state', ivaUi?.causale_iva_id ?? null)
   }, [header, rows, ivaUi, ivaRows, stato, progressivo, activeTab, partitarioClosedMap])
+
+  const docIdForInsights = initialDraft?.meta?.documento_import_id
+  useEffect(() => {
+    let alive = true
+    if (!societaId || !docIdForInsights) {
+      setIvaInsights([])
+      return () => { alive = false }
+    }
+    setIvaInsightsLoading(true)
+    loadIvaInsightsForSocieta(societaId, { docIds: [docIdForInsights] })
+      .then((res) => {
+        if (!alive) return
+        const rows = res.byDocId?.[String(docIdForInsights)] || []
+        setIvaInsights(rows)
+      })
+      .finally(() => {
+        if (alive) setIvaInsightsLoading(false)
+      })
+    return () => { alive = false }
+  }, [societaId, docIdForInsights])
 
   const selectedCausale = useMemo(
     () => causali.find(c => String(c.id) === String(header.causale_id)),
@@ -723,7 +895,7 @@ export function PrimaNotaGuidata({
   const isFornitoreRow = (r) => {
     const d = String(r?.descrizione || '').toLowerCase()
     if (d.includes('fornitore')) return true
-    // Fallback: nella scrittura import, la riga fornitore è tipicamente quella con AVERE valorizzato
+    // Fallback: nella scrittura import, la riga fornitore Ã¨ tipicamente quella con AVERE valorizzato
     return toMoneyNumber(r?.avere) > 0
   }
 
@@ -811,6 +983,8 @@ export function PrimaNotaGuidata({
     runSetPartitarioClosedMap(initialDraft?.partitarioClosedMap || {})
     runSetStato(initialDraft?.stato || 'bozza')
     runSetProgressivo(initialDraft?.progressivo || null)
+    setOperatorClarifications(initialDraft?.operatorClarifications || [])
+    setClarificationModalItem(null)
 
     // Reset completo (evita di trascinare label/aliquota dal documento precedente)
     runSetIvaUi({
@@ -821,6 +995,7 @@ export function PrimaNotaGuidata({
       imponibile: initialDraft?.ivaUi?.imponibile ?? null,
       iva: initialDraft?.ivaUi?.iva ?? null,
       ivaIndetraibile: initialDraft?.ivaUi?.ivaIndetraibile ?? 0,
+      regime_iva: initialDraft?.ivaUi?.regime_iva ?? null,
       multi_riepilogo: initialDraft?.ivaUi?.multi_riepilogo === true
     })
   }, [initialDraft?.meta?.documento_import_id, runSetHeader, runSetRows, runSetIvaRows, runSetPartitarioClosedMap, runSetStato, runSetProgressivo, runSetIvaUi])
@@ -836,10 +1011,11 @@ export function PrimaNotaGuidata({
       meta: initialDraft?.meta || {},
       partitarioClosedMap,
       ivaRows,
-      ivaUi
+      ivaUi,
+      operatorClarifications,
     }
     onDraftChange(draft)
-  }, [stato, progressivo, header, rows, partitarioClosedMap, ivaRows, ivaUi])
+  }, [stato, progressivo, header, rows, partitarioClosedMap, ivaRows, ivaUi, operatorClarifications])
 
   const selectedCausaleIva = useMemo(
     () => causaliIva.find(c => String(c.id) === String(ivaUi.causale_iva_id)) || null,
@@ -914,14 +1090,21 @@ export function PrimaNotaGuidata({
     const aliq = parseAliquota(selectedCausaleIva.aliquota) ?? 0
     const percDet = getPercDetraibileFromCausale(selectedCausaleIva)
 
-    // Da import: imponibile/IVA arrivano dal documento (e da più DatiRiepilogo). NON ricalcolare da
-    // totale documento / (1+aliquota): con più aliquote (o 0% + 22%) produrrebbe IVA errata (es. 10,81 vs 10,45).
+    // Da import: imponibile/IVA arrivano dal documento (e da piÃ¹ DatiRiepilogo). NON ricalcolare da
+    // totale documento / (1+aliquota): con piÃ¹ aliquote (o 0% + 22%) produrrebbe IVA errata (es. 10,81 vs 10,45).
     if (fromImport) {
+      const nextRegime = classifyIvaRegime({
+        causale: selectedCausaleIva,
+        natura: null,
+        aliquota: aliq,
+      })
       runSetIvaUi(prev => ({
         ...prev,
         label: prev.label || buildCausaleIvaLabel(selectedCausaleIva),
         percDetraibile: percDet,
-        aliquota: prev.aliquota != null ? prev.aliquota : aliq
+        aliquota: prev.aliquota != null ? prev.aliquota : aliq,
+        ivaIndetraibile: Math.round((toMoneyNumber(prev.iva) * (100 - percDet) / 100) * 100) / 100,
+        regime_iva: prev.regime_iva || nextRegime
       }))
       return
     }
@@ -939,7 +1122,8 @@ export function PrimaNotaGuidata({
       percDetraibile: percDet,
       imponibile: impon,
       iva: ivaCalc,
-      ivaIndetraibile: ivaInd
+      ivaIndetraibile: ivaInd,
+      regime_iva: prev.regime_iva || classifyIvaRegime({ causale: selectedCausaleIva, natura: null, aliquota: aliq })
     }))
 
     applyIvaToRows({ imponibile: impon, iva: ivaCalc, ivaIndetraibile: ivaInd })
@@ -960,6 +1144,16 @@ export function PrimaNotaGuidata({
     () => [...ivaRows].sort((a, b) => a.aliquota - b.aliquota),
     [ivaRows]
   )
+
+  const regimeSummary = useMemo(() => {
+    const regimes = ivaRows.map(r => r.regime_iva || null).filter(Boolean)
+    const uniq = Array.from(new Set(regimes))
+    return {
+      list: uniq,
+      unknown: ivaRows.some(r => r.regime_iva === 'unknown' || !r.regime_iva),
+      mixed: uniq.length > 1
+    }
+  }, [ivaRows])
 
   const ivaTotalsFromRows = useMemo(() => {
     const ti = ivaRows.reduce((s, r) => s + r.imponibile, 0)
@@ -986,6 +1180,20 @@ export function PrimaNotaGuidata({
 
   const lastFocusedRowId = useRef(null)
   const onFocusRow = (rowId) => { lastFocusedRowId.current = rowId }
+  const applySuggestedContoToRow = useCallback((suggestion) => {
+    if (!suggestion?.id || stato === 'confermata') return
+    const targetRowId = lastFocusedRowId.current || rows.find((r) => !r.conto_id)?.id || rows[0]?.id
+    if (!targetRowId) return
+    runSetRows((prev) => prev.map((r) => (
+      r.id === targetRowId
+        ? {
+            ...r,
+            conto_id: suggestion.id,
+            descrizione: r.descrizione || suggestion.descrizione,
+          }
+        : r
+    )))
+  }, [rows, runSetRows, stato])
 
   const onConfirm = () => {
     const year = new Date(header.data_registrazione || todayStr()).getFullYear()
@@ -1003,9 +1211,19 @@ export function PrimaNotaGuidata({
   }
 
   async function handleSave() {
+    if (saving) return null
     try {
+      setSaving(true)
       if (!totals?.bilanciata) {
         alert('Scrittura non bilanciata')
+        return null
+      }
+      if (!header?.data_registrazione) {
+        alert('Data registrazione mancante')
+        return null
+      }
+      if (!rows.some(hasImporto)) {
+        alert('Inserisci almeno una riga con importo')
         return null
       }
       if (isFattura) {
@@ -1014,6 +1232,12 @@ export function PrimaNotaGuidata({
           if (missing.length) {
             missing.forEach(row => traceStep('IVA_ROW_MISSING_CAUSALE', { row }, {}))
             alert('Una o più righe IVA non hanno causale assegnata')
+            return null
+          }
+          const invalidRows = ivaRows.filter(r => !Number.isFinite(r.imponibile) || !Number.isFinite(r.iva))
+          if (invalidRows.length) {
+            invalidRows.forEach(row => traceStep('IVA_ROW_INVALID', { row }, {}))
+            alert('Una o più righe IVA hanno importi non validi')
             return null
           }
         } else if (!String(ivaUi.causale_iva_id || '').trim()) {
@@ -1077,38 +1301,79 @@ export function PrimaNotaGuidata({
       if (complete.error) throw complete.error
       if (complete.partIns?.error) console.error('[PrimaNotaGuidata] partitario insert error', complete.partIns.error)
 
+      const learningCandidate = [...rows]
+        .filter((r) => {
+          const conto = String(r?.conto_id || '').trim()
+          if (!conto) return false
+          if (String(conto) === String(header?.cliente_fornitore_id || '')) return false
+          const desc = String(r?.descrizione || '').toLowerCase()
+          return !desc.includes('iva')
+        })
+        .sort((a, b) => {
+          const va = Math.max(toMoneyNumber(a?.dare), toMoneyNumber(a?.avere))
+          const vb = Math.max(toMoneyNumber(b?.dare), toMoneyNumber(b?.avere))
+          return vb - va
+        })[0] || null
+
+      if (sourceDoc?.id && learningCandidate?.conto_id) {
+        void fetch('/api/accounting/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documentId: sourceDoc.id,
+            finalContoId: learningCandidate.conto_id,
+            primaNotaRigaId: learningCandidate.id || null,
+          }),
+        }).catch((error) => {
+          console.warn('[PrimaNotaGuidata] learning feedback', error?.message || error)
+        })
+      }
+
       return { primaNotaId: complete.data?.primaNotaId }
     } catch (e) {
       console.error('[PrimaNotaGuidata] handleSave error', e)
       return null
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>📝 Prima Nota (Guidata)</div>
-          <div style={{ fontSize: '.75rem', color: 'var(--mu)' }}>
-            {stato === 'confermata'
-              ? <>Confermata {progressivo ? <>· Progressivo <strong style={{ color: 'var(--gld2)' }}>{progressivo}</strong></> : null}</>
-              : 'Bozza · Modifica rapida'}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <div style={{ display: 'flex', gap: '.35rem', alignItems: 'center' }}>
+    <div className="erp-guided-shell">
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title="Inserimento guidato"
+        context={
+          stato === 'confermata'
+            ? `Confermata${progressivo ? ` · Progressivo ${progressivo}` : ''}`
+            : 'Bozza · Modifica rapida'
+        }
+        secondaryAction={
+          <>
+            <button
+              className="btn-sec"
+              onClick={() => {
+                setDocPreviewOpen(true)
+              }}
+              disabled={!canPreviewSource}
+              style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}
+              title={canPreviewSource ? 'Apri anteprima documento' : 'Anteprima non disponibile'}
+            >
+              Anteprima
+            </button>
             <button className="btn-sec" onClick={() => onPrev && onPrev()} disabled={!onPrev || !canPrev} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
               ← Fattura precedente
             </button>
             <button className="btn-sec" onClick={() => onNext && onNext()} disabled={!onNext || !canNext} style={{ fontSize: '.72rem', padding: '.35rem .6rem' }}>
               Fattura successiva →
             </button>
-          </div>
-          <span className={'bdg ' + (totals.bilanciata ? 'bdg-green' : 'bdg-red')} style={{ fontSize: '.65rem' }}>
-            {totals.bilanciata ? 'Bilanciata' : `Sbilanciata (${totals.diff > 0 ? '+' : ''}${totals.diff.toFixed(2)})`}
-          </span>
-          {stato !== 'confermata' ? (
+            <span className={'bdg ' + (totals.bilanciata ? 'bdg-green' : 'bdg-red')} style={{ fontSize: '.65rem' }}>
+              {totals.bilanciata ? 'Bilanciata' : `Sbilanciata (${totals.diff > 0 ? '+' : ''}${totals.diff.toFixed(2)})`}
+            </span>
+          </>
+        }
+        primaryAction={
+          stato !== 'confermata' ? (
             <button className="btn" onClick={onConfirm} disabled={!totals.bilanciata}>
               ✓ Conferma
             </button>
@@ -1116,12 +1381,39 @@ export function PrimaNotaGuidata({
             <button className="btn-sec" onClick={onBackToDraft}>
               ↩ Torna in bozza
             </button>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
-      {/* HEADER */}
-      <div className="card" style={{ marginTop: '.9rem' }}>
+      <DocumentPreviewModal
+        open={docPreviewOpen}
+        onClose={() => setDocPreviewOpen(false)}
+        title="Anteprima documento"
+        subtitle={`${sourceDoc?.numero_documento || sourceDatiEstratti?.numero || 'Documento'} · ${sourceDoc?.soggetto_denominazione || sourceDatiEstratti?.cedente_denom || 'Soggetto'}`}
+        fileUrl={sourceFileUrl || ''}
+        filename={sourceDoc?.filename || ''}
+        mimeType={sourceDoc?.mime_type || ''}
+        xmlContent={sourceDatiEstratti?.xml_content || ''}
+        fallback={{
+          tipo_documento: sourceDoc?.tipo_documento,
+          numero_documento: sourceDoc?.numero_documento,
+          data_documento: sourceDoc?.data_documento,
+          soggetto_denominazione: sourceDoc?.soggetto_denominazione,
+          soggetto_piva: sourceDoc?.soggetto_piva,
+          soggetto_cf: sourceDoc?.soggetto_cf,
+          imponibile: sourceDoc?.imponibile,
+          iva: sourceDoc?.iva,
+          totale: sourceDoc?.totale,
+          cedente_denom: sourceDatiEstratti?.cedente_denom,
+          cedente_piva: sourceDatiEstratti?.cedente_piva,
+          cedente_cf: sourceDatiEstratti?.cedente_cf,
+          cessionario_denom: sourceDatiEstratti?.cessionario_denom,
+          cessionario_piva: sourceDatiEstratti?.cessionario_piva,
+          cessionario_cf: sourceDatiEstratti?.cessionario_cf,
+        }}
+      />
+
+      <div className="erp-flat-panel">
         <div className="form-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(160px, 1fr))' }}>
           <div className="fg">
             <label>Data registrazione</label>
@@ -1152,8 +1444,8 @@ export function PrimaNotaGuidata({
             onChange={(id) => runSetHeader(p => ({ ...p, cliente_fornitore_id: id }))}
             options={clientiFornitori.map(c => ({ ...c, id: c.id }))}
             formatOption={(c) => {
-              const nome = c.ragione_sociale || `${c.nome || ''} ${c.cognome || ''}`.trim()
-              const cod = c.codice_cliente ? `[${c.codice_cliente}] ` : ''
+              const nome = c.descrizione || c.ragione_sociale || `${c.nome || ''} ${c.cognome || ''}`.trim()
+              const cod = c.codice ? `[${c.codice}] ` : ''
               return `${cod}${nome}`.trim()
             }}
             placeholder="Cerca cliente/fornitore…"
@@ -1169,8 +1461,35 @@ export function PrimaNotaGuidata({
         </div>
       </div>
 
-      {/* TABS DINAMICHE */}
-      <div className="card" style={{ marginTop: '.75rem' }}>
+      {(ivaInsightsLoading || ivaInsightsLimited.length > 0) && (
+        <div className="erp-flat-panel">
+          {ivaInsightsLoading && ivaInsightsLimited.length === 0 && (
+            <div className="alert alert-info" style={{ margin: 0 }}>
+              Analisi IVA in corso…
+            </div>
+          )}
+          {ivaInsightsLimited.map((ins) => {
+            const sev = String(ins.gravita || '').toLowerCase()
+            const tipo = String(ins.tipo || '').toLowerCase()
+            const isWarn = tipo === 'iva_anomaly'
+              ? (sev === 'critical' || sev === 'warning' || sev === 'high' || sev === 'medium')
+              : false
+            return (
+              <div key={ins.fingerprint || ins.titolo} className={`alert ${isWarn ? 'alert-warn' : 'alert-info'}`} style={{ marginBottom: '.35rem' }}>
+                <strong>{ins.titolo || 'Segnale IVA'}</strong>
+                <div style={{ fontSize: '.72rem', marginTop: '.2rem' }}>{ins.descrizione}</div>
+              </div>
+            )
+          })}
+          {ivaInsightsExtraCount > 0 && (
+            <div className="alert alert-info" style={{ marginBottom: '.35rem' }}>
+              Altri {ivaInsightsExtraCount} segnali IVA disponibili.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="erp-flat-panel">
         <Tabs
           tabs={tabs}
           activeId={activeTab}
@@ -1181,10 +1500,9 @@ export function PrimaNotaGuidata({
         />
       </div>
 
-      {/* TAB: SCRITTURA */}
       {activeTab === 'scrittura' && (
-        <div className="card" style={{ marginTop: '.75rem', padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '.75rem 1rem', borderBottom: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+        <div className="erp-table-shell">
+          <div className="erp-table-head">
             <div style={{ fontSize: '.8rem', fontWeight: 700 }}>Righe Prima Nota</div>
             <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }}>
               <button className="btn-sec" onClick={addRow} disabled={stato === 'confermata'}>+ Riga</button>
@@ -1194,17 +1512,18 @@ export function PrimaNotaGuidata({
             </div>
           </div>
 
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th style={{ width: '34%' }}>Conto</th>
-                <th>Descrizione</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Dare</th>
-                <th style={{ width: 140, textAlign: 'right' }}>Avere</th>
-                <th style={{ width: 56 }} />
-              </tr>
-            </thead>
-            <tbody>
+          <div className="erp-table-body">
+            <BaseTable wrap={false}>
+              <thead>
+                <tr>
+                  <th style={{ width: '34%' }}>Conto</th>
+                  <th>Descrizione</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Dare</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Avere</th>
+                  <th style={{ width: 56 }} />
+                </tr>
+              </thead>
+              <tbody>
               {(() => {
                 traceStep('UI_RENDER_RIGHE', {
                   righe: rows.map((row, i) => ({
@@ -1233,11 +1552,117 @@ export function PrimaNotaGuidata({
                   ivaUiCausaleIvaId={primaryIvaCausaleForTrace}
                 />
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </BaseTable>
+          </div>
+
+          <div style={{ margin: '.75rem 1rem 0' }}>
+            <OperatorAssistPanel
+              items={operatorAssistItems}
+              onResolve={resolveOperatorAssist}
+              onManualResolve={(item, value) => resolveOperatorAssist(item, { id: 'manual', label: value, patch: {} }, value)}
+              onRequestClarification={setClarificationModalItem}
+              title="Chiarimenti guidati"
+            />
+          </div>
+
+          <OperatorClarificationModal
+            open={Boolean(clarificationModalItem)}
+            item={clarificationModalItem}
+            onClose={() => setClarificationModalItem(null)}
+            engineSource={engineSource}
+            subtitle={sourceDoc?.filename || sourceDoc?.numero_documento || 'Scrittura guidata'}
+            onOpenPreview={() => setDocPreviewOpen(true)}
+            onContinue={(item, option, manualText) => resolveOperatorAssist(item, option, manualText, { rerun_result: 'continue' })}
+            onSkip={(item) => resolveOperatorAssist(item, { id: 'skip', label: 'Salta e gestisci manualmente', patch: {} }, '', { rerun_result: 'skip' })}
+            onReviewLater={(item) => resolveOperatorAssist(item, { id: 'review_later', label: 'Rivedi dopo', patch: {} }, '', { rerun_result: 'review_later' })}
+          />
+
+          <div className="erp-flat-panel" style={{ margin: '.75rem 1rem 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+                  SUGGERIMENTI AI
+                </div>
+                {Array.isArray(contoSuggestions) && contoSuggestions.length > 0 ? (
+                  <div style={{ display: 'grid', gap: '.35rem' }}>
+                    {contoSuggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="btn-sec"
+                        onClick={() => applySuggestedContoToRow(s)}
+                        disabled={stato === 'confermata'}
+                        style={{ textAlign: 'left', padding: '.45rem .55rem', borderRadius: 8 }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                          <div style={{ fontWeight: 700 }}>
+                            <code style={{ color: 'var(--gold)' }}>{s.codice}</code> {s.descrizione}
+                          </div>
+                          <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                        </div>
+                        {Array.isArray(s.reasons) && s.reasons.length > 0 && (
+                          <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                            {s.reasons.join(' · ')}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                    Nessun conto da suggerire con sufficiente confidenza.
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: '.68rem', fontWeight: 700, color: '#34c27a', marginBottom: '.25rem', letterSpacing: '.06em' }}>
+                  STORICO CONFERMATO
+                </div>
+                {historicalContoLoading ? (
+                  <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                    Cerco fatture confermate nello storico...
+                  </div>
+                ) : Array.isArray(historicalContoSuggestions) && historicalContoSuggestions.length > 0 ? (
+                  <div style={{ display: 'grid', gap: '.35rem' }}>
+                    {historicalContoSuggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="btn-sec"
+                        onClick={() => applySuggestedContoToRow(s)}
+                        disabled={stato === 'confermata'}
+                        style={{
+                          textAlign: 'left',
+                          padding: '.45rem .55rem',
+                          borderRadius: 8,
+                          background: 'rgba(52,194,122,.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', alignItems: 'baseline' }}>
+                          <div style={{ fontWeight: 700 }}>
+                            <code style={{ color: '#34c27a' }}>{s.codice}</code> {s.descrizione}
+                          </div>
+                          <span style={{ fontSize: '.65rem', color: 'var(--mu)' }}>{s.score}%</span>
+                        </div>
+                        <div style={{ fontSize: '.68rem', color: 'var(--mu)', marginTop: '.15rem' }}>
+                          {Array.isArray(s.reasons) && s.reasons.length > 0 ? s.reasons.join(' · ') : 'Storico confermato'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '.74rem', color: 'var(--mu)', padding: '.4rem .5rem', borderRadius: 8, border: '1px dashed var(--bd)' }}>
+                    Nessun storico confermato utile trovato.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           {!totals.bilanciata && (
-            <div style={{ padding: '.7rem 1rem', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
+            <div style={{ padding: '.7rem 1rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
               <div style={{ fontSize: '.78rem', color: 'var(--rd)', fontWeight: 700 }}>
                 Scrittura sbilanciata: correggi Dare/Avere per confermare.
               </div>
@@ -1249,13 +1674,22 @@ export function PrimaNotaGuidata({
         </div>
       )}
 
-      {/* TAB: MOVIMENTI IVA — una riga per aliquota (ivaRows) */}
       {activeTab === 'iva' && (
-        <div className="card" style={{ marginTop: '.75rem' }}>
+        <div className="erp-flat-panel">
           <div style={{ fontWeight: 800, marginBottom: '.35rem' }}>Movimenti IVA</div>
           <div style={{ fontSize: '.78rem', color: 'var(--mu)', marginBottom: '.75rem' }}>
             Una riga per ogni aliquota presente nel documento. La verità IVA è in queste righe; la scrittura si aggiorna di conseguenza.
           </div>
+          {regimeSummary.unknown && (
+            <div className="alert alert-warn" style={{ marginBottom: '.6rem' }}>
+              Regime IVA non determinato su una o più righe. Verifica causale e natura FE.
+            </div>
+          )}
+          {regimeSummary.mixed && (
+            <div className="alert alert-info" style={{ marginBottom: '.6rem' }}>
+              Regime IVA misto: {regimeSummary.list.map(r => formatIvaRegimeLabel(r)).join(', ')}
+            </div>
+          )}
 
           {ivaRows.length === 0 ? (
             <div style={{ fontSize: '.85rem', color: 'var(--mu)' }}>
@@ -1265,25 +1699,27 @@ export function PrimaNotaGuidata({
             <>
               <div style={{ display: 'grid', gap: '.5rem' }}>
                 {ivaRowsDisplay.map((row, idx) => {
-                  const hue = (row.aliquota * 17) % 360
-                  const bg = idx % 2 === 0 ? `hsla(${hue}, 32%, 93%, 0.55)` : 'transparent'
                   return (
                     <div
                       key={row.id}
+                      className="iva-row"
                       style={{
                         display: 'grid',
                         gridTemplateColumns: 'minmax(72px, 88px) minmax(100px, 1fr) minmax(100px, 1fr) minmax(180px, 2fr)',
                         gap: '.5rem',
                         alignItems: 'start',
                         padding: '.55rem .65rem',
-                        borderRadius: 6,
-                        border: '1px solid var(--bd)',
-                        background: bg
+                        borderRadius: 14,
+                        border: '1px solid var(--border-subtle)',
+                        background: 'var(--bg-secondary)',
                       }}
                     >
                       <div>
                         <div style={{ fontSize: '.65rem', color: 'var(--mu)' }}>Aliquota</div>
                         <div style={{ fontWeight: 800 }}>{row.aliquota}%</div>
+                        <div style={{ fontSize: '.62rem', color: 'var(--mu)', marginTop: '.2rem' }}>
+                          {formatIvaRegimeLabel(row.regime_iva)}
+                        </div>
                         {row.autoResolved && (
                           <span className="bdg bdg-green" style={{ fontSize: '.58rem', marginTop: '.25rem', display: 'inline-block' }}>AUTO</span>
                         )}
@@ -1329,7 +1765,8 @@ export function PrimaNotaGuidata({
                               ...r,
                               causale_iva_id: id || null,
                               codice_interno: c?.codice_interno ?? null,
-                              autoResolved: false
+                              autoResolved: false,
+                              regime_iva: classifyIvaRegime({ causale: c, natura: r.natura, aliquota: r.aliquota })
                             } : r)))
                           }}
                           causaliIva={causaliIva}
@@ -1354,7 +1791,6 @@ export function PrimaNotaGuidata({
         </div>
       )}
 
-      {/* TAB: PARTITARIO (placeholder semplice) */}
       {activeTab === 'partitario' && (
         <Partitario
           clienteFornitoreId={header.cliente_fornitore_id}
@@ -1366,3 +1802,4 @@ export function PrimaNotaGuidata({
     </div>
   )
 }
+

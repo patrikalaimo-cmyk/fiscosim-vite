@@ -1,0 +1,366 @@
+{
+  "generatedAt": "2026-04-13T10:14:24.710Z",
+  "deployUrl": "https://fiscosim-v6.vercel.app",
+  "xmlPath": "c:\\Users\\patri\\Desktop\\fiscosim-vite\\qa\\fixtures\\IT01378570350.xml",
+  "users": [
+    {
+      "user": {
+        "label": "legacy",
+        "email": "patrik.alaimo@gmail.com"
+      },
+      "startedAt": "2026-04-13T10:14:22.900Z",
+      "tests": [
+        {
+          "id": "T1",
+          "title": "Login legacy",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "status": "FAIL",
+            "sessionStatus": 200,
+            "societaId": null,
+            "ruolo": "owner",
+            "reason": "missing_societa_default_id",
+            "sessionBody": {
+              "ok": true,
+              "user": {
+                "id": "7abb6432-9862-42d9-923a-045860ff7a92",
+                "nome": "Patrik",
+                "cognome": "Alaimo",
+                "email": "patrik.alaimo@gmail.com",
+                "ruolo": "owner",
+                "permessi": {
+                  "cu": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "f24": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "iva": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "agenda": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "import": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "clienti": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "deleghe": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "dashboard": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "simulatore": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "adempimenti": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "ammortamenti": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "impostazioni": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  },
+                  "richieste_fatture": {
+                    "leggi": true,
+                    "elimina": false,
+                    "modifica": false,
+                    "solo_assegnati": false
+                  }
+                },
+                "clienti_assegnati": [],
+                "attivo": true,
+                "auth_email": "patrik.alaimo@gmail.com"
+              }
+            }
+          },
+          "endedAt": "2026-04-13T10:14:24.386Z"
+        },
+        {
+          "id": "T3",
+          "title": "Refresh sessione",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T4",
+          "title": "Piano dei conti (load/create/edit)",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T5",
+          "title": "Causali contabili",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T6",
+          "title": "Causali IVA",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T7",
+          "title": "Prima nota guidata",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T8",
+          "title": "Registra confermati",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T9",
+          "title": "Import documento",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        },
+        {
+          "id": "T10",
+          "title": "Assenza errori RLS in console/network",
+          "startedAt": "2026-04-13T10:14:24.386Z",
+          "endedAt": "2026-04-13T10:14:24.386Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "blocked_by_missing_societa",
+            "dependsOn": "T1 legacy login/session profile"
+          }
+        }
+      ],
+      "created": {},
+      "cleanupErrors": [],
+      "profile": {
+        "authUserId": "80eb7418-4ca8-46b1-9dec-f6ce815956fd",
+        "utenteId": "7abb6432-9862-42d9-923a-045860ff7a92",
+        "societaId": null,
+        "ruolo": "owner",
+        "societaAssegnate": [],
+        "sessionStatus": 200
+      },
+      "endedAt": "2026-04-13T10:14:24.386Z"
+    },
+    {
+      "user": {
+        "label": "new",
+        "email": "patrik.alaimo@alice.it"
+      },
+      "startedAt": "2026-04-13T10:14:24.710Z",
+      "endedAt": "2026-04-13T10:14:24.710Z",
+      "tests": [
+        {
+          "id": "T2",
+          "title": "Login new",
+          "startedAt": "2026-04-13T10:14:24.710Z",
+          "endedAt": "2026-04-13T10:14:24.710Z",
+          "status": "FAIL",
+          "details": {
+            "reason": "auth_failed",
+            "error": {
+              "message": "Invalid login credentials",
+              "code": "invalid_credentials",
+              "details": null,
+              "hint": null,
+              "stack": "AuthApiError: Invalid login credentials\n    at handleError (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\lib\\fetch.js:66:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async _handleRequest (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\lib\\fetch.js:109:9)\n    at async _request (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\lib\\fetch.js:91:18)\n    at async SupabaseAuthClient.signInWithPassword (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\GoTrueClient.js:616:23)\n    at async signIn (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:98:27)\n    at async runUser (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:141:35)\n    at async safeRunUser (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:603:12)\n    at async main (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:686:18)"
+            }
+          }
+        }
+      ],
+      "created": {},
+      "cleanupErrors": [],
+      "fatalError": {
+        "message": "Invalid login credentials",
+        "code": "invalid_credentials",
+        "details": null,
+        "hint": null,
+        "stack": "AuthApiError: Invalid login credentials\n    at handleError (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\lib\\fetch.js:66:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async _handleRequest (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\lib\\fetch.js:109:9)\n    at async _request (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\lib\\fetch.js:91:18)\n    at async SupabaseAuthClient.signInWithPassword (C:\\Users\\patri\\Desktop\\fiscosim-vite\\node_modules\\@supabase\\auth-js\\dist\\main\\GoTrueClient.js:616:23)\n    at async signIn (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:98:27)\n    at async runUser (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:141:35)\n    at async safeRunUser (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:603:12)\n    at async main (file:///C:/Users/patri/Desktop/fiscosim-vite/qa/run-sprint1-smoke.mjs:686:18)"
+      }
+    }
+  ],
+  "summary": {
+    "tests": [
+      {
+        "id": "T1",
+        "title": "Login legacy",
+        "status": "FAIL"
+      },
+      {
+        "id": "T2",
+        "title": "Login new",
+        "status": "FAIL"
+      },
+      {
+        "id": "T3",
+        "title": "Refresh sessione",
+        "status": "FAIL"
+      },
+      {
+        "id": "T4",
+        "title": "Piano dei conti (load/create/edit)",
+        "status": "FAIL"
+      },
+      {
+        "id": "T5",
+        "title": "Causali contabili",
+        "status": "FAIL"
+      },
+      {
+        "id": "T6",
+        "title": "Causali IVA",
+        "status": "FAIL"
+      },
+      {
+        "id": "T7",
+        "title": "Prima nota guidata",
+        "status": "FAIL"
+      },
+      {
+        "id": "T8",
+        "title": "Registra confermati",
+        "status": "FAIL"
+      },
+      {
+        "id": "T9",
+        "title": "Import documento",
+        "status": "FAIL"
+      },
+      {
+        "id": "T10",
+        "title": "Assenza errori RLS in console/network",
+        "status": "FAIL"
+      }
+    ],
+    "failed": [
+      {
+        "id": "T1",
+        "title": "Login legacy",
+        "status": "FAIL"
+      },
+      {
+        "id": "T2",
+        "title": "Login new",
+        "status": "FAIL"
+      },
+      {
+        "id": "T3",
+        "title": "Refresh sessione",
+        "status": "FAIL"
+      },
+      {
+        "id": "T4",
+        "title": "Piano dei conti (load/create/edit)",
+        "status": "FAIL"
+      },
+      {
+        "id": "T5",
+        "title": "Causali contabili",
+        "status": "FAIL"
+      },
+      {
+        "id": "T6",
+        "title": "Causali IVA",
+        "status": "FAIL"
+      },
+      {
+        "id": "T7",
+        "title": "Prima nota guidata",
+        "status": "FAIL"
+      },
+      {
+        "id": "T8",
+        "title": "Registra confermati",
+        "status": "FAIL"
+      },
+      {
+        "id": "T9",
+        "title": "Import documento",
+        "status": "FAIL"
+      },
+      {
+        "id": "T10",
+        "title": "Assenza errori RLS in console/network",
+        "status": "FAIL"
+      }
+    ],
+    "goNoGo": "NO-GO",
+    "readiness": "Residual failures present"
+  }
+}

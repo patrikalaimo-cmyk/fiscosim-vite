@@ -75,6 +75,12 @@ export function buildDocumentoContabilitaPayload({
   totale,
   nullDate,
 }) {
+  const contoSource =
+    form.conto_da_storico ? 'storico'
+      : form.conto_da_ai ? 'ai'
+      : form.conto_id ? 'manuale'
+      : 'none'
+
   return {
     societa_id: societaId,
     tipo,
@@ -106,11 +112,15 @@ export function buildDocumentoContabilitaPayload({
       conto_id: contoId,
       conto_codice: contoCodice,
       conto_descrizione: contoDesc,
+      conto_source: contoSource,
+      conto_confirmed: Boolean(contoId),
       riepilogo_iva: form.riepilogo_iva,
       linee: form.linee || [],
       cedente_piva: form.cedente_piva,
       cedente_denom: form.cedente_denom,
       pagamenti: form.pagamenti || [],
+      operator_clarifications: form.operator_clarifications || [],
+      parcella_confirmation: form.parcella_confirmation ?? null,
     }),
   }
 }

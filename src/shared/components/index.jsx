@@ -1,6 +1,142 @@
-import { useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, cloneElement, useRef } from 'react'
+
+const HeaderBridgeContext = createContext(null)
+
+function areVisualPropsEqual(a, b) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (typeof a !== 'object' || typeof b !== 'object') return false
+  if (a.type !== b.type) return false
+
+  const propsA = a.props || {}
+  const propsB = b.props || {}
+
+  if (propsA.disabled !== propsB.disabled) return false
+  if (propsA.className !== propsB.className) return false
+
+  return isChildrenEqual(propsA.children, propsB.children)
+}
+
+function isChildrenEqual(a, b) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((item, idx) => isChildrenEqual(item, b[idx]))
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    return areVisualPropsEqual(a, b)
+  }
+  return false
+}
+
+function cloneWithRefClick(element, clickRef) {
+  if (!element) return null
+  return cloneElement(element, {
+    onClick: (e) => {
+      if (clickRef.current) {
+        clickRef.current(e)
+      }
+    }
+  })
+}
+
+export function HeaderBridgeProvider({ children }) {
+  const [header, setHeader] = useState(null)
+  const primaryClickRef = useRef(null)
+  const secondaryClickRef = useRef(null)
+
+  const clearHeader = useCallback(() => {
+    setHeader(null)
+    primaryClickRef.current = null
+    secondaryClickRef.current = null
+  }, [])
+
+  const setHeaderSafe = useCallback((next) => {
+    if (next?.primaryAction?.props?.onClick) {
+      primaryClickRef.current = next.primaryAction.props.onClick
+    }
+    if (next?.secondaryAction?.props?.onClick) {
+      secondaryClickRef.current = next.secondaryAction.props.onClick
+    }
+
+    setHeader((prev) => {
+      if (!prev && !next) return prev
+      if (!prev || !next) return next
+
+      const visualChange =
+        prev.sectionLabel !== next.sectionLabel ||
+        prev.title !== next.title ||
+        prev.context !== next.context ||
+        !areVisualPropsEqual(prev.primaryAction, next.primaryAction) ||
+        !areVisualPropsEqual(prev.secondaryAction, next.secondaryAction)
+
+      if (!visualChange) {
+        return prev
+      }
+      return next
+    })
+  }, [])
+
+  const bridgedHeader = useMemo(() => {
+    if (!header) return null
+    return {
+      ...header,
+      primaryAction: header.primaryAction ? cloneWithRefClick(header.primaryAction, primaryClickRef) : null,
+      secondaryAction: header.secondaryAction ? cloneWithRefClick(header.secondaryAction, secondaryClickRef) : null,
+    }
+  }, [header])
+
+  const value = useMemo(() => ({ header: bridgedHeader, setHeader: setHeaderSafe, clearHeader }), [bridgedHeader, setHeaderSafe, clearHeader])
+
+  return (
+    <HeaderBridgeContext.Provider value={value}>
+      {children}
+    </HeaderBridgeContext.Provider>
+  )
+}
+
+export function useHeaderBridge() {
+  return useContext(HeaderBridgeContext)
+}
 
 // ─── TAG INPUT ───────────────────────────────────────────────────
+export function ModuleHeader({
+  sectionLabel = '',
+  title,
+  context = '',
+  primaryAction = null,
+  secondaryAction = null,
+}) {
+  const bridge = useHeaderBridge()
+  const setHeader = bridge?.setHeader
+  const clearHeader = bridge?.clearHeader
+
+  useEffect(() => {
+    if (!setHeader || !clearHeader) return undefined
+    setHeader({ sectionLabel, title, context, primaryAction, secondaryAction })
+    return () => clearHeader()
+  }, [setHeader, clearHeader, sectionLabel, title, context, primaryAction, secondaryAction])
+
+  if (bridge) return null
+
+  return (
+    <div className="page-hdr">
+      <div className="page-hdr-main">
+        {sectionLabel ? <div className="page-eyebrow">{sectionLabel}</div> : null}
+        <div className="page-title">{title}</div>
+        {context ? <div className="page-sub">{context}</div> : null}
+      </div>
+      {(primaryAction || secondaryAction) ? (
+        <div className="page-hdr-actions">
+          {secondaryAction}
+          {primaryAction}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function TagInput({ value = [], onChange, placeholder = 'email@es.it' }) {
   const [input, setInput] = useState('')
 
@@ -67,10 +203,10 @@ export function SendMailModal({ onClose, cliente = null, adempimento = null, ogg
     setSending(true)
     setErr(null)
     try {
-      const res = await fetch('/api/send-email', {
+      const res = await fetch('/api/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, cc, oggetto: ogg, corpo: body })
+        body: JSON.stringify({ action: 'send', to, cc, oggetto: ogg, corpo: body })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)

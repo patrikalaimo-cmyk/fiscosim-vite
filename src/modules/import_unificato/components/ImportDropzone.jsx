@@ -24,7 +24,7 @@ export function ImportDropzone({
         cursor: uploading || !societaId ? 'not-allowed' : 'pointer',
         opacity: !societaId ? 0.72 : 1,
         background: dragOver ? 'rgba(200,164,94,.06)' : 'var(--s2)',
-        marginBottom: '1rem',
+        marginBottom: '.7rem',
         transition: 'all .2s',
       }}
     >

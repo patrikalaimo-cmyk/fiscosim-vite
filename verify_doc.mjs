@@ -1,0 +1,10 @@
+﻿import { createClient } from '@supabase/supabase-js'
+const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+const { data: docs } = await db.from('documenti_contabilita').select('id,workflow_status,validation_status,locked_by,locked_at,soggetto_piva,soggetto_denominazione,numero_documento,totale,created_at').eq('societa_id','4a728851-be5a-412c-9ce6-ec07b72fcdfa').eq('filename','IT02708430737_0EAY6.xml.p7m.xml').order('created_at',{ascending:false}).limit(3)
+console.log('DOCS:', JSON.stringify(docs,null,2))
+const { count: cpn } = await db.from('prima_nota').select('id',{count:'exact',head:true}).eq('societa_id','4a728851-be5a-412c-9ce6-ec07b72fcdfa').gte('created_at',since)
+const { count: cpnr } = await db.from('prima_nota_righe').select('id',{count:'exact',head:true}).gte('created_at',since)
+const { count: creg } = await db.from('registri_iva').select('id',{count:'exact',head:true}).eq('societa_id','4a728851-be5a-412c-9ce6-ec07b72fcdfa').gte('created_at',since)
+const { count: cpart } = await db.from('partitario').select('id',{count:'exact',head:true}).eq('societa_id','4a728851-be5a-412c-9ce6-ec07b72fcdfa').gte('created_at',since)
+console.log('prima_nota recenti:',cpn,'prima_nota_righe recenti:',cpnr,'registri_iva recenti:',creg,'partitario recenti:',cpart)

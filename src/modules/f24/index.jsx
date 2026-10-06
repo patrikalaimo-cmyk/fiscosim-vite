@@ -2,6 +2,7 @@ import { parseXMLFattura, formattaXML, CATEGORIE_CESPITI, suggerisciCespiteDeter
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { sb } from '../../lib/supabase'
 import { MESI } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -72,14 +73,14 @@ export function ModuloF24(){
   // ── RENDER ────────────────────────────────────────────────
   if(stato==='loading') return(
     <div className="page">
-      <div className="page-hdr"><div className="page-title">📋 Gestione F24</div></div>
+      <ModuleHeader sectionLabel="Fiscale" title="📋 Gestione F24" />
       <div className="loading">⏳ Caricamento modulo F24...</div>
     </div>
   );
 
   if(stato==='error') return(
     <div className="page">
-      <div className="page-hdr"><div className="page-title">📋 Gestione F24</div></div>
+      <ModuleHeader sectionLabel="Fiscale" title="📋 Gestione F24" />
       <div className="alert alert-err" style={{marginBottom:'1rem'}}>
         <div style={{fontWeight:700,marginBottom:'.35rem'}}>⚠️ Errore caricamento</div>
         <div style={{fontSize:'.8rem',marginBottom:'.75rem'}}>{errMsg}</div>
@@ -96,10 +97,11 @@ export function ModuloF24(){
 
   return(
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">📋 Gestione F24</div>
-        <div className="page-sub">Tabellone scadenze F24 — seleziona una scadenza per lavorarci</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Fiscale"
+        title="📋 Gestione F24"
+        context="Tabellone scadenze F24 — seleziona una scadenza per lavorarci"
+      />
 
       {/* TABS SCADENZE */}
       <div style={{display:'flex',gap:'.5rem',marginBottom:'1.5rem',flexWrap:'wrap',alignItems:'center'}}>
@@ -615,7 +617,7 @@ function F24RigaModal({riga,clienteNome,locked,onSave,onClose}){
               <label>F24 a zero</label>
               <div onClick={()=>!locked&&up('f24_zero',!form.f24_zero)} style={{display:'flex',alignItems:'center',gap:'.5rem',cursor:locked?'not-allowed':'pointer',padding:'.42rem 0',opacity:locked?.5:1}}>
                 <div style={{width:36,height:20,background:form.f24_zero?'var(--bl)':'var(--bd)',borderRadius:10,position:'relative',transition:'background .2s',flexShrink:0}}>
-                  <div style={{position:'absolute',top:3,left:form.f24_zero?19:3,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                  <div style={{position:'absolute',top:3,left:form.f24_zero?19:3,width:14,height:14,borderRadius:'50%',background:'var(--bg-main)',transition:'left .2s'}}/>
                 </div>
                 <span style={{fontSize:'.8rem',color:form.f24_zero?'var(--bl)':'var(--mu)'}}>{form.f24_zero?'Sì':'No'}</span>
               </div>

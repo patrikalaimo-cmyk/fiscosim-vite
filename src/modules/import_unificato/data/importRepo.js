@@ -1,4 +1,5 @@
 import { sb } from '../../../lib/supabase'
+import { syncPercipienteFromDocumentoContabilita } from '../../contabilita/application/percipientiRegistryService.js'
 
 export function findPianoContiByPiva(societaId, pivaNorm) {
   return sb
@@ -40,6 +41,28 @@ export function getAccountingEntriesByDocumentId(documentId) {
     .select('id, data, status, created_at')
     .eq('document_id', documentId)
     .order('created_at', { ascending: false })
+}
+
+export function getHistoricalConfirmedDocumentsForCounterparty({ piva = '', cf = '', nomeLike = '', limit = 80 } = {}) {
+  let q = sb
+    .from('documenti_contabilita')
+    .select('id, societa_id, conto_id, numero_documento, data_documento, tipo_documento, soggetto_denominazione, soggetto_piva, soggetto_cf, causale_iva, causale_iva_codice, validation_status, created_at')
+    .eq('validation_status', 'confirmed')
+    .not('conto_id', 'is', null)
+    .order('data_documento', { ascending: false })
+    .limit(limit)
+
+  if (piva && cf) {
+    q = q.or(`soggetto_piva.eq.${piva},soggetto_cf.eq.${cf}`)
+  } else if (piva) {
+    q = q.eq('soggetto_piva', piva)
+  } else if (cf) {
+    q = q.eq('soggetto_cf', cf)
+  } else if (nomeLike) {
+    q = q.ilike('soggetto_denominazione', `%${String(nomeLike).slice(0, 24)}%`)
+  }
+
+  return q
 }
 
 export function getSocietaAttive() {
@@ -115,6 +138,10 @@ export function uploadDocumentoToStorage(filePath, file) {
   return sb.storage.from('documenti').upload(filePath, file)
 }
 
+export function getDocumentoPublicUrl(filePath) {
+  return sb.storage.from('documenti').getPublicUrl(filePath)
+}
+
 export function insertDocumentoImport(documentiImportPayload) {
   return sb.from('documenti_import').insert([documentiImportPayload]).select().single()
 }
@@ -132,7 +159,20 @@ export function findCausaleIvaByCodice(codice) {
 }
 
 export function insertDocumentoContabilita(payload) {
-  return sb.from('documenti_contabilita').insert([payload]).select()
+  return sb
+    .from('documenti_contabilita')
+    .insert([payload])
+    .select()
+    .then(async (res) => {
+      if (!res.error && res.data?.[0]) {
+        try {
+          await syncPercipienteFromDocumentoContabilita(res.data[0])
+        } catch (e) {
+          console.warn('[Percipienti sync] import_unificato', e?.message || e)
+        }
+      }
+      return res
+    })
 }
 
 export function insertAvvisoAde(payload) {

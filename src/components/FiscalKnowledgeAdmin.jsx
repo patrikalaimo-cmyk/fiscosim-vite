@@ -345,7 +345,11 @@ export function FiscalKnowledgeRulesPanelModal({ open, onClose, utente, pendingB
     setScanning(true)
     setMsg('')
     try {
-      const res = await fetch('/api/fiscal-knowledge-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const res = await fetch('/api/insights/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'fiscal_knowledge_scan' })
+      })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || 'Scan fallito')
       setMsg(`Batch creato (${j.itemsCount || 0} voci). Chiudi e ricarica o attendi la notifica al prossimo accesso.`)

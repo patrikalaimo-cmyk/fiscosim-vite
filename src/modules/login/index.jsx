@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { sb } from '../../lib/supabase'
+import { isLocalAuthDisabled } from '../../lib/auth'
 
 export function Login({onLogin}){
   const [email,setEmail]=useState("");
@@ -11,19 +12,78 @@ export function Login({onLogin}){
     e.preventDefault();
     if(!email||!password){setErr("Inserisci email e password");return;}
     setLoading(true);setErr(null);
-    try{
-      const{data,error}=await sb.from("utenti_studio")
-        .select("id,nome,cognome,email,ruolo,permessi,clienti_assegnati,password_hash")
-        .eq("email",email.toLowerCase().trim())
-        .eq("attivo",true)
+
+    const bypass = isLocalAuthDisabled();
+
+    if (bypass) {
+      try {
+        const { data, error } = await sb.from("utenti_studio")
+          .select("id,nome,cognome,email,ruolo,permessi,clienti_assegnati,password_hash,auth_user_id")
+          .eq("email", email.toLowerCase().trim())
+          .eq("attivo", true)
+          .single();
+        
+        if (error || !data) {
+          setErr("Utente non trovato");
+          setLoading(false);
+          return;
+        }
+        if (data.password_hash !== password) {
+          setErr("Password non corretta");
+          setLoading(false);
+          return;
+        }
+
+        const { password_hash, ...utenteSicuro } = data;
+        onLogin({
+          ...utenteSicuro,
+          login_origin: 'dev_bypass'
+        });
+      } catch (errVal) {
+        setErr("Errore di connessione");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    try {
+      // 1. Authenticate with Supabase Auth
+      const { data: authData, error: authError } = await sb.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password: password
+      });
+
+      if (authError || !authData?.session) {
+        setErr(authError?.message || "Email o password errati");
+        setLoading(false);
+        return;
+      }
+
+      const authUserId = authData.session.user.id;
+
+      // 2. Retrieve utenti_studio profile using auth_user_id
+      const { data: profileData, error: profileError } = await sb.from("utenti_studio")
+        .select("id,nome,cognome,email,ruolo,permessi,clienti_assegnati,auth_user_id")
+        .eq("auth_user_id", authUserId)
+        .eq("attivo", true)
         .single();
-      if(error||!data){setErr("Utente non trovato");setLoading(false);return;}
-      if(data.password_hash!==password){setErr("Password non corretta");setLoading(false);return;}
-      // Login ok - rimuovi password_hash prima di salvare in stato
-      const{password_hash,...utenteSicuro}=data;
-      onLogin(utenteSicuro);
-    }catch(e){setErr("Errore di connessione");}
-    finally{setLoading(false);}
+
+      if (profileError || !profileData) {
+        setErr("Profilo utente FiscoSim non trovato o disattivato");
+        setLoading(false);
+        return;
+      }
+
+      onLogin({
+        ...profileData,
+        login_origin: 'supabase_auth'
+      });
+    } catch (errVal) {
+      setErr("Errore di connessione");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return(

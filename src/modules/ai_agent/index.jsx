@@ -408,10 +408,11 @@ export function ModuloAIAgent({ utente }) {
       history.push({ role: 'user', content: text })
 
       // Prima chiamata API — l'agente ragiona e decide quali tool usare
-      const res = await fetch('/api/claude', {
+      const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'claude',
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 2000,
           system: buildSystemPrompt(societaAttiva),
@@ -460,10 +461,11 @@ export function ModuloAIAgent({ utente }) {
 
       if(toolsScrittura.length === 0) {
         // Solo lettura — fai seconda chiamata con risultati e mostra risposta finale
-        const finalRes = await fetch('/api/claude', {
+        const finalRes = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            action: 'claude',
             model: 'claude-haiku-4-5-20251001',
             max_tokens: 1500,
             system: buildSystemPrompt(societaAttiva),
@@ -541,10 +543,11 @@ export function ModuloAIAgent({ utente }) {
     const allResults = [...(msg._letturResults||[]), ...scritturaResults]
 
     // Chiamata finale per risposta sintetica
-    const finalRes = await fetch('/api/claude', {
+    const finalRes = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        action: 'claude',
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 800,
         system: buildSystemPrompt(societaAttiva),
@@ -609,7 +612,7 @@ export function ModuloAIAgent({ utente }) {
               <span style={{ fontSize: '.72rem', color: 'var(--mu)' }}>Voce</span>
               <div onClick={() => setVoiceMode(p => !p)}
                 style={{ width: 36, height: 20, borderRadius: 10, background: voiceMode ? 'var(--gold)' : 'var(--bd2)', position: 'relative', cursor: 'pointer', transition: 'background .2s' }}>
-                <div style={{ width: 14, height: 14, borderRadius: 7, background: '#fff', position: 'absolute', top: 3, left: voiceMode ? 19 : 3, transition: 'left .2s' }} />
+                <div style={{ width: 14, height: 14, borderRadius: 7, background: 'var(--bg-main)', position: 'absolute', top: 3, left: voiceMode ? 19 : 3, transition: 'left .2s' }} />
               </div>
             </div>
           )}

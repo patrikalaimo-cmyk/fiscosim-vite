@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { TIPO_LABEL, TIPO_COLOR, MESI, ALLEGATO_LABEL, CICLICITA_LABEL, TIPO_CLIENTE } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -25,8 +26,12 @@ export function ModuloAdempimenti(){
     <div className="page">
       {modal&&<AdempimentoModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving}/>}
       {destModal&&<DestinatariModal adempimento={destModal} clienti={clienti} onClose={()=>setDestModal(null)}/>}
-      <div className="page-hdr"><div className="page-title">📬 Adempimenti</div><div className="page-sub">Template email per comunicazioni ai clienti</div></div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:".85rem"}}><button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Template</button></div>
+      <ModuleHeader
+        sectionLabel="Adempimenti"
+        title="📬 Adempimenti"
+        context="Template email per comunicazioni ai clienti"
+        primaryAction={<button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Template</button>}
+      />
       {loading?<div className="loading">⏳</div>:list.length===0?(
         <div className="empty"><div className="empty-ico">📬</div><div className="empty-t">Nessun adempimento</div><div className="empty-s">Crea template per TCG, liquidazione IVA, imposta di registro...</div></div>
       ):(

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { TIPO_LABEL, TIPO_COLOR, LAST_SOCIETA_STORAGE_KEY } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 import { CopilotInsightsBlock } from '../contabilita/CopilotInsightsBlock.jsx'
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -62,10 +63,11 @@ export function Dashboard({ onNavigate }) {
 
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">Dashboard</div>
-        <div className="page-sub">Riepilogo attività studio · {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Home"
+        title="Dashboard"
+        context={`Riepilogo attività studio · ${new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
+      />
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="card-hdr">
@@ -120,7 +122,7 @@ export function Dashboard({ onNavigate }) {
           <div className="stat-lbl">Totale F24 aperti</div>
         </div>
         <div className="stat-card" onClick={() => onNavigate('agenda')} style={{ cursor: 'pointer' }}>
-          <div className="stat-ico">📅</div>
+          <div className="stat-ico">📆</div>
           <div className="stat-val" style={{ color: 'var(--cy)' }}>{stats.invii}</div>
           <div className="stat-lbl">Invii programmati</div>
         </div>
@@ -166,11 +168,30 @@ export function Dashboard({ onNavigate }) {
         <div className="card-hdr"><div className="card-title">🚀 Moduli attivi</div></div>
         <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
           {[
-            ['📊', 'Simulatore', 'simulatore'], ['👥', 'Clienti', 'clienti'], ['📤', 'Import Excel', 'import'],
-            ['👤', 'Utenti Studio', 'utenti'], ['💧', 'Liquidazione IVA', 'iva'], ['📋', 'Gestione F24', 'f24'],
-            ['🏢', 'Ammortamenti', 'ammortamenti'], ['📬', 'Adempimenti', 'adempimenti'], ['📅', 'Agenda', 'agenda']
-          ].map(([ico, label, id]) => (
-            <div key={id} onClick={() => onNavigate(id)}
+            { ico: '📊', label: 'Simulatore', id: 'simulatore' },
+            { ico: '👥', label: 'Clienti', id: 'clienti' },
+            { ico: '📤', label: 'Import Excel', id: 'import' },
+            { ico: '👤', label: 'Utenti Studio', id: 'utenti' },
+            {
+              ico: '💧',
+              label: 'IVA e Adempimenti',
+              id: 'contabilita',
+              onClick: () => {
+                try {
+                  localStorage.setItem(LAST_SOCIETA_STORAGE_KEY, dashSocietaId || '')
+                  localStorage.setItem('contabilita_sub_tab', 'liquidazioni_iva')
+                } catch {
+                  /* ignore */
+                }
+                onNavigate('contabilita')
+              },
+            },
+            { ico: '📋', label: 'Gestione F24', id: 'f24' },
+            { ico: '🏢', label: 'Ammortamenti', id: 'ammortamenti' },
+            { ico: '📬', label: 'Adempimenti', id: 'adempimenti' },
+            { ico: '📆', label: 'Agenda', id: 'agenda' },
+          ].map(({ ico, label, id, onClick }) => (
+            <div key={id} onClick={onClick || (() => onNavigate(id))}
               style={{ background: 'var(--s2)', border: '1px solid var(--bd)', borderRadius: 9, padding: '.55rem .85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.45rem', fontSize: '.8rem', fontWeight: 500, transition: 'all .15s' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.color = 'var(--gld2)' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.color = '' }}>

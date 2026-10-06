@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { callBackend } from '../../core/workflow'
+import { ModuleHeader } from '../../shared/components'
 
 const fmt0 = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0)
 
@@ -37,7 +38,7 @@ function CalendarModal({regimeId,onClose}){
   const toggleAll=()=>{if(allSel)setSel({});else{const s={};allItems.forEach((_,i)=>s[i]=true);setSel(s);}};
   const toggle=i=>setSel(p=>({...p,[i]:!p[i]}));
   const countSel=Object.values(sel).filter(Boolean).length;
-  const send=async()=>{if(!email||!countSel)return;setLoading(true);setErr(null);try{await callBackend('/api/send-email', {email,regimeName:REGIME_LABELS[regimeId],scadenze:allItems.filter((_,i)=>sel[i]),isTest:false});setSent(true);}catch(e){setErr(e.message);}finally{setLoading(false);}};
+  const send=async()=>{if(!email||!countSel)return;setLoading(true);setErr(null);try{await callBackend('/api/email', {action:'send',email,regimeName:REGIME_LABELS[regimeId],scadenze:allItems.filter((_,i)=>sel[i]),isTest:false});setSent(true);}catch(e){setErr(e.message);}finally{setLoading(false);}};
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -90,7 +91,7 @@ export function ModuloSimulatore(){
   return(
     <div className="page">
       {calModal&&<CalendarModal regimeId={calModal} onClose={()=>setCalModal(null)}/>}
-      <div className="page-hdr"><div className="page-title">📊 Simulatore Fiscale</div><div className="page-sub">Confronto regimi fiscali · Italia 2025</div></div>
+      <ModuleHeader sectionLabel="Fiscale" title="📊 Simulatore Fiscale" context="Confronto regimi fiscali · Italia 2025" />
       <div className="card">
         <div className="card-title" style={{marginBottom:"1rem"}}>Inserisci i dati</div>
         <div className="form-grid">

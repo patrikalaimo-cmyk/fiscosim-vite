@@ -1,0 +1,41 @@
+Ecco la tabella con la percentuale di completamento stimata per ogni funzione chiave di un gestionale contabile fiscale, basata sullo stato attuale di FiscoSim:
+
+| Funzione gestionale/fiscale                        | Stato FiscoSim                | % Completamento | Note principali / Gap                                    |
+|----------------------------------------------------|-------------------------------|-----------------|----------------------------------------------------------|
+| Multi-società, multi-utente, permessi              | FUNZIONANTE                   | 90%             | RLS attiva, UI da rafforzare                             |
+| Import fatture passive XML/P7M/ZIP Agenzia         | FUNZIONANTE MA DA RAFFORZARE  | 80%             | Flusso canonico ok, UI/validatori da rafforzare          |
+| Import fatture attive                              | MANCANTE                      | 0%              | Da sviluppare                                            |
+| Import massivo, deduplica, working table           | PARZIALE                      | 60%             | UI/servizi, feedback errori                              |
+| Anagrafiche clienti/fornitori                      | PARZIALE                      | 60%             | Deduplica, validatori, match automatico                  |
+| Piano dei conti multilivello                       | FUNZIONANTE                   | 90%             | UI avanzata da rafforzare                                |
+| Causali contabili/IVA                              | FUNZIONANTE                   | 90%             | Mapping, UI avanzata                                     |
+| Prima nota manuale                                 | PARZIALE                      | 50%             | UI/servizi, validatori, quadratura                       |
+| Prima nota automatica da fatture                   | FUNZIONANTE                   | 90%             | Commit canonico ok, UI/validatori da rafforzare          |
+| Scritture ricorrenti, ratei/risconti, giroconti    | MANCANTE                      | 0%              | Da sviluppare                                            |
+| Ammortamenti/cespiti                               | PROTOTIPO                     | 10%             | Da sviluppare                                            |
+| Registri IVA acquisti/vendite/corrispettivi        | PARZIALE                      | 60%             | UI, quadrature, export                                   |
+| Liquidazioni IVA mensili/trimestrali               | PARZIALE/PROTOTIPO            | 30%             | Output, workflow, quadrature                             |
+| Pro-rata, split, reverse, autofatture, IVA cassa   | MANCANTE                      | 0%              | Da sviluppare                                            |
+| LIPE, IVA annuale, F24 IVA                         | PROTOTIPO                     | 10%             | Output, workflow, controlli                              |
+| Bilancio di verifica, CEE/XBRL                     | PARZIALE/MANCANTE             | 30%             | Output, quadrature, export                               |
+| Mastri/schede contabili                            | PARZIALE                      | 50%             | UI, export, quadrature                                   |
+| Partitari clienti/fornitori                        | PARZIALE                      | 60%             | UI, matching, chiusure                                   |
+| Scadenzario incassi/pagamenti                      | PROTOTIPO                     | 10%             | Da sviluppare                                            |
+| Riconciliazione bancaria/contabile                 | PROTOTIPO                     | 10%             | Da sviluppare                                            |
+| Chiusura partite                                   | PROTOTIPO                     | 10%             | Da sviluppare                                            |
+| Percipienti, ritenute, CU, 770                     | PROTOTIPO                     | 10%             | Da sviluppare                                            |
+| Stampe registri IVA, libro giornale, export        | PROTOTIPO/PARZIALE            | 30%             | Output, layout, export massivo                           |
+| Audit trail, log operazioni                        | PARZIALE                      | 50%             | UI, ricerca, export                                      |
+| Parsing documenti, AI, automazioni                 | FUNZIONANTE MA DA RAFFORZARE  | 80%             | UI/servizi, explain trasparente, validatori              |
+| Controlli anomalia, validatori bloccanti           | PARZIALE                      | 50%             | UI, feedback, validatori bloccanti                       |
+| Test scenario-based, QA                            | PARZIALE                      | 50%             | Coverage, validatori, test end-to-end                    |
+| Sicurezza, RLS, isolamento società                 | FUNZIONANTE                   | 90%             | Test coverage, validatori, audit trail                   |
+
+Legenda:
+- 0% = da implementare completamente
+- 10-30% = prototipo, solo placeholder
+- 50-60% = parziale, copertura base ma non produzione-ready
+- 80-90% = funzionante, usabile ma da rafforzare
+- 100% = pienamente integrata e funzionante (nessuna funzione è ancora a 100%)
+
+Se vuoi la percentuale dettagliata per ogni micro-area o modulo, chiedi pure!

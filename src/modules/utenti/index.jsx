@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { sb } from '../../lib/supabase'
 import { RUOLO_LABEL, RUOLO_COLOR, PERMESSI_MODULI, PERMESSI_DEFAULT } from '../../shared/constants'
 import { getPermessi, puoGestireUtenti } from '../../shared/utils'
+import { ModuleHeader } from '../../shared/components'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 
@@ -40,10 +41,12 @@ export function ModuloUtenti(){
   return(
     <div className="page">
       {modal&&<UtenteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err}/>}
-      <div className="page-hdr"><div className="page-title">👤 Utenti Studio</div><div className="page-sub">Gestione accessi e collaboratori</div></div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:".85rem"}}>
-        <button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Utente</button>
-      </div>
+      <ModuleHeader
+        sectionLabel="Impostazioni"
+        title="👤 Utenti Studio"
+        context="Gestione accessi e collaboratori"
+        primaryAction={<button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Utente</button>}
+      />
       {loading?<div className="loading">⏳</div>:(
         <div className="card" style={{padding:0,overflow:"hidden"}}>
           <table className="tbl">

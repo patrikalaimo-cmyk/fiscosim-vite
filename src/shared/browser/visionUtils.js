@@ -51,10 +51,11 @@ export async function analyzeDocumentWithVision(file, tipoDocumento = 'generico'
 
         let batchRes
         for (let attempt = 0; attempt < 3; attempt++) {
-          batchRes = await fetch('/api/claude', {
+          batchRes = await fetch('/api/ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              action: 'claude',
               model: 'claude-haiku-4-5-20251001',
               max_tokens: 4000,
               system: 'Sei un assistente specializzato in documenti fiscali italiani. Rispondi SEMPRE e SOLO con JSON valido, zero testo aggiuntivo.',
@@ -184,10 +185,11 @@ Rispondi SOLO con JSON valido:
   const prompt = PROMPTS[tipoDocumento] || PROMPTS.generico
   const maxTokens = tipoDocumento === 'anagrafica_nes' ? 4000 : 1000
 
-  const res = await fetch('/api/claude', {
+  const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      action: 'claude',
       model: 'claude-haiku-4-5-20251001',
       max_tokens: maxTokens,
       system: 'Sei un assistente specializzato in documenti fiscali italiani. Rispondi SEMPRE e SOLO con JSON valido, zero testo aggiuntivo prima o dopo.',
@@ -214,4 +216,3 @@ Rispondi SOLO con JSON valido:
     throw new Error('Risposta AI non valida: ' + txt.substring(0, 100))
   }
 }
-

@@ -1,6 +1,15 @@
-import { traceStep } from '../src/utils/pipelineLogger.js'
+﻿import { traceStep } from '../src/utils/pipelineLogger.js'
 
 export const IVA_ALIQUOTE_SUPPORTATE = Object.freeze([0, 4, 5, 10, 22])
+export const IVA_REGIMI = Object.freeze({
+  ORDINARIA: 'ordinaria',
+  ESENTE: 'esente',
+  NON_IMPONIBILE: 'non_imponibile',
+  FUORI_CAMPO: 'fuori_campo',
+  REVERSE_CHARGE: 'reverse_charge',
+  SPLIT_PAYMENT: 'split_payment',
+  UNKNOWN: 'unknown',
+})
 
 export function isNaturaFatturaPA(value) {
   const raw = String(value ?? '').trim().replace(/\s/g, '')
@@ -120,16 +129,28 @@ export function resolveIva({ conto, aliquota, causaliIva, natura, pipelineContex
   const natStr = String(natura ?? '').trim()
   const forceZeroByNatura = isNaturaFatturaPA(natStr)
 
+  // If the account has a preferred VAT "causale", we should only reuse it when it is
+  // compatible with the document's aliquota. Otherwise it would incorrectly override
+  // the XML/PDF-derived VAT rate (e.g. forcing 20% on a 22% invoice).
+  const effectiveAliquotaForConfronto = forceZeroByNatura ? 0 : aliquota
+  const percentualeDoc = parseIvaPercent(effectiveAliquotaForConfronto)
+
   if (conto?.causale_iva_id) {
     const want = String(conto.causale_iva_id).trim()
     const c0 = causaliIva.find(c => String(c?.id ?? '').trim() === want)
     if (c0) {
-      if (!forceZeroByNatura || aliquotaCausaleEquals(c0, 0)) {
+      const compatibile =
+        // No aliquota info on the document: keep existing behavior (use conto as fallback).
+        percentualeDoc === null
+        // Natura forces 0%: only keep conto default if it is also 0%.
+        || (forceZeroByNatura ? aliquotaCausaleEquals(c0, 0) : aliquotaCausaleEquals(c0, percentualeDoc))
+
+      if (compatibile) {
         return normCausaleId(c0.id)
       }
       traceStep(
         'RESOLVE_IVA_CONTO_SKIP_NATURA_ZERO',
-        { causale_conto_id: want, natura: natStr },
+        { causale_conto_id: want, natura: natStr, doc_aliquota_percent: percentualeDoc, note: 'causale conto non compatibile con aliquota documento' },
         { resolve_iva_note: true },
         pipelineContext
       )
@@ -191,7 +212,7 @@ export function resolveIva({ conto, aliquota, causaliIva, natura, pipelineContex
         causaliIva_count: causaliIva.length,
         candidati_stessa_aliquota: causaliIva.filter(c => aliquotaCausaleEquals(c, percentuale)).length,
         hint:
-          'Serve una riga con aliquota coerente e predefinita attiva. Verifica tipo boolean/1 su is_default_per_aliquota e ricarica ContabilitÃ  dopo aver salvato in Impostazioni Procedure.',
+          'Serve una riga con aliquota coerente e predefinita attiva. Verifica tipo boolean/1 su is_default_per_aliquota e ricarica Contabilità dopo aver salvato in Impostazioni Procedure.',
         causali_iva_debug_sample: debugRows,
       },
       { resolve_iva_error: true },
@@ -224,3 +245,75 @@ export function resolveIvaOrNull({ conto, aliquota, causaliIva, natura, pipeline
     return null
   }
 }
+
+function normalizeRegimeString(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function regimeFromNatura(natura) {
+  const nat = String(natura ?? '').trim().toUpperCase()
+  if (!nat || !isNaturaFatturaPA(nat)) return null
+  if (nat.startsWith('N6')) return IVA_REGIMI.REVERSE_CHARGE
+  if (nat.startsWith('N4')) return IVA_REGIMI.ESENTE
+  if (nat.startsWith('N3')) return IVA_REGIMI.NON_IMPONIBILE
+  if (nat.startsWith('N2') || nat.startsWith('N1')) return IVA_REGIMI.FUORI_CAMPO
+  if (nat.startsWith('N5')) return IVA_REGIMI.ESENTE
+  if (nat.startsWith('N7')) return IVA_REGIMI.NON_IMPONIBILE
+  return null
+}
+
+function regimeFromCausale(causale) {
+  if (!causale) return null
+  if (causale.reverse_charge === true) return IVA_REGIMI.REVERSE_CHARGE
+  const regIva = normalizeRegimeString(causale.regime_iva)
+  if (regIva) {
+    if (regIva.includes('imponibile')) return IVA_REGIMI.ORDINARIA
+    if (regIva.includes('non imponibile')) return IVA_REGIMI.NON_IMPONIBILE
+    if (regIva.includes('esente')) return IVA_REGIMI.ESENTE
+    if (regIva.includes('escluso')) return IVA_REGIMI.FUORI_CAMPO
+  }
+  const reg = normalizeRegimeString(causale.regime)
+  if (reg) {
+    if (reg.includes('reverse')) return IVA_REGIMI.REVERSE_CHARGE
+    if (reg.includes('split')) return IVA_REGIMI.SPLIT_PAYMENT
+    if (reg.includes('non impon')) return IVA_REGIMI.NON_IMPONIBILE
+    if (reg.includes('esente')) return IVA_REGIMI.ESENTE
+    if (reg.includes('esclus')) return IVA_REGIMI.FUORI_CAMPO
+  }
+  const desc = normalizeRegimeString(causale.descrizione)
+  if (desc.includes('reverse') || desc.includes('autofatt')) return IVA_REGIMI.REVERSE_CHARGE
+  if (desc.includes('split payment') || desc.includes('split-payment')) return IVA_REGIMI.SPLIT_PAYMENT
+  return null
+}
+
+export function classifyIvaRegime({ causale, natura, aliquota, splitPayment = false }) {
+  if (splitPayment) return IVA_REGIMI.SPLIT_PAYMENT
+  const byCausale = regimeFromCausale(causale)
+  if (byCausale) return byCausale
+  const byNatura = regimeFromNatura(natura)
+  if (byNatura) return byNatura
+  const aliq = parseIvaPercent(aliquota)
+  if (aliq != null && aliq > 0) return IVA_REGIMI.ORDINARIA
+  if (aliq === 0) return IVA_REGIMI.UNKNOWN
+  return IVA_REGIMI.UNKNOWN
+}
+
+export function formatIvaRegimeLabel(regime) {
+  switch (regime) {
+    case IVA_REGIMI.ORDINARIA:
+      return 'Ordinaria'
+    case IVA_REGIMI.ESENTE:
+      return 'Esente'
+    case IVA_REGIMI.NON_IMPONIBILE:
+      return 'Non imponibile'
+    case IVA_REGIMI.FUORI_CAMPO:
+      return 'Fuori campo'
+    case IVA_REGIMI.REVERSE_CHARGE:
+      return 'Reverse charge'
+    case IVA_REGIMI.SPLIT_PAYMENT:
+      return 'Split payment'
+    default:
+      return 'Regime IVA ?'
+  }
+}
+

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -40,11 +41,13 @@ export function ModuloAmmortamenti(){
       {modal&&<BeneModal mode={modal.mode} data={modal.data||EMPTY} clienti={clienti} onSave={salva} onClose={()=>setModal(null)} saving={saving}/>}
       {xmlModal&&<XMLImportModal clienti={clienti} onSave={salva} onClose={()=>setXmlModal(false)}/>}
       {pianoModal&&<PianoModal bene={pianoModal} piano={calcPiano(pianoModal)} onClose={()=>setPianoModal(null)}/>}
-      <div className="page-hdr"><div className="page-title">🏢 Ammortamenti</div><div className="page-sub">Registro beni ammortizzabili e piani di ammortamento</div></div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:".85rem",gap:".5rem"}}>
-        <button className="btn-sec" onClick={()=>setXmlModal(true)}>📎 Importa da XML</button>
-        <button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Bene</button>
-      </div>
+      <ModuleHeader
+        sectionLabel="Contabilità"
+        title="🏢 Ammortamenti"
+        context="Registro beni ammortizzabili e piani di ammortamento"
+        primaryAction={<button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Bene</button>}
+        secondaryAction={<button className="btn-sec" onClick={()=>setXmlModal(true)}>📎 Importa da XML</button>}
+      />
       {loading?<div className="loading">⏳</div>:beni.length===0?(
         <div className="empty"><div className="empty-ico">🏢</div><div className="empty-t">Nessun bene ammortizzabile</div><div className="empty-s">Aggiungi manualmente o importa da fattura XML</div></div>
       ):(
@@ -77,4 +80,3 @@ export function ModuloAmmortamenti(){
     </div>
   );
 }
-

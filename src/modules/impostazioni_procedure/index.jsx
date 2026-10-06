@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { sb } from '../../lib/supabase'
 import { IVA_ALIQUOTE_SUPPORTATE, isDefaultPerAliquotaFlag } from '../../../domain/resolveIva.js'
+import { ModuleHeader } from '../../shared/components'
 
 const TAB_ALIQUOTE = 'aliquote_iva'
 
@@ -196,10 +197,11 @@ export function ModuloImpostazioniProcedure() {
 
   return (
     <div className="page">
-      <div className="page-hdr">
-        <div className="page-title">Impostazioni Procedure</div>
-        <div className="page-sub">Fonte unica per la risoluzione IVA (default per aliquota)</div>
-      </div>
+      <ModuleHeader
+        sectionLabel="Impostazioni"
+        title="Impostazioni Procedure"
+        context="Fonte unica per la risoluzione IVA (default per aliquota)"
+      />
 
       <div style={{ display: 'flex', gap: '.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--bd)', paddingBottom: '.5rem' }}>
         <button

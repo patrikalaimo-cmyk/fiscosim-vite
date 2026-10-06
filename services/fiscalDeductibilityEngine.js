@@ -97,6 +97,12 @@ function heuristicPctFromTheme(theme, mergedBlob) {
   return null
 }
 
+async function loadCausaliIva(db, societaId) {
+  return db
+    .from('causali_iva')
+    .select('id, codice, descrizione, aliquota, tipo, detraibile, percentuale_detraibilita')
+}
+
 /**
  * @param {'restaurant'|'fuel'|'mixed_use'} theme
  * @param {object[]} allRows
@@ -156,10 +162,7 @@ export async function analyzeFiscalDeductibilityEngine(db, societaId) {
   const allRows = fk.rows || []
   if (!allRows.length) return []
 
-  const { data: causali, error: cErr } = await db
-    .from('causali_iva')
-    .select('id, codice, descrizione, aliquota, tipo, detraibile, percentuale_detraibilita')
-    .eq('societa_id', societaId)
+  const { data: causali, error: cErr } = await loadCausaliIva(db, societaId)
 
   if (cErr) console.warn('[fiscalDeductibilityEngine] causali_iva', cErr.message)
   const causById = new Map((causali || []).map((c) => [String(c.id), c]))

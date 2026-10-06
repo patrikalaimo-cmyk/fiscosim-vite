@@ -1,0 +1,814 @@
+CONTESTO OPERATIVO RIUTILIZZABILE — FiscoSim
+
+Stiamo sviluppando FiscoSim, gestionale contabile/fiscale interno avanzato per studio commercialista.
+
+FiscoSim non è un SaaS, non deve diventare un prodotto vendibile ad altri studi e non deve integrare direttamente invii Agenzia Entrate, SDI o conservazione. Deve invece diventare uno strumento interno molto veloce, moderno e affidabile per gestire:
+
+import fatture
+registrazione manuale
+prima nota
+registri IVA
+liquidazioni IVA
+LIPE
+IVA annuale
+partitari
+mastrini
+bilancio
+ritenute
+percipienti
+CU
+770
+riconciliazione bancaria
+stampe
+export PDF/CSV/XML
+
+L’obiettivo è superare la logica operativa di NES, mantenendo però la stessa velocità d’uso per l’operatore esperto.
+
+1. Metodo di sviluppo obbligatorio
+Regola base
+
+Non bisogna fare implementazioni “a caso” o semplici contenitori di dati.
+Ogni funzione va progettata prima dal punto di vista:
+
+contabile
+operativo
+UX
+tecnico
+dati output
+integrazione futura
+
+Prima di implementare una funzione bisogna sempre chiedersi:
+
+1. Qual è il lavoro reale dell’operatore?
+2. Quali dati FiscoSim conosce già?
+3. Quali dati deve davvero inserire l’operatore?
+4. Cosa può essere calcolato automaticamente?
+5. Cosa può essere corretto manualmente?
+6. Quali controlli evitano errori?
+7. Quale output dati serve ai moduli successivi?
+
+Se queste risposte non sono chiare, prima si ragiona e solo dopo si scrive il prompt.
+
+2. Regola sui report Codex
+
+Quando viene incollato un report Codex, non bisogna dare subito il prompt successivo.
+
+L’ordine corretto è:
+
+1. Audit del report
+2. Verifica file modificati
+3. Controllo perimetro
+4. Controllo regressioni
+5. Controllo se sono stati creati file enormi
+6. Controllo test/build
+7. Indicazione dei test manuali necessari
+8. Verdetto: ok / non ok / ok tecnico ma serve test browser
+9. Solo dopo, se confermato, prompt successivo
+
+Se emergono bug, si ferma la scaletta principale e si corregge prima il bug.
+
+Se emerge una miglioria:
+
+se è bloccante, si fa subito;
+se è utile ma non bloccante, si mette in scaletta;
+se è futura, si mette nel backlog.
+3. Regola contro micro-prompt e micro-implementazioni
+
+Non fare 10.000 prompt inutili.
+
+La regola corretta è:
+
+1 prompt = 1 blocco logico completo ma controllato
+
+Si accorpano più interventi se:
+
+riguardano lo stesso flusso;
+toccano lo stesso perimetro;
+hanno stesso obiettivo;
+si possono testare insieme;
+non aumentano troppo il rischio.
+
+Si separano invece se:
+
+serve migration DB delicata;
+si toccano moduli diversi;
+si passa da draft a persistenza reale;
+si cambia contratto dati;
+serve prima validare manualmente.
+4. Regola file piccoli / no file enormi
+
+Non accumulare tutto dentro una view enorme.
+
+Regole:
+
+- View principale = solo orchestrazione
+- Business logic fuori JSX
+- Funzioni pure in domain/application
+- Componenti UI piccoli e dedicati
+- Se una feature cresce, creare file dedicato
+- Non fare “aggiungo qui e poi splittiamo dopo”
+
+Quando possibile:
+
+nuova funzione → file dedicato;
+nuovo pannello → componente dedicato;
+nuova normalizzazione → helper puro;
+nuovo calcolo → funzione pura testabile.
+5. Architettura generale dei moduli
+
+Ogni modulo deve essere sviluppato prima come blocco autonomo:
+
+input
+→ elaborazione
+→ output
+
+Solo dopo che i moduli funzionano autonomamente si procede con integrazione.
+
+Non bisogna integrare moduli instabili.
+
+I moduli principali di ingresso saranno:
+
+Import Contabilità
+Registrazione manuale
+Riconciliazione bancaria
+Storni/rettifiche future
+
+Tutti devono produrre in futuro lo stesso linguaggio dati canonico.
+
+6. Contratto canonico universale
+
+Prima dell’integrazione finale dei moduli bisogna definire un canonicalAccountingPayload unico.
+
+Import Contabilità, Registrazione manuale e Riconciliazione bancaria non devono produrre formati diversi.
+
+Il payload canonico dovrà avere sezioni tipo:
+
+schemaVersion
+source
+company
+fiscalContext
+header
+subject
+document
+accounting
+vat
+ledger
+withholding
+attachments
+audit
+validation
+postCommitTargets
+
+Le aree canoniche alimentate saranno:
+
+1. Prima Nota / Contabilità generale
+2. Registri IVA
+3. Partitario clienti/fornitori/professionisti
+4. Percipienti / Ritenute
+5. Documenti origine / allegati
+6. Audit trail
+7. Scadenziario, se applicabile
+
+Prima di integrare definitivamente i moduli bisogna fare:
+
+Audit contratto canonico output moduli di ingresso
+7. Priorità contabili generali
+Prima Nota / Contabilità generale
+
+Alimentata da:
+
+Import Contabilità
+Registrazione manuale
+Riconciliazione bancaria
+storni/rettifiche future
+scritture apertura/chiusura future
+
+Alimenta:
+
+Consultazione Prima Nota
+Mastrini
+Bilancio
+Stampe
+Export
+controlli quadratura
+IVA / Registri IVA
+
+Alimentata da:
+
+Import Contabilità
+Registrazione manuale
+riconciliazione solo per IVA per cassa/differita
+
+Alimenta:
+
+registri IVA
+liquidazioni IVA
+LIPE
+IVA annuale
+F24 IVA
+stampe IVA
+Partitario
+
+Alimentato da:
+
+apertura fatture clienti/fornitori/professionisti
+chiusure da pagamenti/incassi
+riconciliazione bancaria
+note credito/storni
+
+Alimenta:
+
+partite aperte
+scadenziario
+riconciliazione
+stampe clienti/fornitori
+IVA per cassa quando applicabile
+Percipienti / Ritenute
+
+Alimentato da:
+
+parcelle professionisti
+pagamenti parcelle
+ritenute
+eventuale riconciliazione bancaria
+
+Alimenta:
+
+anagrafiche percipienti
+scadenzario ritenute
+F24 ritenute
+CU
+770
+8. Filosofia UX
+
+FiscoSim deve essere:
+
+semplice
+veloce
+user friendly
+operativo
+efficace
+da studio professionale
+
+Non deve essere una raccolta di campi.
+Ogni schermata deve aiutare l’operatore a fare il lavoro con meno click e meno errori.
+
+Regola UX
+
+L’operatore deve inserire solo ciò che FiscoSim non può sapere.
+
+FiscoSim deve:
+
+proporre;
+calcolare;
+compilare;
+avvisare;
+lasciare correggere;
+non bloccare inutilmente.
+Stile operativo
+
+Preferire:
+
+campi cercabili
+shortcut tastiera
+auto-compilazioni
+residui automatici
+tabelle compatte
+badge chiari
+preview sintetiche
+warning non invasivi
+
+Evitare:
+
+mega-form inutili;
+troppe colonne sempre visibili;
+popup bloccanti;
+campi manuali dove il dato è calcolabile;
+doppioni visivi;
+layout affollati.
+9. Shortcut e velocità stile NES
+
+FiscoSim deve mantenere una velocità simile/superiore a NES.
+
+Shortcut principali già richiesti:
+
+ALT+N = nuova registrazione
+CTRL+ALT+N = fallback nuova registrazione
+F2 = piano dei conti / selezione rapida
+F3 = ricerca globale libera
+F8 = ricalcolo residuo secondario
+F9 = partite
+F12 = salva
+ESC = chiude modali/pannelli
+CTRL + = nuova riga nella tab attiva
+CTRL - = elimina riga attiva nella tab attiva
+
+La navigazione deve funzionare con:
+
+Enter;
+frecce;
+Tab;
+doppio click;
+ricerca diretta nel campo.
+10. Piano dei conti — visualizzazione e regole
+
+La gerarchia corretta del piano dei conti è:
+
+MASTRO
+→ CONTO
+→ CONTO
+→ SOTTOCONTO
+Mastro
+
+Primo livello / macroconto:
+
+Attività
+Passività
+Ricavi
+Costi
+Conto
+
+Secondo e terzo livello:
+
+Attivo circolante
+Crediti v/clienti
+Debiti v/fornitori
+Costi per servizi
+Sottoconto
+
+Ultimo livello realmente movimentabile:
+
+BIRIMPORT S.P.A.
+Piccoli cespiti
+Spese telefoniche
+Banca Unicredit
+Regola operativa fondamentale
+La scrittura contabile può essere confermata solo con un SOTTOCONTO.
+Mastro e Conto sono visibili/navigabili ma non registrabili.
+
+Nelle causali contabili/template:
+
+si può salvare un Conto come base/scope;
+si può salvare un Sottoconto;
+non conviene salvare un Mastro salvo scelta esplicita futura;
+in registrazione effettiva serve comunque Sottoconto.
+Visualizzazione picker
+
+Mantenere comportamento attuale:
+
+scrivo nel riquadro e cerco direttamente;
+F2 piano completo;
+F3 ricerca globale.
+
+Cambiare solo visualizzazione:
+
+indentazione per livelli;
+badge Mastro / Conto / Sottoconto;
+codice + descrizione leggibili;
+selezione evidente.
+
+La visuale gerarchica è già validata su:
+
+Registrazione manuale;
+Causali contabili.
+
+Da estendere più avanti a:
+
+Import Contabilità;
+Consultazione Prima Nota / filtri conto.
+
+Non anticipare questa estensione mentre si lavora su Registrazione manuale.
+
+11. Registrazione manuale — principi operativi
+
+La Registrazione manuale deve essere progettata come modulo veloce, non come form lento.
+
+Flusso base
+Nuova registrazione
+→ data registrazione
+→ causale contabile
+→ dati documento se richiesti
+→ soggetto se richiesto
+→ righe PN precompilate
+→ IVA se richiesta
+→ partitario se richiesto
+→ ritenute se richieste
+→ F12 salva
+Causale contabile
+
+Il comportamento deve derivare dalle impostazioni della causale, non dal codice causale.
+
+Campi causale usati:
+
+tipo_causale
+operazione_partite
+gestione_partite
+op_ritenute
+tipo_documento
+data_documento
+numero_documento
+flag IVA/CEE/differita
+
+Il codice causale può essere solo fallback se mancano dati configurativi.
+
+12. Righe Prima Nota — priorità
+
+Le righe PN si generano con questa gerarchia:
+
+1. Template righe salvato nella causale contabile
+2. Storico struttura causale per società
+3. Fallback behavior causale
+
+Poi, dentro una riga generica, il conto specifico si risolve così:
+
+1. conto preimpostato nell’anagrafica/piano dei conti della controparte
+2. storico registrazioni per soggetto/causale/ruolo
+3. conto generico da future impostazioni procedure collegate alla causale
+4. manuale / da scegliere
+Importante
+
+Lo storico struttura causale non è lo storico del singolo fornitore.
+
+Risponde a:
+
+Con questa causale, per questa società, quali righe si usano di solito?
+
+Esempio:
+
+Società SIRIA SRL
+Causale FF
+Pattern storico:
+- Fornitore Avere
+- IVA Dare
+- Costo Dare
+
+Lo storico soggetto invece risponde a:
+
+Quale conto specifico uso per questo fornitore/cliente?
+13. Template righe causale
+
+Nelle impostazioni causali contabili esiste/va mantenuta la tab:
+
+Righe prima nota
+
+Ogni riga template contiene:
+
+ordine;
+conto_id;
+conto_codice;
+conto_descrizione;
+hierarchyType;
+isTemplateScope;
+lato;
+formula_importo;
+descrizione_riga;
+obbligatoria;
+modificabile;
+attiva.
+
+Formule importo:
+
+totale_documento
+imponibile
+iva_detraibile
+iva_indetraibile
+netto
+residuo_sbilancio
+manuale
+
+Il template si applica automaticamente solo se le righe sono vuote/non modificate.
+
+Se l’operatore ha già modificato:
+
+non sovrascrivere;
+mostrare “Applica righe suggerite”.
+14. IVA — progettazione operativa corretta
+
+La tab IVA non deve essere una tabella manuale di numeri.
+
+L’operatore deve solo indicare come ripartire il totale documento tra una o più causali IVA.
+
+Obiettivo
+causale IVA + totale/residuo
+→ calcolo automatico imponibile / IVA / detraibile / indetraibile
+→ correzione manuale se serve
+→ riepilogo residuo
+→ ivaDraft coerente
+→ righe PN aggiornate
+UX consigliata
+
+Colonne base:
+
+Riga
+Causale IVA
+Totale riga
+Imponibile
+IVA detratta
+IVA indetraibile
+Registro
+Stato
+Azioni
+
+Le informazioni avanzate possono essere in vista estesa/dettaglio:
+
+aliquota/natura;
+competenza IVA;
+data operazione;
+segno;
+protocollo provvisorio;
+protocollo definitivo.
+Comportamento corretto
+Caso 1 — Totale documento 122, IVA 22%
+
+Se seleziono causale IVA 22%:
+
+Totale riga = 122
+Imponibile = 100
+IVA totale = 22
+IVA detratta = 22
+IVA indetraibile = 0
+Caso 2 — Multi IVA
+
+Totale documento = 122
+
+Riga 1:
+
+Fuori campo
+Totale = 10
+
+Riga 2:
+
+IVA 22%
+Totale residuo automatico = 112
+→ scorporo automatico
+Caso 3 — Detraibilità 50%
+
+Totale riga 110, IVA 10%, detraibilità 50%:
+
+Imponibile = 100
+IVA totale = 10
+IVA detratta = 5
+IVA indetraibile = 5
+Totale = 110
+Regole input
+
+Se modifico Totale riga:
+
+scorpora imponibile/IVA.
+
+Se modifico Imponibile:
+
+calcola IVA e totale.
+
+Se modifico IVA detratta o IVA indetraibile:
+
+rispetta override;
+segnala eventuale incoerenza.
+Multi-riga IVA
+
+Shortcut:
+
+CTRL + = nuova riga IVA
+CTRL - = elimina riga IVA
+
+Nuova riga:
+
+propone il residuo documento non ancora coperto dalle righe IVA.
+Riepilogo IVA sempre visibile
+Totale documento
+Totale righe IVA
+Residuo IVA
+Imponibile totale
+IVA detratta totale
+IVA indetraibile totale
+
+Residuo diverso da zero:
+
+warning evidente ma non blocker finché non si scrive nei registri reali.
+15. Partitario — progettazione operativa
+
+Il partitario non deve essere compilato manualmente quando apre partita.
+
+Se causale apre partita
+
+FiscoSim deve generare automaticamente:
+
+Soggetto
+Data documento
+Numero documento
+Tipo documento
+Importo originario
+Importo aperto
+Residuo
+Stato apertura predisposta
+
+Fonte dati:
+
+soggetto;
+data documento;
+numero documento;
+totale documento.
+
+Campo principale modificabile:
+
+Importo aperto
+
+Perché può servire in:
+
+split payment;
+reverse charge;
+autofatture;
+arrotondamenti;
+casi particolari.
+Se causale chiude partita
+
+Il tab Partitario deve mostrare:
+
+partite aperte del soggetto;
+numero documento;
+data;
+tipo;
+saldo residuo;
+importo chiusura;
+segno;
+stato.
+
+L’operatore deve:
+
+selezionare la partita;
+modificare importo solo se chiusura parziale;
+confermare.
+
+Non deve ricompilare tutto.
+
+16. Ritenute / Percipienti — progettazione futura
+
+Le ritenute sono più delicate e vanno trattate dopo IVA e Partitario.
+
+Dati da usare:
+
+anagrafica percipiente;
+fattura/parcella;
+causale reddituale CU;
+pagamento;
+eventuali somme non soggette;
+codice esclusione;
+cassa previdenziale.
+
+Campi:
+
+percipiente
+causale CU
+imponibile/reddito
+somme non soggette
+codice esclusione
+cassa previdenziale
+base ritenuta
+aliquota
+ritenuta
+netto
+data pagamento
+
+Devono alimentare in futuro:
+
+scadenzario ritenute;
+F24 ritenute;
+CU;
+17. Validazioni
+
+Distinguere sempre:
+
+blockers
+warnings
+info
+Blockers
+
+Solo ciò che impedisce registrazione contabile corretta:
+
+PN non quadrata;
+riga senza sottoconto finale;
+importi negativi gravi;
+causale obbligatoria mancante;
+soggetto mancante se partitario obbligatorio.
+Warnings
+
+Problemi da correggere ma non sempre bloccanti:
+
+IVA incompleta;
+registro IVA mancante;
+residuo IVA diverso da zero;
+partitario predisposto ma non reale;
+ritenute incomplete.
+Info
+
+Elementi solo informativi:
+
+protocollo da assegnare;
+IVA non ancora scritta nei registri;
+CU/770 non ancora generati;
+partitario non ancora chiuso realmente.
+18. Persistenza reale vs draft
+
+Durante questa fase molte cose sono draft:
+
+ivaDraft
+partitarioDraft
+ritenutaDraft
+documentDraft
+
+Non devono sporcare persistPrimaNotaDraft.
+
+persistPrimaNotaDraft deve continuare a salvare solo:
+
+prima_nota;
+prima_nota_righe.
+
+IVA/Partitario/Ritenute reali saranno collegati in fase successiva tramite contratto canonico.
+
+19. Stato attuale da ricordare
+
+Attualmente sono stati consolidati:
+
+- persistenza causali contabili
+- behavior causale da impostazioni reali
+- tab Righe prima nota nelle causali
+- template righe PN
+- picker Piano dei Conti gerarchico su Registrazione manuale e Causali
+- applicazione template causale in Registrazione manuale
+- ricalcolo importi template
+- storico struttura causale per società
+- priorità conto specifico coerenti con Import Contabilità
+- tab IVA impostata ma da correggere operativamente secondo logica gestionale
+
+Picker gerarchico da estendere in futuro a:
+
+Import Contabilità
+Consultazione Prima Nota
+20. Scaletta residua Registrazione manuale
+
+Da completare:
+
+1. Sistemare Tab IVA in modo operativo gestionale
+2. Partitario automatico
+3. Ritenute / Percipienti
+4. Checkpoint finale Registrazione manuale
+
+Poi:
+
+5. Contratto canonico universale
+6. Audit Import Contabilità / Consultazione / Registrazione manuale
+7. Gap analysis rispetto a software contabile italiano avanzato
+8. Decisione prossimo modulo: Partitario reale / Riconciliazione / Commit IVA-Partitario-Ritenute
+21. Regola finale di comportamento per ChatGPT/Codex
+
+Per ogni prossimo step:
+
+prima progettare
+poi prompt
+poi report
+poi audit
+poi test manuale
+poi verdetto
+poi prossimo step
+
+Non saltare la scaletta.
+
+Non anticipare prompt.
+
+Non proseguire se il blocco attuale non è chiuso.
+
+Non fare micro-prompt inutili.
+
+Non fare mega-refactor.
+
+Non creare file enormi.
+
+Non modificare moduli fuori perimetro.
+
+Non cancellare file.
+
+Non fare git add/commit salvo richiesta.
+
+Frase da aggiungere nelle nuove chat
+
+Alla fine di questo contesto puoi aggiungere:
+
+Ultimo modulo/funzione implementata:
+[SCRIVERE QUI]
+
+Stato attuale:
+[SCRIVERE QUI]
+
+Prossimo passo desiderato:
+[SCRIVERE QUI]
+
+Esempio:
+
+Ultimo modulo/funzione implementata:
+Registrazione manuale — storico struttura causale e priorità conto specifico.
+
+Stato attuale:
+Tab IVA implementata tecnicamente ma da correggere perché deve funzionare come strumento operativo gestionale: ricerca causale IVA, scorporo da totale, multi-riga, residuo automatico, aggiornamento righe PN.
+
+Prossimo passo desiderato:
+Progettare e correggere la Tab IVA in modo operativo prima di passare al Partitario.

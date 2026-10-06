@@ -1,7 +1,7 @@
 import { loadScript } from '../../shared/utils'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { sb } from '../../lib/supabase'
-import { TagInput } from '../../shared/components'
+import { TagInput, ModuleHeader } from '../../shared/components'
 import { TIPO_LABEL, TIPO_CLIENTE } from '../../shared/constants'
 
 
@@ -144,7 +144,11 @@ export function ModuloIVA(){
     <div className="page">
       {modal&&<IVAModal mode={modal.mode} data={modal.data||EMPTY} clienti={clienti} onSave={salva} onClose={()=>setModal(null)} saving={saving}/>}
 
-      <div className="page-hdr"><div className="page-title">💧 Liquidazione IVA</div><div className="page-sub">Importa documenti e gestisci le liquidazioni periodiche</div></div>
+      <ModuleHeader
+        sectionLabel="Fiscale"
+        title="💧 Liquidazione IVA"
+        context="Importa documenti e gestisci le liquidazioni periodiche"
+      />
 
       {/* ── SEZIONE IMPORT (superiore) ── */}
       <div className="card" style={{marginBottom:"1.5rem"}}>

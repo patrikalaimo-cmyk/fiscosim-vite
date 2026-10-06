@@ -15,7 +15,6 @@ import * as importRepo from './data/importRepo.js'
 import { ImportDropzone } from './components/ImportDropzone.jsx'
 import { ImportControlBar } from './components/ImportControlBar.jsx'
 import { ImportDocumentsList } from './components/ImportDocumentsList.jsx'
-import { ImportPageHeader } from './components/ImportPageHeader.jsx'
 import { TIPI_DOCUMENTO, ALIQUOTE_IVA, fmt } from './components/importUiConfig.js'
 
 export function ModuloImportUnificato({ ruolo }) {
@@ -35,6 +34,7 @@ export function ModuloImportUnificato({ ruolo }) {
   const [progress, setProgress] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [societaImportHint, setSocietaImportHint] = useState('')
+  const [bulkConfirming, setBulkConfirming] = useState(false)
   const [tipoManuale, setTipoManuale] = useState('')
   const [aiMode, setAiMode] = useState(() => getStoredAiMode())
   const [aiPreprocessMode, setAiPreprocessMode] = useState(() => getStoredAiPreprocessMode())
@@ -156,9 +156,15 @@ export function ModuloImportUnificato({ ruolo }) {
   }
 
   const confermaTuttiDocumenti = async () => {
+    if (bulkConfirming) return
     if (!window.confirm("Confermi l'invio di tutti i " + documenti.length + ' documenti in Da Validare?')) return
-    for (const doc of documenti) {
-      await confermaDocumento(doc, buildBulkConfirmFormFromDocument(doc))
+    setBulkConfirming(true)
+    try {
+      for (const doc of documenti) {
+        await confermaDocumento(doc, buildBulkConfirmFormFromDocument(doc))
+      }
+    } finally {
+      setBulkConfirming(false)
     }
   }
 
@@ -170,8 +176,6 @@ export function ModuloImportUnificato({ ruolo }) {
 
   return (
     <div className="page">
-      <ImportPageHeader />
-
       <ImportControlBar
         societa={societa}
         societaId={societaId}
@@ -222,6 +226,7 @@ export function ModuloImportUnificato({ ruolo }) {
         tipiDocumento={TIPI_DOCUMENTO}
         aliquoteIva={ALIQUOTE_IVA}
         fmt={fmt}
+        actionsBusy={bulkConfirming}
       />
     </div>
   )

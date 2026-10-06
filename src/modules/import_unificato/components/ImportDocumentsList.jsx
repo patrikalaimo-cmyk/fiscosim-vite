@@ -14,15 +14,16 @@ export function ImportDocumentsList({
   tipiDocumento,
   aliquoteIva,
   fmt,
+  actionsBusy = false,
 }) {
   if (!societaId) {
-    return <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--mu)' }}>Seleziona una società per iniziare</div>
+    return <div style={{ textAlign: 'center', padding: '1.25rem 0 .5rem', color: 'var(--mu)' }}>Seleziona una società per iniziare</div>
   }
 
   if (documenti.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--mu)' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '.5rem' }}>✅</div>
+      <div style={{ textAlign: 'center', padding: '1rem 0 .25rem', color: 'var(--mu)' }}>
+        <div style={{ fontSize: '2rem', marginBottom: '.35rem' }}>✓</div>
         <div>Nessun documento in attesa di conferma</div>
       </div>
     )
@@ -34,6 +35,7 @@ export function ImportDocumentsList({
         documenti={documenti}
         onConfermaTutti={onConfermaTutti}
         onSvuotaTutto={onSvuotaTutto}
+        busy={actionsBusy}
       />
       {documenti.map((doc) => (
         <ImportDocumentCard

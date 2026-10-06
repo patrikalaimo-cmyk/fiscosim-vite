@@ -10,6 +10,5 @@ export async function callAPI(endpoint, payload) {
 }
 
 export async function callSendEmail(payload) {
-  return callAPI('/api/send-email', payload)
+  return callAPI('/api/email', { action: 'send', ...payload })
 }
-

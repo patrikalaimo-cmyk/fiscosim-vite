@@ -1,9 +1,14 @@
-import { getSupabaseAdmin } from '../../lib/db.js'
-import { runProactiveInsightEngine } from '../../services/proactiveInsightEngine.js'
+import { insightsRunHandler } from '../../services/api/insights/run.js'
+import { fiscalKnowledgeScanHandler } from '../../services/api/insights/fiscal-knowledge-scan.js'
 
 export const config = {
   api: { bodyParser: true },
   maxDuration: 60,
+}
+
+const handlers = {
+  run: insightsRunHandler,
+  fiscal_knowledge_scan: fiscalKnowledgeScanHandler,
 }
 
 export default async function handler(req, res) {
@@ -13,27 +18,14 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
-    const societaId = body.societaId
-    if (!societaId) return res.status(400).json({ error: 'societaId richiesto' })
+  const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
+  const action = (typeof body.action === 'string' ? body.action : 'run').trim().toLowerCase() || 'run'
+  const handlerFn = handlers[action] || handlers.run
 
-    const db = await getSupabaseAdmin()
-    const out = await runProactiveInsightEngine(db, {
-      societaId,
-      log: (e, p) => console.log(`[api/insights/run] ${e}`, p || ''),
-    })
+  const result = await handlerFn({
+    body,
+    log: (e, payload) => console.log(`[api/insights/run:${action}] ${e}`, payload || ''),
+  })
 
-    if (!out.ok) {
-      return res.status(500).json({
-        error: 'Persistenza insight fallita (vedi byTipo)',
-        ...out,
-      })
-    }
-
-    return res.status(200).json(out)
-  } catch (e) {
-    console.error('[api/insights/run]', e)
-    return res.status(500).json({ error: e?.message || String(e) })
-  }
+  return res.status(result.status).json(result.json)
 }

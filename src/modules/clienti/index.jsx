@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { TIPO_LABEL, TIPO_COLOR, MODULI_DEFAULT, MODULI_DISPONIBILI, TIPO_CLIENTE } from '../../shared/constants'
+import { ModuleHeader } from '../../shared/components'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -57,11 +58,15 @@ export function ModuloClienti(){
       {moduliModal&&<ModuliModal cliente={moduliModal} onSave={salvaModuli} onClose={()=>setModuliModal(null)}/>}
       {bulkModal&&<ModuliBulkModal clienti={selClienti} onSave={salvaModuli} onClose={()=>{setBulkModal(false);setSelected(new Set());}}/>}
 
-      <div className="page-hdr"><div className="page-title">👥 Clienti</div><div className="page-sub">{clienti.length} clienti in archivio</div></div>
+      <ModuleHeader
+        sectionLabel="Operatività"
+        title="👥 Clienti"
+        context={`${clienti.length} clienti in archivio`}
+        primaryAction={<button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Cliente</button>}
+      />
 
       <div style={{display:"flex",gap:".6rem",marginBottom:".85rem",alignItems:"center",flexWrap:"wrap"}}>
         <input className="search-bar" style={{margin:0,flex:1,minWidth:200}} placeholder="🔍  Cerca nome, email, P.IVA..." value={search} onChange={e=>setSearch(e.target.value)}/>
-        <button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Cliente</button>
       </div>
 
       <div className="pills">{["tutti",...TIPO_CLIENTE].map(t=><span key={t} className={"pill"+(filtroTipo===t?" active":"")} onClick={()=>setFiltroTipo(t)}>{t==="tutti"?"Tutti ("+clienti.length+")":TIPO_LABEL[t]}</span>)}</div>
@@ -269,10 +274,11 @@ function ModuliBulkModal({clienti, onSave, onClose}){
 // ─── IVA IMPORT (PDF / Excel via Claude AI) ──────────────────
 async function estraiDatiIVADaPDF(base64, mimeType, useAI=true) {
   if(!useAI)return null; // Caller will show manual input form
-  const res = await fetch("/api/claude", {
+  const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      action: "claude",
       model: "claude-haiku-4-5-20251001",
       max_tokens: 600,
       system: `Sei un esperto di contabilità IVA italiana. Analizza il documento e rispondi SOLO con JSON valido, zero testo aggiuntivo.`,
@@ -311,10 +317,11 @@ async function estraiDatiIVADaExcel(file, useAI=true) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const testo = XLSX.utils.sheet_to_csv(ws).slice(0, 4000);
 
-  const res = await fetch("/api/claude", {
+  const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      action: "claude",
       model: "claude-haiku-4-5-20251001",
       max_tokens: 600,
       system: `Sei un esperto di contabilità IVA italiana. Analizza il testo CSV di un foglio Excel e rispondi SOLO con JSON valido, zero testo aggiuntivo.`,

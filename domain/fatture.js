@@ -50,17 +50,41 @@ export function parseXMLFattura(xmlText) {
   })
 
   const linesArr = [...linee].map(l => {
+    const num = l.querySelector('NumeroLinea')?.textContent?.trim() || ''
     const sconto = l.querySelector('ScontoMaggiorazione')
+
+    const n = (v, fb = 0) => {
+      const x = parseFloat(String(v ?? '').replace(',', '.'))
+      return Number.isFinite(x) ? x : fb
+    }
+
+    const descrizione = l.querySelector('Descrizione')?.textContent?.trim() || ''
+    const quantita = n(l.querySelector('Quantita')?.textContent, 1) || 1
+    const prezzoUnitario = n(l.querySelector('PrezzoUnitario')?.textContent, 0)
+    const prezzoTotaleRaw = l.querySelector('PrezzoTotale')?.textContent
+    const prezzoTotale = prezzoTotaleRaw != null && String(prezzoTotaleRaw).trim() !== ''
+      ? n(prezzoTotaleRaw, 0)
+      : Math.round((quantita * prezzoUnitario) * 100) / 100
+
+    const aliquotaIvaRaw = l.querySelector('AliquotaIVA')?.textContent?.trim() || ''
+    const natura = l.querySelector('Natura')?.textContent?.trim() || ''
     return {
-      num: l.querySelector('NumeroLinea')?.textContent?.trim() || '',
-      desc: l.querySelector('Descrizione')?.textContent?.trim() || '',
+      num,
+      desc: descrizione,
       codice_art: l.querySelector('CodiceValore')?.textContent?.trim() || '',
-      qty: parseFloat(l.querySelector('Quantita')?.textContent || '1'),
+      qty: quantita,
       um: l.querySelector('UnitaMisura')?.textContent?.trim() || '',
-      prezzo: parseFloat(l.querySelector('PrezzoUnitario')?.textContent || '0'),
-      totale: parseFloat(l.querySelector('PrezzoTotale')?.textContent || '0'),
-      iva: l.querySelector('AliquotaIVA')?.textContent?.trim() || '',
-      natura: l.querySelector('Natura')?.textContent?.trim() || '',
+      prezzo: prezzoUnitario,
+      totale: prezzoTotale,
+      iva: aliquotaIvaRaw,
+      natura,
+
+      // Canonical names used by previews / mappers (avoid undefined in UI).
+      descrizione: descrizione || '',
+      quantita,
+      prezzoUnitario,
+      imponibile: prezzoTotale,
+      aliquotaIVA: aliquotaIvaRaw || '',
       sconto: sconto ? parseFloat(sconto.querySelector('Percentuale')?.textContent || '0') : null,
     }
   })
@@ -88,8 +112,13 @@ export function parseXMLFattura(xmlText) {
     imposta: totImposta,
     imponibili: riepilogoArr.map(r => ({ imp: r.imponibile, aliq: r.aliquota, nat: r.natura })),
     linee: linesArr.map(l => ({
-      descrizione: l.desc, quantita: l.qty, prezzoUnitario: l.prezzo,
-      prezzoTotale: l.totale, aliquotaIVA: l.iva, natura: l.natura,
+      descrizione: l.desc || '',
+      quantita: Number.isFinite(l.qty) ? l.qty : 1,
+      prezzoUnitario: Number.isFinite(l.prezzo) ? l.prezzo : 0,
+      prezzoTotale: Number.isFinite(l.totale) ? l.totale : 0,
+      imponibile: Number.isFinite(l.totale) ? l.totale : 0,
+      aliquotaIVA: l.iva || '',
+      natura: l.natura || '',
     })),
     tipo: get('TipoDocumento'),
     nome_cedente: getNome(cedente),
