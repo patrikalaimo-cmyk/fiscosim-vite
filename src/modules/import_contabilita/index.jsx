@@ -29,6 +29,7 @@ import {
   normalizeAnagraficaText,
   paginateWorkingTableRows,
 } from './domain/importContabilitaPerformanceIndexes.js'
+import { buildImportContabilitaVatHistoryIndex } from './domain/importContabilitaVatHistory.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
@@ -47,6 +48,7 @@ import {
   createImportContabilitaPianoConto,
   findImportContabilitaPercipienteByCf,
   loadCausaliIvaBySocieta,
+  loadImportContabilitaVatHistoryBySocieta,
   getNextPianoContoCodeByParent,
   loadCausaliContabiliBySocieta,
   loadPercipientiBySocieta,
@@ -2614,6 +2616,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [causaliContabiliLoading, setCausaliContabiliLoading] = useState(false)
   const [causaliContabiliError, setCausaliContabiliError] = useState('')
   const [causaliIva, setCausaliIva] = useState([])
+  const [vatHistoryRows, setVatHistoryRows] = useState([])
   const [causaleEditorRowId, setCausaleEditorRowId] = useState('')
   const [causaleSearchTerm, setCausaleSearchTerm] = useState('')
   const [manualCausaleByRowId, setManualCausaleByRowId] = useState({})
@@ -2681,6 +2684,11 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const workingViewCausaliIvaById = useMemo(
     () => causaliIvaIndexes.byId,
     [causaliIvaIndexes],
+  )
+
+  const vatHistoryIndex = useMemo(
+    () => buildImportContabilitaVatHistoryIndex(vatHistoryRows),
+    [vatHistoryRows],
   )
 
   const counterpartyAccountByRowId = useMemo(() => {
@@ -3414,6 +3422,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       setCausaliContabili([])
       setCausaliContabiliError('')
       setCausaliIva([])
+      setVatHistoryRows([])
 
       if (!selectedSocietaId) {
         if (societaLoading) return
@@ -3431,20 +3440,23 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       setCausaliContabiliError('')
 
       try {
-        const [rows, causaliRows, causaliIvaRows] = await Promise.all([
+        const [rows, causaliRows, causaliIvaRows, historyRows] = await Promise.all([
           loadPianoContiBySocieta(selectedSocietaId),
           loadCausaliContabiliBySocieta(selectedSocietaId),
           loadCausaliIvaBySocieta(selectedSocietaId),
+          loadImportContabilitaVatHistoryBySocieta(selectedSocietaId).catch(() => []),
         ])
         if (!alive) return
         setPianoConti(rows)
         setCausaliContabili(causaliRows)
         setCausaliIva(causaliIvaRows)
+        setVatHistoryRows(Array.isArray(historyRows) ? historyRows : [])
       } catch (error) {
         if (!alive) return
         setPianoConti([])
         setCausaliContabili([])
         setCausaliIva([])
+        setVatHistoryRows([])
         setPianoContiError(error?.message || 'Impossibile caricare il piano conti.')
         setCausaliContabiliError(error?.message || 'Impossibile caricare le causali contabili.')
       } finally {
@@ -5638,6 +5650,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         causaliContabili={causaliContabili}
         causaliIva={workingViewCausaliIva}
         causaliIvaById={workingViewCausaliIvaById}
+        vatHistoryIndex={vatHistoryIndex}
         isDemoSocieta={isSelectedDemoSocieta}
         onCommitDemoWorkingView={handleDemoWorkingViewCommit}
         commitBusy={demoCommitBusy}

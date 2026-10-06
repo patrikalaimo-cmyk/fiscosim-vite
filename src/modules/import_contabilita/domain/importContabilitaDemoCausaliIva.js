@@ -185,6 +185,7 @@ export function assessWorkingViewIvaDraftRows(ivaDraftRows, options = {}) {
   const rows = normalizeImportVatRows(ivaDraftRows)
   const documentVatTotal = Number(options.documentVatTotal ?? 0) || 0
   const blockingIssues = []
+  const warnings = []
   const checks = []
 
   if (!rows.length) {
@@ -192,10 +193,10 @@ export function assessWorkingViewIvaDraftRows(ivaDraftRows, options = {}) {
       const issue = 'Causale IVA mancante'
       blockingIssues.push(issue)
       checks.push({ key: 'iva-causale', label: issue, status: 'blocked', detail: 'Nessuna riga IVA significativa in bozza' })
-      return { status: 'blocked', blockingIssues, warnings: [], checks }
+      return { status: 'blocked', blockingIssues, warnings, checks }
     }
     checks.push({ key: 'iva-causale', label: 'Nessuna riga IVA significativa', status: 'ok' })
-    return { status: 'ok', blockingIssues, warnings: [], checks }
+    return { status: 'ok', blockingIssues, warnings, checks }
   }
 
   rows.forEach((row, index) => {
@@ -215,6 +216,18 @@ export function assessWorkingViewIvaDraftRows(ivaDraftRows, options = {}) {
     }
 
     if (causaleIvaId) {
+      const historyWarning = String(row?.causaleIvaHistoryWarning || '').trim()
+      if (historyWarning) {
+        const warning = `${historyWarning}${rowSuffix}`
+        warnings.push(warning)
+        checks.push({
+          key: `iva-history-${index}`,
+          label: `Discrepanza storico IVA${rowSuffix}`,
+          status: 'warning',
+          detail: warning,
+        })
+      }
+
       checks.push({
         key: `iva-causale-${index}`,
         label: `Causale IVA assegnata${rowSuffix}`,
@@ -227,7 +240,7 @@ export function assessWorkingViewIvaDraftRows(ivaDraftRows, options = {}) {
   return {
     status: blockingIssues.length ? 'blocked' : 'ok',
     blockingIssues,
-    warnings: [],
+    warnings,
     checks,
   }
 }

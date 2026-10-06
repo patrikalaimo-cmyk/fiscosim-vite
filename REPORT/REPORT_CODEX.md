@@ -10966,3 +10966,48 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessun intervento su DB reale, RLS/auth, migration, `.env` o browser.
 - CI da rilanciare sul commit correttivo; esito finale da registrare append-only.
 
+### TEST-BASELINE-1 — CI RUN #3: BASELINE UFFICIALE CHIUSA VERDE
+
+- GitHub Actions run `37523777654` sul commit `5ec0d8efb969cb93efe439d3c4b3fc90e39a61c0`: **SUCCESS**.
+- Job `safe-node-baseline (ubuntu-latest)`: **SUCCESS**.
+- Job `safe-node-baseline (windows-latest)`: **SUCCESS**.
+- Su Windows risultano verdi tutti gli step applicativi: `npm ci`, `test:import`, `test:core`, `test:all`, `npm run build`.
+- TEST-BASELINE-1 è quindi **CHIUSO** come baseline automatica ufficiale.
+- Nessun test browser/manuale reale dichiarato eseguito. Il collaudo manuale resta concentrato a fine blocco come da nuova regola test.
+- Prossimo blocco: `IMPORT-25A-FREEZE`.
+
+## IMPORT-25A-HISTORY-1 — STORICO IVA CONTROPARTE + DETRAIBILITÀ
+
+- **Obiettivo**: collegare alla Working View Import lo storico delle scelte IVA già contabilizzate senza introdurre decisioni autonome definitive.
+- **Regola priorità causale IVA**:
+  1. P1 causale standard Studio per aliquota/natura;
+  2. P2 storico controparte;
+  3. P3 AI riservato a fase successiva;
+  4. override manuale operatore sempre prevalente.
+- **Discrepanza P1/P2**: se standard Studio e storico divergono, viene mantenuto P1 e viene prodotto warning non bloccante. Nessuna sostituzione silenziosa.
+- **Storico**: lettura read-only da `registri_iva`, separata per società, controparte, direzione acquisto/vendita e aliquota. Match P.IVA prioritario, fallback denominazione normalizzata.
+- **Detraibilità**: proposta storica ricavata da `iva_detraibile/iva` o `iva_indetraibile`; percentuale editabile nella Working View; override manuale preservato al rebuild.
+- **Caricamento storico**: opzionale/non bloccante. In caso di errore la Working View continua senza suggerimento storico.
+- **File previsti nel commit**:
+  - `src/modules/import_contabilita/domain/importContabilitaVatHistory.js`;
+  - `src/modules/import_contabilita/domain/importContabilitaWorkingViewIvaDraft.js`;
+  - `src/modules/import_contabilita/domain/importContabilitaDemoCausaliIva.js`;
+  - `src/modules/import_contabilita/data/importContabilitaRepo.js`;
+  - `src/modules/import_contabilita/index.jsx`;
+  - `src/modules/import_contabilita/components/working_view/ImportContabilitaWorkingView.jsx`;
+  - `src/modules/import_contabilita/tests/importContabilitaVatHistory.test.js`;
+  - `src/modules/import_contabilita/tests/importContabilitaWorkingViewIvaDraft.test.js`;
+  - documentazione/regole/test matrix/report.
+- **Test sintetici aggiunti**:
+  - normalizzazione P.IVA e denominazione;
+  - separazione storico acquisti/vendite;
+  - separazione per aliquota;
+  - causale storica modale;
+  - detraibilità storica modale;
+  - P1 standard > P2 storico con warning;
+  - fallback P2 se manca standard;
+  - override manuale detraibilità preservato.
+- **Sicurezza**: nessuna migration, nessuna modifica `.env`, auth, RLS o policy; nessuna scrittura su DB reale; nessuna contabilizzazione autonoma.
+- **Verifiche runtime**: da eseguire tramite la CI ufficiale Windows/Linux dopo il commit. Test browser/manuali **NON eseguiti**.
+- **Residuo successivo Import**: storico assistito di conto costo/ricavo e causale contabile per controparte, poi audit finale IMPORT-25A-FREEZE.
+

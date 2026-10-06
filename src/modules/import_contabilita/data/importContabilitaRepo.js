@@ -734,6 +734,42 @@ export async function loadCausaliIvaBySocieta(societaId) {
   return mapRows(fallbackData)
 }
 
+export async function loadImportContabilitaVatHistoryBySocieta(societaId, options = {}) {
+  const sid = normalizeSocietaId(societaId)
+  if (!sid) return []
+
+  const rawLimit = Number(options?.limit)
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(2000, Math.round(rawLimit)))
+    : 1200
+
+  const rows = await fetchPagedRows({
+    table: 'registri_iva',
+    societaColumn: 'societa_id',
+    societaId: sid,
+    select: 'id,societa_id,tipo,imponibile,iva,iva_detraibile,iva_indetraibile,aliquota,data,created_at,causale_iva_id,soggetto_piva,soggetto_denominazione',
+    orderBy: 'created_at',
+    ascending: false,
+    limit,
+  })
+
+  return rows.map((row) => ({
+    id: normalizeText(row?.id),
+    societa_id: normalizeText(row?.societa_id),
+    tipo: normalizeText(row?.tipo),
+    imponibile: Number(row?.imponibile ?? 0) || 0,
+    iva: Number(row?.iva ?? 0) || 0,
+    iva_detraibile: row?.iva_detraibile == null ? null : Number(row.iva_detraibile),
+    iva_indetraibile: row?.iva_indetraibile == null ? null : Number(row.iva_indetraibile),
+    aliquota: row?.aliquota ?? null,
+    data: normalizeText(row?.data),
+    created_at: normalizeText(row?.created_at),
+    causale_iva_id: normalizeText(row?.causale_iva_id),
+    soggetto_piva: normalizeText(row?.soggetto_piva),
+    soggetto_denominazione: normalizeText(row?.soggetto_denominazione),
+  }))
+}
+
 export async function loadStaging() {
   notImplemented('loadStaging')
 }

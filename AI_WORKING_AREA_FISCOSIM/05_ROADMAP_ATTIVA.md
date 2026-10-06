@@ -33,3 +33,29 @@ L'attività corrente ha completato con successo il modulo **Liquidazione IVA Def
 5. **Passaggio Test e Compilazione Build (COMPLETATO ✔)**:
    * Eseguiti con successo tutti i 101 test relativi alla liquidazione IVA.
    * Compilata la build di produzione (`npm run build`) con successo.
+
+## Riallineamento A100 — 2026-10-06
+
+La roadmap operativa corrente è stata riallineata all'obiettivo **A100 — Studio Interno Completo**.
+
+Stato attuale:
+- **TEST-BASELINE-1: COMPLETATO**. GitHub Actions run `37523777654` verde su Linux e Windows con `test:import`, `test:core`, `test:all` e `npm run build`.
+- **IMPORT-25A-FREEZE: IN CORSO**.
+- Sottoblocco corrente: **IMPORT-25A-HISTORY-1 — storico IVA controparte + percentuale detrazione proposta**.
+- **Registrazione Manuale, Consultazione e IVA** restano nella sequenza di freeze prevista dopo Import.
+- **Riconciliazione Bancaria resta BLOCCATA** finché Import + Manuale + IVA non sono chiusi con test automatici e collaudo manuale finale di blocco.
+
+Ordine A100 attivo:
+1. IMPORT-25A-FREEZE.
+2. MANUALE-CANONICO-FREEZE.
+3. CONSULTAZIONE-FREEZE.
+4. IVA-REGISTRI-LIQUIDAZIONE.
+5. SPLIT-SIMPLE.
+6. RITENUTE-SCADENZARIO.
+7. STAMPE-EXPORT-FASCICOLO.
+8. LOCK-PERIODO-AUDIT.
+9. RICONCILIAZIONE BANCARIA ASSISTITA.
+10. RELEASE A100.
+
+Nel blocco Import, le proposte da storico devono restare assistive: il software propone, segnala discrepanze e preserva gli override manuali; la contabilizzazione richiede sempre validazione utente.
+

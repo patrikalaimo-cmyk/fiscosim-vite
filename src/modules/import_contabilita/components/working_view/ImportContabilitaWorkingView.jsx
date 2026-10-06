@@ -271,6 +271,7 @@ export function ImportContabilitaWorkingView({
   causaliContabili,
   causaliIva,
   causaliIvaById: causaliIvaByIdProp = null,
+  vatHistoryIndex = new Map(),
   isDemoSocieta = false,
   onCommitDemoWorkingView,
   commitBusy = false,
@@ -307,6 +308,7 @@ export function ImportContabilitaWorkingView({
     counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
     isDemoSocieta,
     causaliIvaById,
+    vatHistoryIndex,
     createRowId: nextWorkingViewIvaDraftId,
   }))
   const effectiveIvaDraftRows = useMemo(
@@ -596,12 +598,13 @@ export function ImportContabilitaWorkingView({
       counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
       isDemoSocieta,
       causaliIvaById,
+      vatHistoryIndex,
       createRowId: nextWorkingViewIvaDraftId,
     }))
     setSelectedIvaDraftRowId(null)
     setIvaCausalePickerRowId('')
     setIvaCausaleSearchTerm('')
-  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.counterpartyAccount?.id, activeWorkingViewModel?.counterpartyAccount?.causaleIvaId, causaliIva, isDemoSocieta])
+  }, [activeWorkingViewModel?.rowKey, activeWorkingViewModel?.counterpartyAccount?.id, activeWorkingViewModel?.counterpartyAccount?.causaleIvaId, causaliIva, vatHistoryIndex, isDemoSocieta])
 
   useEffect(() => {
     if (!effectiveIvaDraftRows.length) {
@@ -655,6 +658,14 @@ export function ImportContabilitaWorkingView({
       }
       if (field === 'causaleIvaId') {
         nextRow.causaleIvaManual = true
+        nextRow.causaleIvaSuggestionSource = 'manual'
+        nextRow.causaleIvaHistoryWarning = ''
+      }
+      if (field === 'detraibilePercent') {
+        const percent = Number(value)
+        nextRow.detraibilePercent = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0
+        nextRow.detraibileManual = true
+        nextRow.detraibileSuggestionSource = 'manual'
       }
       return recalculateWorkingViewIvaDraftRow(nextRow, causaliIvaById)
     })))
@@ -1164,9 +1175,28 @@ export function ImportContabilitaWorkingView({
                               </div>
                             </td>
                             <td style={{ padding: '.1rem .12rem', width: '14%', borderBottom: '1px solid rgba(124,157,202,.08)' }}>
-                              <div style={{ display: 'grid', gap: '.02rem' }}>
+                              <div style={{ display: 'grid', gap: '.03rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '.05rem', alignItems: 'center' }}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={row.detraibilePercent}
+                                    onChange={(event) => updateIvaDraftRow(row.id, 'detraibilePercent', event.target.value)}
+                                    style={{ ...ivaAmountInputStyle, minWidth: 0 }}
+                                    aria-label="Percentuale IVA detraibile"
+                                  />
+                                  <span style={{ fontSize: '.62rem', color: 'rgba(188,204,226,.72)' }}>%</span>
+                                </div>
                                 <strong style={ivaAmountValueStyle}>{formatMoney(row.detraibileImposta || 0)}</strong>
-                                <span style={ivaAmountMetaStyle}>{Math.round(Number(row.detraibilePercent || 0))}% detraibile</span>
+                                <span style={ivaAmountMetaStyle}>
+                                  {row.detraibileSuggestionSource === 'history' && !row.detraibileManual
+                                    ? `Storico controparte · ${Number(row.historicalSampleCount || 0)} campion${Number(row.historicalSampleCount || 0) === 1 ? 'e' : 'i'}`
+                                    : row.detraibileManual
+                                      ? 'Scelta manuale'
+                                      : 'Da causale IVA'}
+                                </span>
                               </div>
                             </td>
                             <td style={{ padding: '.1rem .12rem', width: '14%', borderBottom: '1px solid rgba(124,157,202,.08)' }}>
@@ -1200,6 +1230,15 @@ export function ImportContabilitaWorkingView({
                                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.causaleIvaLabel || 'Seleziona causale IVA'}</span>
                                 <span style={{ fontSize: '.58rem', color: 'rgba(188,204,226,.72)' }}>▾</span>
                               </button>
+                              {row.causaleIvaHistoryWarning && !row.causaleIvaManual ? (
+                                <div style={{ marginTop: '.04rem', fontSize: '.58rem', lineHeight: 1.2, color: '#ffcf70' }}>
+                                  ⚠ Standard Studio ≠ storico controparte
+                                </div>
+                              ) : row.causaleIvaSuggestionSource === 'history' && !row.causaleIvaManual ? (
+                                <div style={{ marginTop: '.04rem', fontSize: '.58rem', lineHeight: 1.2, color: '#a9c8ec' }}>
+                                  Suggerita dallo storico controparte
+                                </div>
+                              ) : null}
                             </td>
                             <td style={{ padding: '.1rem', width: '6%', borderBottom: isPickerOpen ? 'none' : '1px solid rgba(124,157,202,.08)' }}>
                               <button

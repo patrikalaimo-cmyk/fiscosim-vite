@@ -6,7 +6,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 
 | Suite | Comando | Copertura principale | Non copre |
 |---|---|---|---|
-| Import Contabilità | `npm run test:import` | parser/normalizzazione Import, fixture sintetica TEST-VERGNANO-001, Working View IVA, pruning 0/0, causali IVA standard, override manuale, payload commit, readiness, dedup/anti-doppio commit, performance 500 documenti, Test Lab con mock | browser reale, Supabase reale, società reali, ZIP cliente reale |
+| Import Contabilità | `npm run test:import` | parser/normalizzazione Import, fixture sintetica TEST-VERGNANO-001, Working View IVA, pruning 0/0, causali IVA standard, storico IVA controparte P2, warning standard/storico, proposta e override manuale detraibilità, payload commit, readiness, dedup/anti-doppio commit, performance 500 documenti, Test Lab con mock | browser reale, Supabase reale, società reali, ZIP cliente reale |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
@@ -47,3 +47,18 @@ Non fanno parte di TEST-BASELINE-1 e non devono essere dichiarati eseguiti autom
 ## Esclusioni di sicurezza
 
 La baseline non applica migration, non modifica RLS/auth/policy Supabase, non legge `.env` per collegarsi a società reali, non esegue browser automation e non apre la Riconciliazione Bancaria.
+
+## IMPORT-25A-HISTORY-1
+
+Copertura automatica aggiunta:
+- indicizzazione storico IVA per P.IVA/denominazione, direzione acquisto/vendita e aliquota;
+- causale IVA storica modale con separazione acquisti/vendite;
+- percentuale detraibile storica modale;
+- P1 standard Studio prevale su P2 storico;
+- warning non bloccante quando standard e storico divergono;
+- P2 storico usato quando lo standard Studio manca;
+- override manuale della percentuale detraibile preservato al rebuild;
+- nessun riuso di storico con aliquota incompatibile.
+
+Resta manuale a fine blocco la sola verifica UX nel browser: leggibilità del warning, modifica percentuale detraibile e comportamento visuale al cambio documento.
+

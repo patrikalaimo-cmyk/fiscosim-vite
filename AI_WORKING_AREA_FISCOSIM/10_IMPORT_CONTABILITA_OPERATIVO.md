@@ -50,3 +50,28 @@ Questo documento descrive il consolidamento dell'Import Contabilità per la gest
 *Riconciliazione Bancaria*: **Rigidamente Bloccata** — gate Manuale + Import **non superato** finché Test Lab (24B/24C) e matrice test manuale non sono validati.
 *Test Lab (24A)*: Recinto demo attivo; **nessun** import/commit da Test Lab in questa fase.
 
+## IMPORT-25A-HISTORY-1 — Storico IVA controparte e detraibilità
+
+Nel freeze Import 25A viene introdotta una proposta deterministica, read-only, basata sulle registrazioni già contabilizzate in `registri_iva`.
+
+### Regole
+- Match storico forte per P.IVA; fallback per denominazione normalizzata solo se necessario.
+- Lo storico è separato per **direzione** (`acquisto`/`vendita`) e **aliquota IVA**: una scelta al 22% non viene riutilizzata sul 10%, né lo storico acquisti viene mescolato con le vendite.
+- Causale IVA storica = valore modale; a parità viene privilegiata la scelta più recente.
+- Percentuale detraibile storica = valore modale ricostruito da `iva_detraibile / iva` o, in alternativa, da `iva_indetraibile`.
+- Priorità causale: **P1 standard Studio > P2 storico controparte > P3 AI futuro**.
+- Se standard e storico divergono, la Working View mantiene lo standard e mostra warning non bloccante.
+- La percentuale di detrazione proposta dallo storico è visibile ed editabile direttamente nella Working View.
+- Causale IVA e detraibilità modificate manualmente prevalgono sulla proposta e restano preservate nel rebuild della bozza.
+- Il caricamento dello storico è opzionale/non bloccante: un errore di lettura non deve impedire l'import.
+
+### Implementazione
+- `domain/importContabilitaVatHistory.js`: indice storico per controparte/direzione/aliquota.
+- `data/importContabilitaRepo.js`: lettura read-only delle ultime righe `registri_iva` della società.
+- `domain/importContabilitaWorkingViewIvaDraft.js`: risoluzione P1/P2, warning discrepanza, proposta detraibilità e override manuali.
+- `components/working_view/ImportContabilitaWorkingView.jsx`: indicazione fonte proposta e input manuale percentuale detraibile.
+- Nessuna migration, nessuna modifica RLS/auth, nessuna scrittura DB aggiuntiva.
+
+### Residuo Import storico
+Dopo HISTORY-1 resta da collegare, in sottoblocco separato, lo storico **conto costo/ricavo** e **causale contabile** per fornitore/cliente, mantenendo la stessa filosofia di proposta assistita e validazione finale dell'operatore.
+
