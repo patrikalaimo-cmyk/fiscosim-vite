@@ -11104,3 +11104,12 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna migration, modifica `.env`, auth, RLS/policy o accesso a società reali.
 - **Residuo necessario per chiudere definitivamente IMPORT-25A-FREEZE**: collaudo manuale finale del blocco in browser su società esclusivamente di test, come checklist riportata nell'audit. Non viene dichiarato eseguito.
 
+### IMPORT-25A-FREEZE — CI RUN #1: FIX SELETTORE TEST STATICO
+
+- GitHub Actions run `37531763614`, job Linux: `test:import` ha rilevato **1 failure** esclusivamente nel nuovo `importContabilitaFreezeAudit.test.js`.
+- Le altre due guardie del freeze audit risultavano PASS, inclusa la conferma esplicita operatore prima del commit.
+- Causa: il test cercava `<ImportContabilitaWorkingTable` e intercettava per prefisso `<ImportContabilitaWorkingTableToolbar`, quindi analizzava il componente sbagliato.
+- Fix test-only: ricerca resa non ambigua usando `<ImportContabilitaWorkingTable\n`.
+- Nessuna modifica a logica produttiva, regole fiscali o write path.
+- CI da rilanciare sul commit correttivo.
+
