@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { runCommitWorkflow } from '../application/importContabilitaWorkflow.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 
+const TEST_STAGING_UUID = '9539bde9-b325-4246-a20d-6c1b9408b48e'
+
 // Simple mock for database queries
 class MockDbQuery {
   constructor(table, client) {
@@ -42,7 +44,7 @@ class MockDbClient {
   constructor() {
     this.log = []
     this.responses = {
-      documenti_import: { id: 'doc-import-123', stato: 'pending' },
+      documenti_import: { id: TEST_STAGING_UUID, stato: 'pending' },
       stampe_definitive: [],
       prima_nota: { id: 'pn-new-id' },
       prima_nota_righe: [],
@@ -84,12 +86,12 @@ function makeBasePayload({ direction = 'acquisto', causaleCode = 'FF', tipoCausa
     societaId: 'soc-123',
     registrationDate: '2026-04-30',
     sourceRow: {
-      id: 'doc-import-123',
+      id: TEST_STAGING_UUID,
       filename: 'invoice.xml',
     },
     payload: {
       handoff: {
-        sourceRowKey: 'doc-import-123',
+        sourceRowKey: TEST_STAGING_UUID,
         sourceFileName: 'invoice.xml',
         sourceBatchId: 'batch-test-123',
         contractVersion: 'P7B-v3',

@@ -10940,3 +10940,12 @@ pm run build -> Successo (429 moduli, 16s).
 - **Manuale residuo a fine blocco**: verifica UI Working Table/Working View, file picker XML/ZIP controllati, override visivo, commit esclusivamente su società test con UUID staging reale, percezione performance ~500 documenti.
 - **Prossimo step consigliato**: acquisire esito CI; se verde, dichiarare TEST-BASELINE-1 chiuso e procedere a `IMPORT-25A-FREEZE` senza aprire Riconciliazione Bancaria.
 
+### TEST-BASELINE-1 — CI RUN #1: REGRESSIONE TEST LEGACY RILEVATA E CORRETTA
+
+- GitHub Actions run `37522811004`, job Linux: `test:import` ha eseguito **213 test: 206 pass / 7 fail**.
+- I 7 fallimenti erano tutti in `importContabilitaHardening.test.js` e non nella nuova fixture TEST-VERGNANO-001.
+- Causa: il vecchio helper `makeBasePayload()` usava `doc-import-123` come ID staging e si aspettava commit riuscito; dopo 25A-FIX-4 il flusso import reale richiede correttamente un UUID `documenti_import` e quindi i test legacy venivano bloccati dal precheck prima del persist.
+- Correzione test-only: introdotto `TEST_STAGING_UUID` fittizio e riallineati `sourceRow.id`, `handoff.sourceRowKey` e risposta mock `documenti_import`.
+- Nessuna modifica alla logica produttiva, nessun DB reale, nessuna migration, nessun browser.
+- La CI viene rilanciata sul nuovo commit; esito finale da registrare in append-only.
+
