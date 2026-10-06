@@ -79,3 +79,14 @@ Copertura automatica aggiunta:
 - sorgente storico verificata read-only, senza insert/update/delete.
 
 Resta manuale a fine blocco la verifica UX nel browser: leggibilità del badge storico e sostituzione manuale di conto/causale su un documento reale di test.
+
+## IMPORT-25A-FREEZE
+
+Gate regressivo aggiunto:
+- `importContabilitaFreezeAudit.test.js` verifica che il commit sia disabilitato quando la Working View non è coerente;
+- verifica il popup `window.confirm` prima della contabilizzazione;
+- verifica che la Working Table non chiami direttamente il commit;
+- verifica che `runCommitWorkflow` resti concentrato nel handler esplicito della Working View.
+
+Stato: **gate automatico PASS** dopo CI del commit di freeze. La chiusura definitiva resta subordinata alla checklist manuale finale descritta in `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.
+

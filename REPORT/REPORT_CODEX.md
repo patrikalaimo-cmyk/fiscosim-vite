@@ -11073,3 +11073,34 @@ pm run build -> Successo (429 moduli, 16s).
 - **Verifiche runtime**: da eseguire con la CI ufficiale Windows/Linux sul commit del blocco. Browser/manuali reali NON eseguiti.
 - **Prossimo step se CI verde**: audit finale `IMPORT-25A-FREEZE` su anti-dup, payload canonico, readiness, storico/override e residui manuali di fine blocco.
 
+### IMPORT-25A-HISTORY-2 — CI RUN #1: BLOCCO CHIUSO VERDE
+
+- GitHub Actions run `37531246293` sul commit `6263fa8eaf58d0f34b051f1c1074478cf6dd2ea5`: **SUCCESS**.
+- Linux: `test:import` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- Windows: `test:import` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- **IMPORT-25A-HISTORY-2 è CHIUSO** a livello automatico.
+- Confermati storico read-only, proposta conto costo/ricavo, proposta causale contabile, separazione acquisti/vendite, match P.IVA/fallback denominazione, marker “Proposta da storico” e prevalenza degli override già presenti.
+- Browser/manuali reali: **NON eseguiti**.
+
+## IMPORT-25A-FREEZE — AUDIT AUTOMATICO FINALE
+
+- Audit consolidato in `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.
+- Gate automatici verificati:
+  - XML / P7M / ZIP;
+  - dataset 500 documenti + paginazione/cache;
+  - matching anagrafiche forte;
+  - pruning IVA 0/0 e mantenimento delle righe fiscalmente significative;
+  - P1 standard Studio / P2 storico IVA / warning conflitto / override manuale;
+  - storico conto costo/ricavo + causale contabile, read-only e assistivo;
+  - readiness;
+  - payload canonico e quadratura PN;
+  - anti-duplicazione in import;
+  - anti-doppio commit;
+  - blocco periodo definitivo;
+  - commit solo da Working View coerente, dopo click e conferma esplicita operatore;
+  - nessun commit diretto dalla Working Table.
+- Aggiunto `importContabilitaFreezeAudit.test.js` come guardia regressiva sulla conferma esplicita e sul write path.
+- **Esito audit automatico: PASS**, subordinato alla CI del commit di freeze.
+- Nessuna migration, modifica `.env`, auth, RLS/policy o accesso a società reali.
+- **Residuo necessario per chiudere definitivamente IMPORT-25A-FREEZE**: collaudo manuale finale del blocco in browser su società esclusivamente di test, come checklist riportata nell'audit. Non viene dichiarato eseguito.
+
