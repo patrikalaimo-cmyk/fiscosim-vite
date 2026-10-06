@@ -238,7 +238,11 @@ export function assessWorkingViewIvaDraftRows(ivaDraftRows, options = {}) {
   })
 
   return {
-    status: blockingIssues.length ? 'blocked' : 'ok',
+    status: blockingIssues.length
+      ? 'blocked'
+      : warnings.length
+        ? 'warning'
+        : 'ok',
     blockingIssues,
     warnings,
     checks,

@@ -11011,3 +11011,11 @@ pm run build -> Successo (429 moduli, 16s).
 - **Verifiche runtime**: da eseguire tramite la CI ufficiale Windows/Linux dopo il commit. Test browser/manuali **NON eseguiti**.
 - **Residuo successivo Import**: storico assistito di conto costo/ricavo e causale contabile per controparte, poi audit finale IMPORT-25A-FREEZE.
 
+### IMPORT-25A-HISTORY-1 — CI RUN #1: WARNING STATUS FIX
+
+- GitHub Actions run `37525487122`, job Linux: `test:import` ha rilevato **1 failure** nel nuovo test P1/P2.
+- La causale standard P1, lo storico P2 e il warning venivano costruiti correttamente; il difetto era solo nello stato restituito da `assessWorkingViewIvaDraftRows`, che restituiva `ok` in presenza di warning non bloccanti.
+- Correzione: stato `blocked` se esistono blocker, `warning` se esistono warning senza blocker, altrimenti `ok`.
+- Nessuna logica fiscale o priorità P1/P2 modificata; nessun test escluso o indebolito.
+- CI da rilanciare sul commit correttivo.
+
