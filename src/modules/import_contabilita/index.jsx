@@ -20,7 +20,9 @@ import {
 } from './domain/importContabilitaCommitFlow.js'
 import {
   WORKING_TABLE_PAGE_SIZE,
+  buildCausaliContabiliByIdMap,
   buildCausaliIvaLookupIndexes,
+  buildPianoContiByIdMap,
   buildPianoContiLookup,
   classifyCounterparty,
   createCounterpartyClassificationResolver,
@@ -30,6 +32,11 @@ import {
   paginateWorkingTableRows,
 } from './domain/importContabilitaPerformanceIndexes.js'
 import { buildImportContabilitaVatHistoryIndex } from './domain/importContabilitaVatHistory.js'
+import {
+  buildImportContabilitaAccountingHistoryIndex,
+  decorateImportAccountingHistorySuggestion,
+  resolveImportContabilitaAccountingHistorySuggestion,
+} from './domain/importContabilitaAccountingHistory.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
@@ -48,6 +55,7 @@ import {
   createImportContabilitaPianoConto,
   findImportContabilitaPercipienteByCf,
   loadCausaliIvaBySocieta,
+  loadImportContabilitaAccountingHistoryBySocieta,
   loadImportContabilitaVatHistoryBySocieta,
   getNextPianoContoCodeByParent,
   loadCausaliContabiliBySocieta,
@@ -2617,6 +2625,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [causaliContabiliError, setCausaliContabiliError] = useState('')
   const [causaliIva, setCausaliIva] = useState([])
   const [vatHistoryRows, setVatHistoryRows] = useState([])
+  const [accountingHistoryBundle, setAccountingHistoryBundle] = useState(() => ({ documents: [], headers: [], rows: [] }))
   const [causaleEditorRowId, setCausaleEditorRowId] = useState('')
   const [causaleSearchTerm, setCausaleSearchTerm] = useState('')
   const [manualCausaleByRowId, setManualCausaleByRowId] = useState({})
@@ -2689,6 +2698,27 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const vatHistoryIndex = useMemo(
     () => buildImportContabilitaVatHistoryIndex(vatHistoryRows),
     [vatHistoryRows],
+  )
+
+  const pianoContiById = useMemo(
+    () => buildPianoContiByIdMap(pianoConti),
+    [pianoConti],
+  )
+
+  const causaliContabiliIndexes = useMemo(
+    () => buildCausaliContabiliByIdMap(causaliContabili),
+    [causaliContabili],
+  )
+
+  const accountingHistoryIndex = useMemo(
+    () => buildImportContabilitaAccountingHistoryIndex({
+      documents: accountingHistoryBundle?.documents || [],
+      headers: accountingHistoryBundle?.headers || [],
+      rows: accountingHistoryBundle?.rows || [],
+      pianoConti,
+      causaliContabili,
+    }),
+    [accountingHistoryBundle, pianoConti, causaliContabili],
   )
 
   const counterpartyAccountByRowId = useMemo(() => {
@@ -3423,6 +3453,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       setCausaliContabiliError('')
       setCausaliIva([])
       setVatHistoryRows([])
+      setAccountingHistoryBundle({ documents: [], headers: [], rows: [] })
 
       if (!selectedSocietaId) {
         if (societaLoading) return
@@ -3440,23 +3471,30 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       setCausaliContabiliError('')
 
       try {
-        const [rows, causaliRows, causaliIvaRows, historyRows] = await Promise.all([
+        const [rows, causaliRows, causaliIvaRows, historyRows, accountingHistory] = await Promise.all([
           loadPianoContiBySocieta(selectedSocietaId),
           loadCausaliContabiliBySocieta(selectedSocietaId),
           loadCausaliIvaBySocieta(selectedSocietaId),
           loadImportContabilitaVatHistoryBySocieta(selectedSocietaId).catch(() => []),
+          loadImportContabilitaAccountingHistoryBySocieta(selectedSocietaId).catch(() => ({ documents: [], headers: [], rows: [] })),
         ])
         if (!alive) return
         setPianoConti(rows)
         setCausaliContabili(causaliRows)
         setCausaliIva(causaliIvaRows)
         setVatHistoryRows(Array.isArray(historyRows) ? historyRows : [])
+        setAccountingHistoryBundle(
+          accountingHistory && typeof accountingHistory === 'object'
+            ? accountingHistory
+            : { documents: [], headers: [], rows: [] },
+        )
       } catch (error) {
         if (!alive) return
         setPianoConti([])
         setCausaliContabili([])
         setCausaliIva([])
         setVatHistoryRows([])
+        setAccountingHistoryBundle({ documents: [], headers: [], rows: [] })
         setPianoContiError(error?.message || 'Impossibile caricare il piano conti.')
         setCausaliContabiliError(error?.message || 'Impossibile caricare le causali contabili.')
       } finally {
@@ -3557,6 +3595,90 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       )
     }
   }
+
+  useEffect(() => {
+    if (!selectedSocietaId || !accountingHistoryIndex.size) return
+    const rows = Array.isArray(stagingRows) ? stagingRows : []
+    if (!rows.length) return
+
+    let accountChanged = false
+    let causaleChanged = false
+    const nextAccounts = { ...(manualAccountByRowId || {}) }
+    const nextCausali = { ...(manualCausaleByRowId || {}) }
+
+    rows.forEach((row) => {
+      const rowKey = getRowKey(row)
+      if (!rowKey) return
+
+      const parsedDocument = row?.parsedDocument || {}
+      const preferredCounterparty = getPreferredCounterparty(parsedDocument)
+      const role = normalizeText(preferredCounterparty?.role || '').toLowerCase()
+      const direction = role === 'cliente' ? 'vendita' : role === 'fornitore' ? 'acquisto' : ''
+      const suggestion = resolveImportContabilitaAccountingHistorySuggestion({
+        historyIndex: accountingHistoryIndex,
+        parsedDocument,
+        counterpartyAccount: counterpartyAccountByRowId[rowKey] || null,
+        direction,
+        pianoContiById,
+        causaliContabiliById: causaliContabiliIndexes.byId,
+      })
+      if (!suggestion) return
+
+      if (!Object.prototype.hasOwnProperty.call(nextAccounts, rowKey) && suggestion.costRevenueAccount) {
+        nextAccounts[rowKey] = decorateImportAccountingHistorySuggestion(
+          suggestion.costRevenueAccount,
+          {
+            kind: 'account',
+            sampleCount: suggestion.accountSampleCount,
+            totalSamples: suggestion.sampleCount,
+            lastSeenAt: suggestion.lastSeenAt,
+          },
+        )
+        accountChanged = true
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(nextCausali, rowKey) && suggestion.causaleContabile) {
+        nextCausali[rowKey] = decorateImportAccountingHistorySuggestion(
+          suggestion.causaleContabile,
+          {
+            kind: 'causale',
+            sampleCount: suggestion.causaleSampleCount,
+            totalSamples: suggestion.sampleCount,
+            lastSeenAt: suggestion.lastSeenAt,
+          },
+        )
+        causaleChanged = true
+      }
+    })
+
+    if (!accountChanged && !causaleChanged) return
+
+    if (accountChanged) setManualAccountByRowId(nextAccounts)
+    if (causaleChanged) setManualCausaleByRowId(nextCausali)
+    persistSocietaState(
+      result,
+      accountChanged ? nextAccounts : manualAccountByRowId,
+      causaleChanged ? nextCausali : manualCausaleByRowId,
+      manualRegistrationDateByRowId,
+      anagraficheDecisioniByKey,
+      percipientiDecisioniByKey,
+      automationMetaByRowId,
+    )
+  }, [
+    selectedSocietaId,
+    stagingRows,
+    accountingHistoryIndex,
+    counterpartyAccountByRowId,
+    pianoContiById,
+    causaliContabiliIndexes,
+    manualAccountByRowId,
+    manualCausaleByRowId,
+    manualRegistrationDateByRowId,
+    anagraficheDecisioniByKey,
+    percipientiDecisioniByKey,
+    automationMetaByRowId,
+    result,
+  ])
 
   const updateManualAccountForRow = (rowId, account) => {
     const key = String(rowId || '')

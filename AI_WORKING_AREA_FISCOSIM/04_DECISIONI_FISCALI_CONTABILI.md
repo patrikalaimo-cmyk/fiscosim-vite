@@ -37,3 +37,18 @@ La percentuale di detrazione IVA può essere proposta dallo storico della stessa
 
 Lo storico usato per le proposte è **read-only** e deriva da registrazioni IVA già contabilizzate; non comporta contabilizzazioni autonome né scritture di apprendimento durante la semplice apertura della Working View.
 
+## 7. Import Contabilità — Storico conto costo/ricavo e causale contabile
+
+Per conto costo/ricavo e causale contabile, lo storico della controparte è una **proposta assistiva**, non una regola definitiva.
+
+Regole consolidate:
+1. lo storico considera solo documenti già contabilizzati con prima nota collegata;
+2. il match controparte usa prima la P.IVA e solo in fallback la denominazione normalizzata;
+3. acquisti e vendite restano separati;
+4. la causale contabile proposta è quella modale delle registrazioni storiche compatibili;
+5. il conto costo/ricavo proposto è quello modale, escludendo il conto patrimoniale della controparte e i conti IVA;
+6. se esiste già una scelta per il documento — manuale, batch o ripristinata da snapshot — lo storico **non la sovrascrive**;
+7. una proposta storica deve essere visibile come tale nella Working View;
+8. appena l'operatore modifica conto o causale, la scelta manuale prevale e non viene ripristinata dallo storico;
+9. la lettura dello storico è read-only e non produce scritture di apprendimento né contabilizzazioni autonome.
+

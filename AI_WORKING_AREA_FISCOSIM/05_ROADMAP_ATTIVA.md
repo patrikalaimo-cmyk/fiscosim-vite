@@ -41,7 +41,7 @@ La roadmap operativa corrente è stata riallineata all'obiettivo **A100 — Stud
 Stato attuale:
 - **TEST-BASELINE-1: COMPLETATO**. GitHub Actions run `37523777654` verde su Linux e Windows con `test:import`, `test:core`, `test:all` e `npm run build`.
 - **IMPORT-25A-FREEZE: IN CORSO**.
-- Sottoblocco corrente: **IMPORT-25A-HISTORY-1 — storico IVA controparte + percentuale detrazione proposta**.
+- Sottoblocco corrente: **IMPORT-25A-HISTORY-2 — storico assistito conto costo/ricavo + causale contabile**. HISTORY-1 è chiuso verde.
 - **Registrazione Manuale, Consultazione e IVA** restano nella sequenza di freeze prevista dopo Import.
 - **Riconciliazione Bancaria resta BLOCCATA** finché Import + Manuale + IVA non sono chiusi con test automatici e collaudo manuale finale di blocco.
 

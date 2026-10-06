@@ -6,7 +6,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 
 | Suite | Comando | Copertura principale | Non copre |
 |---|---|---|---|
-| Import Contabilità | `npm run test:import` | parser/normalizzazione Import, fixture sintetica TEST-VERGNANO-001, Working View IVA, pruning 0/0, causali IVA standard, storico IVA controparte P2, warning standard/storico, proposta e override manuale detraibilità, payload commit, readiness, dedup/anti-doppio commit, performance 500 documenti, Test Lab con mock | browser reale, Supabase reale, società reali, ZIP cliente reale |
+| Import Contabilità | `npm run test:import` | parser/normalizzazione Import, fixture sintetica TEST-VERGNANO-001, Working View IVA, pruning 0/0, causali IVA standard, storico IVA controparte P2, warning standard/storico, proposta e override manuale detraibilità, storico contabile conto costo/ricavo + causale contabile con override manuale prevalente, payload commit, readiness, dedup/anti-doppio commit, performance 500 documenti, Test Lab con mock | browser reale, Supabase reale, società reali, ZIP cliente reale |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
@@ -62,3 +62,20 @@ Copertura automatica aggiunta:
 
 Resta manuale a fine blocco la sola verifica UX nel browser: leggibilità del warning, modifica percentuale detraibile e comportamento visuale al cambio documento.
 
+
+
+## IMPORT-25A-HISTORY-2
+
+Copertura automatica aggiunta:
+- storico read-only da `documenti_contabilita`, `prima_nota` e `prima_nota_righe`;
+- separazione storico acquisti/vendite per controparte;
+- match P.IVA prioritario e fallback denominazione normalizzata;
+- conto costo/ricavo modale per controparte con esclusione del conto controparte e dei conti IVA;
+- causale contabile modale per controparte;
+- filtro degli ID non più presenti nel piano conti/causali correnti;
+- prefill solo quando il documento non ha già una scelta account/causale;
+- marker esplicito “Proposta da storico” nella Working View;
+- override manuale/batch/snapshot non sovrascritto dallo storico;
+- sorgente storico verificata read-only, senza insert/update/delete.
+
+Resta manuale a fine blocco la verifica UX nel browser: leggibilità del badge storico e sostituzione manuale di conto/causale su un documento reale di test.

@@ -124,6 +124,15 @@ function getWorkingViewAutomationFieldLabels(fields = []) {
     .filter(Boolean)
 }
 
+function getAccountingHistorySuggestionLabel(value) {
+  if (!value?._importHistorySuggested) return ''
+  const count = Number(value?._importHistorySampleCount || 0)
+  const noun = count === 1 ? 'registrazione' : 'registrazioni'
+  return count > 0
+    ? `Proposta da storico · ${count} ${noun}`
+    : 'Proposta da storico'
+}
+
 function normalizeWorkingViewCausaleIvaSearchValue(value) {
   return String(value || '')
     .toLowerCase()
@@ -1031,6 +1040,11 @@ export function ImportContabilitaWorkingView({
                     </option>
                   ))}
                 </select>
+                {activeWorkingViewModel.causale?._importHistorySuggested ? (
+                  <div style={{ fontSize: '.58rem', color: '#9fc5ff', lineHeight: 1.25 }}>
+                    {getAccountingHistorySuggestionLabel(activeWorkingViewModel.causale)} · modificabile dall'operatore
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -1382,10 +1396,16 @@ export function ImportContabilitaWorkingView({
               <div style={{ padding: '.14rem .16rem', borderRadius: 12, border: '1px solid rgba(124,157,202,.12)', background: 'linear-gradient(180deg, rgba(13,40,61,.66), rgba(10,30,46,.6))', display: 'grid', gap: '.05rem' }}>
                 <div style={{ fontSize: '.54rem', color: 'rgba(188,204,226,.72)' }}>Conto costo selezionato</div>
                 <div style={{ fontSize: '.8rem', color: '#e6eeff', fontWeight: 700, lineHeight: 1.24 }}>{formatManualAccount(activeWorkingViewModel.costRevenueAccount)}</div>
+                {activeWorkingViewModel.costRevenueAccount?._importHistorySuggested ? (
+                  <div style={{ fontSize: '.54rem', color: '#9fc5ff' }}>{getAccountingHistorySuggestionLabel(activeWorkingViewModel.costRevenueAccount)}</div>
+                ) : null}
               </div>
               <div style={{ padding: '.14rem .16rem', borderRadius: 12, border: '1px solid rgba(124,157,202,.12)', background: 'linear-gradient(180deg, rgba(13,40,61,.66), rgba(10,30,46,.6))', display: 'grid', gap: '.05rem' }}>
-                <div style={{ fontSize: '.54rem', color: 'rgba(188,204,226,.72)' }}>Causale FF</div>
+                <div style={{ fontSize: '.54rem', color: 'rgba(188,204,226,.72)' }}>Causale contabile</div>
                 <div style={{ fontSize: '.8rem', color: '#e6eeff', fontWeight: 700, lineHeight: 1.24 }}>{formatManualCausale(activeWorkingViewModel.causale)}</div>
+                {activeWorkingViewModel.causale?._importHistorySuggested ? (
+                  <div style={{ fontSize: '.54rem', color: '#9fc5ff' }}>{getAccountingHistorySuggestionLabel(activeWorkingViewModel.causale)}</div>
+                ) : null}
               </div>
             </div>
 

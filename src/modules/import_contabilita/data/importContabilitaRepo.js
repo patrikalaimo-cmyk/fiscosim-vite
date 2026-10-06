@@ -770,6 +770,114 @@ export async function loadImportContabilitaVatHistoryBySocieta(societaId, option
   }))
 }
 
+export async function loadImportContabilitaAccountingHistoryBySocieta(societaId, options = {}) {
+  const sid = normalizeSocietaId(societaId)
+  if (!sid) {
+    return { documents: [], headers: [], rows: [] }
+  }
+
+  const rawLimit = Number(options?.limit)
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(1500, Math.round(rawLimit)))
+    : 800
+
+  const documents = await fetchPagedRows({
+    table: 'documenti_contabilita',
+    societaColumn: 'societa_id',
+    societaId: sid,
+    select: 'id,societa_id,tipo_documento,soggetto_denominazione,soggetto_piva,soggetto_cf,validation_status,workflow_status,registered_at,prima_nota_id,created_at',
+    orderBy: 'created_at',
+    ascending: false,
+    limit,
+  })
+
+  const eligibleDocuments = documents
+    .filter((row) => {
+      const pnId = normalizeText(row?.prima_nota_id)
+      if (!pnId) return false
+      const workflow = normalizeText(row?.workflow_status).toLowerCase()
+      const validation = normalizeText(row?.validation_status).toLowerCase()
+      return Boolean(normalizeText(row?.registered_at))
+        || ['confirmed', 'registered', 'registrata'].includes(workflow)
+        || ['confirmed', 'registered', 'registrata'].includes(validation)
+    })
+    .map((row) => ({
+      id: normalizeText(row?.id),
+      societa_id: normalizeText(row?.societa_id),
+      tipo_documento: normalizeText(row?.tipo_documento),
+      soggetto_denominazione: normalizeText(row?.soggetto_denominazione),
+      soggetto_piva: normalizeText(row?.soggetto_piva),
+      soggetto_cf: normalizeText(row?.soggetto_cf),
+      validation_status: normalizeText(row?.validation_status),
+      workflow_status: normalizeText(row?.workflow_status),
+      registered_at: normalizeText(row?.registered_at),
+      prima_nota_id: normalizeText(row?.prima_nota_id),
+      created_at: normalizeText(row?.created_at),
+    }))
+
+  const pnIds = Array.from(new Set(eligibleDocuments.map((row) => row.prima_nota_id).filter(Boolean)))
+  if (!pnIds.length) {
+    return { documents: eligibleDocuments, headers: [], rows: [] }
+  }
+
+  const headers = []
+  const rows = []
+  const CHUNK_SIZE = 100
+
+  for (let start = 0; start < pnIds.length; start += CHUNK_SIZE) {
+    const chunk = pnIds.slice(start, start + CHUNK_SIZE)
+
+    const [{ data: headerRows, error: headerError }, { data: lineRows, error: lineError }] = await Promise.all([
+      sb
+        .from('prima_nota')
+        .select('id,societa_id,causale_id,causale_codice,cliente_fornitore_id,cliente_fornitore_nome,data_registrazione,created_at')
+        .eq('societa_id', sid)
+        .in('id', chunk),
+      sb
+        .from('prima_nota_righe')
+        .select('id,prima_nota_id,riga_numero,conto_id,conto_codice,conto_descrizione,descrizione_riga,importo_dare,importo_avere')
+        .in('prima_nota_id', chunk)
+        .order('riga_numero', { ascending: true }),
+    ])
+
+    if (headerError) throw headerError
+    if (lineError) throw lineError
+
+    ;(Array.isArray(headerRows) ? headerRows : []).forEach((row) => {
+      headers.push({
+        id: normalizeText(row?.id),
+        societa_id: normalizeText(row?.societa_id),
+        causale_id: normalizeText(row?.causale_id),
+        causale_codice: normalizeText(row?.causale_codice),
+        cliente_fornitore_id: normalizeText(row?.cliente_fornitore_id),
+        cliente_fornitore_nome: normalizeText(row?.cliente_fornitore_nome),
+        data_registrazione: normalizeText(row?.data_registrazione),
+        created_at: normalizeText(row?.created_at),
+      })
+    })
+
+    ;(Array.isArray(lineRows) ? lineRows : []).forEach((row) => {
+      rows.push({
+        id: normalizeText(row?.id),
+        prima_nota_id: normalizeText(row?.prima_nota_id),
+        riga_numero: Number(row?.riga_numero || 0) || 0,
+        conto_id: normalizeText(row?.conto_id),
+        conto_codice: normalizeText(row?.conto_codice),
+        conto_descrizione: normalizeText(row?.conto_descrizione),
+        descrizione_riga: normalizeText(row?.descrizione_riga),
+        importo_dare: Number(row?.importo_dare ?? 0) || 0,
+        importo_avere: Number(row?.importo_avere ?? 0) || 0,
+      })
+    })
+  }
+
+  return {
+    documents: eligibleDocuments,
+    headers,
+    rows,
+  }
+}
+
 export async function loadStaging() {
   notImplemented('loadStaging')
 }

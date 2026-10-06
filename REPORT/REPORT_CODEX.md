@@ -11036,3 +11036,40 @@ pm run build -> Successo (429 moduli, 16s).
 - Test browser/manuali reali: **NON eseguiti**; restano nel collaudo finale del blocco Import.
 - Prossimo sottoblocco: `IMPORT-25A-HISTORY-2` — storico assistito conto costo/ricavo e causale contabile.
 
+## IMPORT-25A-HISTORY-2 — STORICO CONTO COSTO/RICAVO + CAUSALE CONTABILE
+
+- **Obiettivo**: completare lo storico assistito della controparte per i due campi operativi residui della Working View Import: conto costo/ricavo e causale contabile.
+- **Sorgenti read-only**:
+  - `documenti_contabilita` per controparte, direzione e collegamento alla prima nota;
+  - `prima_nota` per causale contabile e conto controparte;
+  - `prima_nota_righe` per individuare il conto economico realmente usato.
+- **Regola matching**: P.IVA forte prima; fallback denominazione normalizzata; storico separato per acquisto/vendita.
+- **Conto storico**:
+  - esclusione del conto controparte;
+  - esclusione dei conti marcati IVA;
+  - preferenza per conti classificati economici/costo/ricavo;
+  - per ogni documento viene preso il conto economico dominante, poi viene proposta la moda storica della controparte.
+- **Causale storica**: causale contabile modale; fallback da codice a ID corrente se necessario.
+- **Comportamento UI**:
+  - prefill solo su documenti che non hanno ancora una chiave account/causale nello stato;
+  - marker `_importHistorySuggested` e label “Proposta da storico” nella Working View;
+  - una scelta manuale/batch/snapshot già presente non viene sovrascritta;
+  - quando l'operatore cambia il valore, la nuova scelta sostituisce il marker storico.
+- **File tecnici**:
+  - nuovo `domain/importContabilitaAccountingHistory.js`;
+  - nuova lettura `loadImportContabilitaAccountingHistoryBySocieta` nel repo Import;
+  - integrazione in `index.jsx`;
+  - label di trasparenza in `ImportContabilitaWorkingView.jsx`;
+  - nuovo test `importContabilitaAccountingHistory.test.js`.
+- **Test automatici aggiunti**:
+  - moda conto/casuale per fornitore;
+  - esclusione IVA/controparte dal conto costo;
+  - separazione acquisti/vendite;
+  - fallback denominazione;
+  - marker assistivo;
+  - guardia override tramite `hasOwnProperty`;
+  - verifica statica che la sorgente storico non contenga insert/update/delete.
+- **Sicurezza**: nessuna migration, nessuna modifica a `.env`, auth, RLS o policy; nessuna scrittura su società reali; nessun commit autonomo dei documenti.
+- **Verifiche runtime**: da eseguire con la CI ufficiale Windows/Linux sul commit del blocco. Browser/manuali reali NON eseguiti.
+- **Prossimo step se CI verde**: audit finale `IMPORT-25A-FREEZE` su anti-dup, payload canonico, readiness, storico/override e residui manuali di fine blocco.
+
