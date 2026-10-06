@@ -5,7 +5,7 @@ Branch: `mio-branch`
 
 ## Esito
 
-**Gate automatico: PASS**, subordinato alla CI del commit di freeze.
+**Gate automatico: PASS**. CI ufficiale run `37532225370` verde su Ubuntu e Windows.
 
 Il modulo Import Contabilità 25A soddisfa i requisiti automatici definiti per il blocco A100. La chiusura definitiva del blocco richiede ancora il collaudo manuale finale in browser su ambiente/società di test; nessun test manuale viene dichiarato eseguito in questo audit.
 
@@ -33,7 +33,7 @@ Il modulo Import Contabilità 25A soddisfa i requisiti automatici definiti per i
 | Validazione operatore | commit abilitato solo con Working View coerente + click esplicito + `window.confirm` | PASS |
 | Commit diretto Working Table | nessuna chiamata diretta a `runCommitWorkflow` dalla tabella | PASS |
 | Storico read-only | loader storici senza insert/update/delete | PASS |
-| Build / regressioni | CI ufficiale Windows + Linux | DA CONFERMARE SUL COMMIT FREEZE |
+| Build / regressioni | CI ufficiale Windows + Linux, run `37532225370` | PASS |
 
 ## Principi confermati
 

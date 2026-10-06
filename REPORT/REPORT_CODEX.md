@@ -11129,3 +11129,16 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica al codice produttivo.
 - CI da rilanciare.
 
+### IMPORT-25A-FREEZE — CI RUN #4: GATE AUTOMATICO FINALE VERDE
+
+- GitHub Actions run `37532225370` sul commit `237dffceab09e644b28b347a145450d26fc836b3`: **SUCCESS**.
+- Ubuntu: `test:import` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- Windows: `test:import` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- Le tre guardie `IMPORT-25A-FREEZE` risultano verdi:
+  - Working View deve essere coerente;
+  - contabilizzazione richiede conferma esplicita operatore;
+  - `runCommitWorkflow` non è richiamato direttamente dalla Working Table ed è concentrato nel handler esplicito della Working View.
+- **IMPORT-25A-FREEZE ha superato il gate automatico finale.**
+- Stato residuo: esclusivamente collaudo manuale finale in browser su società di test, come checklist in `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.
+- Fino a quel collaudo, il blocco non viene dichiarato chiuso definitivo e `MANUALE-CANONICO-FREEZE` non viene avviato.
+
