@@ -19,7 +19,7 @@ test('IMPORT-25A-FREEZE — commit richiede Working View pronta e conferma espli
 
 test('IMPORT-25A-FREEZE — Working Table apre il flusso di lavorazione e non chiama direttamente runCommitWorkflow', async () => {
   const source = await readFile(new URL('../index.jsx', import.meta.url), 'utf8')
-  const tableRenderStart = source.search(/<ImportContabilitaWorkingTable\\s/)
+  const tableRenderStart = source.search(/<ImportContabilitaWorkingTable\s/)
   const tableRenderEnd = source.indexOf('/>', tableRenderStart)
   const tableBlock = source.slice(tableRenderStart, tableRenderEnd + 2)
 

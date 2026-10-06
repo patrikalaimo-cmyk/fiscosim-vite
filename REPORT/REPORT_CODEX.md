@@ -11121,3 +11121,11 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica produttiva o fiscale.
 - CI da rilanciare.
 
+### IMPORT-25A-FREEZE — CI RUN #3: CORREZIONE ESCAPE REGEX
+
+- GitHub Actions run `37532079560`, job Linux: fallimento ancora limitato al nuovo test statico `IMPORT-25A-FREEZE`.
+- Causa: nel sorgente del test la regex era stata salvata come `/<ImportContabilitaWorkingTable\\s/`, che cerca una sequenza letterale `\s` anziché whitespace.
+- Fix test-only: regex corretta a `/<ImportContabilitaWorkingTable\s/`, valida sia con LF sia con CRLF e distinta da `WorkingTableToolbar`.
+- Nessuna modifica al codice produttivo.
+- CI da rilanciare.
+
