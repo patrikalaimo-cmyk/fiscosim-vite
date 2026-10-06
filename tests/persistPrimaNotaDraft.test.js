@@ -222,8 +222,9 @@ test('3. Payload non valido bloccato prima del write', async () => {
   assert.notEqual(result.error, null)
   assert.equal(result.error.code, 'PERSIST_PRIMA_NOTA_DRAFT_BLOCKED')
 
-  // Check no database operations occurred
-  assert.equal(db.log.length, 0, 'Nessuna operazione sul DB dovrebbe avvenire per payload non valido')
+  // Le letture di preflight sono ammesse; nessuna scrittura deve avvenire per payload non valido.
+  const writes = db.log.filter((entry) => ['insert', 'update', 'delete'].includes(entry.action))
+  assert.deepEqual(writes, [], 'Nessun write sul DB dovrebbe avvenire per payload non valido')
 })
 
 test('4. PN semplice non tenta scritture IVA/partitario/ritenute', async () => {

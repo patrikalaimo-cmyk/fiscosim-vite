@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { isCespiteAccount, findCespiteRow } from '../src/modules/contabilita/domain/registrazione/resolveCespiteAccount.js'
 import { runCommitWorkflow } from '../src/modules/import_contabilita/application/importContabilitaWorkflow.js'
 
+const TEST_STAGING_UUID = '9539bde9-b325-4246-a20d-6c1b9408b48e'
+
 class MockDbQuery {
   constructor(table, client) {
     this.table = table
@@ -49,7 +51,7 @@ class MockDbClient {
   constructor() {
     this.log = []
     this.responses = {
-      documenti_import: { id: 'doc-import-123', stato: 'pending' },
+      documenti_import: { id: TEST_STAGING_UUID, stato: 'pending' },
       stampe_definitive: [],
       societa: { id: 'soc-123', denominazione: 'Test Societa', partita_iva: '12345678901' },
       clienti: { id: 'cli-789', ragione_sociale: 'Test Cliente Studio' },
@@ -124,12 +126,12 @@ function makeTestCommitPayload({ assetAccount = false } = {}) {
     societaId: 'soc-123',
     registrationDate: '2026-06-25',
     sourceRow: {
-      id: 'doc-import-123',
+      id: TEST_STAGING_UUID,
       filename: 'invoice.xml',
     },
     payload: {
       handoff: {
-        sourceRowKey: 'doc-import-123',
+        sourceRowKey: TEST_STAGING_UUID,
         sourceFileName: 'invoice.xml',
         sourceBatchId: 'batch-test-123',
         contractVersion: 'P7B-v3',

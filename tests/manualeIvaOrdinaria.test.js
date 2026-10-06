@@ -433,8 +433,12 @@ test('3. Nota credito passiva: stesso registro acquisti, segno sottrae (importi 
   assert.equal(inserts[1].table, 'prima_nota_righe')
   assert.equal(inserts[2].table, 'registri_iva')
   
-  // Note Credito partitario is skipped by policy
-  assert.ok(!inserts.some(l => l.table === 'partitario'), 'Non deve essere creata la partita per Note Credito (saltata per prudenza)')
+  // La nota credito deve incidere sul partitario con segno negativo.
+  const partInsert = inserts.find(l => l.table === 'partitario')
+  assert.ok(partInsert, 'La nota credito passiva deve creare/ridurre la partita fornitore')
+  assert.equal(partInsert.data[0].tipo, 'fornitore')
+  assert.equal(partInsert.data[0].importo_originale, -122.00)
+  assert.equal(partInsert.data[0].importo_residuo, -122.00)
 
   // Check negative values in register
   const vatRow = inserts[2].data[0]
@@ -485,8 +489,12 @@ test('4. Nota credito attiva: stesso registro vendite, segno sottrae (importi ne
   assert.equal(inserts[1].table, 'prima_nota_righe')
   assert.equal(inserts[2].table, 'registri_iva')
 
-  // Note Credito partitario is skipped by policy
-  assert.ok(!inserts.some(l => l.table === 'partitario'))
+  // La nota credito deve incidere sul partitario con segno negativo.
+  const partInsert = inserts.find(l => l.table === 'partitario')
+  assert.ok(partInsert, 'La nota credito attiva deve creare/ridurre la partita cliente')
+  assert.equal(partInsert.data[0].tipo, 'cliente')
+  assert.equal(partInsert.data[0].importo_originale, -122.00)
+  assert.equal(partInsert.data[0].importo_residuo, -122.00)
 
   // Check negative values in register
   const vatRow = inserts[2].data[0]

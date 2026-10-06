@@ -10949,3 +10949,20 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica alla logica produttiva, nessun DB reale, nessuna migration, nessun browser.
 - La CI viene rilanciata sul nuovo commit; esito finale da registrare in append-only.
 
+### TEST-BASELINE-1 — CI RUN #2: CORE BASELINE E HARDENING GUARD
+
+- GitHub Actions run `37523064278`: `test:import` **PASS** su Linux dopo il riallineamento UUID della fixture Import.
+- `test:core` ha eseguito **574 test: 566 pass / 8 fail** e ha portato alla luce regressioni/aspettative pregresse fuori dalla nuova suite Import.
+- Classificazione dei fallimenti:
+  - 2 test Cespiti usavano ancora `doc-import-123` come ID staging import reale: fixture riallineata a UUID sintetico;
+  - 3 test di persistenza ordinaria (PN semplice / IVA per cassa / pagamento ritenuta) venivano erroneamente sottoposti al guard UUID Test Lab perché `persistPrimaNotaDraft` impostava `TL-ACQ-01` come numero documento di fallback quando il numero era assente;
+  - 2 test Note Credito assumevano ancora che il partitario fosse saltato: aspettativa obsoleta rispetto al contratto corrente, che registra la partita a segno negativo per ridurre cliente/fornitore;
+  - 1 test “payload non valido bloccato prima del write” vietava anche le letture di preflight; l'assert è stato corretto per vietare i soli write (`insert/update/delete`), preservando il requisito effettivo.
+- **Fix produttivo minimo**: in `persistPrimaNotaDraft` il fallback di `docNum` diventa stringa vuota. Il guard Test Lab continua a scattare esclusivamente per società demo o documenti il cui numero contiene realmente `TL-ACQ`.
+- **Test-only fixes**:
+  - UUID sintetico nella fixture Cespiti;
+  - Note Credito manuali ora verificano partitario cliente/fornitore con `importo_originale` e `importo_residuo` negativi;
+  - payload invalido: consentite letture di preflight, confermato zero write.
+- Nessun intervento su DB reale, RLS/auth, migration, `.env` o browser.
+- CI da rilanciare sul commit correttivo; esito finale da registrare append-only.
+

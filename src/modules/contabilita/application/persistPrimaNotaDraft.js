@@ -710,7 +710,7 @@ export async function persistPrimaNotaDraft({
 
   const societaCodice = String(resolved?.innerDraft?.company?.codice || resolved?.innerDraft?.societa?.codice || resolved?.bundle?.societa?.codice || '').trim()
   const isDemo = societaCodice.includes('DEMO') || resolved?.pnPayload?.societa_id === 'demo-1' || resolved?.pnPayload?.societa_id === 'demo-2'
-  const docNum = pnPayloadForDb.numero_registrazione || resolved?.pnPayload?.numero_documento || 'TL-ACQ-01'
+  const docNum = pnPayloadForDb.numero_registrazione || resolved?.pnPayload?.numero_documento || ''
 
   if (isDemo || docNum.includes('TL-ACQ')) {
     // [TEST_LAB_COMMIT_DB_HEADER_PAYLOAD_AFTER_SANITIZE]
