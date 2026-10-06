@@ -11113,3 +11113,11 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica a logica produttiva, regole fiscali o write path.
 - CI da rilanciare sul commit correttivo.
 
+### IMPORT-25A-FREEZE — CI RUN #2: FIX CROSS-PLATFORM LINE ENDING
+
+- GitHub Actions run `37531911410`: Linux ha superato `test:import`, `test:core`, `test:all`; Windows ha fallito esclusivamente lo stesso test statico del selettore Working Table.
+- Causa Windows: checkout con terminatore `\r\n`; il test usava un match con `\n` letterale.
+- Fix test-only: selettore reso cross-platform con regex `/<ImportContabilitaWorkingTable\\s/`, che distingue il componente reale dal suffisso `Toolbar` senza dipendere dal line ending.
+- Nessuna modifica produttiva o fiscale.
+- CI da rilanciare.
+
