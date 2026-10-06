@@ -7,7 +7,10 @@
     "dev": "vite",
     "dev:api": "set PORT=3001&& node -r dotenv/config scripts/dev-api.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:import": "node scripts/run-node-tests.mjs import",
+    "test:core": "node scripts/run-node-tests.mjs core",
+    "test:all": "node scripts/run-node-tests.mjs all"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

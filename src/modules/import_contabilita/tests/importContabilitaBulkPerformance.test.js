@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 import {
   WORKING_TABLE_PAGE_SIZE,
@@ -10,6 +11,9 @@ import {
   getAnagraficaDecisionKeyFromCounterparty,
   paginateWorkingTableRows,
 } from '../domain/importContabilitaPerformanceIndexes.js'
+import {
+  TEST_VERGNANO_FIXTURE,
+} from './fixtures/vergnanoSyntheticFixture.js'
 
 function buildSyntheticStagingRows(count, supplierPoolSize = 12) {
   const rows = []
@@ -50,6 +54,10 @@ const mockPianoConti = [
     descrizione: 'Fornitore Pool 1 Srl',
     partitaIva: '10000000001',
   },
+  {
+    ...TEST_VERGNANO_FIXTURE.accounts.counterparty,
+    partitaIva: TEST_VERGNANO_FIXTURE.supplier.partitaIva,
+  },
 ]
 
 test('25A-PERF-1 — paginazione 500 documenti: 5 pagine da 100', () => {
@@ -65,14 +73,19 @@ test('25A-PERF-1 — paginazione 500 documenti: 5 pagine da 100', () => {
   assert.equal(page5.rows[0].id, 'doc-400')
 })
 
-test('25A-PERF-1 — cache matching: stesso fornitore su molte fatture produce stesso rank', () => {
+test('25A-PERF-1 — cache matching: stessa chiave fornitore riusa lo stesso risultato', () => {
   const pianoLookup = buildPianoContiLookup(mockPianoConti)
   const resolve = createCounterpartyClassificationResolver({ societaId: 'soc-1', pianoLookup })
   const counterparty = { denominazione: 'Fornitore Pool 0 Srl', partitaIva: '10000000000' }
 
-  const results = Array.from({ length: 200 }, () => resolve(counterparty))
-  assert.ok(results.every((item) => item.rank === 3))
-  assert.ok(results.every((item) => item.matchedPianoConto?.id === 'acc-1'))
+  const first = resolve(counterparty)
+  const second = resolve({ ...counterparty })
+  const results = Array.from({ length: 200 }, () => resolve({ ...counterparty }))
+
+  assert.equal(first, second)
+  assert.ok(results.every((item) => item === first))
+  assert.equal(first.rank, 3)
+  assert.equal(first.matchedPianoConto?.id, 'acc-1')
   assert.equal(getAnagraficaDecisionKeyFromCounterparty(counterparty), 'piva:10000000000')
 })
 
@@ -83,9 +96,18 @@ test('25A-PERF-1 — match forte P.IVA coerente con piano conti', () => {
   assert.equal(result.matchedPianoConto?.id, 'acc-2')
 })
 
+test('TEST-BASELINE-1 — fornitore fixture noto con P.IVA forte non diventa nuova anagrafica', () => {
+  const pianoLookup = buildPianoContiLookup(mockPianoConti)
+  const result = classifyCounterparty(TEST_VERGNANO_FIXTURE.supplier, pianoLookup)
+
+  assert.equal(result.rank, 3)
+  assert.equal(result.status, 'già presente')
+  assert.equal(result.matchedPianoConto?.id, TEST_VERGNANO_FIXTURE.accounts.counterparty.id)
+})
+
 test('25A-PERF-1 — fornitore nuovo resta rank 1', () => {
   const pianoLookup = buildPianoContiLookup(mockPianoConti)
-  const result = classifyCounterparty({ partitaIva: '99999999999', denominazione: 'Nuovo Fornitore' }, pianoLookup)
+  const result = classifyCounterparty({ partitaIva: '77777777777', denominazione: 'Nuovo Fornitore' }, pianoLookup)
   assert.equal(result.rank, 1)
   assert.equal(result.status, 'nuova')
 })
@@ -108,4 +130,47 @@ test('25A-PERF-1 — dataset 500: chiavi decisione fornitore senza duplicati log
     keys.add(getAnagraficaDecisionKeyFromCounterparty(cp))
   })
   assert.equal(keys.size, 12)
+})
+
+test('TEST-BASELINE-1 — filtri, paginazione e selezione pagina non mutano il dataset globale da 500 documenti', () => {
+  const rows = buildSyntheticStagingRows(500, 12)
+  const originalIds = rows.map((row) => row.id)
+  const filtered = rows.filter((row) => row.parsedDocument.fornitore.denominazione === 'Fornitore Pool 0 Srl')
+  const page = paginateWorkingTableRows(filtered, 1, WORKING_TABLE_PAGE_SIZE)
+  const selectedPageIds = new Set(page.rows.map((row) => row.id))
+
+  assert.ok(filtered.length > 0)
+  assert.ok(selectedPageIds.size <= WORKING_TABLE_PAGE_SIZE)
+  assert.equal(rows.length, 500)
+  assert.deepEqual(rows.map((row) => row.id), originalIds)
+})
+
+test('TEST-BASELINE-1 — production path memoizza indici e readiness batch prima dei consumer', async () => {
+  const source = await readFile(new URL('../index.jsx', import.meta.url), 'utf8')
+
+  assert.match(
+    source,
+    /const pianoLookup = useMemo\(\s*\(\) => buildPianoContiLookup\(/,
+    'piano conti deve essere indicizzato via useMemo nel production path',
+  )
+  assert.match(
+    source,
+    /createCounterpartyClassificationResolver\(\{ societaId: selectedSocietaId, pianoLookup \}\)/,
+    'matching fornitore deve usare resolver con cache condivisa',
+  )
+  assert.match(
+    source,
+    /const workingTableReadinessByRowId = useMemo\(\(\) => \{/,
+    'readiness deve essere calcolata in una mappa memoizzata per batch',
+  )
+  assert.match(
+    source,
+    /readinessByRowId: workingTableReadinessByRowId/,
+    'filtri devono consumare la mappa readiness invece di ricalcolare ogni documento',
+  )
+  assert.match(
+    source,
+    /workingTableReadinessByRowId=\{workingTableReadinessByRowId\}/,
+    'Working Table deve ricevere la stessa cache readiness',
+  )
 })

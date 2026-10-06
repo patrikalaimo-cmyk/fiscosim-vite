@@ -10898,3 +10898,45 @@ pm run build -> Successo (429 moduli, 16s).
   - `supabase/migrations/20260615103000_fix_liquidazione_iva_stato_column_alignment.sql`: potenzialmente più coerente, ma da validare in task dedicato prima di commit o applicazione.
 - **Conferme sicurezza**: nessun push, nessun force push, nessun branch creato, nessun reset, nessuna cancellazione, nessuna migration applicata, nessun codice applicativo modificato.
 - **Prossimo step**: rieseguire il push sicuro su branch checkpoint remoto dopo verifica finale dello stato residuo.
+
+## TEST-BASELINE-1 — SUITE TEST UFFICIALE + FIXTURE IMPORT 25A
+
+- **Obiettivo**: introdurre una baseline test ufficiale e ripetibile per FiscoSim, con focus Import Contabilità 25A, eliminando la necessità di test manuali ad ogni micro-fix.
+- **Baseline Git verificata prima delle modifiche**:
+  - branch remoto operativo: `mio-branch`;
+  - HEAD iniziale: `d29ac57ce6e8f43b392d57f164aae79c92df3c26`;
+  - checkpoint `3af07b4e0a65fd3fbc01dfc3ec32907948f64202` presente nello storico come parent del merge PR #1.
+- **File creati/modificati**:
+  - `package.json`;
+  - `scripts/run-node-tests.mjs`;
+  - `src/modules/import_contabilita/tests/fixtures/vergnanoSyntheticFixture.js`;
+  - `src/modules/import_contabilita/tests/importContabilitaOfficialBaseline.test.js`;
+  - `src/modules/import_contabilita/tests/importContabilitaBulkPerformance.test.js`;
+  - `REPORT/FISCOSIM_TEST_MATRIX.md`;
+  - `.github/workflows/fiscosim-test-baseline.yml`;
+  - `REPORT/REPORT_CODEX.md` (append-only).
+- **Script ufficiali aggiunti**:
+  - `npm run test:import`;
+  - `npm run test:core`;
+  - `npm run test:all`.
+- **Runner**: `scripts/run-node-tests.mjs` usa `fs/readdir` + `spawn(process.execPath, ['--test', ...files])` con `shell: false`; non dipende da Bash/glob shell ed è predisposto per Windows.
+- **Fixture sintetica TEST-VERGNANO-001**: solo dati fittizi; fornitore `Fornitore Caffe Test Srl`, P.IVA/CF `99999999999`, IVA 22% + 10%, placeholder 0/0, causali standard simulate, conti e causale contabile di test.
+- **Copertura TEST-BASELINE-1 aggiunta**:
+  - pruning placeholder IVA 0/0;
+  - auto-match causali IVA standard 22%/10%;
+  - override manuale preservato al rebuild;
+  - commit payload a 2 righe IVA e PN bilanciata;
+  - readiness pronta/incompleta secondo campi effettivamente significativi;
+  - documento già registrato escluso dallo staging operativo;
+  - doppio commit `processed/committed` bloccato prima del persist;
+  - dataset 500 documenti, paginazione 100, cache matching, match forte P.IVA, dataset globale non mutato;
+  - guard strutturale su memoizzazione indici e `workingTableReadinessByRowId`.
+- **Audit sicurezza suite**: ricerca sui test selezionati non ha rilevato `createClient`, `process.env` Supabase, `fetch` o Puppeteer; l'unico test root che importa `sb` sostituisce `sb.from`/`sb.rpc` con mock prima delle operazioni.
+- **Verifiche eseguite prima del commit**:
+  - controllo sintattico `node --check` sui nuovi file JS/MJS: OK;
+  - test/browser/manuali reali: **NON eseguiti e NON dichiarati**.
+- **Verifica runtime ufficiale**: affidata al workflow GitHub Actions `FiscoSim Test Baseline` sul commit, con matrice Windows/Linux, Node 20, `npm ci`, `test:import`, `test:core`, `test:all`, `npm run build`. L'esito sarà registrato in append-only dopo il completamento del workflow.
+- **Test esclusi**: nessun browser E2E; nessuna scrittura DB reale; nessuna società reale; nessuna migration; nessuna policy RLS/auth; nessun accesso a `.env`.
+- **Manuale residuo a fine blocco**: verifica UI Working Table/Working View, file picker XML/ZIP controllati, override visivo, commit esclusivamente su società test con UUID staging reale, percezione performance ~500 documenti.
+- **Prossimo step consigliato**: acquisire esito CI; se verde, dichiarare TEST-BASELINE-1 chiuso e procedere a `IMPORT-25A-FREEZE` senza aprire Riconciliazione Bancaria.
+
