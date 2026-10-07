@@ -46,6 +46,7 @@ export function validateRegistrazioneRitenutaDraft(draft = {}, options = {}) {
   const base = toAmount(ritenutaData.baseImponibile ?? ritenutaData.baseRitenuta ?? ritenutaData.imponibileSoggettoRitenuta ?? 0)
   const ritenuta = toAmount(ritenutaData.ritenuta || 0)
   const importoPagamento = toAmount(ritenutaData.importoPagamento || partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || 0)
+  const codiceTributo = normalizeText(ritenutaData.codiceTributo || ritenutaData.codice_tributo || defaults.codiceTributo)
   const expectedBase = Math.max(0, roundNumber(importoCompenso - quotaNonSoggetta - sommeNonSoggette))
   const expectedRitenuta = roundNumber((base * aliquota) / 100)
 
@@ -74,7 +75,7 @@ export function validateRegistrazioneRitenutaDraft(draft = {}, options = {}) {
       blockers.push('pagamento parziale ritenute non ancora supportato')
     }
   }
-  if (mode !== 'none' && !normalizeText(ritenutaData.codiceTributo)) blockers.push('codice tributo ritenuta mancante')
+  if (mode !== 'none' && !codiceTributo) blockers.push('codice tributo ritenuta mancante')
   if (mode === 'pagamento' && !normalizeText(ritenutaData.dataScadenza)) blockers.push('data scadenza ritenuta non calcolabile')
   info.push(mode === 'pagamento'
     ? 'Ritenuta maturata, scadenza e dati CU/770 predisposti.'

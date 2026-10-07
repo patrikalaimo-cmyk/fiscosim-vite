@@ -11183,3 +11183,11 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica a logica produttiva in questo fix; solo fixture test rese coerenti con il contratto corrente.
 - CI completa da rilanciare.
 
+### MANUALE-CANONICO-FREEZE — CI RUN #3: ULTIMO RESIDUO RITENUTE
+
+- GitHub Actions run `37615376442`: `test:manual` è sceso a **1 failure**.
+- Il residuo riguarda `validateRegistrazioneRitenutaDraft`: `resolveRegistrazioneRitenutaDefaults` risolve correttamente il `codice_tributo` dall'anagrafica percipiente, ma il blocker finale controllava esclusivamente `ritenutaData.codiceTributo`.
+- Fix produttivo: la validazione usa ora `ritenutaData.codiceTributo / codice_tributo` oppure il `defaults.codiceTributo` già risolto. Nessun codice tributo viene inventato: il fallback proviene dall'anagrafica/configurazione osservabile.
+- Nessuna modifica a DB, migration, auth/RLS o ambiente.
+- CI completa da rilanciare.
+
