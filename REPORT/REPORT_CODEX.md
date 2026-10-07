@@ -11265,3 +11265,9 @@ pm run build -> Successo (429 moduli, 16s).
 - Il mapper DB corrente persiste `numero_documento` come tale e non lo riclassifica in `numero_registrazione`; inoltre un `sourceRowKey` non UUID non deve diventare `documento_import_id`.
 - Aggiornate quindi le sole aspettative di fixture: `numero_documento` ammesso e verificato; `numero_registrazione` non inventato; `documento_import_id` non valorizzato con chiave tecnica non UUID.
 - Nessuna logica produttiva o validazione è stata allentata.
+
+
+### MANUALE-CANONICO-FREEZE — UUID GUARD FIXTURE
+
+- CI `37661964310` ha lasciato un solo failure: la fixture pretendeva l'assenza fisica di `documento_import_id` dopo il guard UUID.
+- Il contratto corrente conserva invece la chiave DB-safe valorizzandola a `null` quando l'identificativo tecnico non è un UUID valido. L'aspettativa è stata aggiornata a chiave presente + valore `null`, preservando il guard e senza modifiche produttive.

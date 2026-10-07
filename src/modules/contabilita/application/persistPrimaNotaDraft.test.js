@@ -294,7 +294,8 @@ test('persistenza autonoma prima nota crea testata e righe da draft canonico', a
   assert.equal(header.totale_avere, 122)
   assert.equal(typeof header.stato, 'string')
   assert.equal(header.stato.length > 0, true)
-  assert.equal(Object.hasOwn(header, 'documento_import_id'), false)
+  assert.equal(Object.hasOwn(header, 'documento_import_id'), true)
+  assert.equal(header.documento_import_id, null)
   for (const forbidden of ['scope', 'meta', 'behavior', 'validation', 'readiness', 'activeTabs', 'showDocumentPanel', 'showIvaPanel', 'showPartitario', 'showRitenute', 'dare', 'avere']) {
     assert.equal(Object.hasOwn(header, forbidden), false)
   }
