@@ -11174,3 +11174,12 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica a migration, DB reale, `.env`, auth, RLS o policy.
 - Prossimo passo: rilancio `test:manual` + suite completa Windows/Linux e correzione degli eventuali residui prima del freeze automatico Manuale.
 
+### MANUALE-CANONICO-FREEZE — CI RUN #2: RESIDUI RIDOTTI A 2
+
+- GitHub Actions run `37615085084` sul commit `9ed4356dccd91dea6ca66e94b2d63114d91b2937`: `test:import` PASS; il nuovo `test:manual` è sceso da 19 a **2 failure**.
+- Le tre regressioni produttive corrette (direzione contabile neutra, corrispettivi senza apertura partitario implicita, riga costo/ricavo manuale non potata) non risultano più tra i failure.
+- Residuo 1: il test rollback “fallisce inserimento partitario” costruiva in realtà una **chiusura** con `documento_id`; il servizio corrente tenta quindi correttamente il read/update della partita e non l'insert. Fixture riallineata a una vera apertura partitario per testare l'errore di insert.
+- Residuo 2: il test “ritenute documento = ok” usava un percipiente senza `codice_tributo`, oggi obbligatorio. Fixture completata con codice tributo `1040`; nessun requisito produttivo viene allentato.
+- Nessuna modifica a logica produttiva in questo fix; solo fixture test rese coerenti con il contratto corrente.
+- CI completa da rilanciare.
+

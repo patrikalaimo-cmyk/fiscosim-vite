@@ -1482,7 +1482,12 @@ test('createPrimaNotaCompleta pulisce anche il ramo partitario se fallisce l ins
     db,
     pnPayload: { societa_id: 'soc-1', esercizio_contabile: '2026' },
     righePayload: [{ conto_id: 'c1', dare: 100, avere: 0 }],
-    partEntries: [{ documento_id: 'part-1', importo_chiuso: 50 }],
+    partEntries: [{
+      tipo_movimento: 'apertura',
+      conto_id: 'conto-fornitore-test',
+      importo_originale: 50,
+      importo_residuo: 50,
+    }],
   })
 
   assert.equal(result.error, partError)
@@ -1695,7 +1700,7 @@ test('buildRegistrazioneRitenutaDraft costruisce un draft ritenute con calcolo b
     documentData: { totaleDocumento: '1220,00', imponibile: '1000,00' },
     header: { soggetto: 'Studio Rossi' },
     percipienti: [
-      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20 },
+      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20, codice_tributo: '1040' },
     ],
     ritenutaData: {
       percipiente: 'Studio Rossi',
@@ -1757,7 +1762,7 @@ test('buildRegistrazioneRitenutaDraft legge il compenso netto IVA e blocca i cod
     documentData: { totaleDocumento: '1220,00', imponibile: '1000,00' },
     ivaDraft: { imponibile: '1000,00', totaleDocumento: '1220,00', totaleImposta: '220,00' },
     percipienti: [
-      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20 },
+      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20, codice_tributo: '1040' },
     ],
     ritenutaData: {
       percipiente: 'Studio Rossi',
@@ -1825,7 +1830,7 @@ test('buildRegistrazioneRitenutaDraft in modalità pagamento usa il partitario c
   const draft = buildRegistrazioneRitenutaDraft({
     header: { soggetto: 'Studio Rossi' },
     percipienti: [
-      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20 },
+      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20, codice_tributo: '1040' },
     ],
     partitarioDraft: {
       selectedPartitaId: 'part-1',
@@ -1960,14 +1965,14 @@ test('validateRegistrazioneDraft varia con il behavior della causale', () => {
       totaleDocumento: '1220,00',
     },
     percipienti: [
-      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20 },
+      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20, codice_tributo: '1040' },
     ],
     rows: [
       { conto_id: 'c1', dare: 100, avere: 0 },
       { conto_id: 'c2', dare: 0, avere: 100 },
     ],
     percipienti: [
-      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20 },
+      { id: 'p1', ragione_sociale: 'Studio Rossi', codice_fiscale: 'RSSSTU80A01H501U', causale_prevalente: 'A', aliquota_ritenuta: 20, codice_tributo: '1040' },
     ],
     ritenutaData: { percipiente: 'Studio Rossi', causaleReddituale: 'A', importoCompenso: '1000,00', baseRitenuta: '1000,00', aliquotaRitenuta: '20', ritenuta: '200,00' },
   }, { behavior: resolveRegistrazioneCausaleBehavior({ codice: 'RP', tipo_causale: 'Movimento di generale', op_ritenute: 'Documento' }) })
