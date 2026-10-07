@@ -40,10 +40,10 @@ La roadmap operativa corrente è stata riallineata all'obiettivo **A100 — Stud
 
 Stato attuale:
 - **TEST-BASELINE-1: COMPLETATO**. GitHub Actions run `37523777654` verde su Linux e Windows con `test:import`, `test:core`, `test:all` e `npm run build`.
-- **IMPORT-25A-FREEZE: GATE AUTOMATICO COMPLETATO; COLLAUDO MANUALE FINALE PENDENTE**.
+- **IMPORT-25A-FREEZE: GATE AUTOMATICO COMPLETATO; COLLAUDO MANUALE FINALE DEFERITO**.
 - **IMPORT-25A-HISTORY-1: CHIUSO VERDE**.
 - **IMPORT-25A-HISTORY-2: CHIUSO VERDE**.
-- Audit automatico finale Import: PASS; il passaggio a MANUALE-CANONICO-FREEZE avviene dopo il collaudo manuale di fine blocco su società di test.
+- Audit automatico finale Import: PASS. Su autorizzazione operativa del 07/10/2026, i collaudi manuali vengono accorpati alla fase finale; lo sviluppo prosegue ora su **MANUALE-CANONICO-FREEZE**. Ogni blocco resta marcato “automatico verde / manuale pendente” finché il collaudo non è eseguito.
 - **Registrazione Manuale, Consultazione e IVA** restano nella sequenza di freeze prevista dopo Import.
 - **Riconciliazione Bancaria resta BLOCCATA** finché Import + Manuale + IVA non sono chiusi con test automatici e collaudo manuale finale di blocco.
 
@@ -61,3 +61,13 @@ Ordine A100 attivo:
 
 Nel blocco Import, le proposte da storico devono restare assistive: il software propone, segnala discrepanze e preserva gli override manuali; la contabilizzazione richiede sempre validazione utente.
 
+
+
+## Regola collaudi differiti — 2026-10-07
+
+Per accelerare lo sviluppo:
+- i test automatici e la CI restano obbligatori a ogni blocco;
+- i collaudi manuali browser/utente vengono registrati come debito di collaudo e accorpati in una sessione finale;
+- nessun collaudo manuale viene dichiarato eseguito se non realmente svolto;
+- Riconciliazione Bancaria resta bloccata finché Import + Manuale + IVA non hanno gate automatici verdi e i collaudi manuali richiesti non sono stati validati;
+- RELEASE A100 resta bloccata fino alla chiusura di tutto il debito manuale.

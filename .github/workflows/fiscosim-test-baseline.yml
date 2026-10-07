@@ -43,6 +43,9 @@ jobs:
       - name: Import suite
         run: npm run test:import
 
+      - name: Manual accounting suite
+        run: npm run test:manual
+
       - name: Core suite
         run: npm run test:core
 

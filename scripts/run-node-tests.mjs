@@ -5,33 +5,84 @@ import process from 'node:process'
 
 const ROOT_TEST_DIR = path.resolve('tests')
 const IMPORT_TEST_DIR = path.resolve('src/modules/import_contabilita/tests')
+const CONTABILITA_APPLICATION_DIR = path.resolve('src/modules/contabilita/application')
 const IMPORT_ROOT_TESTS = new Set(['testLabIntegrazione.test.js'])
 
-async function listTestFiles(directory) {
+const MANUAL_ROOT_TESTS = new Set([
+  'a17xAutofatturaBase.test.js',
+  'causaliPolicyEngine.test.js',
+  'cespitiIntegrazione.test.js',
+  'fase13eClosedPeriodBlock.test.js',
+  'fase13fClosedPeriodBlock.test.js',
+  'fase3RegistrazioneManualeMovimentiGenerali.test.js',
+  'ff5BeniEsteroBase.test.js',
+  'ivaOrdinariaEndToEndLiquidazione.test.js',
+  'ivaPerCassaDocumento.test.js',
+  'ivaPerCassaPagamentoUiPolicy.test.js',
+  'ivaPerCassaPreviewRelease.test.js',
+  'ivaPerCassaRelease.test.js',
+  'ivaPerCassaSchemaMapping.test.js',
+  'manualeIvaOrdinaria.test.js',
+  'partitarioDocumentiIva.test.js',
+  'partitarioPagamentiIncassi.test.js',
+  'persistPrimaNotaDraft.test.js',
+  'primaNotaMutationService.test.js',
+  'ritenutePagamentoParcella.test.js',
+  'ritenutePercipientiCompleto.test.js',
+  'splitPaymentDocumentoAttivo.test.js',
+  'vatRegisterEntriesFromCanonicalPayload.test.js',
+])
+
+async function listTestFiles(directory, { recursive = false } = {}) {
   const entries = await readdir(directory, { withFileTypes: true })
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.test.js'))
-    .map((entry) => path.join(directory, entry.name))
-    .sort((a, b) => a.localeCompare(b))
+  const files = []
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name)
+    if (entry.isDirectory() && recursive) {
+      files.push(...await listTestFiles(fullPath, { recursive: true }))
+      continue
+    }
+    if (entry.isFile() && entry.name.endsWith('.test.js')) {
+      files.push(fullPath)
+    }
+  }
+  return files.sort((a, b) => a.localeCompare(b))
 }
 
 async function resolveProfile(profile) {
   const rootTests = await listTestFiles(ROOT_TEST_DIR)
   const importModuleTests = await listTestFiles(IMPORT_TEST_DIR)
+  const contabilitaApplicationTests = await listTestFiles(CONTABILITA_APPLICATION_DIR, { recursive: true })
+
   const importRootTests = rootTests.filter((file) => IMPORT_ROOT_TESTS.has(path.basename(file)))
-  const coreTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
+  const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
+  const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
+  const manualApplicationTests = contabilitaApplicationTests.filter((file) => {
+    const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
+    return (
+      rel === 'buildContabilitaPostPersistOutput.test.js'
+      || rel === 'canonicalContabilitaDraftMapper.test.js'
+      || rel === 'fiscalWorkflow.test.js'
+      || rel === 'persistPrimaNotaDraft.test.js'
+      || rel === 'registrazioneOperations/registrazioneOperations.test.js'
+      || rel === 'primaNotaOperations/primaNotaOperations.test.js'
+    )
+  })
 
   if (profile === 'import') {
     return [...importModuleTests, ...importRootTests]
   }
+  if (profile === 'manual') {
+    return [...manualApplicationTests, ...manualRootTests]
+  }
   if (profile === 'core') {
-    return coreTests
+    return [...contabilitaApplicationTests, ...coreRootTests]
   }
   if (profile === 'all') {
-    return [...coreTests, ...importModuleTests, ...importRootTests]
+    return [...contabilitaApplicationTests, ...coreRootTests, ...importModuleTests, ...importRootTests]
   }
 
-  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, core, all.`)
+  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, core, all.`)
 }
 
 async function main() {

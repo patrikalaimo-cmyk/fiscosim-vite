@@ -11142,3 +11142,16 @@ pm run build -> Successo (429 moduli, 16s).
 - Stato residuo: esclusivamente collaudo manuale finale in browser su società di test, come checklist in `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.
 - Fino a quel collaudo, il blocco non viene dichiarato chiuso definitivo e `MANUALE-CANONICO-FREEZE` non viene avviato.
 
+## A100 — COLLAUDI MANUALI DIFFERITI + AVVIO MANUALE-CANONICO-FREEZE
+
+- Su indicazione operativa del 07/10/2026, i collaudi manuali vengono accorpati a una fase finale per non interrompere lo sviluppo.
+- I test automatici/CI restano obbligatori per ogni blocco.
+- Import resta classificato **automatico verde / manuale pendente**.
+- Creato `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md` come registro unico dei collaudi differiti.
+- Riconciliazione Bancaria e Release A100 restano bloccate fino alla chiusura dei gate manuali previsti.
+- Avviato `MANUALE-CANONICO-FREEZE`.
+- Gap baseline individuato: la CI ufficiale non includeva i test `*.test.js` collocati in `src/modules/contabilita/application/**`.
+- Intervento: runner reso ricorsivo sull'application accounting, nuovo profilo `test:manual`, e inclusione di tutte le suite application safe nel profilo `core` e `all`.
+- Workflow CI esteso con step dedicato `npm run test:manual`.
+- Nessuna modifica a logica fiscale, DB, migration, auth/RLS o ambiente.
+
