@@ -11209,3 +11209,16 @@ pm run build -> Successo (429 moduli, 16s).
 - **MANUALE-CANONICO-FREEZE: gate automatico PASS**.
 - Browser/manuali reali: **NON eseguiti**, differiti e registrati in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 - Prossimo blocco: `CONSULTAZIONE-FREEZE`.
+
+### MANUALE-CANONICO-FREEZE — HARDENING CESPITE POST-SAVE
+
+- Audit write path della Registrazione Manuale: le scritture contabili principali passano da `persistPrimaNotaDraft`; modifica/annullamento/storno passano dai servizi applicativi dedicati.
+- Residuo individuato: creazione `beni_ammortizzabili` eseguita direttamente dentro `RegistrazioneManualeView.jsx`.
+- Correzione architetturale senza modifica funzionale:
+  - nuovo application service `application/cespiti/createCespiteFromPrimaNota.js`;
+  - lookup cliente + costruzione payload + insert cespite spostati fuori dal JSX;
+  - la View mantiene soltanto orchestrazione e gestione dell'eventuale errore post-save.
+- Aggiunta suite Node applicativa per creazione cespite, fallback società e skip su input non valido.
+- Profilo `test:manual` esteso ai test application cespiti.
+- Nessuna migration, modifica DB schema, auth/RLS o logica fiscale della prima nota.
+

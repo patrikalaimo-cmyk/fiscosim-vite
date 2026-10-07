@@ -66,6 +66,7 @@ async function resolveProfile(profile) {
       || rel === 'persistPrimaNotaDraft.test.js'
       || rel === 'registrazioneOperations/registrazioneOperations.test.js'
       || rel === 'primaNotaOperations/primaNotaOperations.test.js'
+      || rel.startsWith('cespiti/')
     )
   })
 
