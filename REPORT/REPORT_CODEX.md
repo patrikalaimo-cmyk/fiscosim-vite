@@ -11350,3 +11350,33 @@ Prossimo blocco: `CONSULTAZIONE-FREEZE`.
 
 - CI `37664599025`: `test:consultazione` PASS; Core bloccato unicamente da una regex del test storico riallineato, escapata in modo errato nel sorgente JS.
 - Corretto il test statico senza variazioni alla logica produttiva.
+
+
+## CONSULTAZIONE-FREEZE — CHIUSURA GATE AUTOMATICO
+
+### Esito
+**AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+### Codice validato
+Commit `66952c229a9b6e6dd8bac329b664a5537c2f88d3`.
+
+### CI
+Run `37664771687` — SUCCESS.
+- Ubuntu: Import 231/231, Manuale 413/413, Consultazione 38/38, Core 575/575, All safe 950/950, build PASS.
+- Windows: tutti gli step PASS.
+
+### Correzione principale
+L'audit ha trovato un bypass reale del read-only: `ConsultazioneDetailSidebar.jsx` esponeva modifica/storno ed eliminazione della simulata, mentre la documentazione CORE-CLOSURE classificava Consultazione come sola lettura. Il bypass è stato rimosso e il guard è stato esteso all'intera superficie.
+
+### Triage
+- test storico che pretendeva `onEditScrittura`: obsoleto e riallineato al contratto read-only;
+- regex di test mal escapata: fix test-only.
+
+### Documentazione
+- creato `REPORT/CONSULTAZIONE_FREEZE_AUDIT.md`;
+- aggiornata matrice test;
+- aggiornato debito collaudi manuali;
+- roadmap avanzata a `IVA-REGISTRI-LIQUIDAZIONE`.
+
+### Sicurezza
+Nessuna migration, env, auth/login, RLS/policy, DB reale o Riconciliazione Bancaria toccati.

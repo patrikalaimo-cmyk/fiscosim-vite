@@ -55,3 +55,24 @@ I casi manuali specifici verranno aggiunti durante `IVA-REGISTRI-LIQUIDAZIONE` e
 - sviluppo Manuale/Consultazione/IVA: consentito con CI verde;
 - sviluppo Riconciliazione Bancaria: **NON consentito** finché il debito manuale di Import + Manuale + IVA non è chiuso secondo il gate stabilito;
 - Release A100: **NON consentita** finché tutto il debito manuale non è chiuso.
+
+
+## Consultazione Prima Nota — pendente
+
+Riferimento: `REPORT/CONSULTAZIONE_FREEZE_AUDIT.md`.
+
+Da verificare in browser su società esclusivamente di test:
+1. caricamento Consultazione con società attiva e default “Ordinarie”;
+2. filtri esercizio/date/soggetto/documento/causale/conto;
+3. selezione conto e coerenza saldo precedente + saldo progressivo;
+4. toggle Ordinarie / Stornate / Simulate;
+5. apertura dettaglio scrittura e coerenza testata/righe/quadratura;
+6. verifica visuale del banner read-only;
+7. verifica che Modifica/Storno/Elimina simulata non siano eseguibili dalla Consultazione;
+8. periodo chiuso/stampato mostrato come non operativo;
+9. export CSV compatto e completo con N. Prima Nota;
+10. ordinamento numerico N. Prima Nota e riga;
+11. navigazione tastiera ↑/↓/Invio/Esc;
+12. warning e comportamento visuale sul limite 10.000 righe.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.

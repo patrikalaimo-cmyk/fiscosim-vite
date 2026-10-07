@@ -84,3 +84,16 @@ Per accelerare lo sviluppo:
 - I collaudi manuali sono registrati in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md` e non sono dichiarati eseguiti.
 - **Prossimo blocco attivo: CONSULTAZIONE-FREEZE**.
 - **Riconciliazione Bancaria resta BLOCCATA** fino al gate previsto su Import + Manuale + IVA.
+
+
+## CONSULTAZIONE-FREEZE — gate automatico 2026-10-07
+
+- Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Commit codice validato: `66952c229a9b6e6dd8bac329b664a5537c2f88d3`.
+- CI run `37664771687`: Ubuntu e Windows verdi su Import, Manuale, Consultazione, Core, All safe e build.
+- Profilo `test:consultazione`: 5 file / 38 test PASS.
+- Chiuso un bypass reale del contratto read-only: la sidebar non può più modificare, stornare o eliminare simulazioni e il parent non passa più callback mutative verso il Manuale.
+- Filtri, dettaglio, saldi, stati ed export restano operativi in sola lettura.
+- Collaudo browser differito e registrato nel debito QA finale.
+- **Prossimo blocco attivo: IVA-REGISTRI-LIQUIDAZIONE**.
+- **Riconciliazione Bancaria resta BLOCCATA**.
