@@ -52,6 +52,9 @@ jobs:
       - name: VAT registers and liquidation suite
         run: npm run test:iva
 
+      - name: Split payment simple suite
+        run: npm run test:split
+
       - name: Core suite
         run: npm run test:core
 

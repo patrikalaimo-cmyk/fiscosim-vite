@@ -205,6 +205,44 @@ test('righe PN split usano imponibile per cliente e doppia riga tecnica IVA', ()
   assert.equal(result.rows.reduce((sum, row) => sum + Number(row.avere || 0), 0), 1220)
 })
 
+test('nota credito attiva split conserva il lato Avere della controparte e resta quadrata', () => {
+  const activeCreditNote = {
+    ...activeInvoice,
+    id: 'caus-nc-split',
+    tipo_documento: 'nota_credito_attiva',
+    segno_registro_iva: '-',
+  }
+
+  const split = resolveRegistrazioneSplitPayment({
+    header: { clienteFornitoreTipo: 'cliente', split_payment: true },
+    causaleContabile: activeCreditNote,
+  })
+  assert.equal(split.active, true)
+
+  const result = buildSplitPaymentRows({
+    rows: [
+      { id: 'ricavo', ruolo: 'ricavo', conto_id: 'ricavo', dare: 1000, avere: 0 },
+      { id: 'iva', ruolo: 'iva', conto_id: 'iva-debito', dare: 220, avere: 0 },
+      { id: 'cliente', ruolo: 'soggetto', conto_id: 'cliente-pa', dare: 0, avere: 1220 },
+    ],
+    splitPayment: split,
+    ivaDraft: { totaleImponibile: 1000, totaleIva: 220 },
+    causale: activeCreditNote,
+    pianoConti: [
+      { id: 'iva-split', codice: '220199', descrizione: 'IVA split payment' },
+    ],
+    header: { clienteFornitoreId: 'cliente-pa' },
+  })
+
+  assert.deepEqual(result.blockers, [])
+  const customerRow = result.rows.find((row) => row.id === 'cliente')
+  assert.equal(customerRow.dare, 0)
+  assert.equal(customerRow.avere, 1000)
+  assert.equal(result.rows.some((row) => row.id === 'iva'), false)
+  assert.equal(result.rows.reduce((sum, row) => sum + Number(row.dare || 0), 0), 1220)
+  assert.equal(result.rows.reduce((sum, row) => sum + Number(row.avere || 0), 0), 1220)
+})
+
 test('cliente split viene abbassato all imponibile anche quando la riga non porta ruolo esplicito', () => {
   const result = buildSplitPaymentRows({
     rows: [

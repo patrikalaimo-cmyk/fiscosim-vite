@@ -14,6 +14,12 @@ const CONSULTAZIONE_ROOT_TESTS = new Set([
   'consultazioneReadOnlyGuard.test.js',
 ])
 
+const SPLIT_ROOT_TESTS = new Set([
+  'anagraficaSplitPaymentSave.test.js',
+  'liquidazioneIvaSplitPayment.test.js',
+  'splitPaymentDocumentoAttivo.test.js',
+])
+
 const IVA_ROOT_TESTS = new Set([
   'calcoloLiquidazioneIvaDefinitiva.test.js',
   'ivaOrdinariaEndToEndLiquidazione.test.js',
@@ -82,6 +88,7 @@ async function resolveProfile(profile) {
   const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
   const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
   const consultazioneRootTests = rootTests.filter((file) => CONSULTAZIONE_ROOT_TESTS.has(path.basename(file)))
+  const splitRootTests = rootTests.filter((file) => SPLIT_ROOT_TESTS.has(path.basename(file)))
   const ivaRootTests = rootTests.filter((file) => IVA_ROOT_TESTS.has(path.basename(file)))
   const consultazioneApplicationTests = contabilitaApplicationTests.filter((file) => {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
@@ -115,6 +122,9 @@ async function resolveProfile(profile) {
   if (profile === 'iva') {
     return ivaRootTests
   }
+  if (profile === 'split') {
+    return splitRootTests
+  }
   if (profile === 'core') {
     return coreRootTests
   }
@@ -128,7 +138,7 @@ async function resolveProfile(profile) {
     ]))
   }
 
-  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, iva, core, all.`)
+  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, iva, split, core, all.`)
 }
 
 async function main() {

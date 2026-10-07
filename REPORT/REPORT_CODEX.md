@@ -13,3 +13,16 @@
 - Riconciliazione Bancaria resta BLOCCATA.
 - Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
 - Stato del commit documentale: **CI PENDENTE**.
+
+
+## 2026-10-08 — SPLIT-SIMPLE / audit e hardening segni nota credito
+
+- Audit avviato dal gate IVA già verde sul branch `mio-branch`.
+- Confermata la catena principale split: flag controparte/documento -> draft Manuale -> conto tecnico configurato -> partitario al solo imponibile -> registro IVA con flag split -> esclusione dal debito effettivo in liquidazione.
+- Individuata divergenza reale Manuale/Import: il workflow Import preservava il lato Dare/Avere della controparte, mentre `buildSplitPaymentRows` nel Manuale forzava sempre la controparte in Dare.
+- Correzione applicata: la controparte split mantiene il lato contabile originario; fattura attiva resta in Dare, nota credito attiva resta in Avere.
+- Aggiunta regressione specifica per nota credito attiva split, con quadratura delle righe e rimozione della riga IVA ordinaria.
+- Introdotto profilo dedicato `test:split` e step CI Windows/Linux.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Riconciliazione Bancaria resta BLOCCATA.
+- Stato: **CI PENDENTE**.

@@ -143,15 +143,21 @@ export function buildSplitPaymentRows({ rows = [], splitPayment = {}, ivaDraft =
 
   const retained = sourceRows
     .filter((row) => !isOrdinaryVatRow(row) && !['iva_split', 'iva_split_payment', 'split_payment'].includes(rowRole(row)) && row?.source !== 'split_payment')
-    .map((row) => isSplitSubjectRow(row, header)
-      ? {
-          ...row,
-          dare: imponibile,
-          avere: 0,
-          splitPayment: true,
-          contoQuery: normalizeText(row?.contoQuery || row?.conto_query || row?.conto_descrizione || row?.conto_codice || row?.conto_id || normalizeAccountQuery({ id: row?.conto_id, codice: row?.conto_codice, descrizione: row?.conto_descrizione })),
-        }
-      : row)
+    .map((row) => {
+      if (!isSplitSubjectRow(row, header)) return row
+
+      const currentDare = amount(row?.dare ?? row?.importo_dare)
+      const currentAvere = amount(row?.avere ?? row?.importo_avere)
+      const subjectOnCreditSide = currentAvere > 0 && currentDare <= 0
+
+      return {
+        ...row,
+        dare: subjectOnCreditSide ? 0 : imponibile,
+        avere: subjectOnCreditSide ? imponibile : 0,
+        splitPayment: true,
+        contoQuery: normalizeText(row?.contoQuery || row?.conto_query || row?.conto_descrizione || row?.conto_codice || row?.conto_id || normalizeAccountQuery({ id: row?.conto_id, codice: row?.conto_codice, descrizione: row?.conto_descrizione })),
+      }
+    })
 
   const technical = [
     {
