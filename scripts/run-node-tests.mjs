@@ -61,6 +61,8 @@ async function resolveProfile(profile) {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
     return (
       rel === 'canonicalContabilitaDraftMapper.test.js'
+      || rel === 'persistPrimaNotaDraft.test.js'
+      || rel === 'buildContabilitaPostPersistOutput.test.js'
       || rel === 'fiscalWorkflow.test.js'
       || rel === 'registrazioneOperations/registrazioneOperations.test.js'
       || rel === 'primaNotaOperations/primaNotaOperations.test.js'

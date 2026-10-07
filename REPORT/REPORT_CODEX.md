@@ -11240,3 +11240,12 @@ pm run build -> Successo (429 moduli, 16s).
 - `test:core` mantiene il perimetro root baseline precedente; `test:all` aggiunge le suite application Manuale correnti senza includere adapter legacy non usati in produzione.
 - Le due suite legacy restano nel repository come debito di cleanup, ma non vengono dichiarate verdi né usate come prova del freeze.
 
+
+
+### MANUALE-CANONICO-FREEZE — REINCLUSIONE SUITE ESPLICITAMENTE RICHIESTE
+
+- Audit del profilo ufficiale rispetto al perimetro richiesto: le suite application `persistPrimaNotaDraft.test.js` e `buildContabilitaPostPersistOutput.test.js` risultavano escluse dopo il triage precedente.
+- Poiché il gate MANUALE richiede espressamente anche queste suite, vengono reincluse nel profilo `test:manual` e quindi in `test:all` tramite il medesimo insieme application.
+- Nessuna aspettativa viene silenziata: eventuali failure saranno classificati come test/fixture obsoleti oppure bug reali e corretti prima del freeze finale.
+- Sicurezza: nessuna modifica a `.env`, auth/login, RLS/policy Supabase, migration o dati di società reali.
+- CI Windows/Linux: da verificare sul commit di reinclusione.
