@@ -22,7 +22,7 @@ test('FASE 3C.3 - Test Funzionali Modifica, Storno e Ricerca con Stati Stornata/
   await t.test('2. Hub non collega la Consultazione al workflow edit/storno', () => {
     const filePath = path.resolve('src/modules/contabilita/views/PrimaNotaHubView.jsx')
     const content = fs.readFileSync(filePath, 'utf8')
-    const consultazioneMount = content.match(/<ConsultazionePrimaNotaView[\\s\\S]{0,1200}\\/>/)?.[0] || ''
+    const consultazioneMount = content.match(/<ConsultazionePrimaNotaView[\s\S]{0,1200}\/>/)?.[0] || ''
 
     assert.ok(consultazioneMount, 'Il mount Consultazione deve essere presente')
     assert.ok(!consultazioneMount.includes('onEditScrittura'), 'La Consultazione non deve ricevere callback mutative')

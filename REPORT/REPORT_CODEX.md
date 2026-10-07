@@ -11344,3 +11344,9 @@ Prossimo blocco: `CONSULTAZIONE-FREEZE`.
 - Classificazione: **test obsoleto**, non bug produttivo.
 - Riallineamento: la suite ora verifica l'opposto, cioè nessun callback mutativo, nessuna cancellazione simulata dalla sidebar e nessun helper legacy di handoff nel parent.
 - Nessuna logica fiscale o contabile di scrittura è stata rimossa dai workflow dedicati; è stato chiuso soltanto il bypass dalla Consultazione.
+
+
+### CONSULTAZIONE-FREEZE — FIX SINTASSI TEST DI TRIAGE
+
+- CI `37664599025`: `test:consultazione` PASS; Core bloccato unicamente da una regex del test storico riallineato, escapata in modo errato nel sorgente JS.
+- Corretto il test statico senza variazioni alla logica produttiva.
