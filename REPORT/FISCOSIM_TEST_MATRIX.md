@@ -90,3 +90,20 @@ Gate regressivo aggiunto:
 
 Stato: **gate automatico PASS** dopo CI del commit di freeze. La chiusura definitiva resta subordinata alla checklist manuale finale descritta in `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.
 
+## MANUALE-CANONICO-FREEZE — profilo ufficiale
+
+Comando dedicato: `npm run test:manual`.
+
+Il profilo include:
+- suite correnti di Registrazione Manuale, policy causali, IVA ordinaria, note credito, split payment, IVA per cassa, reverse/autofattura/CEE, ritenute e partitario;
+- suite applicative correnti `canonicalContabilitaDraftMapper`, `fiscalWorkflow`, `registrazioneOperations`, `primaNotaOperations`;
+- il test corrente `tests/persistPrimaNotaDraft.test.js`.
+
+Esclusioni nominate:
+- `src/modules/contabilita/application/persistPrimaNotaDraft.test.js`;
+- `src/modules/contabilita/application/buildContabilitaPostPersistOutput.test.js`.
+
+Le due suite escluse sono fixture di integrazione pre-canoniche rimaste nel repository come storico tecnico. Non sono usate per allentare requisiti: la persistenza corrente è coperta da `tests/persistPrimaNotaDraft.test.js`, mentre mapping/contratto canonico sono coperti dalle suite correnti dedicate.
+
+CI run iniziale del nuovo profilo Manuale: `37613649884`. Ha fatto emergere test storici non più coerenti e regressioni produttive prima non osservate dalla baseline.
+

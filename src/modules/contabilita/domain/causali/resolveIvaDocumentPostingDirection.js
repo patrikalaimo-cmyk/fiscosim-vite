@@ -49,6 +49,20 @@ export function resolveIvaDocumentPostingDirection(causalePolicy) {
     }
   }
 
+  // Se né policy, né registro, né fallback tecnico identificano acquisti/vendite,
+  // non inventiamo una direzione. I consumer possono allora usare il ruolo reale
+  // della controparte/template invece di ereditare implicitamente la matrice vendite.
+  if (!isAcquisti && !isVendite) {
+    return {
+      registroKind: null,
+      segnoRegistro: null,
+      subjectSide: null,
+      vatSide: null,
+      imputationSide: null,
+      registroSign: 1,
+    }
+  }
+
   // Identificazione segno registro (Sottrae vs Somma)
   let isSottrae = segno === 'sottrae' || segno === '-' || segno === 'sottrazione' || causalePolicy?.notaCredito === true
 

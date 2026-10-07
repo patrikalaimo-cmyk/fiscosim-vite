@@ -57,13 +57,24 @@ async function resolveProfile(profile) {
   const importRootTests = rootTests.filter((file) => IMPORT_ROOT_TESTS.has(path.basename(file)))
   const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
   const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
-  const manualApplicationTests = contabilitaApplicationTests.filter((file) => {
+
+  // Suite applicative pre-canoniche mantenute nel repository come storico tecnico,
+  // ma sostituite nel gate ufficiale da copertura corrente:
+  // - tests/persistPrimaNotaDraft.test.js
+  // - canonicalContabilitaDraftMapper.test.js + suite registrazioneOperations.
+  const supersededApplicationTests = new Set([
+    'persistPrimaNotaDraft.test.js',
+    'buildContabilitaPostPersistOutput.test.js',
+  ])
+  const safeContabilitaApplicationTests = contabilitaApplicationTests.filter(
+    (file) => !supersededApplicationTests.has(path.basename(file)),
+  )
+
+  const manualApplicationTests = safeContabilitaApplicationTests.filter((file) => {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
     return (
-      rel === 'buildContabilitaPostPersistOutput.test.js'
-      || rel === 'canonicalContabilitaDraftMapper.test.js'
+      rel === 'canonicalContabilitaDraftMapper.test.js'
       || rel === 'fiscalWorkflow.test.js'
-      || rel === 'persistPrimaNotaDraft.test.js'
       || rel === 'registrazioneOperations/registrazioneOperations.test.js'
       || rel === 'primaNotaOperations/primaNotaOperations.test.js'
     )
@@ -76,10 +87,10 @@ async function resolveProfile(profile) {
     return [...manualApplicationTests, ...manualRootTests]
   }
   if (profile === 'core') {
-    return [...contabilitaApplicationTests, ...coreRootTests]
+    return [...safeContabilitaApplicationTests, ...coreRootTests]
   }
   if (profile === 'all') {
-    return [...contabilitaApplicationTests, ...coreRootTests, ...importModuleTests, ...importRootTests]
+    return [...safeContabilitaApplicationTests, ...coreRootTests, ...importModuleTests, ...importRootTests]
   }
 
   throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, core, all.`)

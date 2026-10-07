@@ -115,10 +115,14 @@ export function buildCausaleContabilePolicy(causale = {}) {
     operazionePolicy.isDocumentoIva ||
     (ivaPerCassa && !isPagamentoIncasso)
 
-  if (!hasPartiteConfig && isDocumentoIva) {
+  if (!hasPartiteConfig && isDocumentoIva && !isCorrispettivo && !isSolaIva) {
     partiteOpen = true
     partiteClose = false
     partiteIgnore = false
+  } else if (!hasPartiteConfig && (isCorrispettivo || isSolaIva)) {
+    partiteOpen = false
+    partiteClose = false
+    partiteIgnore = true
   }
 
   const richiedeDataDocumento =

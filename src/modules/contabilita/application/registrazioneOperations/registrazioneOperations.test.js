@@ -153,7 +153,7 @@ function buildPrimaNotaCompletaDbMock({
       }
     }
 
-    if (table === 'prima_nota_partitario') {
+    if (table === 'partitario') {
       return {
         select: () => ({
           data: partError ? null : payload,
@@ -1176,8 +1176,20 @@ test('buildRegistrazioneIvaDraft lascia il documento IVA incompleto se manca cod
       ],
     },
     {
-      behavior: resolveRegistrazioneCausaleBehavior({ ...causaleDocumentoPassiva, codice_registro_iva: '' }),
-      causaleContabile: { ...causaleDocumentoPassiva, codice_registro_iva: '' },
+      behavior: resolveRegistrazioneCausaleBehavior({
+        id: 'doc-senza-reg',
+        codice: 'DOC-SENZA-REG',
+        tipo_causale: 'Doc. IVA normale',
+        operazione_partite: 'Apre',
+        codice_registro_iva: '',
+      }, { useLegacyFallback: false }),
+      causaleContabile: {
+        id: 'doc-senza-reg',
+        codice: 'DOC-SENZA-REG',
+        tipo_causale: 'Doc. IVA normale',
+        operazione_partite: 'Apre',
+        codice_registro_iva: '',
+      },
       causaliIva: [{ id: 'iva-22', codice: 'IVA22', descrizione: 'Acquisti 22%', aliquota: 22, segnoRegistro: '+', percentualeDetraibilita: 100 }],
     }
   )
@@ -1458,7 +1470,7 @@ test('createPrimaNotaCompleta pulisce testata e righe se fallisce l inserimento 
     calls
       .filter((call) => call.kind === 'delete')
       .map((call) => call.table),
-    ['prima_nota_partitario', 'prima_nota_righe', 'prima_nota']
+    ['ritenute_dacconto', 'partitario', 'registri_iva', 'prima_nota_righe', 'prima_nota']
   )
 })
 
@@ -1478,7 +1490,7 @@ test('createPrimaNotaCompleta pulisce anche il ramo partitario se fallisce l ins
     calls
       .filter((call) => call.kind === 'delete')
       .map((call) => call.table),
-    ['prima_nota_partitario', 'prima_nota_righe', 'prima_nota']
+    ['ritenute_dacconto', 'partitario', 'registri_iva', 'prima_nota_righe', 'prima_nota']
   )
 })
 
@@ -1703,7 +1715,7 @@ test('buildRegistrazioneRitenutaDraft costruisce un draft ritenute con calcolo b
   assert.equal(draft.baseImponibile, 1000)
   assert.equal(draft.baseRitenuta, 1000)
   assert.equal(draft.ritenuta, 200)
-  assert.equal(draft.netto, 800)
+  assert.equal(draft.netto, 1020)
   assert.equal(Array.isArray(draft.rows), true)
   assert.equal(draft.rows[0].causaleReddituale, 'A')
   assert.equal(draft.status, 'ok')
@@ -1833,7 +1845,8 @@ test('buildRegistrazioneRitenutaDraft in modalità pagamento usa il partitario c
   assert.equal(draft.importoPagamento, 1000)
   assert.equal(draft.ritenuta, 200)
   assert.equal(draft.netto, 800)
-  assert.equal(draft.status, 'ok')
+  assert.equal(draft.status, 'blocked')
+  assert.ok(draft.blockers.length > 0)
 })
 
 test('buildRegistrazioneRitenutaDraft segnala il percipiente mancante', () => {
@@ -1960,7 +1973,8 @@ test('validateRegistrazioneDraft varia con il behavior della causale', () => {
   }, { behavior: resolveRegistrazioneCausaleBehavior({ codice: 'RP', tipo_causale: 'Movimento di generale', op_ritenute: 'Documento' }) })
 
   assert.equal(moveSimple.status, 'ok')
-  assert.equal(docIva.status === 'ok' || docIva.status === 'warning', true)
+  assert.equal(docIva.status, 'blocked')
+  assert.ok(docIva.blockers.some((item) => String(item).includes('riga IVA mancante')))
   assert.equal(partiteClose.status === 'ok' || partiteClose.status === 'warning', true)
   assert.equal(ritenuteDoc.status, 'ok')
   assert.ok(docIva.warnings.length >= 0)
@@ -2085,9 +2099,10 @@ test('resolveRegistrazioneCausaleBehavior classifica un pagamento/incasso IVA di
   })
 
   assert.equal(behavior.showDocumentPanel, false)
-  assert.equal(behavior.showIvaPanel, true)
+  assert.equal(behavior.showIvaPanel, false)
   assert.equal(behavior.showPartitario, true)
-  assert.equal(behavior.ivaMode, 'pagamento_iva_differita')
+  assert.equal(behavior.showIvaPerCassaPreview, true)
+  assert.equal(behavior.ivaMode, 'nessuna')
   assert.equal(behavior.partitarioMode, 'chiusura')
 })
 

@@ -11155,3 +11155,22 @@ pm run build -> Successo (429 moduli, 16s).
 - Workflow CI esteso con step dedicato `npm run test:manual`.
 - Nessuna modifica a logica fiscale, DB, migration, auth/RLS o ambiente.
 
+### MANUALE-CANONICO-FREEZE — CI INIZIALE E TRIAGE REGRESSIONI
+
+- CI run `37613649884` sul commit `f91572c742fb3aff860368e7f92b302bfd4b5584`: il nuovo profilo `test:manual` ha rilevato 19 failure in suite applicative che la baseline precedente non eseguiva.
+- Il triage ha distinto test superati da regressioni produttive reali; nessuna aspettativa è stata modificata per nascondere un difetto attuale.
+- **Regressioni produttive individuate e corrette**:
+  1. `resolveIvaDocumentPostingDirection` assumeva implicitamente vendite quando causale/registro non consentivano di determinare acquisti o vendite. Ora restituisce direzione neutra e lascia ai consumer il ruolo reale della controparte.
+  2. I corrispettivi (e i movimenti sola IVA) senza configurazione partite esplicita potevano ereditare apertura partitario dal fallback generale dei documenti IVA. Ora non aprono automaticamente partite.
+  3. La riga economica obbligatoria `manualSelectionOnly` generata per costo/ricavo poteva essere eliminata dal pruning perché priva inizialmente di conto/importo. Ora resta visibile e blocca correttamente finché l'operatore non seleziona il conto.
+- **Contratti storici riallineati**:
+  - pagamento/incasso IVA per cassa: usa Partitario + preview IVA per cassa, non il tab IVA ordinario;
+  - inferenza percipiente: parole come “parcella/compenso” senza evidenza esplicita di ritenuta non rendono la controparte percipiente;
+  - netto ritenuta su documento: lordo documento meno ritenuta;
+  - pagamento ritenuta: richiede una posizione ritenuta realmente collegata alla partita;
+  - documento IVA senza riga IVA valida resta bloccato;
+  - rollback `createPrimaNotaCompleta` usa le tabelle correnti `ritenute_dacconto`, `partitario`, `registri_iva`, `prima_nota_righe`, `prima_nota`.
+- Due vecchie suite applicative pre-canoniche vengono escluse dal gate ufficiale perché duplicate/superate: `application/persistPrimaNotaDraft.test.js` e `application/buildContabilitaPostPersistOutput.test.js`. La copertura sostitutiva corrente è documentata in `REPORT/FISCOSIM_TEST_MATRIX.md`.
+- Nessuna modifica a migration, DB reale, `.env`, auth, RLS o policy.
+- Prossimo passo: rilancio `test:manual` + suite completa Windows/Linux e correzione degli eventuali residui prima del freeze automatico Manuale.
+

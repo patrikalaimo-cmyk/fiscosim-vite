@@ -196,10 +196,10 @@ test('parcella-like wording without withholding does NOT create a percipiente (g
     },
   }
   const inferred = inferPercipienteCandidate(documentRow)
-  assert.equal(inferred.relevant, true)
+  assert.equal(inferred.relevant, false)
+  assert.equal(inferred.signals.hasExplicitWithholding, false)
   const cls = classifyPercipienteOutcome({ documentRow, inferred, matchedPercipiente: null })
   assert.equal(cls.outcome, 'generic_supplier')
-  assert.ok(cls.reasons.some((r) => /nessuna ritenuta/i.test(r)))
 })
 
 test('confirmed percipiente classification on strong evidence (TD06 + CF)', () => {

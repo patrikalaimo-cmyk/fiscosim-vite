@@ -159,9 +159,11 @@ export function buildRegistrazioneDraft(input = {}, options = {}) {
     const dare = Number(row.dare ?? row.importo_dare ?? 0);
     const avere = Number(row.avere ?? row.importo_avere ?? 0);
     const hasAmount = dare !== 0 || avere !== 0;
-    // A row without a conto AND without amounts is useless for validation — drop it
-    // regardless of description (catches phantom "IVA a debito" rows with 0/0 from old templates)
+    // Una riga manuale obbligatoria generata dal template deve restare visibile:
+    // è il blocker operativo che chiede all'utente di scegliere il conto finale.
+    // Pruniamo solo i placeholder realmente inerti.
     if (!hasConto && !hasAmount) {
+      if (row?.manualSelectionOnly || row?.obbligatoria) return true;
       return false;
     }
     const desc = String(row.descrizione ?? row.descrizione_riga ?? '').trim();
