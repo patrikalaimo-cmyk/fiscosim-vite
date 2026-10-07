@@ -114,3 +114,17 @@
 - **STAMPE-EXPORT-FASCICOLO resta IN CORSO / NON FREEZE**. Non avanzare al blocco LOCK-PERIODO-AUDIT prima di un gate completo.
 - Riconciliazione Bancaria resta BLOCCATA. Nessuna migration/env/auth/RLS/policy/società reale.
 - Stato CI del commit documentale: pendente.
+
+
+## 2026-10-08 — BANK-DEV / sviluppo sbloccato e primo hardening
+
+- Autorizzazione esplicita utente: proseguire Stampe/Export in parallelo allo sviluppo della Riconciliazione Bancaria, **senza** sbloccare scritture bancarie reali o rilascio.
+- HEAD audit: `c97291ebb32e618e6caac604b4cd3c6b86a8689b`, CI `37700006171` success Ubuntu+Windows.
+- Audit Bank esistente: matcher, Working View, decisioni, R8 canonico e R9A dry-run/mock disponibili. Commit reale oggi fermo intenzionalmente; RPC atomica/audit idempotente ancora non implementati.
+- Difetto individuato: `validateCanonicalReconciliationPayload` impostava `valid = true` nel ramo ignored anche in presenza di blocker/contesto mancante e non vietava `primaNota` nella sezione ignored.
+- Fix: ignored non sana gli errori precedenti; testata PN ignored vietata. Aggiunta suite di regressione, fixture R8/R9A e guard contro abilitazione write.
+- Profilo `test:bank` aggiunto al runner e alla CI Ubuntu+Windows.
+- Documentata la nuova distinzione tra gate **sviluppo consentito** e gate **produzione vietata**.
+- Nessuna migration, env, auth/RLS/policy, scrittura contabile live, dato reale toccato.
+- Il blocco Stampe resta in corso, non freeze.
+- Stato: **CI PENDENTE**.

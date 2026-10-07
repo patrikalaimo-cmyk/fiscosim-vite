@@ -163,3 +163,17 @@ Da verificare in browser su società di test:
 9. nessuna voce demo esposta come situazione reale.
 
 Stato: **IN CORSO — NON CONGELATO**.
+
+
+## Revisione gate Bank (2026-10-08) — distinzione sviluppo / produzione
+
+**Sviluppo bancario sbloccato** dall'utente: la vecchia frase “sviluppo NON consentito finché Import+Manuale+IVA non sono collaudati manualmente” è superata SOLO per sviluppo su branch, test sintetici e architettura.
+
+**Produzione/commit reale rimangono vietati** finché non siano superati:
+1. collaudo Import, Manuale e IVA secondo i rispettivi debiti;
+2. audit Bank, isolamento `societa_id`, anti-duplicati, riconciliazione saldo estratto conto;
+3. commit atomico, rollback, idempotency key vincolata, audit persistito, nessuna scrittura UI diretta;
+4. verifica partitario e Prima Nota canonici, casi ignored senza contabilità, blocco casi fiscali non supportati;
+5. QA browser Bank su società esclusivamente fittizie; verifica trimestrale e giroconti interni.
+
+**Non equivale a rilascio A100.**

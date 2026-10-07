@@ -13,6 +13,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 | Split payment semplice | `npm run test:split` | flag anagrafica, fattura/NC attiva split, conto tecnico configurato, righe PN, partitario al netto IVA, registro e liquidazione | browser reale, DB remoto, casi split avanzati fuori perimetro |
 | Ritenute / Scadenzario | `npm run test:ritenute` | parcella professionista, pagamento integrale, chiusura partitario, maturazione ritenuta, debito Erario, scadenza, tenant scope, readiness CU/770 e guard read-only | browser reale, DB remoto, pagamento parziale con ritenuta, controllo F24 importato |
 | Stampe/Export (hardening intermedio) | `npm run test:stampe` | modelli registro/giornale, guard no facsimile operativo, scoping arricchimenti, blocco export potenzialmente tronco, print HTML provvisorio, precheck consolidamento | fascicolo unico, volumi >1000, hash contenuto definitivo, browser/PDF E2E |
+| Riconciliazione Bancaria (gate sviluppo) | `npm run test:bank` | validatore canonico ignored e blocker, fixture R8/R9A, dry-run/replay, guard nessun commit reale | RPC atomica, DB reale, UI E2E e contabilizzazione reale |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
@@ -20,7 +21,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 
 ## Runner ufficiale
 
-`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `ritenute`, `stampe`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
+`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `ritenute`, `stampe`, `bank`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
 
 Regole:
 - `test:import` include tutti i `src/modules/import_contabilita/tests/*.test.js` e `tests/testLabIntegrazione.test.js`.
@@ -238,3 +239,14 @@ Ancora da implementare/testare prima del freeze:
 - QA browser reale e PDF esportato.
 
 Stato: **IN CORSO — NON CONGELATO**.
+
+
+## BANK-DEV — autorizzazione 2026-10-08
+
+Sviluppo Bank sbloccato parallelamente a Stampe. Test `npm run test:bank` su fixture sintetiche:
+- contesto obbligatorio e blocker non ignorabili nel caso `ignored`;
+- `ignored` non può contenere PN, righe PN, partitario, IVA per cassa o ritenute;
+- fixture mapper canonico R8 (16 casi) e commit R9A dry_run/replay (16 casi);
+- commit reale ancora impedito lato applicazione.
+
+Non dichiarare Bank pronto alla produzione sulla base del solo `test:bank`: RPC, vincoli idempotenza database, audit e collaudi sono ancora requisiti aperti.

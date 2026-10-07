@@ -16,7 +16,8 @@
     "test:iva": "node scripts/run-node-tests.mjs iva",
     "test:split": "node scripts/run-node-tests.mjs split",
     "test:ritenute": "node scripts/run-node-tests.mjs ritenute",
-    "test:stampe": "node scripts/run-node-tests.mjs stampe"
+    "test:stampe": "node scripts/run-node-tests.mjs stampe",
+    "test:bank": "node scripts/run-node-tests.mjs bank"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

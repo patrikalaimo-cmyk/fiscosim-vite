@@ -78,12 +78,12 @@ export function validateCanonicalReconciliationPayload(payload = {}) {
   }
 
   if (ignored) {
-    if (primaNotaRighe.length || partitarioMovements.length || cashVatMovements.length || withholdingMovements.length) {
+    if (payload.primaNota || primaNotaRighe.length || partitarioMovements.length || cashVatMovements.length || withholdingMovements.length) {
       valid = false
       reason = 'ignored payload must not contain accounting payload'
       blockers.push('ignored_payload_contains_accounting')
     } else {
-      valid = true
+      // Ignored non crea scritture, ma non deve neutralizzare i blocker o il contesto mancante.
       reason = 'no accounting payload required'
     }
   }

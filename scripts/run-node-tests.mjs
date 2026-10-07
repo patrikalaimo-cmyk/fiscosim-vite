@@ -14,6 +14,10 @@ const CONSULTAZIONE_ROOT_TESTS = new Set([
   'consultazioneReadOnlyGuard.test.js',
 ])
 
+const BANK_ROOT_TESTS = new Set([
+  'riconciliazioneBankSafety.test.js',
+])
+
 const STAMPE_ROOT_TESTS = new Set([
   'registriIvaStampeModel.test.js',
   'motoreStampaDefinitiva.test.js',
@@ -103,6 +107,7 @@ async function resolveProfile(profile) {
   const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
   const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
   const consultazioneRootTests = rootTests.filter((file) => CONSULTAZIONE_ROOT_TESTS.has(path.basename(file)))
+  const bankRootTests = rootTests.filter((file) => BANK_ROOT_TESTS.has(path.basename(file)))
   const stampeRootTests = rootTests.filter((file) => STAMPE_ROOT_TESTS.has(path.basename(file)))
   const ritenuteRootTests = rootTests.filter((file) => RITENUTE_ROOT_TESTS.has(path.basename(file)))
   const splitRootTests = rootTests.filter((file) => SPLIT_ROOT_TESTS.has(path.basename(file)))
@@ -148,6 +153,9 @@ async function resolveProfile(profile) {
   if (profile === 'stampe') {
     return stampeRootTests
   }
+  if (profile === 'bank') {
+    return bankRootTests
+  }
   if (profile === 'core') {
     return coreRootTests
   }
@@ -161,7 +169,7 @@ async function resolveProfile(profile) {
     ]))
   }
 
-  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, iva, split, ritenute, stampe, core, all.`)
+  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, iva, split, ritenute, stampe, bank, core, all.`)
 }
 
 async function main() {

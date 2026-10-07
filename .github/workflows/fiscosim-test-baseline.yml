@@ -61,6 +61,9 @@ jobs:
       - name: Accounting print and export suite
         run: npm run test:stampe
 
+      - name: Bank reconciliation canonical safety suite
+        run: npm run test:bank
+
       - name: Core suite
         run: npm run test:core
 

@@ -159,3 +159,28 @@ Per accelerare lo sviluppo:
 - **Restano da completare prima del freeze:** fascicolo cliente PDF unico, modelli canonici Partitari/Mastrini/Bilancio, paginazione dataset grandi, hash connesso al contenuto effettivo di stampa, numerazione e audit definitivo, eliminazione completa codice demo, E2E browser/PDF.
 - Requisito residuo precedente: pagamento parziale con ritenuta non ancora supportato, esplicitamente bloccato.
 - Riconciliazione Bancaria resta **BLOCCATA**. Nessun collaudo manuale dichiarato eseguito.
+
+
+## Decisione operativa 2026-10-08 — Sblocco SVILUPPO Riconciliazione Bancaria (non produzione)
+
+Su disposizione esplicita dell'utente, il vincolo storico "Riconciliazione Bancaria BLOCCATA" è modificato **per lo sviluppo**. Le sezioni datate precedenti rimangono traccia storica, non costituiscono il gate operativo più recente.
+
+**DA ORA CONSENTITO IN PARALLELO A STAMPE-EXPORT-FASCICOLO:**
+- audit, dominio, parser, normalizzazione, matching e Working View Bank;
+- test automatici con fixture sintetiche;
+- mapping e validazione verso il contratto contabile canonico esistente;
+- progettazione/test del commit transazionale atomico e dell'idempotenza senza attivazione reale;
+- studio di importo/direzione, saldo estratto conto, movimentazioni interne/giroconti, gestione partite e dei blocker fiscali.
+
+**ANCORA VIETATO:**
+- commit reale o persist su società operative prima del gate tecnico e manuale;
+- scrittura tramite sequenze multiple anziché RPC/servizio transazionale atomico;
+- migrazioni Supabase live, policy auth/RLS, credenziali/env senza permesso;
+- bypass operator validation, scritture silenti, matching fiscalmente autorevole;
+- rilascio del modulo Bank in produzione prima del collaudo manuale Import+Manuale+IVA e del collaudo Bank specifico.
+
+Sequenza aggiornata: STAMPE-EXPORT-FASCICOLO e BANK-DEV procedono in parallelo; LOCK-PERIODO-AUDIT e Release A100 restano gated dalla loro matrice e dai collaudi. Il nuovo `test:bank` è una baseline di sicurezza, **non** certifica il commit transazionale reale né l'E2E.
+
+Prima correzione Bank: `validateCanonicalReconciliationPayload` non può più rendere valido un ignored con blocker o contesto assente; un ignored non può avere nemmeno testata PN. Compatibilità fixture R8/R9A da gate CI.
+
+Rimane non chiuso il requisito residuo: pagamento parziale di parcella con ritenuta.
