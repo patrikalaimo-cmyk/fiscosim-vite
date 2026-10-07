@@ -83,3 +83,18 @@ test('ricava il giorno 16 del mese successivo se la scadenza persistita manca', 
   assert.equal(row.dueDate, '2026-07-16')
   assert.equal(row.operationalStatus, 'scaduta')
 })
+
+
+test('CU/770 non e pronto se manca il codice fiscale del percipiente', () => {
+  const [row] = buildRitenuteScadenzarioRows({ ritenute: [{ ...maturata, percipiente_cf: '' }], year: 2026 })
+  assert.equal(row.cu770.ready, false)
+})
+
+test('pagamento di dicembre porta la scadenza al 16 gennaio dell anno successivo', () => {
+  const [row] = buildRitenuteScadenzarioRows({
+    ritenute: [{ ...maturata, id: 'rit-dicembre', data_pagamento: '2026-12-20', data_scadenza: null, periodo_riferimento: '2026-12', anno_riferimento: 2026 }],
+    year: 2026, today: '2026-12-31',
+  })
+  assert.equal(row.dueDate, '2027-01-16')
+  assert.equal(row.operationalStatus, 'da_versare')
+})

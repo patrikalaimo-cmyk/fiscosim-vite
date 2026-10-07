@@ -41,3 +41,16 @@
 - Riconciliazione Bancaria resta BLOCCATA.
 - Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
 - Stato commit documentale: **CI PENDENTE**.
+
+
+## 2026-10-08 — RITENUTE-SCADENZARIO / audit e hardening architetturale
+
+- Verificato gate documentale SPLIT-SIMPLE: CI `37695914834` verde su Ubuntu e Windows.
+- Il percorso canonico Manuale gestisce parcella, pagamento integrale, chiusura partitario, maturazione ritenuta, debito Erario, scadenza e link PN.
+- Individuato bypass legacy in `TaxComplianceView.jsx`: "Nuovo pagamento" scriveva direttamente `ritenute_dacconto` e aggiornava il documento senza Prima Nota/partitario/persistenza canonica.
+- Vista Ritenute resa sola lettura: scadenzario derivato esclusivamente dai pagamenti contabilizzati.
+- CU/770 "pronto" richiede ora anche CF del percipiente.
+- Rimossa inferenza euristica aliquota: senza dato esplicito da draft/causale/percipiente il validator blocca.
+- Aggiunto `test:ritenute` e step CI Windows/Linux.
+- Nessuna migration/env/auth/RLS/policy/societa reale; Bank resta BLOCCATA.
+- Stato: **CI PENDENTE**.

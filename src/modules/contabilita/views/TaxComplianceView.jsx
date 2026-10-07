@@ -2121,611 +2121,80 @@ function PercipientiView({societa,onRefresh}){
   );
 }
 function RitenuteView({societa}){
-  const EMPTY_FORM = {
-    percipiente_id:'',
-    linked_document_id:'',
-    data_pagamento:new Date().toISOString().split('T')[0],
-    data_documento:'',
-    numero_documento:'',
-    compenso_lordo:0,
-    causaleReddituale:'A',
-    cassa_flag:false,
-    cassa_percent:0,
-    inps_flag:false,
-    enasarco_flag:false,
-    quota_non_soggetta:0,
-    codice_somme_non_soggette:'',
-    withholding_rate:20,
-    ritenuta:0,
-    compenso_netto:0,
-    payment_causale:'',
-    note:''
-  };
+  const currentYear = new Date().getFullYear();
   const [ritenute,setRitenute]=useState([]);
-  const [percipienti,setPercipienti]=useState([]);
-  const [documenti,setDocumenti]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [modalNuova,setModalNuova]=useState(false);
-  const [modalAudit,setModalAudit]=useState(null);
-  const [annoSel,setAnnoSel]=useState(new Date().getFullYear());
-  const [manualOverrides,setManualOverrides]=useState({});
-  const [formData,setFormData]=useState(EMPTY_FORM);
+  const [annoSel,setAnnoSel]=useState(currentYear);
 
   useEffect(()=>{
-    if(societa?.id)caricaDati();
-  },[societa,annoSel]);
-
-  const caricaDati=async()=>{
+    if(!societa?.id){ setRitenute([]); setLoading(false); return; }
+    let alive=true;
     setLoading(true);
-    const [{data:rit},{data:perc},{data:docs}] = await Promise.all([
-      contabilitaRepo.getRitenuteByAnnoPerData(societa.id, annoSel),
-      contabilitaRepo.getPercipientiAttivi(societa.id),
-      contabilitaRepo.getDocumenti(societa.id),
-    ]);
-    setRitenute(rit||[]);
-    setPercipienti(perc||[]);
-    setDocumenti(docs||[]);
-    setLoading(false);
-  };
-
-  const fmt = fmtNumber;
-  const selectedPercipiente = useMemo(
-    () => percipienti.find((p)=>p.id===formData.percipiente_id) || null,
-    [percipienti, formData.percipiente_id]
-  );
-
-  const relatedDocumenti = useMemo(()=>{
-    if(!selectedPercipiente) return [];
-    const cf = String(selectedPercipiente.codice_fiscale || '').trim().toUpperCase();
-    const piva = String(selectedPercipiente.partita_iva || '').trim().toUpperCase();
-    const name = String(selectedPercipiente.ragione_sociale || `${selectedPercipiente.cognome||''} ${selectedPercipiente.nome||''}`.trim()).trim().toUpperCase();
-    return documenti.filter((doc)=>{
-      const docCf = String(doc.soggetto_cf || '').trim().toUpperCase();
-      const docPiva = String(doc.soggetto_piva || '').trim().toUpperCase();
-      const docName = String(doc.soggetto_denominazione || '').trim().toUpperCase();
-      return (cf && docCf === cf) || (piva && docPiva === piva) || (name && docName === name);
-    });
-  },[documenti, selectedPercipiente]);
-
-  const selectedDocumento = useMemo(
-    () => relatedDocumenti.find((doc)=>doc.id===formData.linked_document_id) || null,
-    [relatedDocumenti, formData.linked_document_id]
-  );
-
-  const selectedDocumentoWorkflow = useMemo(
-    ()=>readParcellaWorkflowState(selectedDocumento),
-    [selectedDocumento]
-  );
-
-  useEffect(()=>{
-    if(!modalNuova || !selectedPercipiente) return;
-    if(formData.linked_document_id || relatedDocumenti.length===0) return;
-    setFormData((prev)=>({...prev,linked_document_id:relatedDocumenti[0].id}));
-  },[modalNuova, selectedPercipiente, relatedDocumenti, formData.linked_document_id]);
-
-  useEffect(()=>{
-    if(!modalNuova || !selectedDocumento) return;
-    setFormData((prev)=>{
-      const next = { ...prev };
-      let changed = false;
-      if(!manualOverrides.data_documento){
-        const value = selectedDocumento.data_documento || '';
-        if(next.data_documento !== value){ next.data_documento = value; changed = true; }
-      }
-      if(!manualOverrides.numero_documento){
-        const value = selectedDocumento.numero_documento || '';
-        if(next.numero_documento !== value){ next.numero_documento = value; changed = true; }
-      }
-      if(!manualOverrides.compenso_lordo){
-        const value = Number(selectedDocumentoWorkflow?.taxableBaseOpen ?? selectedDocumento.imponibile ?? selectedDocumento.totale ?? 0);
-        if(Number(next.compenso_lordo || 0) !== value){ next.compenso_lordo = value; changed = true; }
-      }
-      if(!manualOverrides.ritenuta){
-        const value = Number(selectedDocumentoWorkflow?.withholdingPayableOpen ?? prev.ritenuta ?? 0);
-        if(Number(next.ritenuta || 0) !== value){ next.ritenuta = value; changed = true; }
-      }
-      return changed ? next : prev;
-    });
-  },[modalNuova, selectedDocumento, selectedDocumentoWorkflow, manualOverrides]);
-
-  const decision = useMemo(
-    ()=>buildParcellaDecision({ percipiente:selectedPercipiente, documentRow:selectedDocumento, draft:formData }),
-    [selectedPercipiente, selectedDocumento, formData]
-  );
-
-  useEffect(()=>{
-    if(!modalNuova) return;
-    const proposal = decision.proposal;
-    setFormData((prev)=>{
-      const next = { ...prev };
-      let changed = false;
-      const syncField = (key, value) => {
-        if (manualOverrides[key]) return;
-        if ((next[key] ?? '') !== (value ?? '')) {
-          next[key] = value;
-          changed = true;
-        }
-      };
-      syncField('causaleReddituale', proposal.causaleReddituale);
-      syncField('cassa_flag', proposal.cassaFlag);
-      syncField('cassa_percent', proposal.cassaPercent);
-      syncField('inps_flag', proposal.inpsFlag);
-      syncField('enasarco_flag', proposal.enasarcoFlag);
-      syncField('quota_non_soggetta', proposal.quotaNonSoggetta);
-      syncField('codice_somme_non_soggette', proposal.codiceSommeNonSoggette);
-      syncField('withholding_rate', proposal.withholdingRate);
-      syncField('ritenuta', proposal.withholdingAmount);
-      syncField('compenso_netto', proposal.compensoNetto);
-      syncField('payment_causale', proposal.paymentCausale);
-      return changed ? next : prev;
-    });
-  },[modalNuova, decision, manualOverrides]);
-
-  const finalDownstream = useMemo(()=>{
-    const isForfettario = String(formData.codice_somme_non_soggette||'') === '24' || decision.signals.isForfettario;
-    const hasRitenuta = Number(formData.ritenuta || 0) > 0;
-    return {
-      updateCu: !isForfettario && Boolean(selectedPercipiente?.soggetto_cu ?? hasRitenuta),
-      update770: !isForfettario && Boolean(selectedPercipiente?.soggetto_770 ?? hasRitenuta),
-      updateWithholdingSchedule: !isForfettario && hasRitenuta,
-      paymentSchedule1040: !isForfettario && Boolean(selectedPercipiente?.payment_schedule_1040 ?? hasRitenuta),
-    };
-  },[formData.codice_somme_non_soggette, formData.ritenuta, decision.signals.isForfettario, selectedPercipiente]);
-
-  const paymentWorkflow = useMemo(()=>{
-    const registrationCausale = String(
-      selectedDocumentoWorkflow?.registrationCausale ||
-      decision.proposal.registrationCausale ||
-      ''
-    ).toUpperCase();
-    const paymentCausale = registrationCausale === 'FF'
-      ? 'PF'
-      : registrationCausale === 'RPPC'
-        ? 'PPPC'
-        : 'PF80';
-    const taxableBasePaid = Number(formData.compenso_lordo || 0);
-    const withholdingPaid = Number(formData.ritenuta || 0);
-    const accountingPaid = Math.max(0, Number(formData.compenso_netto || 0));
-    const simulatedState = selectedDocumentoWorkflow
-      ? applyPaymentToParcellaWorkflow(selectedDocumentoWorkflow, {
-          paymentDate: formData.data_pagamento,
-          paymentCausale,
-          taxableBasePaid,
-          accountingPaid,
-          withholdingPaid,
-        })
-      : null;
-    return { registrationCausale, paymentCausale, taxableBasePaid, withholdingPaid, accountingPaid, simulatedState };
-  },[decision.proposal.registrationCausale, formData.compenso_lordo, formData.compenso_netto, formData.data_pagamento, formData.ritenuta, selectedDocumentoWorkflow]);
-
-  const updateField = (key, value, manual = true) => {
-    if (manual) setManualOverrides((prev)=>({ ...prev, [key]: true }));
-    setFormData((prev)=>({ ...prev, [key]: value }));
-  };
-
-  const openNuovaRitenuta = () => {
-    setManualOverrides({});
-    setFormData({ ...EMPTY_FORM, data_pagamento:new Date().toISOString().split('T')[0] });
-    setModalNuova(true);
-  };
-
-  const onPercipienteChange = (id) => {
-    setManualOverrides({});
-    setFormData((prev)=>({
-      ...EMPTY_FORM,
-      data_pagamento: prev.data_pagamento || new Date().toISOString().split('T')[0],
-      percipiente_id:id,
-    }));
-  };
-
-  const salvaRitenuta=async()=>{
-    const perc=selectedPercipiente;
-    if(!perc){alert('Seleziona un percipiente');return;}
-
-    const proposal = decision.proposal;
-    const finalValues = {
-      causaleReddituale: formData.causaleReddituale,
-      cassaFlag: Boolean(formData.cassa_flag),
-      cassaPercent: Number(formData.cassa_percent || 0),
-      inpsFlag: Boolean(formData.inps_flag),
-      enasarcoFlag: Boolean(formData.enasarco_flag),
-      quotaNonSoggetta: Number(formData.quota_non_soggetta || 0),
-      codiceSommeNonSoggette: String(formData.codice_somme_non_soggette || ''),
-      withholdingRate: Number(formData.withholding_rate || 0),
-      withholdingAmount: Number(formData.ritenuta || 0),
-      deductionRule: proposal.deductionRule,
-      paymentCausale: paymentWorkflow.paymentCausale,
-      registrationCausale: paymentWorkflow.registrationCausale,
-      downstream: finalDownstream,
-    };
-    const audit = buildParcellaAudit({
-      proposal,
-      finalValues,
-      userLabel: 'Operatore',
-    });
-
-    const record={
-      societa_id:societa.id,
-      percipiente_cf:perc.codice_fiscale,
-      percipiente_denominazione:perc.ragione_sociale||`${perc.cognome||''} ${perc.nome||''}`.trim(),
-      data_pagamento:formData.data_pagamento,
-      data_documento:formData.data_documento||null,
-      numero_documento:formData.numero_documento||null,
-      compenso_lordo:parseFloat(formData.compenso_lordo||0),
-      ritenuta:parseFloat(formData.ritenuta||0),
-      compenso_netto:parseFloat(formData.compenso_netto||0),
-      causale:formData.causaleReddituale,
-      note:buildParcellaAuditNote(formData.note, {
-        proposal,
-        finalValues,
-        audit,
-        warningList: decision.warnings,
-        documentId: selectedDocumento?.id || null,
-        paymentCausale: paymentWorkflow.paymentCausale,
-        registrationCausale: paymentWorkflow.registrationCausale,
-        taxableBasePaid: paymentWorkflow.taxableBasePaid,
-        nonSubjectPaid: Number(selectedDocumentoWorkflow?.nonSubjectTotal || 0) > 0 && Number(selectedDocumentoWorkflow?.taxableBaseTotal || 0) > 0
-          ? Math.round((Number(selectedDocumentoWorkflow.nonSubjectTotal || 0) * (paymentWorkflow.taxableBasePaid / Number(selectedDocumentoWorkflow.taxableBaseTotal || 1))) * 100) / 100
-          : 0,
-        accountingPaid: paymentWorkflow.accountingPaid,
-        withholdingPaid: paymentWorkflow.withholdingPaid,
+    contabilitaRepo.getRitenuteByAnnoPerData(societa.id, annoSel)
+      .then(({data,error})=>{
+        if(!alive)return;
+        if(error)throw error;
+        setRitenute(data||[]);
       })
-    };
+      .catch((error)=>{
+        if(!alive)return;
+        console.error('[Ritenute] caricamento scadenzario',error);
+        setRitenute([]);
+      })
+      .finally(()=>{ if(alive)setLoading(false); });
+    return()=>{alive=false;};
+  },[societa?.id,annoSel]);
 
-    const{data:inserted,error}=await contabilitaRepo.insertRitenuta(record);
-    if(error){
-      alert('Errore: '+error.message);
-      return;
-    }
-
-    if (selectedDocumento && selectedDocumentoWorkflow) {
-      const nextWorkflow = applyPaymentToParcellaWorkflow(selectedDocumentoWorkflow, {
-        paymentId: inserted?.id || null,
-        paymentDate: formData.data_pagamento,
-        paymentCausale: paymentWorkflow.paymentCausale,
-        taxableBasePaid: paymentWorkflow.taxableBasePaid,
-        accountingPaid: paymentWorkflow.accountingPaid,
-        withholdingPaid: paymentWorkflow.withholdingPaid,
-      });
-      if (nextWorkflow) {
-        const datiEstratti = parseUiJson(selectedDocumento.dati_estratti);
-        const parcellaConfirmation = datiEstratti.parcella_confirmation || {};
-        const nextDatiEstratti = {
-          ...datiEstratti,
-          parcella_workflow: nextWorkflow,
-          parcella_confirmation: {
-            ...parcellaConfirmation,
-            payment_effects: {
-              last_payment_id: inserted?.id || null,
-              last_payment_date: formData.data_pagamento,
-              payment_causale: paymentWorkflow.paymentCausale,
-              last_paid_taxable_base: paymentWorkflow.taxableBasePaid,
-              last_paid_non_subject: Number(nextWorkflow?.payments?.[nextWorkflow.payments.length - 1]?.nonSubjectPaid || 0),
-              last_paid_withholding: paymentWorkflow.withholdingPaid,
-            },
-          },
-        };
-        const { error: docError } = await contabilitaRepo.updateDocumentoContabilita(selectedDocumento.id, {
-          dati_estratti: nextDatiEstratti,
-        });
-        if (docError) {
-          alert('Pagamento salvato, ma aggiornamento workflow parcella non riuscito: ' + docError.message);
-        }
-      }
-    }
-
-    setModalNuova(false);
-    setManualOverrides({});
-    setFormData(EMPTY_FORM);
-    caricaDati();
-  };
-
-  const eliminaRitenuta=async(id)=>{
-    if(!confirm('Eliminare questa ritenuta?'))return;
-    await contabilitaRepo.deleteRitenuta(id);
-    caricaDati();
-  };
-
-  const ritenuteEnriched = useMemo(
-    ()=>ritenute.map((row)=>{
-      const parsed = parseParcellaAuditNote(row.note);
-      return {
-        ...row,
-        auditBadge: parsed.audit?.audit?.status || 'Confermato',
-        auditPayload: parsed.audit,
-        paymentCausale: parsed.audit?.paymentCausale || null,
-        visibleNote: parsed.note,
-      };
-    }),
-    [ritenute]
-  );
-
-  const scheduleRows = useMemo(
-    ()=>buildRitenuteScadenzarioRows({
-      ritenute,
-      year: annoSel,
-    }),
-    [annoSel, ritenute]
-  );
-
-  const totali={
-    lordo:scheduleRows.reduce((s,r)=>s+parseFloat(r.compensationAmount||0),0),
-    ritenuta:scheduleRows.reduce((s,r)=>s+parseFloat(r.withholdingAmount||0),0),
-    netto:ritenute.reduce((s,r)=>s+parseFloat(r.compenso_netto||0),0),
+  const scheduleRows=useMemo(()=>buildRitenuteScadenzarioRows({ritenute,year:annoSel}),[ritenute,annoSel]);
+  const fmt=fmtNumber;
+  const totali=useMemo(()=>({
+    lordo:scheduleRows.reduce((s,r)=>s+Number(r.compensationAmount||0),0),
+    ritenuta:scheduleRows.reduce((s,r)=>s+Number(r.withholdingAmount||0),0),
     scadute:scheduleRows.filter((row)=>row.operationalStatus==='scaduta').length,
-  };
+    daVerificare:scheduleRows.filter((row)=>!row.cu770.ready).length,
+  }),[scheduleRows]);
+  const yearOptions=Array.from({length:4},(_,index)=>currentYear-index);
 
   return(
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
         <div>
           <div style={{fontSize:'1.1rem',fontWeight:700}}>Ritenute d'acconto</div>
-          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Pagamento parcelle con proposta fiscale, warning e audit leggero</div>
+          <div style={{fontSize:'.75rem',color:'var(--mu)'}}>Scadenzario derivato dai pagamenti contabilizzati</div>
         </div>
-        <div style={{display:'flex',gap:'.5rem',alignItems:'center'}}>
-          <select value={annoSel} onChange={e=>setAnnoSel(parseInt(e.target.value))} style={{width:100}}>
-            {[2024,2025,2026].map(a=><option key={a} value={a}>{a}</option>)}
-          </select>
-          <button className="btn" onClick={openNuovaRitenuta} disabled={percipienti.length===0}>+ Nuovo pagamento</button>
-        </div>
+        <select value={annoSel} onChange={e=>setAnnoSel(parseInt(e.target.value,10))} style={{width:100}}>
+          {yearOptions.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
       </div>
-
+      <div className="alert alert-info" style={{marginBottom:'1rem'}}>
+        Vista in sola lettura. Le ritenute maturano esclusivamente dal pagamento della parcella registrato nel workflow contabile dedicato; da qui non si creano, modificano o eliminano pagamenti, prima nota o ritenute.
+      </div>
       <div className="stats-grid" style={{marginBottom:'1rem'}}>
-        <div className="stat-card"><div className="stat-val">{scheduleRows.length}</div><div className="stat-lbl">Scadenze generate</div></div>
+        <div className="stat-card"><div className="stat-val">{scheduleRows.length}</div><div className="stat-lbl">Scadenze da versare</div></div>
         <div className="stat-card"><div className="stat-val">{fmt(totali.lordo)}</div><div className="stat-lbl">Compensi pagati</div></div>
         <div className="stat-card"><div className="stat-val" style={{color:'var(--rd)'}}>{fmt(totali.ritenuta)}</div><div className="stat-lbl">Ritenute maturate</div></div>
-        <div className="stat-card"><div className="stat-val" style={{color:'var(--gld2)'}}>{totali.scadute}</div><div className="stat-lbl">Scadenze da rivedere</div></div>
+        <div className="stat-card"><div className="stat-val">{totali.scadute+totali.daVerificare}</div><div className="stat-lbl">Da verificare</div></div>
       </div>
-
-      {percipienti.length===0&&(
-        <div className="alert alert-warn" style={{marginBottom:'1rem'}}>
-          Nessun percipiente registrato. Completa prima l'anagrafica percipienti.
-        </div>
-      )}
-
-      {loading?(
-        <div className="loading">Caricamento...</div>
-      ):scheduleRows.length===0?(
-        <div className="card" style={{padding:'2rem',textAlign:'center'}}>
-          <div style={{color:'var(--mu)'}}>Nessuna scadenza ritenute maturata da parcelle pagate nel {annoSel}</div>
-        </div>
+      {loading?<div className="loading">Caricamento...</div>:scheduleRows.length===0?(
+        <div className="card" style={{padding:'2rem',textAlign:'center'}}><div style={{color:'var(--mu)'}}>Nessuna ritenuta maturata da versare nel {annoSel}</div></div>
       ):(
-        <div className="card">
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Percipiente</th>
-                  <th>Parcella</th>
-                  <th>Data pag.</th>
-                  <th>Scadenza</th>
-                  <th>Tributo</th>
-                  <th style={{textAlign:'right'}}>Ritenuta maturata</th>
-                  <th>Stato</th>
-                  <th>Riferimenti PN</th>
-                  <th>Audit</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {scheduleRows.map((row)=>(
-                  <tr key={row.key}>
-                    <td>
-                      <div style={{fontWeight:600}}>{row.percipiente}</div>
-                      <div style={{fontSize:'.7rem',color:'var(--mu)'}}>{row.codiceFiscale || 'CF mancante'}</div>
-                    </td>
-                    <td style={{fontSize:'.75rem'}}>{row.sourceParcella || EMPTY_CELL}</td>
-                    <td>{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString('it-IT') : EMPTY_CELL}</td>
-                    <td>{row.dueDate ? new Date(row.dueDate).toLocaleDateString('it-IT') : EMPTY_CELL}</td>
-                    <td>{row.codiceTributo}</td>
-                    <td style={{textAlign:'right',color:'var(--rd)'}}>{fmt(row.withholdingAmount)}</td>
-                    <td>
-                      <span className={`bdg ${row.operationalStatus==='scaduta'?'bdg-red':'bdg-gold'}`}>
-                        {row.operationalStatus==='scaduta' ? 'Da versare - scaduta' : 'Da versare'}
-                      </span>
-                    </td>
-                    <td style={{fontSize:'.7rem'}}>
-                      <div>Parcella: {row.primaNotaParcellaId || EMPTY_CELL}</div>
-                      <div>Pagamento: {row.primaNotaPagamentoId || EMPTY_CELL}</div>
-                    </td>
-                    <td>
-                      <button className="bdg bdg-green" onClick={()=>setModalAudit(row.sourceRitenuta)} style={{border:'none',cursor:'pointer'}}>
-                        {row.cu770.ready ? 'CU/770 pronti' : 'Dati da verificare'}
-                      </button>
-                    </td>
-                    <td style={{display:'flex',gap:'.35rem',justifyContent:'flex-end'}}>
-                      <button className="btn-icon" onClick={()=>setModalAudit(row.sourceRitenuta)} title="Diff">i</button>
-                      <button className="btn-icon" onClick={()=>eliminaRitenuta(row.id)} title="Elimina">×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <div className="card"><div className="tbl-wrap"><table className="tbl">
+          <thead><tr><th>Percipiente</th><th>Parcella</th><th>Data pag.</th><th>Scadenza</th><th>Tributo</th><th style={{textAlign:'right'}}>Ritenuta maturata</th><th>Stato</th><th>Riferimenti PN</th><th>CU/770</th></tr></thead>
+          <tbody>{scheduleRows.map((row)=><tr key={row.key}>
+            <td><div style={{fontWeight:600}}>{row.percipiente}</div><div style={{fontSize:'.7rem',color:'var(--mu)'}}>{row.codiceFiscale||'CF mancante'}</div></td>
+            <td style={{fontSize:'.75rem'}}>{row.sourceParcella||EMPTY_CELL}</td>
+            <td>{row.paymentDate?new Date(row.paymentDate).toLocaleDateString('it-IT'):EMPTY_CELL}</td>
+            <td>{row.dueDate?new Date(row.dueDate).toLocaleDateString('it-IT'):EMPTY_CELL}</td>
+            <td>{row.codiceTributo||EMPTY_CELL}</td>
+            <td style={{textAlign:'right',color:'var(--rd)'}}>{fmt(row.withholdingAmount)}</td>
+            <td><span className={`bdg ${row.operationalStatus==='scaduta'?'bdg-red':'bdg-gold'}`}>{row.operationalStatus==='scaduta'?'Da versare - scaduta':'Da versare'}</span></td>
+            <td style={{fontSize:'.7rem'}}><div>Parcella: {row.primaNotaParcellaId||EMPTY_CELL}</div><div>Pagamento: {row.primaNotaPagamentoId||EMPTY_CELL}</div></td>
+            <td><span className={`bdg ${row.cu770.ready?'bdg-green':'bdg-gold'}`}>{row.cu770.ready?'Dati pronti':'Dati da verificare'}</span></td>
+          </tr>)}</tbody>
+        </table></div></div>
       )}
-
-      <div className="alert alert-info" style={{marginTop:'1rem'}}>
-        F24 ritenute non automatizzato: l'eventuale pagamento va registrato con una prima nota semplice, Debiti v/Erario ritenute in Dare e Banca/Cassa in Avere.
-      </div>
-
-      {modalNuova&&(
-        <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setModalNuova(false)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:920}}>
-            <div className="modal-hdr">
-              <div className="modal-drag"/>
-              <div className="modal-title">Conferma parcella e ritenuta</div>
-              <button className="modal-close" onClick={()=>setModalNuova(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-grid">
-                <div className="fg full">
-                  <label>Percipiente *</label>
-                  <BaseCombobox
-                    value={formData.percipiente_id}
-                    onChange={(v)=>onPercipienteChange(v||'')}
-                    options={[
-                      { id: '', label: '-- Seleziona --' },
-                      ...(percipienti || []).map((p) => ({
-                        id: p.id,
-                        label: `${p.ragione_sociale || `${p.cognome||''} ${p.nome||''}`.trim()} (${p.codice_fiscale||'CF mancante'})`,
-                      })),
-                    ]}
-                    getOptionId={(o)=>o?.id}
-                    getOptionLabel={(o)=>o?.label}
-                    searchable
-                    maxItems={140}
-                    placeholder="-- Seleziona --"
-                  />
-                </div>
-                <div className="fg full">
-                  <label>Documento collegato</label>
-                  <BaseCombobox
-                    value={formData.linked_document_id}
-                    onChange={(v)=>updateField('linked_document_id', v||'', false)}
-                    options={[
-                      { id: '', label: '-- Nessun documento collegato --' },
-                      ...(relatedDocumenti || []).map((doc) => ({
-                        id: doc.id,
-                        label: `${doc.numero_documento||'Documento senza numero'} - ${doc.soggetto_denominazione||'Soggetto'} - ${fmt(doc.imponibile||doc.totale||0)}`,
-                      })),
-                    ]}
-                    getOptionId={(o)=>o?.id}
-                    getOptionLabel={(o)=>o?.label}
-                    searchable
-                    maxItems={160}
-                    placeholder="-- Nessun documento collegato --"
-                  />
-                </div>
-                <div className="fg"><label>Data pagamento *</label><input type="date" value={formData.data_pagamento} onChange={e=>updateField('data_pagamento', e.target.value)}/></div>
-                <div className="fg"><label>Data documento</label><input type="date" value={formData.data_documento} onChange={e=>updateField('data_documento', e.target.value)}/></div>
-                <div className="fg"><label>N. documento</label><input value={formData.numero_documento} onChange={e=>updateField('numero_documento', e.target.value)} placeholder="Es. FT-2026/014"/></div>
-                <div className="fg"><label>Imponibile compenso</label><input type="number" step="0.01" value={formData.compenso_lordo} onChange={e=>updateField('compenso_lordo', e.target.value)}/></div>
-                <div className="fg"><label>Causale reddituale</label><BaseCombobox value={formData.causaleReddituale} onChange={(v)=>updateField('causaleReddituale', v||'')} options={CAUSALI_REDDITUALI_OPTIONS.map((item)=>({id:item.value,label:item.label}))} getOptionId={o=>o?.id} getOptionLabel={o=>o?.label} searchable maxItems={90} /></div>
-                <div className="fg"><label>Cassa previdenziale</label><BaseCombobox value={formData.cassa_flag?'si':'no'} onChange={(v)=>updateField('cassa_flag', v==='si')} options={[{id:'si',label:'Si'},{id:'no',label:'No'}]} getOptionId={o=>o?.id} getOptionLabel={o=>o?.label} searchable={false} /></div>
-                <div className="fg"><label>% cassa</label><input type="number" min="0" max="100" step="0.01" value={formData.cassa_percent} onChange={e=>updateField('cassa_percent', e.target.value)}/></div>
-                <div className="fg"><label>INPS</label><BaseCombobox value={formData.inps_flag?'si':'no'} onChange={(v)=>updateField('inps_flag', v==='si')} options={[{id:'si',label:'Si'},{id:'no',label:'No'}]} getOptionId={o=>o?.id} getOptionLabel={o=>o?.label} searchable={false} /></div>
-                <div className="fg"><label>Enasarco</label><BaseCombobox value={formData.enasarco_flag?'si':'no'} onChange={(v)=>updateField('enasarco_flag', v==='si')} options={[{id:'si',label:'Si'},{id:'no',label:'No'}]} getOptionId={o=>o?.id} getOptionLabel={o=>o?.label} searchable={false} /></div>
-                <div className="fg"><label>Quota non soggetta</label><input type="number" min="0" step="0.01" value={formData.quota_non_soggetta} onChange={e=>updateField('quota_non_soggetta', e.target.value)}/></div>
-                <div className="fg"><label>Codice somme non soggette</label><BaseCombobox value={formData.codice_somme_non_soggette} onChange={(v)=>updateField('codice_somme_non_soggette', v||'')} options={SOMME_NON_SOGGETTE_OPTIONS.map((item)=>({id:item.value,label:item.label}))} getOptionId={o=>o?.id} getOptionLabel={o=>o?.label} searchable={false} maxItems={80} /></div>
-                <div className="fg"><label>Aliquota ritenuta %</label><input type="number" min="0" max="100" step="0.01" value={formData.withholding_rate} onChange={e=>updateField('withholding_rate', e.target.value)}/></div>
-                <div className="fg"><label>Importo ritenuta</label><input type="number" step="0.01" value={formData.ritenuta} onChange={e=>updateField('ritenuta', e.target.value)}/></div>
-                <div className="fg"><label>Compenso netto</label><input type="number" step="0.01" value={formData.compenso_netto} onChange={e=>updateField('compenso_netto', e.target.value)}/></div>
-                <div className="fg full"><label>Note operatore</label><input value={formData.note} onChange={e=>updateField('note', e.target.value, false)}/></div>
-              </div>
-
-              <div className="card" style={{marginTop:'1rem',padding:'1rem'}}>
-                <div className="card-title" style={{marginBottom:'.5rem'}}>Proposta FiscoSim</div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(220px,1fr))',gap:'.6rem 1rem',fontSize:'.85rem'}}>
-                  <div><strong>Causale proposta:</strong> {CAUSALI_REDDITUALI_BY_CODE[decision.proposal.causaleReddituale]?.title || decision.proposal.causaleReddituale}</div>
-                  <div><strong>Regola riduzione:</strong> {decision.proposal.deductionRule}</div>
-                  <div><strong>Causale registrazione:</strong> {paymentWorkflow.registrationCausale}</div>
-                  <div><strong>Causale pagamento:</strong> {paymentWorkflow.paymentCausale}</div>
-                  <div><strong>Effetto CU / 770:</strong> {decision.proposal.downstream.updateCu ? 'SI' : 'NO'} / {decision.proposal.downstream.update770 ? 'SI' : 'NO'}</div>
-                  <div><strong>Scadenziario ritenute:</strong> {decision.proposal.downstream.updateWithholdingSchedule ? 'SI' : 'NO'}</div>
-                </div>
-              </div>
-
-              {selectedDocumentoWorkflow && (
-                <div className="card" style={{marginTop:'1rem',padding:'1rem'}}>
-                  <div className="card-title" style={{marginBottom:'.5rem'}}>Posizioni aperte e pagamento parziale</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(160px,1fr))',gap:'.6rem 1rem',fontSize:'.85rem'}}>
-                    <div><strong>Debito professionista aperto:</strong> {fmtNumber(selectedDocumentoWorkflow.accountingPayableOpen||0)}</div>
-                    <div><strong>Debito ritenuta aperto:</strong> {fmtNumber(selectedDocumentoWorkflow.withholdingPayableOpen||0)}</div>
-                    <div><strong>Base imponibile aperta:</strong> {fmtNumber(selectedDocumentoWorkflow.taxableBaseOpen||0)}</div>
-                    <div><strong>Chiusura professionista dopo pagamento:</strong> {fmtNumber(paymentWorkflow.simulatedState?.accountingPayableOpen||0)}</div>
-                    <div><strong>Chiusura ritenuta dopo pagamento:</strong> {fmtNumber(paymentWorkflow.simulatedState?.withholdingPayableOpen||0)}</div>
-                    <div><strong>Stato risultante:</strong> {paymentWorkflow.simulatedState?.status || 'open'}</div>
-                  </div>
-                </div>
-              )}
-
-              {decision.warnings.length > 0 && (
-                <div className="alert alert-warn" style={{marginTop:'1rem'}}>
-                  <strong>Warning operatore</strong>
-                  <ul style={{margin:'0.5rem 0 0 1rem'}}>
-                    {decision.warnings.map((warning)=><li key={warning}>{warning}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              <div className="card" style={{marginTop:'1rem',padding:'1rem'}}>
-                <div className="card-title" style={{marginBottom:'.5rem'}}>Effetti a valle del pagamento</div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(120px,1fr))',gap:'.5rem'}}>
-                  <div><span className={'bdg '+(finalDownstream.updateCu?'bdg-green':'bdg-gray')}>CU {finalDownstream.updateCu?'attiva':'esclusa'}</span></div>
-                  <div><span className={'bdg '+(finalDownstream.update770?'bdg-green':'bdg-gray')}>770 {finalDownstream.update770?'attivo':'escluso'}</span></div>
-                  <div><span className={'bdg '+(finalDownstream.updateWithholdingSchedule?'bdg-gold':'bdg-gray')}>Scadenziario {finalDownstream.updateWithholdingSchedule?'attivo':'off'}</span></div>
-                  <div><span className={'bdg '+(finalDownstream.paymentSchedule1040?'bdg-gold':'bdg-gray')}>1040 {finalDownstream.paymentSchedule1040?'rilevante':'non rilevante'}</span></div>
-                </div>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="btn-sec" onClick={()=>setModalNuova(false)}>Annulla</button>
-              <button className="btn" onClick={salvaRitenuta}>Salva pagamento</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {modalAudit&&(
-        <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setModalAudit(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:720}}>
-            <div className="modal-hdr">
-              <div className="modal-drag"/>
-              <div className="modal-title">Audit fiscale parcella</div>
-              <button className="modal-close" onClick={()=>setModalAudit(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div style={{display:'flex',gap:'.5rem',alignItems:'center',marginBottom:'1rem'}}>
-                <span className={'bdg '+(modalAudit.auditBadge==='Variato'?'bdg-gold':'bdg-green')}>{modalAudit.auditBadge}</span>
-                <span style={{fontSize:'.85rem',color:'var(--mu)'}}>{modalAudit.percipiente_denominazione || 'Percipiente'}</span>
-              </div>
-              {(modalAudit.auditPayload?.warningList || modalAudit.auditPayload?.warnings || []).length > 0 && (
-                <div className="alert alert-warn" style={{marginBottom:'1rem'}}>
-                  <ul style={{margin:'0 0 0 1rem'}}>
-                    {(modalAudit.auditPayload?.warningList || modalAudit.auditPayload?.warnings || []).map((warning)=><li key={warning}>{warning}</li>)}
-                  </ul>
-                </div>
-              )}
-              <div className="tbl-wrap">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>Campo</th>
-                      <th>Proposta</th>
-                      <th>Conferma operatore</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(modalAudit.auditPayload?.audit?.diffRows || modalAudit.auditPayload?.diffRows || []).length > 0 ? (
-                      (modalAudit.auditPayload?.audit?.diffRows || modalAudit.auditPayload?.diffRows || []).map((row)=>(
-                        <tr key={row.label}>
-                          <td>{row.label}</td>
-                          <td>{String(row.proposta)}</td>
-                          <td>{String(row.finale)}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3} style={{color:'var(--mu)'}}>Nessuna variazione rispetto alla proposta FiscoSim.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="btn-sec" onClick={()=>setModalAudit(null)}>Chiudi</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="alert alert-info" style={{marginTop:'1rem'}}>F24 ritenute non automatizzato: lo scadenzario predispone importo, tributo e scadenza; il versamento resta un evento contabile separato e controllato.</div>
     </div>
   );
 }
-
-// --- MODULO PIANO DEI CONTI ----------------------------------
-
-
-
 

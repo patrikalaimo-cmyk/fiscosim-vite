@@ -139,19 +139,13 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], m
   return { amount: 0, source: 'non_identificato', resolved: false }
 }
 
-function resolveAliquota({ currentDraft = {}, percipienteRecord = null, causaleRitenutaDefaults = {}, mode = 'documento' } = {}) {
-  const direct = currentDraft.aliquotaRitenuta ?? causaleRitenutaDefaults.aliquotaRitenuta ?? percipienteRecord?.aliquota_ritenuta ?? percipienteRecord?.aliquotaRitenuta
+function resolveAliquota({ currentDraft = {}, percipienteRecord = null, causaleRitenutaDefaults = {} } = {}) {
+  const direct = currentDraft.aliquotaRitenuta
+    ?? causaleRitenutaDefaults.aliquotaRitenuta
+    ?? percipienteRecord?.aliquota_ritenuta
+    ?? percipienteRecord?.aliquotaRitenuta
   if (Number.isFinite(Number(direct)) && Number(direct) > 0) return Number(direct)
-  const text = normalizeText([
-    currentDraft.causaleCu,
-    currentDraft.causaleReddituale,
-    percipienteRecord?.causale_prevalente,
-    percipienteRecord?.causale_reddituale,
-    percipienteRecord?.descrizione,
-    percipienteRecord?.ragione_sociale,
-  ].filter(Boolean).join(' ')).toLowerCase()
-  if (text.includes('provvig') || text.includes('commission') || text.includes('agenz') || text.includes('mediaz') || text.includes('rappresent')) return 23
-  return mode === 'pagamento' ? 20 : 20
+  return 0
 }
 
 function resolveCodiceTributo({ currentDraft = {}, percipienteRecord = null } = {}) {

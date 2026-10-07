@@ -58,6 +58,7 @@ export function buildRitenuteScadenzarioRows({
         cu770: {
           ready: Boolean(
             text(row.percipiente_id)
+            && text(row.percipiente_cf)
             && paymentDate
             && compensationAmount > 0
             && withholdingAmount > 0

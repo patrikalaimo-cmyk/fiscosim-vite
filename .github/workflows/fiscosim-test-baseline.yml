@@ -55,6 +55,9 @@ jobs:
       - name: Split payment simple suite
         run: npm run test:split
 
+      - name: Withholding and deadlines suite
+        run: npm run test:ritenute
+
       - name: Core suite
         run: npm run test:core
 

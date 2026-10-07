@@ -14,7 +14,8 @@
     "test:manual": "node scripts/run-node-tests.mjs manual",
     "test:consultazione": "node scripts/run-node-tests.mjs consultazione",
     "test:iva": "node scripts/run-node-tests.mjs iva",
-    "test:split": "node scripts/run-node-tests.mjs split"
+    "test:split": "node scripts/run-node-tests.mjs split",
+    "test:ritenute": "node scripts/run-node-tests.mjs ritenute"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
