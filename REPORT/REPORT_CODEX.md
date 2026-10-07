@@ -54,3 +54,11 @@
 - Aggiunto `test:ritenute` e step CI Windows/Linux.
 - Nessuna migration/env/auth/RLS/policy/societa reale; Bank resta BLOCCATA.
 - Stato: **CI PENDENTE**.
+
+
+### 2026-10-08 — RITENUTE-SCADENZARIO / triage CI aliquota
+
+- CI `37696964818`: Import PASS; Manual falliva su 4 regressioni ritenute.
+- Diagnosi: il draft puo contenere `aliquotaRitenuta = 0`; una selezione con nullish coalescing fermava la priorita prima dell'aliquota positiva configurata sul percipiente.
+- Fix: priorita esplicita sul primo valore **positivo** tra draft, default causale e percipiente. Nessun fallback euristico testuale; se nessun valore positivo e configurato resta 0 e il validator blocca.
+- Stato: nuova CI pendente.

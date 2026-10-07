@@ -140,11 +140,16 @@ function resolveImportoCompenso({ documentData = {}, ivaDraft = {}, rows = [], m
 }
 
 function resolveAliquota({ currentDraft = {}, percipienteRecord = null, causaleRitenutaDefaults = {} } = {}) {
-  const direct = currentDraft.aliquotaRitenuta
-    ?? causaleRitenutaDefaults.aliquotaRitenuta
-    ?? percipienteRecord?.aliquota_ritenuta
-    ?? percipienteRecord?.aliquotaRitenuta
-  if (Number.isFinite(Number(direct)) && Number(direct) > 0) return Number(direct)
+  const candidates = [
+    currentDraft.aliquotaRitenuta,
+    causaleRitenutaDefaults.aliquotaRitenuta,
+    percipienteRecord?.aliquota_ritenuta,
+    percipienteRecord?.aliquotaRitenuta,
+  ]
+  for (const value of candidates) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
   return 0
 }
 
