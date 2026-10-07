@@ -1588,6 +1588,9 @@ export async function getRegistriIvaPerStampa(societaId, dataDa, dataA, tipoRegi
 
   const { data: rows, error: rowsError } = await query
   if (rowsError || !rows) return { data: [], error: rowsError }
+  if (rows.length >= 1000) {
+    return { data: [], error: new Error('Registro IVA con 1000 o più righe: non è garantita la completezza della lettura non paginata.') }
+  }
 
   const causaleIvaIds = Array.from(new Set(rows.map(r => r.causale_iva_id).filter(Boolean)))
   const causaliMap = new Map()
@@ -1596,7 +1599,12 @@ export async function getRegistriIvaPerStampa(societaId, dataDa, dataA, tipoRegi
       .from('causali_iva')
       .select('*')
       .in('id', causaleIvaIds)
-    if (!causaliError && causali) {
+      .eq('societa_id', societaId)
+    if (causaliError) return { data: [], error: causaliError }
+    if ((causali || []).length !== causaleIvaIds.length) {
+      return { data: [], error: new Error('Causali IVA collegate mancanti o non appartenenti alla società selezionata.') }
+    }
+    if (causali) {
       for (const c of causali) {
         causaliMap.set(c.id, c)
       }
@@ -1614,19 +1622,24 @@ export async function getRegistriIvaPerStampa(societaId, dataDa, dataA, tipoRegi
 
   if (tipoRegistro === 'corrispettivi' || tipoRegistro === 'vendite') {
     const pnIds = Array.from(new Set(flattened.map(r => r.prima_nota_id).filter(Boolean)))
+    if (flattened.some(r => !r.prima_nota_id)) {
+      return { data: [], error: new Error('Registro IVA non esportabile: collegamento Prima Nota mancante.') }
+    }
     if (pnIds.length > 0) {
       const { data: pns, error: pnError } = await sb
         .from('prima_nota')
         .select('id, tipo_registrazione')
         .in('id', pnIds)
-      if (!pnError && pns) {
-        const pnMap = new Map(pns.map(p => [p.id, p.tipo_registrazione]))
-        if (tipoRegistro === 'corrispettivi') {
-          return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) === 'corrispettivo'), error: null }
-        } else {
-          return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) !== 'corrispettivo'), error: null }
-        }
+        .eq('societa_id', societaId)
+      if (pnError) return { data: [], error: pnError }
+      const pnMap = new Map((pns || []).map(p => [p.id, p.tipo_registrazione]))
+      if (pnMap.size !== pnIds.length) {
+        return { data: [], error: new Error('Registro IVA non esportabile: Prima Nota collegata mancante nella società selezionata.') }
       }
+      if (tipoRegistro === 'corrispettivi') {
+        return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) === 'corrispettivo'), error: null }
+      }
+      return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) !== 'corrispettivo'), error: null }
     }
   }
 
@@ -1645,6 +1658,7 @@ export async function getLibroGiornalePerStampa(societaId, dataDa, dataA) {
 
     if (headersError) throw headersError
     if (!headers || !headers.length) return { data: [], error: null }
+    if (headers.length >= 1000) throw new Error('Libro Giornale con 1000 o più scritture: non è garantita la completezza della lettura non paginata.')
 
     const pnIds = headers.map(h => h.id).filter(Boolean)
     const { data: rows, error: rowsError } = await sb
@@ -1654,6 +1668,7 @@ export async function getLibroGiornalePerStampa(societaId, dataDa, dataA) {
       .order('riga_numero', { ascending: true })
 
     if (rowsError) throw rowsError
+    if ((rows || []).length >= 1000) throw new Error('Libro Giornale con 1000 o più righe: non è garantita la completezza della lettura non paginata.')
 
     const rowsByPnId = new Map()
     for (const r of rows || []) {

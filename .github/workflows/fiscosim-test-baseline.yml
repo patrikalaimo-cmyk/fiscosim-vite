@@ -58,6 +58,9 @@ jobs:
       - name: Withholding and deadlines suite
         run: npm run test:ritenute
 
+      - name: Accounting print and export suite
+        run: npm run test:stampe
+
       - name: Core suite
         run: npm run test:core
 

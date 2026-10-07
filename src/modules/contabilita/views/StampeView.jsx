@@ -347,6 +347,15 @@ const GiornaleEmptyState = ({ periodoInizio, periodoFine }) => (
 export default function StampeView({ contTab, societaAttiva, scritture, pianoConti, causaliIva }) {
   if (!societaAttiva) return null
   if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio', 'liquidazione_iva_periodica'].includes(contTab)) return null
+  // Nessuna scheda fac-simile puo essere presentata come situazione contabile reale.
+  if (['partitari', 'mastrini', 'bilancio'].includes(contTab)) {
+    return (
+      <div className="alert alert-info" role="status">
+        Il prospetto richiesto non è ancora collegato alle scritture canoniche di Prima Nota.
+        Nessun dato di esempio è disponibile: non è possibile generare stampe, saldi o fascicoli da questa schermata.
+      </div>
+    )
+  }
   return (
     <StampeDetailView
       tipoStampa={contTab}

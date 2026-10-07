@@ -391,7 +391,7 @@ export function buildRegistroIvaPrintHtml(registroModel, { registroTipo, periodo
 
   <div class="footer">
     <span>FiscoSim Studio Contabile - Modulo Stampe</span>
-    <span>Pagina 1 di 1</span>
+    <span>Paginazione del browser - non definitiva</span>
   </div>
 </body>
 </html>`;
@@ -532,7 +532,7 @@ export function buildGiornalePrintHtml(flatRows, { periodoInizio, periodoFine, s
 
   <div class="footer">
     <span>FiscoSim Studio Contabile - Modulo Stampe</span>
-    <span>Pagina 1 di 1</span>
+    <span>Paginazione del browser - non definitiva</span>
   </div>
 </body>
 </html>`;
