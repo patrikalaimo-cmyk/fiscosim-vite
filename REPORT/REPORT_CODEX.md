@@ -11191,3 +11191,11 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica a DB, migration, auth/RLS o ambiente.
 - CI completa da rilanciare.
 
+### MANUALE-CANONICO-FREEZE — CI RUN #4: TEST CONSULTAZIONE STALE EMERSO DAL CORE ESTESO
+
+- GitHub Actions run `37615610368`: `test:manual` ha superato i residui Manuale; il fallimento complessivo è rimasto in `test:core` su `consultazioneOperations.test.js`.
+- Causa: il test CSV attendeva ancora il vecchio header senza colonna `N. Prima Nota`, mentre l'export produttivo corrente include correttamente `Data registrazione;N. Prima Nota;Documento;...`.
+- Fix test-only: aspettativa aggiornata al contratto CSV corrente, inclusa la cella vuota del numero prima nota nel fixture.
+- Nessuna modifica a logica produttiva, fiscale o persistence.
+- CI completa da rilanciare; obiettivo: `test:import`, `test:manual`, `test:core`, `test:all`, build verdi su Windows/Linux.
+

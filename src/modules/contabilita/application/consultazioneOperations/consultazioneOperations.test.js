@@ -117,6 +117,6 @@ test('exportConsultazioneResults produce CSV pulito', () => {
     { dataRegistrazione: '2025-01-01', numeroDocumento: 'D1', contoCodice: '100', descrizione: 'Riga', dare: 10, avere: 0, saldoProgressivo: 10 },
   ])
 
-  assert.match(out.csv, /Data registrazione;Documento;Conto;Descrizione;Dare;Avere;Saldo progressivo/)
-  assert.match(out.csv, /2025-01-01;D1;100;Riga;10;0;10/)
+  assert.match(out.csv, /Data registrazione;N\. Prima Nota;Documento;Conto;Descrizione;Dare;Avere;Saldo progressivo/)
+  assert.match(out.csv, /2025-01-01;;D1;100;Riga;10;0;10/)
 })
