@@ -138,3 +138,28 @@ Da verificare in browser su società esclusivamente di test:
 Nota: il punto 13 è un controllo del blocker esistente, non una dichiarazione di supporto al pagamento parziale.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## Stampe / Export / Fascicolo — debito QA e sviluppo aperto
+
+Riferimento: `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`.
+
+Prima del freeze automatico:
+1. collegare realmente Partitari, Mastrini e Bilancio alle scritture canoniche;
+2. generare fascicolo cliente PDF unico;
+3. paginare completamente registri e giornale oltre 1000 righe;
+4. legare checksum definitivo al contenuto, non a soli metadati;
+5. rimuovere fisicamente il codice demo/fac-simile dalla vista Stampe.
+
+Da verificare in browser su società di test:
+1. registri acquisti/vendite/corrispettivi con filtri e dati solo della società attiva;
+2. cambio società senza dati trascinati;
+3. note credito e registri con segni coerenti;
+4. libro giornale ordinario, storni, simulazioni e quadrare Dare/Avere;
+5. CSV/XLSX/print-to-PDF senza troncamenti o numerazione fittizia;
+6. scenario oltre 1000 righe: oggi blocker esplicito, poi lettura completa;
+7. generazione fascicolo cliente e verifica tutte le sezioni;
+8. anteprima provvisoria vs definitiva; lock, ristampa, versioni e checksum reali;
+9. nessuna voce demo esposta come situazione reale.
+
+Stato: **IN CORSO — NON CONGELATO**.

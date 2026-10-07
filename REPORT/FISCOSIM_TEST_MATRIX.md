@@ -12,6 +12,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 | IVA / Registri / Liquidazione | `npm run test:iva` | registri IVA canonici, fatture/NC, multi-aliquota, detraibilità/indetraibilità, split, IVA per cassa, reverse charge, liquidazione provvisoria/definitiva, tenant scope, RPC client, prospetti/export e freeze guard | browser reale, DB remoto, migration applicate |
 | Split payment semplice | `npm run test:split` | flag anagrafica, fattura/NC attiva split, conto tecnico configurato, righe PN, partitario al netto IVA, registro e liquidazione | browser reale, DB remoto, casi split avanzati fuori perimetro |
 | Ritenute / Scadenzario | `npm run test:ritenute` | parcella professionista, pagamento integrale, chiusura partitario, maturazione ritenuta, debito Erario, scadenza, tenant scope, readiness CU/770 e guard read-only | browser reale, DB remoto, pagamento parziale con ritenuta, controllo F24 importato |
+| Stampe/Export (hardening intermedio) | `npm run test:stampe` | modelli registro/giornale, guard no facsimile operativo, scoping arricchimenti, blocco export potenzialmente tronco, print HTML provvisorio, precheck consolidamento | fascicolo unico, volumi >1000, hash contenuto definitivo, browser/PDF E2E |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
@@ -19,7 +20,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 
 ## Runner ufficiale
 
-`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `ritenute`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
+`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `ritenute`, `stampe`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
 
 Regole:
 - `test:import` include tutti i `src/modules/import_contabilita/tests/*.test.js` e `tests/testLabIntegrazione.test.js`.
@@ -28,6 +29,7 @@ Regole:
 - `test:iva` include 15 suite dedicate a registri IVA, liquidazione, split/cassa/reverse, detraibilità, export e guard di freeze.
 - `test:split` include 3 suite dedicate a configurazione anagrafica, documento split e impatto in liquidazione.
 - `test:ritenute` include 4 suite dedicate a ciclo parcella/pagamento, scadenzario, percipiente, readiness CU/770 e guard architetturale.
+- `test:stampe` include le suite mirate ai modelli stampa, al motore di consolidamento, al checksum UI e al guard di sicurezza Stampe.
 - `test:core` include gli altri `tests/*.test.js`.
 - `test:all` esegue l'unione dei profili safe senza dipendere da glob shell.
 - Un exit code non zero del Node test runner rende fallita la suite.
@@ -214,3 +216,25 @@ Il gate copre:
 Limite noto non coperto: **pagamento parziale con ritenuta**, oggi esplicitamente bloccato. Non è considerato supportato dal freeze e resta requisito residuo prima della Release A100 salvo esclusione formale.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## STAMPE-EXPORT-FASCICOLO — gate parziale, NON FREEZE
+
+Profilo dedicato `npm run test:stampe`. Il gate automatico del commit di hardening non certifica la completezza del blocco.
+
+Copertura iniziale:
+- schermata Stampe non può esporre fac-simile come dati reali;
+- registri IVA e libro giornale da modelli esistenti;
+- arricchimenti dei registri per società e fallimento esplicito se manca una relazione;
+- blocco degli export che potrebbero essere troncati a 1000 righe;
+- HTML provvisorio senza numero pagine fittizio;
+- motore di precheck e consolidamento da test precedenti.
+
+Ancora da implementare/testare prima del freeze:
+- paginazione completa dati grandi;
+- report canonici Partitari/Mastrini/Bilancio;
+- PDF unico del fascicolo;
+- checksum legato ai contenuti effettivi;
+- QA browser reale e PDF esportato.
+
+Stato: **IN CORSO — NON CONGELATO**.

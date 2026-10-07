@@ -100,3 +100,17 @@
 - Run `37699566213`: Ubuntu PASS completo; Windows `test:stampe` 36/37 per confronto test che usava un newline LF letterale, convertito in CRLF da checkout Windows.
 - Fix confinato al test: confronto dell'ordine tra guard e dettaglio tramite regex whitespace-agnostic.
 - Nessuna regola fiscale/contabile alterata. CI successiva pendente.
+
+
+## 2026-10-08 — STAMPE-EXPORT-FASCICOLO / code gate verde (non freeze)
+
+- Commit hardening: `74e5cd1748222131134b17b7d880aee2c40d694b`.
+- Commit test portabilità: `a2e2a4ec258091cd22b6a0d3da887f4490b76de4`.
+- GitHub Actions run `37699787767`: **SUCCESS** su Ubuntu e Windows per tutti i profili e build.
+- Nuovo profilo `test:stampe`: **5 file / 37 test PASS**.
+- Gate certifica solo l'hardening: niente fac-simile presentato come reale, arricchimenti per società, abort su join fallite, no export potenzialmente troncato, no contatore pagine fittizio.
+- Audit in `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`, matrice e debito collaudo aggiornati.
+- Gap ancora aperti: PDF unico del fascicolo, Partitari/Mastrini/Bilancio canonici, paginazione grande volume, hash sul contenuto, eliminazione codice demo, QA browser/PDF.
+- **STAMPE-EXPORT-FASCICOLO resta IN CORSO / NON FREEZE**. Non avanzare al blocco LOCK-PERIODO-AUDIT prima di un gate completo.
+- Riconciliazione Bancaria resta BLOCCATA. Nessuna migration/env/auth/RLS/policy/società reale.
+- Stato CI del commit documentale: pendente.

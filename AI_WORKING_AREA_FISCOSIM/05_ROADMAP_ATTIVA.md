@@ -145,3 +145,17 @@ Per accelerare lo sviluppo:
 - Collaudo browser differito in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 - **Prossimo blocco attivo: STAMPE-EXPORT-FASCICOLO**.
 - **Riconciliazione Bancaria resta BLOCCATA**.
+
+
+## STAMPE-EXPORT-FASCICOLO — hardening intermedio 2026-10-08
+
+- Stato: **IN CORSO / NON FREEZE**.
+- Hardening GitHub: `74e5cd1748222131134b17b7d880aee2c40d694b`; test portabilità `a2e2a4ec258091cd22b6a0d3da887f4490b76de4`.
+- Profili nuovi: `test:stampe`, CI Ubuntu e Windows. Il superamento non equivale a completamento del blocco.
+- Non esporre più nella vista Stampe i fac-simile storici Partitari/Mastrini/Bilancio: presentare stato non operativo finché non collegati al canonico.
+- Gli export da Registri IVA verificano tenant scope degli arricchimenti e abortiscono se manca la relazione Prima Nota o la causale richiesta.
+- I registri e il giornale non esportano silenziosamente dataset potenzialmente troncati dalla lettura non paginata a 1000 righe: blocco temporaneo da sostituire con paginazione completa.
+- Rimossa falsa indicazione pagina unica dagli HTML provvisori.
+- **Restano da completare prima del freeze:** fascicolo cliente PDF unico, modelli canonici Partitari/Mastrini/Bilancio, paginazione dataset grandi, hash connesso al contenuto effettivo di stampa, numerazione e audit definitivo, eliminazione completa codice demo, E2E browser/PDF.
+- Requisito residuo precedente: pagamento parziale con ritenuta non ancora supportato, esplicitamente bloccato.
+- Riconciliazione Bancaria resta **BLOCCATA**. Nessun collaudo manuale dichiarato eseguito.
