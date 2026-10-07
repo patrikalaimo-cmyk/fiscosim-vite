@@ -278,7 +278,8 @@ test('persistenza autonoma prima nota crea testata e righe da draft canonico', a
   assert.equal(db.state.prima_nota_righe.length, 3)
 
   const header = db.state.prima_nota[0]
-  assert.equal(header.numero_registrazione, 'A-100')
+  assert.equal(header.numero_documento, 'A-100')
+  assert.equal(Object.hasOwn(header, 'numero_registrazione'), false)
   assert.equal(header.societa_id, 'soc-1')
   assert.equal(header.esercizio, 2026)
   assert.equal(header.data_registrazione, '2026-04-30')
@@ -293,8 +294,8 @@ test('persistenza autonoma prima nota crea testata e righe da draft canonico', a
   assert.equal(header.totale_avere, 122)
   assert.equal(typeof header.stato, 'string')
   assert.equal(header.stato.length > 0, true)
-  assert.equal(header.documento_import_id, 'row-1')
-  for (const forbidden of ['scope', 'meta', 'behavior', 'validation', 'readiness', 'activeTabs', 'showDocumentPanel', 'showIvaPanel', 'showPartitario', 'showRitenute', 'numero_documento', 'dare', 'avere']) {
+  assert.equal(Object.hasOwn(header, 'documento_import_id'), false)
+  for (const forbidden of ['scope', 'meta', 'behavior', 'validation', 'readiness', 'activeTabs', 'showDocumentPanel', 'showIvaPanel', 'showPartitario', 'showRitenute', 'dare', 'avere']) {
     assert.equal(Object.hasOwn(header, forbidden), false)
   }
 
@@ -302,6 +303,7 @@ test('persistenza autonoma prima nota crea testata e righe da draft canonico', a
     'id',
     'societa_id',
     'numero_registrazione',
+    'numero_documento',
     'data_registrazione',
     'data_documento',
     'causale_id',
@@ -437,7 +439,7 @@ test('persistenza autonoma prima nota ricostruisce payload DB-safe da campi inte
 
   assert.equal(result.error, null)
   const header = db.state.prima_nota[0]
-  assert.equal(header.numero_registrazione, 'PN-TEST-001')
+  assert.equal(header.numero_documento, 'PN-TEST-001')
   assert.equal(header.totale_dare, 100)
   assert.equal(header.totale_avere, 100)
   assert.equal(Object.hasOwn(header, 'scope'), false)
@@ -451,7 +453,7 @@ test('persistenza autonoma prima nota ricostruisce payload DB-safe da campi inte
   assert.equal(Object.hasOwn(header, 'showRitenute'), false)
   assert.equal(Object.hasOwn(header, 'validation'), false)
   assert.equal(Object.hasOwn(header, 'readiness'), false)
-  assert.equal(Object.hasOwn(header, 'numero_documento'), false)
+  assert.equal(header.numero_documento, 'PN-TEST-001')
 
   const [row1, row2] = db.state.prima_nota_righe
   assert.equal(row1.importo_dare, 100)

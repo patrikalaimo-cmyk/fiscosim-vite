@@ -11257,3 +11257,11 @@ pm run build -> Successo (429 moduli, 16s).
 - Classificazione: fixture pre-canoniche/stale, non regressione produttiva. Le fixture costruivano un draft dall'adapter Import senza i campi camelCase del draft Manuale oggi richiesti dal mapper canonico e i mock DB non contemplavano la lettura read-only di `causali_contabili` introdotta per risolvere la policy configurata.
 - Correzione: le fixture vengono riallineate al contratto Manuale corrente (società, date, causale, descrizione, quadratura) e i mock supportano la sola lettura della causale; nessun requisito di validazione viene allentato e nessuna suite viene esclusa.
 - Sicurezza: nessuna modifica a `.env`, auth/login, RLS/policy, migration o dati reali.
+
+
+### MANUALE-CANONICO-FREEZE — ALLINEAMENTO CONTRATTO HEADER DB
+
+- CI `37661755923` ha ridotto i failure Manuale da 5 a 2; entrambi sono aspettative obsolete della suite application sul campo documento.
+- Il mapper DB corrente persiste `numero_documento` come tale e non lo riclassifica in `numero_registrazione`; inoltre un `sourceRowKey` non UUID non deve diventare `documento_import_id`.
+- Aggiornate quindi le sole aspettative di fixture: `numero_documento` ammesso e verificato; `numero_registrazione` non inventato; `documento_import_id` non valorizzato con chiave tecnica non UUID.
+- Nessuna logica produttiva o validazione è stata allentata.
