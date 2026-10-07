@@ -11249,3 +11249,11 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna aspettativa viene silenziata: eventuali failure saranno classificati come test/fixture obsoleti oppure bug reali e corretti prima del freeze finale.
 - Sicurezza: nessuna modifica a `.env`, auth/login, RLS/policy Supabase, migration o dati di società reali.
 - CI Windows/Linux: da verificare sul commit di reinclusione.
+
+
+### MANUALE-CANONICO-FREEZE — TRIAGE SUITE APPLICATION REINCLUSE
+
+- CI `37661148662`: entrambe le piattaforme hanno confermato 5 failure nel profilo Manuale dopo la reinclusione delle due suite application.
+- Classificazione: fixture pre-canoniche/stale, non regressione produttiva. Le fixture costruivano un draft dall'adapter Import senza i campi camelCase del draft Manuale oggi richiesti dal mapper canonico e i mock DB non contemplavano la lettura read-only di `causali_contabili` introdotta per risolvere la policy configurata.
+- Correzione: le fixture vengono riallineate al contratto Manuale corrente (società, date, causale, descrizione, quadratura) e i mock supportano la sola lettura della causale; nessun requisito di validazione viene allentato e nessuna suite viene esclusa.
+- Sicurezza: nessuna modifica a `.env`, auth/login, RLS/policy, migration o dati reali.

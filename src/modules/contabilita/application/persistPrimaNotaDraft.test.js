@@ -123,6 +123,32 @@ function makePersistenceDraft({ behavior = {}, withCounterparty = true, rows = n
   const canonical = buildPrimaNotaDraftFromCanonicalContabilitaPayload(makeCanonicalPayload())
   canonical.draft.header.esercizioContabile = '2026'
   canonical.pnPayload.esercizio = 2026
+  Object.assign(canonical.draft.header, {
+    societaId: 'soc-1',
+    dataRegistrazione: '2026-04-30',
+    dataDocumento: '2026-04-30',
+    numeroDocumento: 'A-100',
+    causaleContabile: {
+      id: 'caus-1',
+      codice: 'GEN',
+      tipoCausale: 'generale',
+      descrizione: 'Movimento generale test',
+    },
+    descrizioneGenerale: 'Registrazione manuale test',
+    clienteFornitoreId: canonical.pnPayload.cliente_fornitore_id || 'acc-counterparty',
+    clienteFornitoreNome: canonical.pnPayload.cliente_fornitore_nome || 'Fornitore Demo',
+  })
+  const currentTotals = canonical.validation?.totals || { dare: 0, avere: 0, differenza: 0, isBalanced: false }
+  canonical.draft.totals = {
+    totaleDare: currentTotals.dare,
+    totaleAvere: currentTotals.avere,
+    differenza: currentTotals.differenza,
+    isBalanced: currentTotals.isBalanced,
+  }
+  canonical.draft.validation = {
+    ...(canonical.draft.validation || {}),
+    isBalanced: currentTotals.isBalanced,
+  }
   canonical.pnPayload.scope = {
     source_module: 'registrazione_manuale',
     source_mode: 'manuale',
@@ -170,6 +196,14 @@ function makeMockDb({ failRows = false } = {}) {
   return {
     state,
     from(table) {
+      if (table === 'causali_contabili') {
+        const query = {
+          select() { return query },
+          eq() { return query },
+          maybeSingle: async () => ({ data: null, error: null }),
+        }
+        return query
+      }
       if (table === 'prima_nota') {
         return {
           insert(rows = []) {

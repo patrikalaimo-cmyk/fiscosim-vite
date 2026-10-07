@@ -131,6 +131,14 @@ function makeMockDb() {
   return {
     state,
     from(table) {
+      if (table === 'causali_contabili') {
+        const query = {
+          select() { return query },
+          eq() { return query },
+          maybeSingle: async () => ({ data: null, error: null }),
+        }
+        return query
+      }
       if (table === 'prima_nota') {
         return {
           insert(rows = []) {
@@ -177,6 +185,33 @@ function makeMockDb() {
 
 test('buildContabilitaPostPersistOutput produce output canonico per moduli successivi', async () => {
   const canonical = buildPrimaNotaDraftFromCanonicalContabilitaPayload(makeCanonicalPayload())
+  Object.assign(canonical.draft.header, {
+    societaId: 'soc-1',
+    esercizioContabile: '2026',
+    dataRegistrazione: '2026-04-30',
+    dataDocumento: '2026-04-30',
+    numeroDocumento: 'A-100',
+    causaleContabile: {
+      id: 'caus-1',
+      codice: 'GEN',
+      tipoCausale: 'generale',
+      descrizione: 'Movimento generale test',
+    },
+    descrizioneGenerale: 'Registrazione manuale test',
+    clienteFornitoreId: 'acc-counterparty',
+    clienteFornitoreNome: 'Fornitore Demo',
+  })
+  canonical.draft.totals = {
+    totaleDare: canonical.validation.totals.dare,
+    totaleAvere: canonical.validation.totals.avere,
+    differenza: canonical.validation.totals.differenza,
+    isBalanced: canonical.validation.totals.isBalanced,
+  }
+  canonical.draft.validation = {
+    ...(canonical.draft.validation || {}),
+    isBalanced: canonical.validation.totals.isBalanced,
+  }
+  canonical.pnPayload.esercizio = 2026
   const db = makeMockDb()
 
   const persistResult = await persistPrimaNotaDraft({
