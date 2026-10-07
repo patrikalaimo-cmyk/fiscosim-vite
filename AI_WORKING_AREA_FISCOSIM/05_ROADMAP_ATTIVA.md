@@ -75,8 +75,12 @@ Per accelerare lo sviluppo:
 
 ## MANUALE-CANONICO-FREEZE — gate automatico 2026-10-07
 
-- Stato: **AUTOMATICO VERDE / COLLAUDO MANUALE DIFFERITO**.
-- CI run `37627776086`: Ubuntu e Windows verdi su `test:import`, `test:manual`, `test:core`, `test:all` e build.
-- Il freeze automatico copre movimenti generali, fatture IVA attive/passive, note credito, multi-aliquota, split payment, IVA per cassa, reverse charge/autofatture, partitario, ritenute e blocchi periodo.
-- I collaudi manuali restano registrati nel debito QA finale.
+- Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Commit codice validato: `1cbcfbbd7c896650df2ab9fc7ee3c57fc22cd990`.
+- CI run `37662134584`: Ubuntu e Windows verdi su `test:import`, `test:manual`, `test:core`, `test:all` e build.
+- Profilo Manuale ufficiale: 29 file / 413 test; reincluse anche le suite application `persistPrimaNotaDraft.test.js` e `buildContabilitaPostPersistOutput.test.js`.
+- Audit UI: nessun write contabile diretto dalla Registrazione Manuale verso prima nota, righe, registri IVA, partitario o ritenute; persistenza principale condivisa e canonica.
+- Il freeze automatico copre movimenti generali, fatture IVA attive/passive, note credito, multi-aliquota, split payment, IVA per cassa, reverse charge/autofatture/estero, partitario, ritenute, cespiti accessori e blocchi periodo.
+- I collaudi manuali sono registrati in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md` e non sono dichiarati eseguiti.
 - **Prossimo blocco attivo: CONSULTAZIONE-FREEZE**.
+- **Riconciliazione Bancaria resta BLOCCATA** fino al gate previsto su Import + Manuale + IVA.

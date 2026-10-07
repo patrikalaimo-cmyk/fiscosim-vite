@@ -7,19 +7,21 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 | Suite | Comando | Copertura principale | Non copre |
 |---|---|---|---|
 | Import Contabilità | `npm run test:import` | parser/normalizzazione Import, fixture sintetica TEST-VERGNANO-001, Working View IVA, pruning 0/0, causali IVA standard, storico IVA controparte P2, warning standard/storico, proposta e override manuale detraibilità, storico contabile conto costo/ricavo + causale contabile con override manuale prevalente, payload commit, readiness, dedup/anti-doppio commit, performance 500 documenti, Test Lab con mock | browser reale, Supabase reale, società reali, ZIP cliente reale |
+| Manuale canonico | `npm run test:manual` | Registrazione Manuale, persistenza canonica, post-persist output, movimenti generali, IVA ordinaria/NC/multi-aliquota, partitario, split, IVA per cassa, reverse/estero, ritenute, cespiti e closed-period guards | browser reale, DB remoto, collaudo UX |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
-| CI baseline | GitHub Actions `FiscoSim Test Baseline` | `npm ci`, tre profili test e build su Node 20, Windows + Linux, senza secrets e con download Chromium disabilitato | qualunque integrazione live con Supabase/SDI/Agenzia Entrate |
+| CI baseline | GitHub Actions `FiscoSim Test Baseline` | `npm ci`, quattro profili test e build su Node 20, Windows + Linux, senza secrets e con download Chromium disabilitato | qualunque integrazione live con Supabase/SDI/Agenzia Entrate |
 
 ## Runner ufficiale
 
-`scripts/run-node-tests.mjs` riceve un profilo `import`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
+`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
 
 Regole:
 - `test:import` include tutti i `src/modules/import_contabilita/tests/*.test.js` e `tests/testLabIntegrazione.test.js`.
+- `test:manual` include le suite Manuale root selezionate e ricorsivamente le suite application pertinenti, comprese `persistPrimaNotaDraft.test.js` e `buildContabilitaPostPersistOutput.test.js`.
 - `test:core` include gli altri `tests/*.test.js`.
-- `test:all` esegue l'unione dei due insiemi.
+- `test:all` esegue l'unione dei profili safe senza dipendere da glob shell.
 - Un exit code non zero del Node test runner rende fallita la suite.
 - Test futuri che richiedono browser o DB reale devono restare fuori dai profili safe finché non sono isolati con fixture/mock.
 
@@ -94,16 +96,24 @@ Stato: **gate automatico PASS** dopo CI del commit di freeze. La chiusura defini
 
 Comando dedicato: `npm run test:manual`.
 
-Il profilo include:
-- suite correnti di Registrazione Manuale, policy causali, IVA ordinaria, note credito, split payment, IVA per cassa, reverse/autofattura/CEE, ritenute e partitario;
-- suite applicative correnti `canonicalContabilitaDraftMapper`, `fiscalWorkflow`, `registrazioneOperations`, `primaNotaOperations`;
-- il test corrente `tests/persistPrimaNotaDraft.test.js`.
+Il profilo include 29 file nel gate validato e comprende esplicitamente:
+- `canonicalContabilitaDraftMapper.test.js`;
+- `persistPrimaNotaDraft.test.js` application;
+- `buildContabilitaPostPersistOutput.test.js`;
+- `fiscalWorkflow.test.js`;
+- `registrazioneOperations/registrazioneOperations.test.js`;
+- `primaNotaOperations/primaNotaOperations.test.js`;
+- suite application cespiti pertinenti;
+- test root di Registrazione Manuale, policy causali, IVA ordinaria/NC/multi-aliquota, partitario, split payment, IVA per cassa, reverse/autofattura/estero, ritenute, closed-period guards, cespiti, registri IVA e mutation service.
 
-Esclusioni nominate:
-- `src/modules/contabilita/application/persistPrimaNotaDraft.test.js`;
-- `src/modules/contabilita/application/buildContabilitaPostPersistOutput.test.js`.
+Le due suite application in precedenza escluse sono state reincluse. Le relative fixture storiche sono state riallineate al contratto Manuale corrente senza indebolire validazioni o guardie.
 
-Le due suite escluse sono fixture di integrazione pre-canoniche rimaste nel repository come storico tecnico. Non sono usate per allentare requisiti: la persistenza corrente è coperta da `tests/persistPrimaNotaDraft.test.js`, mentre mapping/contratto canonico sono coperti dalle suite correnti dedicate.
+Gate validato: GitHub Actions run `37662134584`.
+- `test:manual`: **413/413 PASS** su Ubuntu; stesso step PASS su Windows.
+- `test:import`: PASS.
+- `test:core`: PASS.
+- `test:all`: PASS.
+- `npm run build`: PASS.
+- matrice CI: Ubuntu + Windows.
 
-CI run iniziale del nuovo profilo Manuale: `37613649884`. Ha fatto emergere test storici non più coerenti e regressioni produttive prima non osservate dalla baseline.
-
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.

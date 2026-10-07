@@ -11271,3 +11271,50 @@ pm run build -> Successo (429 moduli, 16s).
 
 - CI `37661964310` ha lasciato un solo failure: la fixture pretendeva l'assenza fisica di `documento_import_id` dopo il guard UUID.
 - Il contratto corrente conserva invece la chiave DB-safe valorizzandola a `null` quando l'identificativo tecnico non è un UUID valido. L'aspettativa è stata aggiornata a chiave presente + valore `null`, preservando il guard e senza modifiche produttive.
+
+
+## MANUALE-CANONICO-FREEZE — CHIUSURA GATE AUTOMATICO
+
+### Obiettivo
+Chiudere il freeze automatico della Registrazione Manuale sul contratto canonico unico, includendo nel runner ufficiale anche le suite application precedentemente non eseguite e verificando l'assenza di bypass di persistenza dalla UI.
+
+### Audit e modifiche concluse
+- verificato il ramo `mio-branch` e recuperata la sequenza di commit successiva a `f6da7781f8c11c1ea94d2243d207dc9bae5292b2`, evitando duplicazioni del lavoro interrotto;
+- confermato il percorso UI → application → canonical mapping/validation → `persistPrimaNotaDraft` → persistenza condivisa;
+- verificato `RegistrazioneManualeView.jsx`: nessun write diretto a `prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`, `ritenute_dacconto`;
+- il write accessorio cespiti è confinato nell'application service dedicato e non crea un secondo percorso contabile;
+- `test:manual` mantiene runner ricorsivo Windows-safe con `shell:false`;
+- reincluse `src/modules/contabilita/application/persistPrimaNotaDraft.test.js` e `buildContabilitaPostPersistOutput.test.js`;
+- riallineate esclusivamente fixture/aspettative obsolete emerse dalla reinclusione: shape Manuale corrente, lettura causali, `numero_documento`, guard UUID.
+
+### File modificati/creati nel blocco conclusivo
+- `scripts/run-node-tests.mjs`;
+- `src/modules/contabilita/application/persistPrimaNotaDraft.test.js`;
+- `src/modules/contabilita/application/buildContabilitaPostPersistOutput.test.js`;
+- `REPORT/MANUALE_CANONICO_FREEZE_AUDIT.md`;
+- `REPORT/FISCOSIM_TEST_MATRIX.md`;
+- `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`;
+- `AI_WORKING_AREA_FISCOSIM/05_ROADMAP_ATTIVA.md`;
+- `REPORT/REPORT_CODEX.md` append-only.
+
+### Test e CI
+Run ufficiale validato: `37662134584`, commit `1cbcfbbd7c896650df2ab9fc7ee3c57fc22cd990`.
+- Ubuntu: Import 231/231 PASS; Manuale 413/413 PASS; Core 574/574 PASS; All safe 942/942 PASS; build PASS.
+- Windows: `test:import` PASS; `test:manual` PASS; `test:core` PASS; `test:all` PASS; build PASS.
+- Nessun test manuale/browser è stato dichiarato eseguito.
+
+### Sicurezza
+- nessun force push;
+- update ref sempre con `force:false` e `expected_sha`;
+- nessuna modifica a `.env`, `.env.local`, `.env.example`;
+- nessuna modifica auth/login/RLS/policy Supabase;
+- nessuna migration applicata;
+- nessuna scrittura su società reali;
+- nessun avvio della Riconciliazione Bancaria.
+
+### Stato
+**MANUALE-CANONICO-FREEZE = AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+Debito manuale mantenuto in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
+
+Prossimo blocco: `CONSULTAZIONE-FREEZE`.
