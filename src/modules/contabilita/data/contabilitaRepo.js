@@ -794,7 +794,7 @@ export async function upsertLiquidazioneIvaCanonica(row) {
 export async function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo_fine) {
   const { data: rows, error: rowsError } = await sb
     .from('registri_iva')
-    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id')
+    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, data_documento, numero_documento, soggetto_denominazione, soggetto_piva, esigibilita, split_payment, prima_nota_id, causale_iva_id')
     .eq('societa_id', societaId)
     .gte('data', periodo_inizio)
     .lte('data', periodo_fine)
@@ -804,7 +804,7 @@ export async function getRegistriIvaByPeriodo(societaId, periodo_inizio, periodo
   const causaleIvaIds = Array.from(new Set(rows.map(r => r.causale_iva_id).filter(Boolean)))
   let causaliMap = new Map()
   if (causaleIvaIds.length > 0) {
-    const query = sb.from('causali_iva').select('*')
+    const query = sb.from('causali_iva').select('*').eq('societa_id', societaId)
     if (typeof query.in === 'function') {
       const { data: causali, error: causaliError } = await query.in('id', causaleIvaIds)
       if (!causaliError && causali) {
@@ -840,12 +840,16 @@ export function getLiquidazioneIvaByPeriodo({ societaId, periodoInizio, periodoF
     .maybeSingle()
 }
 
-export async function getRigheLiquidazioneIvaSnapshot(liquidazioneId) {
+export async function getRigheLiquidazioneIvaSnapshot(liquidazioneId, societaId) {
+  if (!liquidazioneId || !societaId) {
+    return { data: [], error: new Error('liquidazioneId e societaId sono obbligatori') }
+  }
   try {
     const { data, error } = await sb
       .from('liquidazioni_iva_righe')
-      .select('id, liquidazione_id, tipo, descrizione, imponibile, aliquota, iva, data_documento, numero_documento')
+      .select('id, liquidazione_id, societa_id, tipo, descrizione, imponibile, aliquota, iva, data_documento, numero_documento')
       .eq('liquidazione_id', liquidazioneId)
+      .eq('societa_id', societaId)
       .order('tipo', { ascending: true })
 
     if (error) {

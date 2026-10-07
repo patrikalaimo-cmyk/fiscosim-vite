@@ -348,7 +348,7 @@ export function LiquidazioneIvaDashboard({
         fontSize: '0.75rem',
         color: 'var(--mu)'
       }}>
-        <div>⚙️ <strong>Registri inclusi:</strong> <strong style={{ color: 'var(--text)' }}>{meta.registriInclusiCount || 27}</strong><br/>Tutti i registri IVA</div>
+        <div>⚙️ <strong>Registri inclusi:</strong> <strong style={{ color: 'var(--text)' }}>{meta.registriInclusiCount ?? 0}</strong><br/>Tutti i registri IVA</div>
         <div>❌ <strong>Registri esclusi:</strong> <strong style={{ color: 'var(--text)' }}>{meta.registriEsclusiCount || 0}</strong><br/>Esclusi manualmente</div>
         <div>⏳ <strong>Righe differite:</strong> <strong style={{ color: 'var(--text)' }}>{meta.righeEscluseDifferitaCount || 0}</strong><br/>Art. 6, c. 5 DPR 633/72</div>
         <div>⏱️ <strong>Ultimo agg:</strong> <strong style={{ color: 'var(--text)' }}>{meta.ultimoAggiornamento}</strong></div>

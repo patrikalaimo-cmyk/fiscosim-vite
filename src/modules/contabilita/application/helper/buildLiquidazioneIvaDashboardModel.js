@@ -63,10 +63,18 @@ export function buildLiquidazioneIvaDashboardModel({
   }
 
   // Prepara i KPI basandosi sul calcolo corrente (in memoria) o sui dati salvati
-  const ivaVenditeLorda = currentCalc ? round2(currentCalc.ivaVenditeLorda || 0) : round2(savedRecord?.iva_debito || 0)
-  const ivaSplitPayment = currentCalc ? round2(currentCalc.ivaSplitPayment || 0) : 0
-  const ivaDebitoEffettiva = currentCalc ? round2(currentCalc.ivaDebitoEffettiva || 0) : round2(savedRecord?.iva_debito || 0)
-  const ivaAcquisti = currentCalc ? round2(currentCalc.ivaAcquistiDetraibile || currentCalc.ivaAcquisti || 0) : round2(savedRecord?.iva_credito || 0)
+  const ivaVenditeLorda = currentCalc
+    ? round2(currentCalc.ivaVenditeLorda ?? 0)
+    : round2(savedRecord?.iva_vendite_lorda ?? savedRecord?.iva_debito ?? 0)
+  const ivaSplitPayment = currentCalc
+    ? round2(currentCalc.ivaSplitEsclusa ?? currentCalc.ivaSplitPayment ?? 0)
+    : round2(savedRecord?.iva_split_esclusa ?? 0)
+  const ivaDebitoEffettiva = currentCalc
+    ? round2(currentCalc.ivaDebitoEffettiva ?? 0)
+    : round2(savedRecord?.iva_debito_effettiva ?? savedRecord?.iva_debito ?? 0)
+  const ivaAcquisti = currentCalc
+    ? round2(currentCalc.ivaAcquistiDetraibile ?? currentCalc.ivaAcquisti ?? 0)
+    : round2(savedRecord?.iva_acquisti_detraibile ?? savedRecord?.iva_credito ?? 0)
   const saldoPeriodo = currentCalc ? round2(currentCalc.saldoPeriodo || 0) : round2((savedRecord?.saldo !== undefined ? savedRecord.saldo : ivaDebitoEffettiva - ivaAcquisti))
 
   const esitoLabel = saldoPeriodo > 0 ? 'IVA a debito' : 'IVA a credito'
@@ -76,7 +84,7 @@ export function buildLiquidazioneIvaDashboardModel({
   const registriEsclusiCount = currentCalc?.righeEscluseCount ?? 0
   const righeEscluseDifferitaCount = currentCalc?.righeEscluse?.filter(r => r.motivo === 'esigibilita_differita').length ?? 0
 
-  const operatoreLabel = savedOperator || (operatore?.nome ? `${operatore.nome} ${operatore.cognome || ''}`.trim() : 'Operatore Studio')
+  const operatoreLabel = savedOperator || (operatore?.nome ? `${operatore.nome} ${operatore.cognome || ''}`.trim() : '—')
 
   // Formatta storico per la tabella
   const storico = liquidazioniList.map(l => {
@@ -102,7 +110,7 @@ export function buildLiquidazioneIvaDashboardModel({
       ivaDovuta: dovuta,
       credito,
       lipe: l.stato === 'definitiva' ? `LIPE-${l.anno}-${String(l.id).slice(0,8).toUpperCase()}` : '—',
-      operatore: l.note?.match(/Operatore:\s*([^\n|]+)/)?.[1]?.trim() || 'Patrik Alaimo',
+      operatore: l.note?.match(/Operatore:\s*([^\n|]+)/)?.[1]?.trim() || '—',
       dataAggiornamento: formatTimestamp(l.updated_at)
     }
   })
@@ -127,7 +135,7 @@ export function buildLiquidazioneIvaDashboardModel({
       righeEscluseDifferitaCount,
       ultimoAggiornamento: formatTimestamp(updatedTime || lastCalcTimestamp),
       operatoreStudio: operatoreLabel,
-      metodoCalcolo: 'Prevalenza competenza / Pro-rata: 100%'
+      metodoCalcolo: currentCalc ? 'Calcolo da registri IVA correnti' : (savedRecord ? 'Snapshot liquidazione consolidata' : 'Calcolo da registri IVA correnti')
     },
     storico
   }

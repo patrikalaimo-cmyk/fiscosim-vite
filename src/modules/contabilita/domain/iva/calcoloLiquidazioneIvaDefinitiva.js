@@ -77,7 +77,10 @@ export function calcoloLiquidazioneIvaDefinitiva(rows = [], options = {}) {
       if (tipo === 'vendita') {
         ivaPerCassaDifferitaVendite += toNumber(row?.iva);
       } else if (tipo === 'acquisto') {
-        ivaPerCassaDifferitaAcquisti += toNumber(row?.iva_detraibile || row?.iva);
+        const ivaDetraibileSource = row?.iva_detraibile != null && row?.iva_detraibile !== ''
+          ? row.iva_detraibile
+          : row?.iva;
+        ivaPerCassaDifferitaAcquisti += toNumber(ivaDetraibileSource);
       }
       righeEscluse.push({ row, motivo: 'esigibilita_differita' });
       continue;
@@ -100,7 +103,10 @@ export function calcoloLiquidazioneIvaDefinitiva(rows = [], options = {}) {
 
       righeIncluse.push({ ...row, inclusa_in_liquidazione: true });
     } else if (tipo === 'acquisto') {
-      const ivaDet = toNumber(row?.iva_detraibile || row?.iva);
+      const ivaDetraibileSource = row?.iva_detraibile != null && row?.iva_detraibile !== ''
+        ? row.iva_detraibile
+        : row?.iva;
+      const ivaDet = toNumber(ivaDetraibileSource);
       const ivaIndet = toNumber(row?.iva_indetraibile || 0);
       ivaAcquistiDetraibile += ivaDet;
       ivaAcquistiIndetraibile += ivaIndet;

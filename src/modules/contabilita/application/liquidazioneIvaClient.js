@@ -96,8 +96,8 @@ export async function fetchLiquidazioneIvaDefinitiva({ societaId, periodoInizio,
   return { data: mapLiquidazioneForUi(data), error }
 }
 
-export async function fetchRigheLiquidazioneIvaSnapshot(liquidazioneId) {
-  const { data, error } = await contabilitaRepo.getRigheLiquidazioneIvaSnapshot(liquidazioneId)
+export async function fetchRigheLiquidazioneIvaSnapshot({ liquidazioneId, societaId } = {}) {
+  const { data, error } = await contabilitaRepo.getRigheLiquidazioneIvaSnapshot(liquidazioneId, societaId)
   return { data, error }
 }
 
