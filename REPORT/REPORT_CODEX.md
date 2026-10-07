@@ -11335,3 +11335,12 @@ Prossimo blocco: `CONSULTAZIONE-FREEZE`.
   - `test:all` include ora anche la suite application `consultazioneOperations.test.js`.
 - Nessuna modifica a DB, migration, auth/login, RLS/policy o file env. Nessuna scrittura su società reali.
 - CI da verificare prima del freeze.
+
+
+### CONSULTAZIONE-FREEZE — TRIAGE CORE DOPO HARDENING READ-ONLY
+
+- CI `37664414763`: il nuovo profilo `test:consultazione` è PASS; il Core ha esposto un solo test storico obsoleto in `fase3c3FunctionalCorrection.test.js`.
+- Il test pretendeva ancora `onEditScrittura` e l'handoff Consultazione → Inserimento Manuale per edit/storno, in conflitto con il contratto read-only già consolidato nei documenti CORE-CLOSURE.
+- Classificazione: **test obsoleto**, non bug produttivo.
+- Riallineamento: la suite ora verifica l'opposto, cioè nessun callback mutativo, nessuna cancellazione simulata dalla sidebar e nessun helper legacy di handoff nel parent.
+- Nessuna logica fiscale o contabile di scrittura è stata rimossa dai workflow dedicati; è stato chiuso soltanto il bypass dalla Consultazione.

@@ -8,25 +8,25 @@ import { normalizeConsultazioneFilters } from '../src/modules/contabilita/applic
 
 test('FASE 3C.3 - Test Funzionali Modifica, Storno e Ricerca con Stati Stornata/Storno', async (t) => {
 
-  await t.test('1. Sidebar di Consultazione non esegue direttamente RPC e ha solo Modifica e Storna', () => {
+  await t.test('1. Sidebar di Consultazione resta strettamente read-only', () => {
     const filePath = path.resolve('src/modules/contabilita/components/consultazione/ConsultazioneDetailSidebar.jsx')
     const content = fs.readFileSync(filePath, 'utf8')
-    
-    // Verifiche statiche sulla sidebar di consultazione read-only
-    assert.ok(!content.includes('annullaPrimaNotaLogica'), 'Non deve importare o chiamare direttamente la RPC di annullamento')
-    assert.ok(!content.includes('stornaPrimaNota'), 'Non deve importare o chiamare direttamente la RPC di storno')
-    assert.ok(content.includes('onEditScrittura'), 'Deve delegare l\'azione tramite onEditScrittura')
+
+    assert.ok(!content.includes('annullaPrimaNotaLogica'), 'Non deve importare o chiamare la RPC di annullamento')
+    assert.ok(!content.includes('stornaPrimaNota'), 'Non deve importare o chiamare la RPC di storno')
+    assert.ok(!content.includes('deleteScritturaControllata'), 'Non deve cancellare simulazioni dalla Consultazione')
+    assert.ok(!content.includes('onEditScrittura'), 'Non deve esporre handoff mutativi verso Inserimento Manuale')
+    assert.ok(content.includes('Consultazione read-only'), 'Deve esporre chiaramente il vincolo read-only')
   })
 
-  await t.test('2. Navigazione apre Inserimento Manuale in modalità edit o storno', () => {
-    const modeEdit = 'edit'
-    const modeStorno = 'storno'
-    
-    const draftMock1 = { meta: { operationMode: modeEdit } }
-    const draftMock2 = { meta: { operationMode: modeStorno } }
+  await t.test('2. Hub non collega la Consultazione al workflow edit/storno', () => {
+    const filePath = path.resolve('src/modules/contabilita/views/PrimaNotaHubView.jsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    const consultazioneMount = content.match(/<ConsultazionePrimaNotaView[\\s\\S]{0,1200}\\/>/)?.[0] || ''
 
-    assert.strictEqual(draftMock1.meta.operationMode, 'edit')
-    assert.strictEqual(draftMock2.meta.operationMode, 'storno')
+    assert.ok(consultazioneMount, 'Il mount Consultazione deve essere presente')
+    assert.ok(!consultazioneMount.includes('onEditScrittura'), 'La Consultazione non deve ricevere callback mutative')
+    assert.ok(!content.includes('function buildDraftFromPrimaNota'), 'Il vecchio handoff Consultazione -> Manuale deve essere rimosso')
   })
 
   await t.test('3. Motivazione predefinita "Errata contabilizzazione" di almeno 15 caratteri', () => {
