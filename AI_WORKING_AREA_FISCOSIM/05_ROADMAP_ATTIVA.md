@@ -192,3 +192,12 @@ Rimane non chiuso il requisito residuo: pagamento parziale di parcella con riten
 - STAMPE: sostituzione del vecchio blocker a 1000 righe con paginazione completa e join in batch. Il codice è in validazione CI; stampe non congelate.
 - Requisiti residui Stampe: fascicolo PDF unico; Mastrini/Bilancio/Partitari canonici; hash del contenuto; verifica consistenza in concorrenza; browser e PDF E2E.
 - Sviluppo Bank e Stampe rimane parallelo. Release A100 e commit bancario reale restano gated dai rispettivi collaudi.
+
+
+## Checkpoint verde 2026-10-08 — BANK-DEV + STAMPE
+
+- `31219e6` Bank safety: CI `37701343937` PASS su Ubuntu/Windows.
+- `286f0fd` Stampe pagination: CI `37701699556` PASS su Ubuntu/Windows.
+- Stampe ora legge registri IVA e Giornale paginati e completi, con errori espliciti su anomalie; non è ancora la versione definitiva del fascicolo.
+- Sviluppo Riconciliazione Bancaria attivo, commit reale bloccato fino ai gate.
+- I blocchi LOCK-PERIODO-AUDIT e RELEASE A100 mantengono i propri prerequisiti; pagamenti parziali con ritenuta restano requisito residuo.

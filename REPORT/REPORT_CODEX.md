@@ -144,3 +144,17 @@
 - Test oltre 1000 righe sintetiche; aggiornati test sicurezza preesistenti.
 - Mancano ancora fascicolo PDF unico, stampe canoniche di Mastrini/Bilancio/Partitari, hash contenuto e collaudo E2E. Nessun freeze dichiarato.
 - Nessuna modifica env/auth/RLS, nessuna migration o scrittura su società reali. Stato CI codice: PENDENTE.
+
+
+## 2026-10-08 — STAMPE / gate paginazione verde
+
+- Commit codice `286f0fd156957cf9ea2b77b3546ac9daa17e63b6`.
+- GitHub Actions run `37701699556`: **SUCCESS** su Ubuntu e Windows.
+- `test:stampe`: 6 file / 44 test PASS.
+- `test:bank`: 7 test PASS.
+- Import, Manuale, Consultazione, IVA, Split, Ritenute, Core, All safe e build: PASS.
+- Blocco di sicurezza temporaneo >1000 righe sostituito da paginazione completa e batch join con abort su incongruenze.
+- **Stampe non ancora freeze**: PDF unico del fascicolo, mastrini/bilancio/partitari canonici, hash dei contenuti e QA reali restano aperti.
+- **BANK-DEV sbloccato**; il commit reale rimane vietato fino a RPC atomica, audit/idempotenza, tenant scope e collaudi.
+- Nessuna migration/env/auth/RLS/policy o società reale interessata.
+- CI documentale: pendente.

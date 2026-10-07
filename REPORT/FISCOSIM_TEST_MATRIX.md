@@ -257,3 +257,11 @@ Non dichiarare Bank pronto alla produzione sulla base del solo `test:bank`: RPC,
 Nuovo `tests/stampePagination.test.js` nel profilo `test:stampe`: test con 1234 righe, multiplo esatto del pageSize, pagina fallita, ID duplicato/mancante, stop limite pagine, batch di join e guard sul repository.
 
 I test automatici non certificano da soli consistenza sotto scritture concorrenti, rendering PDF o definitività del fascicolo.
+
+
+## Checkpoint CI 2026-10-08
+
+- Bank: `test:bank` 7/7 PASS su entrambi i sistemi; CI `37701343937`.
+- Stampe: `test:stampe` 44/44 PASS su entrambi i sistemi; CI `37701699556`.
+- All safe e build: PASS Ubuntu/Windows.
+- Questi gate non certificano operatività bancaria in produzione né fascicolo cliente PDF completo.
