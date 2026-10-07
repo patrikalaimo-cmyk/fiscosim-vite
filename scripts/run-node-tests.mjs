@@ -60,20 +60,26 @@ async function resolveProfile(profile) {
   const manualApplicationTests = contabilitaApplicationTests.filter((file) => {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
     return (
-      rel === 'buildContabilitaPostPersistOutput.test.js'
-      || rel === 'canonicalContabilitaDraftMapper.test.js'
+      rel === 'canonicalContabilitaDraftMapper.test.js'
       || rel === 'fiscalWorkflow.test.js'
-      || rel === 'persistPrimaNotaDraft.test.js'
       || rel === 'registrazioneOperations/registrazioneOperations.test.js'
       || rel === 'primaNotaOperations/primaNotaOperations.test.js'
       || rel.startsWith('cespiti/')
     )
   })
 
-  if (profile === 'import') return [...importModuleTests, ...importRootTests]
-  if (profile === 'manual') return [...manualApplicationTests, ...manualRootTests]
-  if (profile === 'core') return [...contabilitaApplicationTests, ...coreRootTests]
-  if (profile === 'all') return [...contabilitaApplicationTests, ...coreRootTests, ...importModuleTests, ...importRootTests]
+  if (profile === 'import') {
+    return [...importModuleTests, ...importRootTests]
+  }
+  if (profile === 'manual') {
+    return [...manualApplicationTests, ...manualRootTests]
+  }
+  if (profile === 'core') {
+    return coreRootTests
+  }
+  if (profile === 'all') {
+    return [...coreRootTests, ...manualApplicationTests, ...importModuleTests, ...importRootTests]
+  }
 
   throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, core, all.`)
 }

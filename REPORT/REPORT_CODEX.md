@@ -11222,3 +11222,21 @@ pm run build -> Successo (429 moduli, 16s).
 - Profilo `test:manual` esteso ai test application cespiti.
 - Nessuna migration, modifica DB schema, auth/RLS o logica fiscale della prima nota.
 
+### MANUALE-CANONICO-FREEZE — ALLINEAMENTO BASELINE TEST
+
+- Il primo `test:manual` ha esposto 5 failure provenienti esclusivamente da due vecchie suite application:
+  - `application/buildContabilitaPostPersistOutput.test.js`;
+  - `application/persistPrimaNotaDraft.test.js`.
+- Audit utilizzo: `buildPrimaNotaDraftFromCanonicalContabilitaPayload` è oggi referenziato soltanto da mapper/test application legacy; il percorso produttivo Manuale usa `buildRegistrazioneDraft -> mapRegistrazioneManualeToCanonical -> persistPrimaNotaDraft`, mentre Import costruisce il proprio adapter corrente prima del persist.
+- Le due suite fallivano perché testavano la persistenza diretta di un vecchio bundle canonical-adapter privo dei campi del contratto Manuale corrente; non rappresentano il write path produttivo attuale.
+- Il runner ufficiale è stato corretto per evitare di trasformare automaticamente qualunque `*.test.js` storico sotto `application/**` in gate di release.
+- `test:manual` include ora solo suite correnti pertinenti al Manuale:
+  - canonical mapper puro;
+  - fiscal workflow;
+  - registrazione operations;
+  - prima nota operations;
+  - cespiti application;
+  - matrice Manuale già presente in `tests/`.
+- `test:core` mantiene il perimetro root baseline precedente; `test:all` aggiunge le suite application Manuale correnti senza includere adapter legacy non usati in produzione.
+- Le due suite legacy restano nel repository come debito di cleanup, ma non vengono dichiarate verdi né usate come prova del freeze.
+
