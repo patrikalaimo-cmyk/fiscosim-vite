@@ -6,6 +6,7 @@ import {
   deletePrimaNotaById,
 } from '../../../../services/primaNotaService.js'
 import { syncPercipienteFromDocumentoContabilita } from '../application/percipientiRegistryService.js'
+import { fetchAllStampeRows, chunkStampeIds } from '../application/stampe/fetchAllStampeRows.js'
 
 export function normalizeUuidOrNull(value) {
   const text = String(value ?? '').trim()
@@ -1567,122 +1568,133 @@ export function updateScritturaHeaderById(id, updates) {
 }
 
 export async function getRegistriIvaPerStampa(societaId, dataDa, dataA, tipoRegistro) {
-  let query = sb
-    .from('registri_iva')
-    .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id, numero_documento, data_documento, soggetto_piva, soggetto_denominazione, documento_contabilita_id')
-    .eq('societa_id', societaId)
-    .gte('data', dataDa)
-    .lte('data', dataA)
-
-  if (tipoRegistro === 'acquisti') {
-    query = query.eq('tipo', 'acquisto')
-  } else if (tipoRegistro === 'vendite' || tipoRegistro === 'corrispettivi') {
-    query = query.eq('tipo', 'vendita')
-  }
-
-  query = query
-    .order('data', { ascending: true })
-    .order('data_documento', { ascending: true })
-    .order('numero_documento', { ascending: true })
-    .order('id', { ascending: true })
-
-  const { data: rows, error: rowsError } = await query
-  if (rowsError || !rows) return { data: [], error: rowsError }
-  if (rows.length >= 1000) {
-    return { data: [], error: new Error('Registro IVA con 1000 o più righe: non è garantita la completezza della lettura non paginata.') }
-  }
-
-  const causaleIvaIds = Array.from(new Set(rows.map(r => r.causale_iva_id).filter(Boolean)))
-  const causaliMap = new Map()
-  if (causaleIvaIds.length > 0) {
-    const { data: causali, error: causaliError } = await sb
-      .from('causali_iva')
-      .select('*')
-      .in('id', causaleIvaIds)
-      .eq('societa_id', societaId)
-    if (causaliError) return { data: [], error: causaliError }
-    if ((causali || []).length !== causaleIvaIds.length) {
-      return { data: [], error: new Error('Causali IVA collegate mancanti o non appartenenti alla società selezionata.') }
+  try {
+    if (!societaId || !dataDa || !dataA || dataDa > dataA) {
+      throw new Error('Selezionare società e periodo di stampa validi.')
     }
-    if (causali) {
-      for (const c of causali) {
-        causaliMap.set(c.id, c)
-      }
-    }
-  }
-
-  const flattened = rows.map((row) => {
-    const causale = row.causale_iva_id ? causaliMap.get(row.causale_iva_id) : null
-    return {
-      ...row,
-      causale_codice: causale?.codice || '',
-      causale_descrizione: causale?.descrizione || '',
-    }
-  })
-
-  if (tipoRegistro === 'corrispettivi' || tipoRegistro === 'vendite') {
-    const pnIds = Array.from(new Set(flattened.map(r => r.prima_nota_id).filter(Boolean)))
-    if (flattened.some(r => !r.prima_nota_id)) {
-      return { data: [], error: new Error('Registro IVA non esportabile: collegamento Prima Nota mancante.') }
-    }
-    if (pnIds.length > 0) {
-      const { data: pns, error: pnError } = await sb
-        .from('prima_nota')
-        .select('id, tipo_registrazione')
-        .in('id', pnIds)
+    // Il builder viene rigenerato a ogni pagina, con tie-breaker univoco ID.
+    const rows = await fetchAllStampeRows(() => {
+      let query = sb
+        .from('registri_iva')
+        .select('id, societa_id, tipo, imponibile, iva, iva_detraibile, iva_indetraibile, aliquota, data, esigibilita, split_payment, prima_nota_id, causale_iva_id, numero_documento, data_documento, soggetto_piva, soggetto_denominazione, documento_contabilita_id')
         .eq('societa_id', societaId)
-      if (pnError) return { data: [], error: pnError }
-      const pnMap = new Map((pns || []).map(p => [p.id, p.tipo_registrazione]))
-      if (pnMap.size !== pnIds.length) {
-        return { data: [], error: new Error('Registro IVA non esportabile: Prima Nota collegata mancante nella società selezionata.') }
-      }
-      if (tipoRegistro === 'corrispettivi') {
-        return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) === 'corrispettivo'), error: null }
-      }
-      return { data: flattened.filter(r => pnMap.get(r.prima_nota_id) !== 'corrispettivo'), error: null }
-    }
-  }
+        .gte('data', dataDa)
+        .lte('data', dataA)
 
-  return { data: flattened, error: null }
+      if (tipoRegistro === 'acquisti') {
+        query = query.eq('tipo', 'acquisto')
+      } else if (tipoRegistro === 'vendite' || tipoRegistro === 'corrispettivi') {
+        query = query.eq('tipo', 'vendita')
+      }
+
+      return query
+        .order('data', { ascending: true })
+        .order('data_documento', { ascending: true })
+        .order('numero_documento', { ascending: true })
+        .order('id', { ascending: true })
+    }, { label: 'Registro IVA' })
+
+    const causaleIvaIds = [...new Set(rows.map((row) => row.causale_iva_id).filter(Boolean))]
+    const causaliMap = new Map()
+    for (const ids of chunkStampeIds(causaleIvaIds)) {
+      const { data: causali, error } = await sb
+        .from('causali_iva')
+        .select('id, codice, descrizione')
+        .in('id', ids)
+        .eq('societa_id', societaId)
+
+      if (error) throw error
+      for (const causale of causali || []) causaliMap.set(causale.id, causale)
+    }
+    if (causaliMap.size !== causaleIvaIds.length) {
+      throw new Error('Causali IVA collegate mancanti o non appartenenti alla società selezionata.')
+    }
+
+    const flattened = rows.map((row) => {
+      const causale = row.causale_iva_id ? causaliMap.get(row.causale_iva_id) : null
+      return {
+        ...row,
+        causale_codice: causale?.codice || '',
+        causale_descrizione: causale?.descrizione || '',
+      }
+    })
+
+    if (tipoRegistro === 'corrispettivi' || tipoRegistro === 'vendite') {
+      if (flattened.some((row) => !row.prima_nota_id)) {
+        throw new Error('Registro IVA non esportabile: collegamento Prima Nota mancante.')
+      }
+      const pnIds = [...new Set(flattened.map((row) => row.prima_nota_id))]
+      const pnMap = new Map()
+      for (const ids of chunkStampeIds(pnIds)) {
+        const { data: pns, error } = await sb
+          .from('prima_nota')
+          .select('id, tipo_registrazione')
+          .in('id', ids)
+          .eq('societa_id', societaId)
+        if (error) throw error
+        for (const pn of pns || []) pnMap.set(pn.id, pn.tipo_registrazione)
+      }
+      if (pnMap.size !== pnIds.length) {
+        throw new Error('Registro IVA non esportabile: Prima Nota collegata mancante nella società selezionata.')
+      }
+
+      return {
+        data: flattened.filter((row) => tipoRegistro === 'corrispettivi'
+          ? pnMap.get(row.prima_nota_id) === 'corrispettivo'
+          : pnMap.get(row.prima_nota_id) !== 'corrispettivo'),
+        error: null,
+      }
+    }
+    return { data: flattened, error: null }
+  } catch (error) {
+    console.error('[getRegistriIvaPerStampa] Error:', error)
+    return { data: [], error }
+  }
 }
 
 export async function getLibroGiornalePerStampa(societaId, dataDa, dataA) {
   try {
-    const { data: headers, error: headersError } = await sb
+    if (!societaId || !dataDa || !dataA || dataDa > dataA) {
+      throw new Error('Selezionare società e periodo di stampa validi.')
+    }
+    const headers = await fetchAllStampeRows(() => sb
       .from('prima_nota')
       .select('id, societa_id, numero_registrazione, data_registrazione, data_documento, numero_documento, causale_codice, descrizione, cliente_fornitore_nome, totale_dare, totale_avere, stato')
       .eq('societa_id', societaId)
       .gte('data_registrazione', dataDa)
       .lte('data_registrazione', dataA)
+      .order('data_registrazione', { ascending: true })
       .order('numero_registrazione', { ascending: true })
+      .order('id', { ascending: true }), { label: 'Libro Giornale' })
 
-    if (headersError) throw headersError
-    if (!headers || !headers.length) return { data: [], error: null }
-    if (headers.length >= 1000) throw new Error('Libro Giornale con 1000 o più scritture: non è garantita la completezza della lettura non paginata.')
-
-    const pnIds = headers.map(h => h.id).filter(Boolean)
-    const { data: rows, error: rowsError } = await sb
-      .from('prima_nota_righe')
-      .select('id, prima_nota_id, riga_numero, conto_id, conto_codice, conto_descrizione, descrizione_riga, importo_dare, importo_avere')
-      .in('prima_nota_id', pnIds)
-      .order('riga_numero', { ascending: true })
-
-    if (rowsError) throw rowsError
-    if ((rows || []).length >= 1000) throw new Error('Libro Giornale con 1000 o più righe: non è garantita la completezza della lettura non paginata.')
+    if (!headers.length) return { data: [], error: null }
 
     const rowsByPnId = new Map()
-    for (const r of rows || []) {
-      const key = String(r.prima_nota_id)
-      if (!rowsByPnId.has(key)) rowsByPnId.set(key, [])
-      rowsByPnId.get(key).push(r)
+    for (const ids of chunkStampeIds(headers.map((header) => header.id))) {
+      const rows = await fetchAllStampeRows(() => sb
+        .from('prima_nota_righe')
+        .select('id, prima_nota_id, riga_numero, conto_id, conto_codice, conto_descrizione, descrizione_riga, importo_dare, importo_avere')
+        .in('prima_nota_id', ids)
+        .order('prima_nota_id', { ascending: true })
+        .order('riga_numero', { ascending: true })
+        .order('id', { ascending: true }), { label: 'Righe Libro Giornale' })
+
+      for (const row of rows) {
+        const key = String(row.prima_nota_id)
+        if (!rowsByPnId.has(key)) rowsByPnId.set(key, [])
+        rowsByPnId.get(key).push(row)
+      }
     }
 
-    const result = headers.map(h => ({
-      ...h,
-      righe: rowsByPnId.get(String(h.id)) || []
-    }))
+    const missingRows = headers.filter((header) => !rowsByPnId.has(String(header.id)))
+    if (missingRows.length) {
+      throw new Error('Libro Giornale non esportabile: una o più registrazioni sono prive di righe.')
+    }
 
-    return { data: result, error: null }
+    return { data: headers.map((header) => ({
+      ...header,
+      righe: rowsByPnId.get(String(header.id)) || [],
+    })), error: null }
   } catch (error) {
     console.error('[getLibroGiornalePerStampa] Error:', error)
     return { data: [], error }

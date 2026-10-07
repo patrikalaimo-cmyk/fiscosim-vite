@@ -24,6 +24,7 @@ const STAMPE_ROOT_TESTS = new Set([
   'resolveStampaDefinitivaOperatore.test.js',
   'stampaDefinitivaUiHelpers.test.js',
   'stampeSafetyGuard.test.js',
+  'stampePagination.test.js',
 ])
 
 const RITENUTE_ROOT_TESTS = new Set([

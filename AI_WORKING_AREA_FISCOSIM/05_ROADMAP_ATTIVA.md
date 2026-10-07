@@ -184,3 +184,11 @@ Sequenza aggiornata: STAMPE-EXPORT-FASCICOLO e BANK-DEV procedono in parallelo; 
 Prima correzione Bank: `validateCanonicalReconciliationPayload` non può più rendere valido un ignored con blocker o contesto assente; un ignored non può avere nemmeno testata PN. Compatibilità fixture R8/R9A da gate CI.
 
 Rimane non chiuso il requisito residuo: pagamento parziale di parcella con ritenuta.
+
+
+## Aggiornamento 2026-10-08 — BANK-DEV e stampe dati voluminosi
+
+- BANK-DEV: primo gate `37701343937` verde su Ubuntu e Windows. Validazione ignored corretta; resta proibita l'attivazione su società reali finché non esiste e viene validato il commit atomico.
+- STAMPE: sostituzione del vecchio blocker a 1000 righe con paginazione completa e join in batch. Il codice è in validazione CI; stampe non congelate.
+- Requisiti residui Stampe: fascicolo PDF unico; Mastrini/Bilancio/Partitari canonici; hash del contenuto; verifica consistenza in concorrenza; browser e PDF E2E.
+- Sviluppo Bank e Stampe rimane parallelo. Release A100 e commit bancario reale restano gated dai rispettivi collaudi.

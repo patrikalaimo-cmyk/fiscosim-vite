@@ -128,3 +128,19 @@
 - Nessuna migration, env, auth/RLS/policy, scrittura contabile live, dato reale toccato.
 - Il blocco Stampe resta in corso, non freeze.
 - Stato: **CI PENDENTE**.
+
+
+## 2026-10-08 — BANK-DEV / gate automatico verde
+
+- Commit `31219e6ae10ece1660dc194d6a621e4c19cb101b`; CI `37701343937`: SUCCESS Ubuntu e Windows.
+- `test:bank`: 7 test PASS. Incluse fixture R8 e R9A, 16 casi ciascuna.
+- Sviluppo Bank autorizzato in parallelo a Stampe, non attivazione del commit reale.
+
+## 2026-10-08 — STAMPE / paginazione completa in implementazione
+
+- Creato helper `fetchAllStampeRows` con pagine da 500, ID stabili e abort su errori/duplicati/risposte anomale.
+- Registri IVA: paginazione di tutte le righe, join IVA e PN in batch da 100, scope società mantenuto.
+- Giornale: paginazione testate e righe in batch, fail-closed su PN priva di righe.
+- Test oltre 1000 righe sintetiche; aggiornati test sicurezza preesistenti.
+- Mancano ancora fascicolo PDF unico, stampe canoniche di Mastrini/Bilancio/Partitari, hash contenuto e collaudo E2E. Nessun freeze dichiarato.
+- Nessuna modifica env/auth/RLS, nessuna migration o scrittura su società reali. Stato CI codice: PENDENTE.

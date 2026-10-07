@@ -54,3 +54,12 @@ Percorsi non realmente operativi:
 - Riconciliazione Bancaria ancora **BLOCCATA**.
 
 Questo documento fotografa **un hardening intermedio**, non un freeze e non una dichiarazione A100.
+
+
+## Addendum 2026-10-08 — Paginazione completa
+
+Il blocco a 999 righe introdotto come protezione temporanea è sostituito dall'helper `fetchAllStampeRows`: letture `range` da 500, ordinamento stabile con tie-breaker ID, fail-closed su errore/doppione/pagina invalida, batch da 100 per arricchimenti causale/PN e righe del giornale.
+
+Evidenza sintetica: fixture oltre 1000 righe, errore a metà, doppione, multiplo esatto e limite di paginazione.
+
+**Non chiude il freeze.** Residui: verifica dello snapshot sotto modifiche concorrenti, PDF fascicolo unico, report canonici di Mastrini/Bilancio/Partitario, hash su contenuti di stampa, test browser e PDF.

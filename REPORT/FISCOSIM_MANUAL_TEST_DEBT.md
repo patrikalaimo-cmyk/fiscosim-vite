@@ -177,3 +177,8 @@ Stato: **IN CORSO — NON CONGELATO**.
 5. QA browser Bank su società esclusivamente fittizie; verifica trimestrale e giroconti interni.
 
 **Non equivale a rilascio A100.**
+
+
+## Stampe — QA aggiornato per la paginazione
+
+L'export oltre 1000 righe usa ora paginazione a batch; verificare in browser con azienda di test il conteggio completo, l'ordinamento, l'assenza di duplicati, la presenza dei join causale/Prima Nota e il comportamento durante modifiche concorrenti. I collaudi manuali del PDF unico e dei report canonici restano pendenti.

@@ -26,8 +26,8 @@ test('gli arricchimenti dei registri IVA sono tenant scoped e falliscono in modo
   assert.match(body, /\.from\('registri_iva'\)/)
   assert.match(body, /\.from\('causali_iva'\)[\s\S]*?\.eq\('societa_id', societaId\)/)
   assert.match(body, /\.from\('prima_nota'\)[\s\S]*?\.eq\('societa_id', societaId\)/)
-  assert.match(body, /if \(causaliError\) return \{ data: \[\], error: causaliError \}/)
-  assert.match(body, /if \(pnError\) return \{ data: \[\], error: pnError \}/)
+  assert.match(body, /if \(error\) throw error/)
+  assert.match(body, /return \{ data: \[\], error \}/)
   assert.match(body, /collegamento Prima Nota mancante/)
 })
 
@@ -35,9 +35,11 @@ test('periodi grandi non generano export troncati in silenzio', async () => {
   const source = await read('../src/modules/contabilita/data/contabilitaRepo.js')
   const vat = source.slice(source.indexOf('export async function getRegistriIvaPerStampa'), source.indexOf('export async function getLibroGiornalePerStampa'))
   const journal = source.slice(source.indexOf('export async function getLibroGiornalePerStampa'), source.indexOf('export async function getStampeDefinitiveValide'))
-  assert.match(vat, /rows\.length >= 1000/)
-  assert.match(journal, /headers\.length >= 1000/)
-  assert.match(journal, /\(rows \|\| \[\]\)\.length >= 1000/)
+  assert.match(vat, /fetchAllStampeRows\(/)
+  assert.match(journal, /fetchAllStampeRows\(/)
+  assert.match(journal, /chunkStampeIds\(/)
+  assert.doesNotMatch(vat, /rows\.length >= 1000/)
+  assert.doesNotMatch(journal, /headers\.length >= 1000/)
 })
 
 test('la stampa provvisoria non dichiara falsamente una singola pagina', async () => {
