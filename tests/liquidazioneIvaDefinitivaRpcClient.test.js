@@ -194,10 +194,14 @@ test('Liquidazione IVA Definitiva — Persistenza & RPC client suite', async (t)
       return chain
     }
 
-    const res = await fetchRigheLiquidazioneIvaSnapshot('liq-123')
+    const res = await fetchRigheLiquidazioneIvaSnapshot({
+      liquidazioneId: 'liq-123',
+      societaId: 'soc-123'
+    })
 
     assert.strictEqual(tableQueried, 'liquidazioni_iva_righe')
     assert.strictEqual(queryEqs.liquidazione_id, 'liq-123')
+    assert.strictEqual(queryEqs.societa_id, 'soc-123')
     assert.deepEqual(res.data, [{ id: 'snap-1', imponibile: 100 }])
   })
 

@@ -14,6 +14,24 @@ const CONSULTAZIONE_ROOT_TESTS = new Set([
   'consultazioneReadOnlyGuard.test.js',
 ])
 
+const IVA_ROOT_TESTS = new Set([
+  'calcoloLiquidazioneIvaDefinitiva.test.js',
+  'ivaOrdinariaEndToEndLiquidazione.test.js',
+  'ivaRegistriLiquidazioneFreeze.test.js',
+  'liquidazioneIvaAggregator.test.js',
+  'liquidazioneIvaDefinitivaOrchestrator.test.js',
+  'liquidazioneIvaDefinitivaRpcClient.test.js',
+  'liquidazioneIvaDefinitivaUiAdapter.test.js',
+  'liquidazioneIvaExport.test.js',
+  'liquidazioneIvaProvvisoria.test.js',
+  'liquidazioneIvaProvvisoriaRealFix.test.js',
+  'liquidazioneIvaProvvisoriaUiAdapter.test.js',
+  'liquidazioneIvaSplitPayment.test.js',
+  'liquidazioneIvaUxHelpers.test.js',
+  'registriIvaStampeModel.test.js',
+  'vatRegisterEntriesFromCanonicalPayload.test.js',
+])
+
 const MANUAL_ROOT_TESTS = new Set([
   'a17xAutofatturaBase.test.js',
   'causaliPolicyEngine.test.js',
@@ -64,6 +82,7 @@ async function resolveProfile(profile) {
   const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
   const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
   const consultazioneRootTests = rootTests.filter((file) => CONSULTAZIONE_ROOT_TESTS.has(path.basename(file)))
+  const ivaRootTests = rootTests.filter((file) => IVA_ROOT_TESTS.has(path.basename(file)))
   const consultazioneApplicationTests = contabilitaApplicationTests.filter((file) => {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
     return (
@@ -93,6 +112,9 @@ async function resolveProfile(profile) {
   if (profile === 'consultazione') {
     return [...consultazioneApplicationTests, ...consultazioneRootTests]
   }
+  if (profile === 'iva') {
+    return ivaRootTests
+  }
   if (profile === 'core') {
     return coreRootTests
   }
@@ -106,7 +128,7 @@ async function resolveProfile(profile) {
     ]))
   }
 
-  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, core, all.`)
+  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, iva, core, all.`)
 }
 
 async function main() {

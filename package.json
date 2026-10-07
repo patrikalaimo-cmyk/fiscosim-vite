@@ -12,7 +12,8 @@
     "test:core": "node scripts/run-node-tests.mjs core",
     "test:all": "node scripts/run-node-tests.mjs all",
     "test:manual": "node scripts/run-node-tests.mjs manual",
-    "test:consultazione": "node scripts/run-node-tests.mjs consultazione"
+    "test:consultazione": "node scripts/run-node-tests.mjs consultazione",
+    "test:iva": "node scripts/run-node-tests.mjs iva"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

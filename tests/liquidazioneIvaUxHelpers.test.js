@@ -238,4 +238,62 @@ test('VAT Settlement UX Helpers and Model Builders - Test Suite', async (t) => {
 
     assert.strictEqual(model.meta.ultimoAggiornamento, '14/06/2026 15:45')
   })
+
+  await t.test('10. dashboard usa ivaSplitEsclusa reale e non inventa operatore/metodo fiscale', () => {
+    const periodParams = { tipo_periodo: 'mensile', anno: 2026, periodo: 6 }
+    const model = buildLiquidazioneIvaDashboardModel({
+      societaAttiva: mockSocieta,
+      periodParams,
+      liquidazioniList: [],
+      currentCalc: {
+        ivaVenditeLorda: 220,
+        ivaSplitEsclusa: 44,
+        ivaDebitoEffettiva: 176,
+        ivaAcquistiDetraibile: 0,
+        saldoPeriodo: 176,
+        righeIncluseCount: 2,
+        righeEscluseCount: 0,
+        righeEscluse: []
+      },
+      operatore: null
+    })
+
+    assert.strictEqual(model.kpis.ivaSplitPayment, 44)
+    assert.strictEqual(model.meta.operatoreStudio, '—')
+    assert.strictEqual(model.meta.metodoCalcolo, 'Calcolo da registri IVA correnti')
+  })
+
+  await t.test('11. dashboard storico usa i campi consolidati reali e nessun nome hardcoded', () => {
+    const periodParams = { tipo_periodo: 'mensile', anno: 2026, periodo: 6 }
+    const model = buildLiquidazioneIvaDashboardModel({
+      societaAttiva: mockSocieta,
+      periodParams,
+      liquidazioniList: [{
+        id: 'liq-real',
+        societa_id: 'company-123',
+        periodicita: 'mensile',
+        anno: 2026,
+        mese: 6,
+        stato: 'definitiva',
+        iva_debito: 999,
+        iva_credito: 999,
+        iva_vendite_lorda: 220,
+        iva_split_esclusa: 44,
+        iva_debito_effettiva: 176,
+        iva_acquisti_detraibile: 110,
+        saldo: 66,
+        note: ''
+      }],
+      currentCalc: null,
+      operatore: null
+    })
+
+    assert.strictEqual(model.kpis.ivaVenditeLorda, 220)
+    assert.strictEqual(model.kpis.ivaSplitPayment, 44)
+    assert.strictEqual(model.kpis.ivaDebitoEffettiva, 176)
+    assert.strictEqual(model.kpis.ivaAcquisti, 110)
+    assert.strictEqual(model.storico[0].operatore, '—')
+    assert.strictEqual(model.meta.metodoCalcolo, 'Snapshot liquidazione consolidata')
+  })
+
 })

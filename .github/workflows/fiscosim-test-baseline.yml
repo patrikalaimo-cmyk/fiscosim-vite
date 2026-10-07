@@ -49,6 +49,9 @@ jobs:
       - name: Consultation read-only suite
         run: npm run test:consultazione
 
+      - name: VAT registers and liquidation suite
+        run: npm run test:iva
+
       - name: Core suite
         run: npm run test:core
 

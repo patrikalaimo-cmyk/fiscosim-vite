@@ -238,3 +238,25 @@ test('16. Multi-tenant logico', () => {
   assert.equal(result.righeEscluseCount, 1)
   assert.equal(result.righeEscluse[0].motivo, 'societa')
 })
+
+
+test('17. IVA acquisti esplicitamente indetraibile al 100% non genera credito IVA', () => {
+  const result = calcoloLiquidazioneIvaDefinitiva([
+    row({ tipo: 'acquisto', imponibile: 100, iva: 22, iva_detraibile: 0, iva_indetraibile: 22 }),
+  ], OPTIONS_BASE)
+
+  assert.equal(result.ivaAcquistiDetraibile, 0)
+  assert.equal(result.ivaAcquistiIndetraibile, 22)
+  assert.equal(result.creditoPeriodo, 0)
+  assert.equal(result.saldoPeriodo, 0)
+})
+
+test('18. IVA per cassa acquisti con detraibilita esplicita zero preserva lo zero', () => {
+  const result = calcoloLiquidazioneIvaDefinitiva([
+    row({ tipo: 'acquisto', imponibile: 100, iva: 22, iva_detraibile: 0, iva_indetraibile: 22, esigibilita: 'differita' }),
+  ], OPTIONS_BASE)
+
+  assert.equal(result.ivaPerCassaDifferitaAcquisti, 0)
+  assert.equal(result.ivaAcquistiDetraibile, 0)
+  assert.equal(result.righeEscluseCount, 1)
+})

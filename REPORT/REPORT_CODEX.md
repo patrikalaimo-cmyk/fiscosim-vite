@@ -11380,3 +11380,20 @@ L'audit ha trovato un bypass reale del read-only: `ConsultazioneDetailSidebar.js
 
 ### Sicurezza
 Nessuna migration, env, auth/login, RLS/policy, DB reale o Riconciliazione Bancaria toccati.
+
+
+## 2026-10-07 — IVA-REGISTRI-LIQUIDAZIONE / audit e hardening code gate
+
+- HEAD di partenza verificato: `5f8e764650fb787df662622a213a3eb60975d0bc`.
+- Commit hardening dati: `e612ca03e75ae6aa11ff9b5b09686ce6cfc4826a`.
+- Audit del percorso reale: Registrazione canonica → `registri_iva` → dominio liquidazione → consolidamento RPC.
+- Corretto gap fiscale: `iva_detraibile = 0` non ricade più sulla piena IVA tramite fallback truthy, inclusa l'IVA per cassa differita.
+- Corretto mapping dashboard split payment: usa `ivaSplitEsclusa` e, sui consolidati, i campi snapshot reali.
+- Rimossi fallback UX dimostrativi: nessun “27 registri” inventato, nessun operatore personale hardcoded, nessun pro-rata 100% dichiarato senza dato.
+- Arricchita la lettura registri con dati documento/controparte già persistiti; lookup causali IVA reso esplicitamente tenant-scoped.
+- Snapshot liquidazione reso esplicitamente tenant-scoped: `liquidazioneId + societaId` obbligatori.
+- Aggiunte regressioni dedicate e guard di freeze.
+- Introdotto profilo `npm run test:iva` e relativo step CI Windows/Linux.
+- I servizi legacy basati su `accounting_entries` esistono ancora in altri percorsi storici, ma non sono il percorso usato dalla vista Tax Compliance IVA sottoposta a questo freeze.
+- Nessuna migration applicata; nessun accesso a società reali; nessuna modifica auth/RLS/policy/env; Riconciliazione Bancaria non avviata.
+- Stato al commit test gate: **CI PENDENTE**.
