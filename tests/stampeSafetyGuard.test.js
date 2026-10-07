@@ -12,7 +12,9 @@ test('non si visualizzano fac-simile come stampe contabili reali', async () => {
   const entrypoint = source.slice(start, end)
   assert.match(entrypoint, /if \(\['partitari', 'mastrini', 'bilancio'\]\.includes\(contTab\)\)/)
   assert.match(entrypoint, /Nessun dato di esempio è disponibile/)
-  assert.ok(entrypoint.indexOf("if (['partitari', 'mastrini', 'bilancio'].includes(contTab))") < entrypoint.indexOf('return (\n    <StampeDetailView'))
+  const guardPos = entrypoint.indexOf("if (['partitari', 'mastrini', 'bilancio'].includes(contTab))")
+  const detailPos = entrypoint.search(/return\s*\(\s*<StampeDetailView/)
+  assert.ok(guardPos >= 0 && detailPos >= 0 && guardPos < detailPos)
 })
 
 test('gli arricchimenti dei registri IVA sono tenant scoped e falliscono in modo esplicito', async () => {
