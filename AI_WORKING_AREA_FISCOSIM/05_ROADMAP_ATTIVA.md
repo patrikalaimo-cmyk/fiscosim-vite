@@ -71,3 +71,12 @@ Per accelerare lo sviluppo:
 - nessun collaudo manuale viene dichiarato eseguito se non realmente svolto;
 - Riconciliazione Bancaria resta bloccata finché Import + Manuale + IVA non hanno gate automatici verdi e i collaudi manuali richiesti non sono stati validati;
 - RELEASE A100 resta bloccata fino alla chiusura di tutto il debito manuale.
+
+
+## MANUALE-CANONICO-FREEZE — gate automatico 2026-10-07
+
+- Stato: **AUTOMATICO VERDE / COLLAUDO MANUALE DIFFERITO**.
+- CI run `37627776086`: Ubuntu e Windows verdi su `test:import`, `test:manual`, `test:core`, `test:all` e build.
+- Il freeze automatico copre movimenti generali, fatture IVA attive/passive, note credito, multi-aliquota, split payment, IVA per cassa, reverse charge/autofatture, partitario, ritenute e blocchi periodo.
+- I collaudi manuali restano registrati nel debito QA finale.
+- **Prossimo blocco attivo: CONSULTAZIONE-FREEZE**.

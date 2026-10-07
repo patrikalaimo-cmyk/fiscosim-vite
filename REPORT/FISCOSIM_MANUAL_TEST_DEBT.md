@@ -23,9 +23,24 @@ Da verificare in browser su società esclusivamente di test:
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
-## Registrazione Manuale — da popolare nel freeze corrente
+## Registrazione Manuale — pendente
 
-Il dettaglio verrà aggiunto dall'audit `MANUALE-CANONICO-FREEZE`.
+Stato automatico: **VERDE** — CI run `37627776086`.
+
+Da verificare nella sessione manuale finale su società di test:
+1. movimento generale bilanciato;
+2. fattura passiva ordinaria con IVA e partitario;
+3. fattura attiva ordinaria con IVA e partitario;
+4. nota credito attiva/passiva con segno opposto;
+5. documento multi-aliquota;
+6. split payment cliente PA;
+7. IVA per cassa documento + successivo incasso/pagamento;
+8. reverse charge/autofattura estera;
+9. parcella professionista con ritenuta e pagamento;
+10. blocco salvataggio su periodo definitivo;
+11. verifica visiva che ogni proposta/template resti modificabile dall'operatore.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
 ## Gate
 

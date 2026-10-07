@@ -11199,3 +11199,14 @@ pm run build -> Successo (429 moduli, 16s).
 - Nessuna modifica a logica produttiva, fiscale o persistence.
 - CI completa da rilanciare; obiettivo: `test:import`, `test:manual`, `test:core`, `test:all`, build verdi su Windows/Linux.
 
+### MANUALE-CANONICO-FREEZE — GATE AUTOMATICO FINALE VERDE
+
+- GitHub Actions run `37627776086` sul commit `7945cbcfbaf5cdbee152f16869826a91df342d5a`: **SUCCESS**.
+- Ubuntu: `test:import` PASS, `test:manual` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- Windows: `test:import` PASS, `test:manual` PASS, `test:core` PASS, `test:all` PASS, `npm run build` PASS.
+- Il nuovo profilo Manuale ha fatto emergere e chiudere regressioni che la baseline precedente non eseguiva: direzione contabile neutra, apertura partitario implicita sui corrispettivi, pruning della riga economica manual-required e default codice tributo ritenuta.
+- L'ultimo failure residuo era un test Consultazione obsoleto sul CSV: aggiornato al contratto corrente con colonna `N. Prima Nota`.
+- **MANUALE-CANONICO-FREEZE: gate automatico PASS**.
+- Browser/manuali reali: **NON eseguiti**, differiti e registrati in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
+- Prossimo blocco: `CONSULTAZIONE-FREEZE`.
+
