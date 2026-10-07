@@ -11,6 +11,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 | Consultazione | `npm run test:consultazione` | filtri, stati PN, view model, saldo precedente/progressivo, export, no-write guard e assenza handoff mutativi | browser reale, DB remoto, UX visuale |
 | IVA / Registri / Liquidazione | `npm run test:iva` | registri IVA canonici, fatture/NC, multi-aliquota, detraibilità/indetraibilità, split, IVA per cassa, reverse charge, liquidazione provvisoria/definitiva, tenant scope, RPC client, prospetti/export e freeze guard | browser reale, DB remoto, migration applicate |
 | Split payment semplice | `npm run test:split` | flag anagrafica, fattura/NC attiva split, conto tecnico configurato, righe PN, partitario al netto IVA, registro e liquidazione | browser reale, DB remoto, casi split avanzati fuori perimetro |
+| Ritenute / Scadenzario | `npm run test:ritenute` | parcella professionista, pagamento integrale, chiusura partitario, maturazione ritenuta, debito Erario, scadenza, tenant scope, readiness CU/770 e guard read-only | browser reale, DB remoto, pagamento parziale con ritenuta, controllo F24 importato |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
@@ -18,7 +19,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 
 ## Runner ufficiale
 
-`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
+`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `ritenute`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
 
 Regole:
 - `test:import` include tutti i `src/modules/import_contabilita/tests/*.test.js` e `tests/testLabIntegrazione.test.js`.
@@ -26,6 +27,7 @@ Regole:
 - `test:consultazione` include le suite root Consultazione selezionate e le suite application `consultazioneOperations` / `primaNotaOperations` pertinenti.
 - `test:iva` include 15 suite dedicate a registri IVA, liquidazione, split/cassa/reverse, detraibilità, export e guard di freeze.
 - `test:split` include 3 suite dedicate a configurazione anagrafica, documento split e impatto in liquidazione.
+- `test:ritenute` include 4 suite dedicate a ciclo parcella/pagamento, scadenzario, percipiente, readiness CU/770 e guard architetturale.
 - `test:core` include gli altri `tests/*.test.js`.
 - `test:all` esegue l'unione dei profili safe senza dipendere da glob shell.
 - Un exit code non zero del Node test runner rende fallita la suite.
@@ -183,5 +185,32 @@ Il gate copre:
 - partitario al solo importo incassabile;
 - propagazione del flag nel payload IVA/canonico;
 - esclusione dell'IVA split dal debito effettivo di liquidazione.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## RITENUTE-SCADENZARIO-FREEZE
+
+Profilo dedicato: `npm run test:ritenute`.
+
+Gate codice validato: GitHub Actions run `37697140035`.
+- `test:ritenute`: **4 file / 27 test PASS** su Ubuntu e Windows;
+- Import, Manuale, Consultazione, IVA, Split, Core e All safe: PASS;
+- build Vite: PASS su Ubuntu e Windows.
+
+Il gate copre:
+- parcella professionista e predisposizione ritenuta;
+- maturazione fiscale solo al pagamento;
+- pagamento integrale con corretta scrittura PN;
+- chiusura partitario;
+- aggiornamento della posizione ritenuta senza duplicazione;
+- debito Erario, codice tributo e scadenza;
+- rollover dicembre -> 16 gennaio anno successivo;
+- query operative tenant-scoped;
+- CU/770 non pronto senza codice fiscale;
+- aliquota ritenuta solo da dati esplicitamente configurati;
+- vista Ritenute in sola lettura, senza percorso alternativo di write.
+
+Limite noto non coperto: **pagamento parziale con ritenuta**, oggi esplicitamente bloccato. Non è considerato supportato dal freeze e resta requisito residuo prima della Release A100 salvo esclusione formale.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.

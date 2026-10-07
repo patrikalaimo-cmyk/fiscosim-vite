@@ -114,3 +114,27 @@ Da verificare in browser su società esclusivamente di test:
 10. confronto Manuale/Import sul medesimo caso semplice split.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## Ritenute / Scadenzario — pendente
+
+Riferimento: `REPORT/RITENUTE_SCADENZARIO_FREEZE_AUDIT.md`.
+
+Da verificare in browser su società esclusivamente di test:
+1. parcella professionista con percipiente configurato, aliquota ritenuta e codice tributo;
+2. prima del pagamento: posizione predisposta ma nessun debito ritenuta maturato/scadenza da versare;
+3. pagamento integrale tramite Registrazione Manuale: PN quadrata, banca/netto, debito Erario e chiusura partitario;
+4. maturazione della ritenuta una sola volta, senza duplicazione;
+5. scadenzario: data pagamento, codice tributo, importo e scadenza al 16 del mese successivo;
+6. pagamento di dicembre: scadenza visualizzata al 16 gennaio dell'anno successivo;
+7. codice fiscale percipiente mancante: stato CU/770 “Dati da verificare”;
+8. aliquota ritenuta non configurata: blocco operativo, senza proposta fiscale inventata;
+9. vista Tax Compliance > Ritenute: sola lettura, senza “Nuovo pagamento”, modifica o elimina;
+10. cambio società attiva: nessuna contaminazione di ritenute/scadenze;
+11. coerenza degli stessi dati tra scadenzario, CU e 770;
+12. caso escluso/forfettario dove previsto: nessuna maturazione ritenuta indebita;
+13. pagamento parziale con ritenuta: verificare che il sistema **blocchi esplicitamente** il caso e non effettui scritture parziali, finché il requisito residuo non sarà implementato.
+
+Nota: il punto 13 è un controllo del blocker esistente, non una dichiarazione di supporto al pagamento parziale.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.

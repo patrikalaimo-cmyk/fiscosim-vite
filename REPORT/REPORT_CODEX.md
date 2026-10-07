@@ -62,3 +62,20 @@
 - Diagnosi: il draft puo contenere `aliquotaRitenuta = 0`; una selezione con nullish coalescing fermava la priorita prima dell'aliquota positiva configurata sul percipiente.
 - Fix: priorita esplicita sul primo valore **positivo** tra draft, default causale e percipiente. Nessun fallback euristico testuale; se nessun valore positivo e configurato resta 0 e il validator blocca.
 - Stato: nuova CI pendente.
+
+
+## 2026-10-08 — RITENUTE-SCADENZARIO / freeze automatico verde
+
+- Commit hardening: `56b173b05ae9b2d84f0993318ba91d382ecee642`.
+- Commit fix aliquota configurata: `9fb3b04782a7dc41d8846022a69746e15e530130`.
+- GitHub Actions run `37697140035`: **SUCCESS** su Ubuntu e Windows.
+- Profilo `test:ritenute`: **4 file / 27 test PASS**.
+- Tutti gli step CI verdi: Import, Manuale, Consultazione, IVA, Split, Ritenute, Core, All safe, build.
+- Formalizzato audit in `REPORT/RITENUTE_SCADENZARIO_FREEZE_AUDIT.md`.
+- Aggiornate matrice test, debito manuale e roadmap A100.
+- Limite residuo esplicito: pagamento parziale con ritenuta non supportato; il validator lo blocca e il requisito resta aperto prima della Release A100 salvo esclusione formale.
+- Stato del blocco: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Prossimo blocco: `STAMPE-EXPORT-FASCICOLO`.
+- Riconciliazione Bancaria resta BLOCCATA.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Stato commit documentale: **CI PENDENTE**.

@@ -128,3 +128,20 @@ Per accelerare lo sviluppo:
 - Collaudo browser differito e registrato in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 - **Prossimo blocco attivo: RITENUTE-SCADENZARIO**.
 - **Riconciliazione Bancaria resta BLOCCATA**.
+
+
+## RITENUTE-SCADENZARIO-FREEZE — gate automatico 2026-10-08
+
+- Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Commit hardening architetturale: `56b173b05ae9b2d84f0993318ba91d382ecee642`.
+- Commit fix priorità aliquota configurata: `9fb3b04782a7dc41d8846022a69746e15e530130`.
+- CI run `37697140035`: Ubuntu e Windows verdi su Import, Manuale, Consultazione, IVA, Split, Ritenute, Core, All safe e build.
+- Profilo `test:ritenute`: **4 file / 27 test PASS**.
+- Eliminato il bypass legacy “Nuovo pagamento” dalla vista Tax Compliance: lo scadenzario ritenute è ora read-only e deriva solo dai pagamenti contabilizzati nel workflow canonico.
+- CU/770 “pronto” richiede anche il codice fiscale del percipiente.
+- L'aliquota ritenuta deve provenire da configurazione esplicita su draft/causale/percipiente; rimosse euristiche testuali fiscali.
+- Query operative ritenute verificate tenant-scoped.
+- Limite residuo A100: **pagamento parziale con ritenuta non ancora supportato** e attualmente bloccato esplicitamente. Deve essere implementato o escluso formalmente prima della RELEASE A100.
+- Collaudo browser differito in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
+- **Prossimo blocco attivo: STAMPE-EXPORT-FASCICOLO**.
+- **Riconciliazione Bancaria resta BLOCCATA**.
