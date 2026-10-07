@@ -9,19 +9,21 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 | Import Contabilità | `npm run test:import` | parser/normalizzazione Import, fixture sintetica TEST-VERGNANO-001, Working View IVA, pruning 0/0, causali IVA standard, storico IVA controparte P2, warning standard/storico, proposta e override manuale detraibilità, storico contabile conto costo/ricavo + causale contabile con override manuale prevalente, payload commit, readiness, dedup/anti-doppio commit, performance 500 documenti, Test Lab con mock | browser reale, Supabase reale, società reali, ZIP cliente reale |
 | Manuale canonico | `npm run test:manual` | Registrazione Manuale, persistenza canonica, post-persist output, movimenti generali, IVA ordinaria/NC/multi-aliquota, partitario, split, IVA per cassa, reverse/estero, ritenute, cespiti e closed-period guards | browser reale, DB remoto, collaudo UX |
 | Consultazione | `npm run test:consultazione` | filtri, stati PN, view model, saldo precedente/progressivo, export, no-write guard e assenza handoff mutativi | browser reale, DB remoto, UX visuale |
+| IVA / Registri / Liquidazione | `npm run test:iva` | registri IVA canonici, fatture/NC, multi-aliquota, detraibilità/indetraibilità, split, IVA per cassa, reverse charge, liquidazione provvisoria/definitiva, tenant scope, RPC client, prospetti/export e freeze guard | browser reale, DB remoto, migration applicate |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
-| CI baseline | GitHub Actions `FiscoSim Test Baseline` | `npm ci`, quattro profili test e build su Node 20, Windows + Linux, senza secrets e con download Chromium disabilitato | qualunque integrazione live con Supabase/SDI/Agenzia Entrate |
+| CI baseline | GitHub Actions `FiscoSim Test Baseline` | `npm ci`, sei profili test e build su Node 20, Windows + Linux, senza secrets e con download Chromium disabilitato | qualunque integrazione live con Supabase/SDI/Agenzia Entrate |
 
 ## Runner ufficiale
 
-`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
+`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
 
 Regole:
 - `test:import` include tutti i `src/modules/import_contabilita/tests/*.test.js` e `tests/testLabIntegrazione.test.js`.
 - `test:manual` include le suite Manuale root selezionate e ricorsivamente le suite application pertinenti, comprese `persistPrimaNotaDraft.test.js` e `buildContabilitaPostPersistOutput.test.js`.
 - `test:consultazione` include le suite root Consultazione selezionate e le suite application `consultazioneOperations` / `primaNotaOperations` pertinenti.
+- `test:iva` include 15 suite dedicate a registri IVA, liquidazione, split/cassa/reverse, detraibilità, export e guard di freeze.
 - `test:core` include gli altri `tests/*.test.js`.
 - `test:all` esegue l'unione dei profili safe senza dipendere da glob shell.
 - Un exit code non zero del Node test runner rende fallita la suite.
@@ -133,5 +135,28 @@ Gate validato: GitHub Actions run `37664771687`.
 - build PASS.
 
 Il guard read-only copre View, componenti Consultazione e application operations. Sono vietati callback mutativi, RPC di write e write diretti sulle tabelle contabili principali.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## IVA-REGISTRI-LIQUIDAZIONE-FREEZE
+
+Profilo dedicato: `npm run test:iva`.
+
+Gate codice validato: GitHub Actions run `37680695367`.
+- `test:iva`: **15 file / 148 test PASS** su Ubuntu e Windows;
+- Import: **231/231 PASS**;
+- Manuale: **413/413 PASS**;
+- Consultazione: **38/38 PASS**;
+- Core: **584/584 PASS**;
+- All safe: **959/959 PASS**;
+- build Vite: PASS su Ubuntu e Windows.
+
+Il gate copre anche le regressioni introdotte dal freeze:
+- `iva_detraibile = 0` preservato come zero, senza fallback alla piena IVA;
+- split payment letto dal campo dominio `ivaSplitEsclusa`;
+- nessun conteggio registri o operatore dimostrativo hardcoded;
+- query registri e snapshot consolidate tenant-scoped;
+- vista Tax Compliance agganciata al percorso IVA canonico sottoposto a freeze.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.

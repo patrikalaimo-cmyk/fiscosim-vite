@@ -46,9 +46,28 @@ Da verificare in browser su società esclusivamente di test:
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
-## IVA / Registri / Liquidazione — da consolidare nel relativo freeze
+## IVA / Registri / Liquidazione — pendente
 
-I casi manuali specifici verranno aggiunti durante `IVA-REGISTRI-LIQUIDAZIONE` e mantenuti qui fino al collaudo finale.
+Riferimento: `REPORT/IVA_REGISTRI_LIQUIDAZIONE_FREEZE_AUDIT.md`.
+
+Da verificare in browser su società esclusivamente di test:
+1. selezione periodo mensile e trimestrale e coerenza delle date incluse;
+2. fattura attiva/passiva ordinaria e note credito con corretti segni nei registri;
+3. documento multi-aliquota e dettaglio separato per aliquota/natura;
+4. acquisto con IVA parzialmente detraibile e totalmente indetraibile, verificando che `iva_detraibile = 0` resti zero;
+5. split payment semplice: IVA esposta ma esclusa dal debito della liquidazione;
+6. IVA per cassa: riga differita esclusa e successivo rilascio incluso nel periodo corretto;
+7. reverse charge/autofattura: esposizione coerente di debito e credito;
+8. cambio società attiva senza contaminazione di registri, causali IVA, liquidazioni o snapshot;
+9. anteprima corrente rispetto a liquidazione già consolidata/definitiva, con warning coerente;
+10. selezione operatore e conferma esplicita prima del consolidamento;
+11. blocco del riconsolidamento di una liquidazione definitiva;
+12. prospetto/export con numero documento, controparte, imponibile, IVA, detraibile/indetraibile e natura reali;
+13. periodo senza righe: valori zero e nessun conteggio dimostrativo/fittizio;
+14. storico liquidazioni: nessun operatore inventato e dati coerenti con lo snapshot salvato;
+15. eventuale dettaglio snapshot consolidato, se esposto dalla UI, limitato alla società attiva.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
 ## Gate
 

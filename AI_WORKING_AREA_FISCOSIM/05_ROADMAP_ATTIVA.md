@@ -97,3 +97,20 @@ Per accelerare lo sviluppo:
 - Collaudo browser differito e registrato nel debito QA finale.
 - **Prossimo blocco attivo: IVA-REGISTRI-LIQUIDAZIONE**.
 - **Riconciliazione Bancaria resta BLOCCATA**.
+
+
+## IVA-REGISTRI-LIQUIDAZIONE-FREEZE — gate automatico 2026-10-07
+
+- Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Commit hardening dati: `e612ca03e75ae6aa11ff9b5b09686ce6cfc4826a`.
+- Commit gate test: `583d7d6b4cf3e3f24ba105ba321cf49ed10a6184`.
+- CI run `37680695367`: Ubuntu e Windows verdi su Import, Manuale, Consultazione, IVA, Core, All safe e build.
+- Profilo `test:iva`: **15 file / 148 test PASS**.
+- Corretto un difetto fiscale reale: l'IVA acquisti esplicitamente indetraibile (`iva_detraibile = 0`) non viene più trasformata in IVA integralmente detraibile da un fallback truthy.
+- Corretto il mapping split payment e rimossi fallback UX dimostrativi su conteggio registri, operatore e metodo di calcolo.
+- Rafforzato il tenant scope di registri, causali IVA e snapshot di liquidazione.
+- Il percorso Tax Compliance congelato usa il dominio/applicazione IVA canonico; residui legacy basati su `accounting_entries` restano confinati ad altri percorsi storici e non vengono dichiarati rimossi.
+- Nessuna migration applicata e nessuna verifica su dati reali.
+- Collaudo browser differito e registrato in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
+- **Prossimo blocco attivo: SPLIT-SIMPLE**.
+- **Riconciliazione Bancaria resta BLOCCATA** fino alla chiusura del gate manuale previsto su Import + Manuale + IVA.
