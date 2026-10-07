@@ -10,6 +10,7 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 | Manuale canonico | `npm run test:manual` | Registrazione Manuale, persistenza canonica, post-persist output, movimenti generali, IVA ordinaria/NC/multi-aliquota, partitario, split, IVA per cassa, reverse/estero, ritenute, cespiti e closed-period guards | browser reale, DB remoto, collaudo UX |
 | Consultazione | `npm run test:consultazione` | filtri, stati PN, view model, saldo precedente/progressivo, export, no-write guard e assenza handoff mutativi | browser reale, DB remoto, UX visuale |
 | IVA / Registri / Liquidazione | `npm run test:iva` | registri IVA canonici, fatture/NC, multi-aliquota, detraibilità/indetraibilità, split, IVA per cassa, reverse charge, liquidazione provvisoria/definitiva, tenant scope, RPC client, prospetti/export e freeze guard | browser reale, DB remoto, migration applicate |
+| Split payment semplice | `npm run test:split` | flag anagrafica, fattura/NC attiva split, conto tecnico configurato, righe PN, partitario al netto IVA, registro e liquidazione | browser reale, DB remoto, casi split avanzati fuori perimetro |
 | Core | `npm run test:core` | test Node in `tests/` escluso `testLabIntegrazione.test.js`, che appartiene al profilo Import | E2E browser, DB remoto, migration applicate |
 | All safe | `npm run test:all` | unione delle suite Core + Import selezionate dal runner interno | test che richiedano browser o DB reale; tali test non devono essere aggiunti a questo profilo senza isolamento/mocking |
 | Build | `npm run build` | compilazione Vite di produzione | comportamento interattivo nel browser |
@@ -17,13 +18,14 @@ Questa matrice definisce la baseline automatica ufficiale di FiscoSim. Le suite 
 
 ## Runner ufficiale
 
-`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
+`scripts/run-node-tests.mjs` riceve un profilo `import`, `manual`, `consultazione`, `iva`, `split`, `core` o `all`, risolve i file test tramite API Node (`fs/readdir`) e avvia `node --test` con `shell: false`. Non usa glob della shell o Bash e quindi è compatibile con Windows.
 
 Regole:
 - `test:import` include tutti i `src/modules/import_contabilita/tests/*.test.js` e `tests/testLabIntegrazione.test.js`.
 - `test:manual` include le suite Manuale root selezionate e ricorsivamente le suite application pertinenti, comprese `persistPrimaNotaDraft.test.js` e `buildContabilitaPostPersistOutput.test.js`.
 - `test:consultazione` include le suite root Consultazione selezionate e le suite application `consultazioneOperations` / `primaNotaOperations` pertinenti.
 - `test:iva` include 15 suite dedicate a registri IVA, liquidazione, split/cassa/reverse, detraibilità, export e guard di freeze.
+- `test:split` include 3 suite dedicate a configurazione anagrafica, documento split e impatto in liquidazione.
 - `test:core` include gli altri `tests/*.test.js`.
 - `test:all` esegue l'unione dei profili safe senza dipendere da glob shell.
 - Un exit code non zero del Node test runner rende fallita la suite.
@@ -158,5 +160,28 @@ Il gate copre anche le regressioni introdotte dal freeze:
 - nessun conteggio registri o operatore dimostrativo hardcoded;
 - query registri e snapshot consolidate tenant-scoped;
 - vista Tax Compliance agganciata al percorso IVA canonico sottoposto a freeze.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## SPLIT-SIMPLE-FREEZE
+
+Profilo dedicato: `npm run test:split`.
+
+Gate codice validato: GitHub Actions run `37695652369`.
+- `test:split`: **3 file / 25 test PASS** su Ubuntu e Windows;
+- Import, Manuale, Consultazione, IVA, Core e All safe: PASS;
+- build Vite: PASS su Ubuntu e Windows.
+
+Il gate copre:
+- flag split salvato/riletto sull'anagrafica;
+- attivazione solo sul documento attivo compatibile;
+- conto IVA split configurato e blocker se mancante;
+- controparte cliente ridotta all'imponibile;
+- righe tecniche split quadrate;
+- nota credito attiva split con controparte mantenuta sul lato Avere;
+- partitario al solo importo incassabile;
+- propagazione del flag nel payload IVA/canonico;
+- esclusione dell'IVA split dal debito effettivo di liquidazione.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.

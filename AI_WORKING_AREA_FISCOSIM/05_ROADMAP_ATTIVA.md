@@ -114,3 +114,17 @@ Per accelerare lo sviluppo:
 - Collaudo browser differito e registrato in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 - **Prossimo blocco attivo: SPLIT-SIMPLE**.
 - **Riconciliazione Bancaria resta BLOCCATA** fino alla chiusura del gate manuale previsto su Import + Manuale + IVA.
+
+
+## SPLIT-SIMPLE-FREEZE — gate automatico 2026-10-08
+
+- Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Commit codice validato: `91d2365a2efa9a19f099bde61fc12a95a1bd162d`.
+- CI run `37695652369`: Ubuntu e Windows verdi su Import, Manuale, Consultazione, IVA, Split, Core, All safe e build.
+- Profilo `test:split`: **3 file / 25 test PASS**.
+- Il caso semplice congelato copre fattura attiva verso cliente split: rilevazione da anagrafica/documento, conto tecnico configurato, partitario al solo imponibile, registro IVA con evidenza split ed esclusione dal debito IVA effettivo.
+- Corretto il segno della controparte per nota credito attiva split: il builder Manuale preserva il lato Avere invece di forzare il Dare, riallineandosi al workflow Import.
+- Il conto tecnico split resta configurabile; nessun codice conto fiscale hardcoded è introdotto.
+- Collaudo browser differito e registrato in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
+- **Prossimo blocco attivo: RITENUTE-SCADENZARIO**.
+- **Riconciliazione Bancaria resta BLOCCATA**.

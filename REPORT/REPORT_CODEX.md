@@ -26,3 +26,18 @@
 - Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
 - Riconciliazione Bancaria resta BLOCCATA.
 - Stato: **CI PENDENTE**.
+
+
+## 2026-10-08 — SPLIT-SIMPLE / freeze automatico verde
+
+- Commit codice: `91d2365a2efa9a19f099bde61fc12a95a1bd162d`.
+- GitHub Actions run `37695652369`: **SUCCESS** su Ubuntu e Windows.
+- Profilo `test:split`: **3 file / 25 test PASS**.
+- Tutti gli step CI risultano verdi: Import, Manuale, Consultazione, IVA, Split, Core, All safe, build.
+- Formalizzato audit in `REPORT/SPLIT_SIMPLE_FREEZE_AUDIT.md`.
+- Aggiornate matrice test, debito manuale e roadmap A100.
+- Stato del blocco: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+- Prossimo blocco: `RITENUTE-SCADENZARIO`.
+- Riconciliazione Bancaria resta BLOCCATA.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Stato commit documentale: **CI PENDENTE**.

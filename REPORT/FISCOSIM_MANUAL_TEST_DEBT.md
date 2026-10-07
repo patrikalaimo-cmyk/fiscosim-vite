@@ -95,3 +95,22 @@ Da verificare in browser su società esclusivamente di test:
 12. warning e comportamento visuale sul limite 10.000 righe.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+
+
+## Split payment semplice — pendente
+
+Riferimento: `REPORT/SPLIT_SIMPLE_FREEZE_AUDIT.md`.
+
+Da verificare in browser su società esclusivamente di test:
+1. cliente ordinario: fattura attiva resta ordinaria e il partitario comprende il lordo;
+2. cliente con flag split: fattura attiva mostra trattamento split e partitario al solo imponibile;
+3. conto tecnico split configurato: righe tecniche coerenti e non modificabili come righe fiscali ordinarie;
+4. conto tecnico split mancante: registrazione bloccata con messaggio esplicito;
+5. registro IVA vendite: imponibile/IVA esposti con flag split;
+6. liquidazione: IVA split visibile separatamente ed esclusa dal debito effettivo;
+7. nota credito attiva split: controparte sul lato Avere e segni coerenti nel registro/partitario;
+8. cambio cliente da split a ordinario e viceversa senza mantenere flag stale;
+9. nessun codice conto tecnico inventato dalla UI o dal workflow;
+10. confronto Manuale/Import sul medesimo caso semplice split.
+
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
