@@ -22,9 +22,6 @@ export function ConsultazioneDetailSidebar({
   primaNotaId,
   societaId,
   onClose,
-  onRefreshList,
-  onEditScrittura,
-  utente,
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -56,7 +53,7 @@ export function ConsultazioneDetailSidebar({
   // annullata mantenuto come fallback difensivo per compatibilità con record legacy
   const isNeutralized = scrittura?.stato === 'stornata' || scrittura?.stato === 'storno' || scrittura?.stato === 'annullata'
   const isSimulata = scrittura?.stato === 'simulata'
-  const isConfermata = scrittura?.stato === 'confermata'
+  const readOnlyMessage = 'Consultazione read-only: modifica, storno, eliminazione e commit non sono disponibili in questo modulo.'
   const stornoCollegatoId = scrittura?.storno_id || scrittura?.storno_of_id || scrittura?.storno_collegato_id || null
   const isPeriodoChiuso = Boolean(scrittura?.periodo_chiuso_lock || scrittura?.stampa_giornale_id)
 
@@ -159,24 +156,20 @@ export function ConsultazioneDetailSidebar({
                 <div style={{ fontWeight: 800, fontSize: '.8rem', color: '#ffb054' }}>Intestazione</div>
                 {!isNeutralized && (
                   <button
-                    disabled={isPeriodoChiuso}
+                    disabled
                     style={{
                       padding: '.25rem .75rem',
                       fontSize: '.75rem',
-                      background: isPeriodoChiuso ? 'rgba(255,255,255,.05)' : 'linear-gradient(180deg, #E8922A, #d07e20)',
-                      color: isPeriodoChiuso ? 'var(--mu)' : '#08101E',
+                      background: 'rgba(255,255,255,.05)',
+                      color: 'var(--mu)',
                       fontWeight: 'bold',
                       border: 'none',
                       borderRadius: '6px',
-                      cursor: isPeriodoChiuso ? 'not-allowed' : 'pointer',
-                      boxShadow: isPeriodoChiuso ? 'none' : '0 2px 4px rgba(0,0,0,.2)',
-                      transition: 'filter 0.1s',
-                      opacity: isPeriodoChiuso ? 0.5 : 1,
+                      cursor: 'not-allowed',
+                      boxShadow: 'none',
+                      opacity: 0.55,
                     }}
-                    onMouseEnter={(e) => { if (!isPeriodoChiuso) e.currentTarget.style.filter = 'brightness(1.1)' }}
-                    onMouseLeave={(e) => { if (!isPeriodoChiuso) e.currentTarget.style.filter = 'none' }}
-                    onClick={() => { if (!isPeriodoChiuso) onEditScrittura?.(primaNotaId, scrittura, righe, 'edit') }}
-                    title={isPeriodoChiuso ? "Le modifiche ordinarie sono bloccate su periodo chiuso/stampato definitivo" : ""}
+                    title={readOnlyMessage}
                   >
                     Modifica
                   </button>
@@ -343,86 +336,20 @@ export function ConsultazioneDetailSidebar({
               </div>
             </div>
 
-            {/* Operazioni contabili */}
+            {/* Consultazione read-only */}
             <div className="card" style={{ padding: '.8rem', background: 'rgba(255,255,255,.015)', border: '1px solid rgba(255,255,255,.035)', borderRadius: 10 }}>
-              <div style={{ fontWeight: 800, fontSize: '.8rem', color: '#1AA8BF', marginBottom: '.6rem' }}>Operazioni Contabili</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                {isNeutralized ? (
-                  <div style={{ fontSize: '.72rem', color: '#ff8f8f', lineHeight: 1.35 }}>
-                    Questa registrazione è stata stornata o neutralizzata (stato di sola lettura). Non sono consentite ulteriori modifiche o storni.
-                  </div>
-                ) : isPeriodoChiuso ? (
-                  <div style={{ fontSize: '.72rem', color: 'var(--gold)', lineHeight: 1.35 }}>
-                    Questa registrazione fa parte di un periodo stampato definitivo/chiuso. Le operazioni di modifica e storno ordinari sono bloccate.
-                  </div>
-                ) : isConfermata ? (
-                  <>
-                    <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
-                      Questa scrittura è confermata e auditata. Scegli un'operazione per aprirla in Inserimento Manuale:
-                    </div>
-                    <button
-                      className="btn"
-                      style={{ width: '100%', fontSize: '.75rem', padding: '.45rem', background: 'linear-gradient(180deg, #E8922A, #d07e20)', color: '#08101E', fontWeight: 'bold', border: 'none', borderRadius: 6 }}
-                      onClick={() => onEditScrittura?.(primaNotaId, scrittura, righe, 'edit')}
-                    >
-                      Modifica Controllata
-                    </button>
-                    <button
-                      className="btn"
-                      style={{ width: '100%', fontSize: '.75rem', padding: '.45rem', background: 'rgba(232,146,42,.15)', color: '#ffb054', border: '1px solid rgba(232,146,42,.3)', borderRadius: 6 }}
-                      onClick={() => onEditScrittura?.(primaNotaId, scrittura, righe, 'storno')}
-                    >
-                      Storno Contabile
-                    </button>
-                  </>
-                ) : isSimulata ? (
-                  <>
-                    <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
-                      Questa scrittura è una Prima Nota simulata (scrittura provvisoria):
-                    </div>
-                    <button
-                      className="btn"
-                      style={{ width: '100%', fontSize: '.75rem', padding: '.45rem', background: 'linear-gradient(180deg, #E8922A, #d07e20)', color: '#08101E', fontWeight: 'bold', border: 'none', borderRadius: 6 }}
-                      onClick={() => onEditScrittura?.(primaNotaId, scrittura, righe, 'edit')}
-                    >
-                      Modifica
-                    </button>
-                    <button
-                      className="btn"
-                      style={{ width: '100%', fontSize: '.75rem', padding: '.45rem', background: 'rgba(255, 143, 143, 0.15)', color: '#ff8f8f', border: '1px solid rgba(255, 143, 143, 0.3)', borderRadius: 6 }}
-                      onClick={async () => {
-                        if (window.confirm('Sei sicuro di voler eliminare definitivamente questa simulazione?')) {
-                          try {
-                            setLoading(true)
-                            const res = await contabilitaRepo.deleteScritturaControllata(primaNotaId, societaId)
-                            if (res.error) throw res.error
-                            onRefreshList?.()
-                            onClose?.()
-                          } catch (err) {
-                            setError('Errore eliminazione simulata: ' + (err.message || String(err)))
-                          } finally {
-                            setLoading(false)
-                          }
-                        }
-                      }}
-                    >
-                      Elimina simulata
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: '.72rem', color: 'var(--mu)', marginBottom: '.2rem' }}>
-                      Stato scrittura non riconosciuto come operativo. Puoi aprirla in Inserimento Manuale per ispezione:
-                    </div>
-                    <button
-                      className="btn"
-                      style={{ width: '100%', fontSize: '.75rem', padding: '.45rem', background: 'linear-gradient(180deg, #E8922A, #d07e20)', color: '#08101E', fontWeight: 'bold', border: 'none', borderRadius: 6 }}
-                      onClick={() => onEditScrittura?.(primaNotaId, scrittura, righe, 'edit')}
-                    >
-                      Apri in Inserimento Manuale
-                    </button>
-                  </>
-                )}
+              <div style={{ fontWeight: 800, fontSize: '.8rem', color: '#1AA8BF', marginBottom: '.6rem' }}>Consultazione read-only</div>
+              <div style={{ fontSize: '.72rem', color: isPeriodoChiuso ? 'var(--gold)' : isNeutralized ? '#ff8f8f' : 'var(--mu)', lineHeight: 1.45 }}>
+                {isPeriodoChiuso
+                  ? 'Periodo stampato definitivo/chiuso: nessuna operazione contabile è disponibile dalla Consultazione.'
+                  : isNeutralized
+                    ? 'Scrittura stornata o neutralizzata: dettaglio disponibile esclusivamente in lettura.'
+                    : isSimulata
+                      ? 'Scrittura simulata: il dettaglio è consultabile, ma modifica ed eliminazione non sono disponibili da questo modulo.'
+                      : 'Il dettaglio è consultabile. Le operazioni contabili devono essere avviate dai workflow dedicati, non dalla Consultazione.'}
+              </div>
+              <div style={{ marginTop: '.55rem', fontSize: '.7rem', color: 'var(--mu)' }}>
+                {readOnlyMessage}
               </div>
             </div>
           </>

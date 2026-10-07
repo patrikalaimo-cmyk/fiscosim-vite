@@ -11318,3 +11318,20 @@ Run ufficiale validato: `37662134584`, commit `1cbcfbbd7c896650df2ab9fc7ee3c57fc
 Debito manuale mantenuto in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 
 Prossimo blocco: `CONSULTAZIONE-FREEZE`.
+
+
+## CONSULTAZIONE-FREEZE — AUDIT INIZIALE E HARDENING READ-ONLY
+
+- Avviato il blocco successivo dopo MANUALE-CANONICO-FREEZE sul branch `mio-branch`.
+- Audit reale della superficie Consultazione: il contratto documentato la definisce read-only, ma `ConsultazioneDetailSidebar.jsx` esponeva ancora callback operative per modifica/storno e una cancellazione diretta della scrittura simulata tramite `deleteScritturaControllata`.
+- Il guard storico `scripts/dev/test-consultazione-prima-nota-no-write.mjs` non analizzava il dettaglio sidebar e quindi non intercettava il bypass.
+- Hardening applicato:
+  - eliminati edit/storno/delete dalla sidebar;
+  - rimosso l'handoff `onEditScrittura` Consultazione → Inserimento Manuale dal parent `PrimaNotaHubView`;
+  - aggiunto banner esplicito read-only;
+  - hardenizzato il guard statico su View + componenti Consultazione + application operations;
+  - aggiunto test Node ufficiale `consultazioneReadOnlyGuard.test.js`;
+  - introdotto profilo `npm run test:consultazione` e step CI dedicato Windows/Linux;
+  - `test:all` include ora anche la suite application `consultazioneOperations.test.js`.
+- Nessuna modifica a DB, migration, auth/login, RLS/policy o file env. Nessuna scrittura su società reali.
+- CI da verificare prima del freeze.

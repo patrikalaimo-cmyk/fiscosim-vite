@@ -46,6 +46,9 @@ jobs:
       - name: Manual accounting suite
         run: npm run test:manual
 
+      - name: Consultation read-only suite
+        run: npm run test:consultazione
+
       - name: Core suite
         run: npm run test:core
 

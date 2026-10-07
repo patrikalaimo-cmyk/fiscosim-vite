@@ -31,7 +31,7 @@ function downloadCsv(filename, csv) {
 
 const DEFAULT_PAGE_SIZE = 25
 
-export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliContabili, causaliIva, onEditScrittura, utente }) {
+export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliContabili, causaliIva }) {
   const readOnlyMessage = 'Modifica/storno non disponibili da Consultazione. Usa il flusso canonico di registrazione/commit atomico.'
   const detailReadOnlyMessage = 'Dettaglio consultazione disponibile in sola lettura. Nessun write diretto.'
   const currentYear = new Date().getFullYear()
@@ -481,6 +481,9 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
         }
       />
 
+      <div className="alert alert-info" style={{ marginBottom: '.9rem' }}>
+        <strong>Consultazione Prima Nota è read-only:</strong> ricerca, filtri, dettaglio ed export sono disponibili in sola lettura. Modifica, storno, eliminazione e commit devono avvenire fuori da questo modulo tramite i workflow contabili dedicati.
+      </div>
       {stubNotice ? <div className="alert alert-info" style={{ marginBottom: '.9rem' }}>{stubNotice}</div> : null}
       {error ? <div className="alert alert-warn" style={{ marginBottom: '.9rem' }}>{error}</div> : null}
       {limitWarning ? (
@@ -565,9 +568,6 @@ export function ConsultazionePrimaNotaView({ societaAttiva, pianoConti, causaliC
               setSelectedRowId(null)
               setSelectedIndex(-1)
             }}
-            onRefreshList={handleSearch}
-            onEditScrittura={onEditScrittura}
-            utente={utente}
           />
         )}
       </div>

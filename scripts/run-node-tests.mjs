@@ -8,6 +8,12 @@ const IMPORT_TEST_DIR = path.resolve('src/modules/import_contabilita/tests')
 const CONTABILITA_APPLICATION_DIR = path.resolve('src/modules/contabilita/application')
 const IMPORT_ROOT_TESTS = new Set(['testLabIntegrazione.test.js'])
 
+const CONSULTAZIONE_ROOT_TESTS = new Set([
+  'consultazioneMutationWorkflow.test.js',
+  'consultazioneOperationsHardening.test.js',
+  'consultazioneReadOnlyGuard.test.js',
+])
+
 const MANUAL_ROOT_TESTS = new Set([
   'a17xAutofatturaBase.test.js',
   'causaliPolicyEngine.test.js',
@@ -57,6 +63,14 @@ async function resolveProfile(profile) {
   const importRootTests = rootTests.filter((file) => IMPORT_ROOT_TESTS.has(path.basename(file)))
   const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
   const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
+  const consultazioneRootTests = rootTests.filter((file) => CONSULTAZIONE_ROOT_TESTS.has(path.basename(file)))
+  const consultazioneApplicationTests = contabilitaApplicationTests.filter((file) => {
+    const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
+    return (
+      rel === 'consultazioneOperations/consultazioneOperations.test.js'
+      || rel === 'primaNotaOperations/primaNotaOperations.test.js'
+    )
+  })
   const manualApplicationTests = contabilitaApplicationTests.filter((file) => {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
     return (
@@ -76,14 +90,23 @@ async function resolveProfile(profile) {
   if (profile === 'manual') {
     return [...manualApplicationTests, ...manualRootTests]
   }
+  if (profile === 'consultazione') {
+    return [...consultazioneApplicationTests, ...consultazioneRootTests]
+  }
   if (profile === 'core') {
     return coreRootTests
   }
   if (profile === 'all') {
-    return [...coreRootTests, ...manualApplicationTests, ...importModuleTests, ...importRootTests]
+    return Array.from(new Set([
+      ...coreRootTests,
+      ...manualApplicationTests,
+      ...consultazioneApplicationTests,
+      ...importModuleTests,
+      ...importRootTests,
+    ]))
   }
 
-  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, core, all.`)
+  throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, consultazione, core, all.`)
 }
 
 async function main() {
