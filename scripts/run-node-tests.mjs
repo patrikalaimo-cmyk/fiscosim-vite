@@ -57,41 +57,22 @@ async function resolveProfile(profile) {
   const importRootTests = rootTests.filter((file) => IMPORT_ROOT_TESTS.has(path.basename(file)))
   const coreRootTests = rootTests.filter((file) => !IMPORT_ROOT_TESTS.has(path.basename(file)))
   const manualRootTests = rootTests.filter((file) => MANUAL_ROOT_TESTS.has(path.basename(file)))
-
-  // Suite applicative pre-canoniche mantenute nel repository come storico tecnico,
-  // ma sostituite nel gate ufficiale da copertura corrente:
-  // - tests/persistPrimaNotaDraft.test.js
-  // - canonicalContabilitaDraftMapper.test.js + suite registrazioneOperations.
-  const supersededApplicationTests = new Set([
-    'persistPrimaNotaDraft.test.js',
-    'buildContabilitaPostPersistOutput.test.js',
-  ])
-  const safeContabilitaApplicationTests = contabilitaApplicationTests.filter(
-    (file) => !supersededApplicationTests.has(path.basename(file)),
-  )
-
-  const manualApplicationTests = safeContabilitaApplicationTests.filter((file) => {
+  const manualApplicationTests = contabilitaApplicationTests.filter((file) => {
     const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
     return (
-      rel === 'canonicalContabilitaDraftMapper.test.js'
+      rel === 'buildContabilitaPostPersistOutput.test.js'
+      || rel === 'canonicalContabilitaDraftMapper.test.js'
       || rel === 'fiscalWorkflow.test.js'
+      || rel === 'persistPrimaNotaDraft.test.js'
       || rel === 'registrazioneOperations/registrazioneOperations.test.js'
       || rel === 'primaNotaOperations/primaNotaOperations.test.js'
     )
   })
 
-  if (profile === 'import') {
-    return [...importModuleTests, ...importRootTests]
-  }
-  if (profile === 'manual') {
-    return [...manualApplicationTests, ...manualRootTests]
-  }
-  if (profile === 'core') {
-    return [...safeContabilitaApplicationTests, ...coreRootTests]
-  }
-  if (profile === 'all') {
-    return [...safeContabilitaApplicationTests, ...coreRootTests, ...importModuleTests, ...importRootTests]
-  }
+  if (profile === 'import') return [...importModuleTests, ...importRootTests]
+  if (profile === 'manual') return [...manualApplicationTests, ...manualRootTests]
+  if (profile === 'core') return [...contabilitaApplicationTests, ...coreRootTests]
+  if (profile === 'all') return [...contabilitaApplicationTests, ...coreRootTests, ...importModuleTests, ...importRootTests]
 
   throw new Error(`Profilo test sconosciuto "${profile}". Usa: import, manual, core, all.`)
 }
@@ -99,20 +80,14 @@ async function resolveProfile(profile) {
 async function main() {
   const profile = String(process.argv[2] || '').trim().toLowerCase()
   const files = await resolveProfile(profile)
-
-  if (!files.length) {
-    throw new Error(`Nessun file test trovato per il profilo "${profile}".`)
-  }
+  if (!files.length) throw new Error(`Nessun file test trovato per il profilo "${profile}".`)
 
   console.log(`[FISCOSIM_TEST] profile=${profile} files=${files.length}`)
   files.forEach((file) => console.log(`[FISCOSIM_TEST_FILE] ${path.relative(process.cwd(), file)}`))
 
   const child = spawn(process.execPath, ['--test', ...files], {
     cwd: process.cwd(),
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
-    },
+    env: { ...process.env, NODE_ENV: 'test' },
     stdio: 'inherit',
     shell: false,
   })
@@ -120,14 +95,10 @@ async function main() {
   const exitCode = await new Promise((resolve, reject) => {
     child.once('error', reject)
     child.once('exit', (code, signal) => {
-      if (signal) {
-        reject(new Error(`Node test runner terminato dal segnale ${signal}.`))
-        return
-      }
+      if (signal) return reject(new Error(`Node test runner terminato dal segnale ${signal}.`))
       resolve(code ?? 1)
     })
   })
-
   process.exitCode = exitCode
 }
 

@@ -11209,4 +11209,3 @@ pm run build -> Successo (429 moduli, 16s).
 - **MANUALE-CANONICO-FREEZE: gate automatico PASS**.
 - Browser/manuali reali: **NON eseguiti**, differiti e registrati in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 - Prossimo blocco: `CONSULTAZIONE-FREEZE`.
-
