@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { sb } from '../../lib/supabase'
+import { signInWithPassword, fetchSessionProfile, signOutSession } from '../../lib/auth'
 
 export function Login({onLogin}){
   const [email,setEmail]=useState("");
@@ -11,41 +11,25 @@ export function Login({onLogin}){
     e.preventDefault();
     if(!email||!password){setErr("Inserisci email e password");return;}
     setLoading(true);setErr(null);
-
+    let sessionCreated = false;
     try {
-      // 1. Authenticate with Supabase Auth
-      const { data: authData, error: authError } = await sb.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password: password
-      });
-
-      if (authError || !authData?.session) {
-        setErr(authError?.message || "Email o password errati");
-        setLoading(false);
-        return;
+      const { data: authData, error: authError } = await signInWithPassword(
+        email.toLowerCase().trim(), password
+      );
+      if (authError || !authData?.session?.access_token) {
+        throw new Error(authError?.message || "Email o password errati");
       }
-
-      const authUserId = authData.session.user.id;
-
-      // 2. Retrieve utenti_studio profile using auth_user_id
-      const { data: profileData, error: profileError } = await sb.from("utenti_studio")
-        .select("id,nome,cognome,email,ruolo,permessi,clienti_assegnati,auth_user_id")
-        .eq("auth_user_id", authUserId)
-        .eq("attivo", true)
-        .single();
-
-      if (profileError || !profileData) {
-        setErr("Profilo utente FiscoSim non trovato o disattivato");
-        setLoading(false);
-        return;
+      sessionCreated = true;
+      const profile = await fetchSessionProfile(authData.session.access_token);
+      if (!profile?.id || profile.attivo === false) {
+        throw new Error("Profilo FiscoSim non disponibile o disattivato");
       }
-
-      onLogin({
-        ...profileData,
-        login_origin: 'supabase_auth'
-      });
-    } catch (errVal) {
-      setErr("Errore di connessione");
+      onLogin({...profile, login_origin: 'supabase_auth'});
+    } catch (error) {
+      if (sessionCreated) {
+        await signOutSession().catch(() => null);
+      }
+      setErr(error?.message || "Autenticazione non riuscita");
     } finally {
       setLoading(false);
     }
