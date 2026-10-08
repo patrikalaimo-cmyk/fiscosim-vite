@@ -493,7 +493,7 @@ function App() {
           {tab === 'dashboard'    && <Dashboard onNavigate={navigateTo} />}
           {tab === 'clienti'      && (canLeggi(perm, 'clienti')   ? <ModuloClienti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
           {tab === 'import'       && (canModifica(perm, 'import')  ? <ModuloImportExcel />                       : <AccessDenied />)}
-          {tab === 'utenti'       && puoGestireUtenti(ruolo)       && <ModuloUtenti ruolo={ruolo} />}
+          {tab === 'utenti'       && puoGestireUtenti(ruolo)       && <ModuloUtenti ruolo={ruolo} utente={utente} />}
           {tab === 'impostazioni' && (
             <ModuloImpostazioni
               ruolo={ruolo}
