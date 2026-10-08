@@ -1,0 +1,43 @@
+import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
+import assert from 'node:assert/strict'
+
+const read=(name)=>readFileSync(
+ new URL('../sql/security_p0/' + name, import.meta.url),'utf8'
+)
+const patch=read('38_stage3n_staff_write_acl_LAB_ONLY.sql')
+const qa=read('39_stage3n_staff_write_acl_TEST_ONLY.sql')
+const unsafe=read('40_stage3n_staff_write_rollback_TEST_ONLY.sql')
+
+test('Stage3N requires only-server staff writes and retains projected reads',()=>{
+ for(const fragment of [
+   'local-server-only-staff-writes',
+   'REVOKE INSERT (nome,cognome,email,ruolo,attivo,permessi,clienti_assegnati)',
+   'UPDATE (nome,cognome,email,ruolo,attivo,permessi,clienti_assegnati)',
+   'FROM authenticated',
+   'has_column_privilege',
+   "'service_role'",
+   "'password_hash'",
+   "'SELECT'",
+   'COMMIT;',
+ ]) assert.ok(patch.includes(fragment),fragment)
+ assert.doesNotMatch(patch,/\bUPDATE\s+public[.]/i)
+ assert.doesNotMatch(patch,/\bDELETE\s+FROM\s+public[.]/i)
+ assert.doesNotMatch(patch,/\bINSERT\s+INTO\s+public[.]/i)
+})
+
+test('Stage3N probes authenticated SQL role without persisting staff writes',()=>{
+ assert.match(qa,/SET LOCAL ROLE authenticated/)
+ assert.match(qa,/LIMIT 0/)
+ assert.match(qa,/WHERE false/)
+ assert.match(qa,/insufficient_privilege/)
+ assert.match(qa,/ROLLBACK;/)
+ assert.doesNotMatch(qa,/\bCOMMIT\s*;/i)
+})
+
+test('Stage3N unsafe rollback is separately guarded and never automatic',()=>{
+ assert.match(unsafe,/unsafe-restore-browser-staff-column-writes/)
+ assert.match(unsafe,/GRANT INSERT/)
+ assert.match(unsafe,/TO authenticated/)
+ assert.match(unsafe,/NEVER run on production/)
+})
