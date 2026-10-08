@@ -12,8 +12,8 @@ export function ModuloUtenti({ utente, ruolo }){
   const [err,setErr]=useState(null);
   const [societaOptions,setSocietaOptions]=useState([]);
   const allowedSocietaIds=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[];
-  const defaultSocietaId=allowedSocietaIds.includes(utente?.societa_default_id)?utente.societa_default_id:(allowedSocietaIds[0]||'');
-  const EMPTY={nome:"",cognome:"",email:"",ruolo:"collaboratore",password:"",societa_assegnate:defaultSocietaId?[defaultSocietaId]:[]};
+  // New access grants require an explicit checkbox selection, no preassignment.
+  const EMPTY={nome:"",cognome:"",email:"",ruolo:"collaboratore",password:"",societa_assegnate:[]};
   const carica=useCallback(async()=>{
     setLoading(true);
     try {
