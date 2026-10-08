@@ -416,3 +416,16 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - App bypass complementare identificato: Stage3G preservava `authenticated` INSERT/UPDATE columns su `utenti_studio`, rendendo bypassabile la API `/api/auth/users`. Stage3N propone `38_stage3n_staff_write_acl_LAB_ONLY.sql` per revocare SOLO tali grants colonnari, conservare lettura specifica e `service_role`; `39_stage3n_staff_write_acl_TEST_ONLY.sql` prove SQL authenticated a zero righe con ROLLBACK; `40_stage3n_staff_write_rollback_TEST_ONLY.sql` rollback esplicitamente pericoloso con opt-in; `scripts/security_p0/run-stage3n.ps1` esecutore Windows PS5.1 e commit pin.
 - Stage3N SQL non ancora applicato a Docker. Non certificare P0 globale: RLS SELECT di `utenti_studio` per owner/admin globale, policy `avvisi_ade` e `revisioni_dichiarativi`, client-scope `clienti` e mapping studio, compatibilità UI gestione utenti, JWT/API/browser E2E e cicli fiscali reali rimangono aperti.
 - Nessun merge sulla PR #2 (Draft), nessuna scrittura a Supabase reale, nessun intervento su `mio-branch`, nessun deploy.
+
+
+## 2026-10-09 — STAGE3N PostgreSQL LAB PASS (operatore)
+- Allegato `STAGE3N_RESULT.txt`, commit `ace0a8cf235b1ad864fe982b66f3b087c7048625`.
+- `38_stage3n_staff_write_acl_LAB_ONLY.sql`: `REVOKE`, `COMMIT`; `39_stage3n_staff_write_acl_TEST_ONLY.sql`: transazione `ROLLBACK`, senza errori.
+- Inventario residuo `23_stage3f_role_only_READ_ONLY.sql`: `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH=0`, `RISK_NULLABLE_LEGACY_FISCAL_STUDIO_IDS=3`, `RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK=0`, `RISK_ROLE_ONLY_AUTHENTICATED_TABLES=1`, `RISK_TRUE_POLICY_AUTH_TABLES=1`.
+- Questo PASS certifica il comportamento di privilegi Postgres nel laboratorio, NON l'E2E JWT/API/UI e NON la chiusura P0.
+
+## 2026-10-09 — STAGE3O user UI -> scoped API (candidate)
+- Audit statico rileva: `src/modules/utenti/index.jsx` precedente scriveva/leggeva direttamente `public.utenti_studio` e gestiva `password_hash` nel browser; comportamento incompatibile con Stage3N. Inoltre non permetteva scelta esplicita delle società, richiesta dalla nuova API `api/auth/users.js`.
+- Patch solo su branch P0: ModuloUtenti usa `apiFetch('/api/auth/users')` per GET/POST/PATCH/DELETE, invia `password` attraverso Auth server invece di `password_hash`, riceve il profilo sessione da `App.jsx`, visualizza soltanto le società assegnate al responsabile, richiede almeno un'assegnazione esplicita, gestisce errori delle operazioni. Aggiunti guard statici `tests/securityP0Stage3oUserUiApi.test.js`.
+- Funzione `clienti` ancora da isolare per studio: il form ha una query diretta di elenco clienti in modalità «solo assegnati»; la API server accetta `clienti_assegnati` senza verifica di appartenenza a una società, per assenza mapping autorevole `clienti` -> `societa`. **Non certificare controllo tenant completo; client permissions and AgeCon/revision remain P0 pending.**
+- Nessun deploy, nessuna esecuzione nel Docker dell'interfaccia o API con JWT; nessuna scrittura a Supabase reale e nessun merge.
