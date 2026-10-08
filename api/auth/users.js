@@ -207,7 +207,7 @@ export default async function handler(req, res) {
         const linkedMemberships = membershipsByUtenteId.get(String(row.id || '').trim()) || []
         // Do not return partially owned profiles: a user shared with another
         // company must not expose global profile fields to this manager.
-        if (!areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds)) return []
+        if (!row.auth_user_id || !areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds, row.auth_user_id)) return []
         const visible = visibleMembershipsForManager(linkedMemberships, managedSocietaIds)
         return [sanitizeUtenteProfile(buildUserProfileSnapshot({
           profileRow: { ...row, ruolo: normalizeRole(row?.ruolo) },
@@ -290,7 +290,7 @@ export default async function handler(req, res) {
       if (existingError) throw existingError
       if (!existing) return res.status(404).json({ error: 'Utente non trovato' })
       const targetMemberships = await listMembershipRowsForUtenteIds(admin, [userId])
-      if (!areTargetMembershipsFullyAllowed(targetMemberships, managedSocietaIds)) {
+      if (!existing.auth_user_id || !areTargetMembershipsFullyAllowed(targetMemberships, managedSocietaIds, existing.auth_user_id)) {
         return res.status(403).json({ error: 'Utente fuori dall’ambito delle società gestite' })
       }
       if (!assertAdminStudioUserGuards(res, ctx, { existingRow: existing, requestedRole: payload.ruolo })) return
@@ -363,7 +363,7 @@ export default async function handler(req, res) {
       if (existingError) throw existingError
       if (!existing) return res.status(404).json({ error: 'Utente non trovato' })
       const targetMemberships = await listMembershipRowsForUtenteIds(admin, [userId])
-      if (!areTargetMembershipsFullyAllowed(targetMemberships, managedSocietaIds)) {
+      if (!existing.auth_user_id || !areTargetMembershipsFullyAllowed(targetMemberships, managedSocietaIds, existing.auth_user_id)) {
         return res.status(403).json({ error: 'Utente fuori dall’ambito delle società gestite' })
       }
       if (normalizeRole(existing.ruolo) === 'owner') {
