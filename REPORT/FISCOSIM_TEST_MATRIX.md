@@ -303,3 +303,7 @@ Commit `1ec940c`: GitHub Actions `37766190172` SUCCESS su Ubuntu/Windows. Ogni p
 
 Nuovo profilo `stampeRaccordoEserciziModel.test.js`: fixture due esercizi, scrittura economica e suo azzeramento, chiusura patrimoniale e riapertura opposta, mismatch centesimi, stato e tenant, causali ID/tipo, date/anno, chiusure duplicate/omesse, conti economici indebitamente movimentati, `saldo_iniziale` ignorato e dataset incoerente. In `stampeSaldiPerContoEsercizioModel.test.js` nuovo scenario cronologico con conto associato alternativamente via codice e ID. Gate CI pendente.
 Non si tratta di collaudo di chiusura automatica, RLS, database, concorrenza, export o PDF.
+
+## Fix CI 2026-10-08 — conto per solo codice in PN storiche
+
+La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.

@@ -230,3 +230,7 @@
 - Nuovi test sintetici di raccordo, fail-closed e cronologia mista; registrati in `test:stampe`.
 - Esito sempre NON definitivo anche se localmente `valid`: completezza PN, closing storico, snapshot e lettura DB non certificati. Nessuna UI abilitata e nessuna migrazione, auth/RLS/env o modifica dati reali.
 - CI: DA VERIFICARE dopo commit.
+
+## Fix CI 2026-10-08 — conto per solo codice in PN storiche
+
+La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.

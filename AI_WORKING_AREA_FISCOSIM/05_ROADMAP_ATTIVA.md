@@ -235,3 +235,7 @@ Commit `1ec940c`, GitHub Actions `37766190172` **SUCCESS** Ubuntu/Windows; stamp
 - Corretto ordinamento dei progressivi di mastro nel caso di registrazioni miste con `conto_id` oppure soltanto `conto_codice`, senza perdere la cronologia tra gruppi.
 - **Non è una procedura di chiusura o riapertura, non scrive PN**. Se la fonte non espone causali/ID o l'esercizio precedente non è realmente chiuso, l'audit fallisce esplicitamente. L'esito è sempre `definitive:false`: snapshot atomico, completezza della lettura e certificazione catena esercizi NON provati.
 - Nessuna stampa Bilancio/Mastri sbloccata, nessuna banca live. Prossimo gate: fonte canonica completa/paginata per periodo e causali storiche, consistenza sotto concorrenza, collegamento applicativo/UI solo dopo audit contabile, workflow reale di assestamento/chiusura.
+
+## Fix CI 2026-10-08 — conto per solo codice in PN storiche
+
+La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.

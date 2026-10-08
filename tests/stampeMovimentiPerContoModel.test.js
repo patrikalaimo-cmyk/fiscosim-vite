@@ -111,3 +111,16 @@ test('modello movimenti non dichiara mai bilancio definitivo né copertura saldi
   assert.equal(missing.valid, false)
   assert.ok(missing.blockers.includes('societa_id_mancante'))
 })
+
+test('registrazioni senza conto_id: il codice stabile aggrega movimenti multipli senza falso conflitto null/stringa', () => {
+  const updated = entries.map(pn => ({
+    ...pn,
+    righe: pn.righe.map(row => row.conto_codice === '100' ? { ...row, conto_id: null } : row),
+  }))
+  const out = buildMovimentiPerContoModel(updated, options)
+  assert.equal(out.valid, true, out.blockers.join(', '))
+  const bank = out.conti.find(row => row.codice === '100')
+  assert.equal(bank.contoId, null)
+  assert.deepEqual(bank.movimenti.map(m => m.saldoProgressivoPeriodo), [100, 60])
+  assert.equal(bank.saldoMovimentiPeriodo, 60)
+})

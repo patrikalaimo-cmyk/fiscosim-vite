@@ -125,7 +125,7 @@ export function buildMovimentiPerContoModel(entries = [], {
     sumAvere += pnAvere
     for (const r of validated) {
       const existing = conti.get(r.key)
-      if (existing && (existing.contoId !== r.accountId || existing.codice !== r.code)) {
+      if (existing && ((existing.contoId || '') !== r.accountId || (existing.codice || '') !== r.code)) {
         addBlocker(blockers, 'anagrafica_conto_non_coerente')
         continue
       }
