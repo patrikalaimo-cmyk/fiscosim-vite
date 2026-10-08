@@ -6,12 +6,10 @@ function normalizeText(value) {
 
 function deriveSourceDocumentId(context = {}, canonicalPayload = {}) {
   return normalizeText(
-    context.sourceDocumentId
-      || context.bankStatementId
-      || canonicalPayload?.bankStatementId
-      || canonicalPayload?.payloadId
-      || canonicalPayload?.movementId
-      || canonicalPayload?.decisionId
+    canonicalPayload?.movementId
+      || context.movementId
+      || context.sourceDocumentId
+      || canonicalPayload?.sourceDocumentId
       || ''
   )
 }

@@ -158,3 +158,14 @@
 - **BANK-DEV sbloccato**; il commit reale rimane vietato fino a RPC atomica, audit/idempotenza, tenant scope e collaudi.
 - Nessuna migration/env/auth/RLS/policy o società reale interessata.
 - CI documentale: pendente.
+
+
+## 2026-10-08 — BANK-DEV / identificazione sorgente e validazione commit
+
+- Audit su `mio-branch` dal commit `312058e8b6f699cb2ea13e1fbad2849507cd43e4` (CI precedente verde).
+- Identificato rischio di aggancio errato: `buildReconciliationCommitInput` usava come `sourceDocumentId` l'ID dell'estratto conto prima dell'ID movimento.
+- Corretto il riferimento: priorità al `movementId` del payload bancario, così l'identità del singolo movimento non viene sostituita da quella del file.
+- Rafforzato gate commit: obbligatori `movementId` e `decisionId`, verifica mismatch fra contesto e payload su società/esercizio/conto, blocker su sezione PN diversa da Dare/Avere.
+- Test automatici di regressione aggiunti al profilo Bank; nessun commit contabile reale abilitato.
+- Nessuna migration, modifica auth/RLS/env o scrittura su dati reali.
+- Stato: **CI PENDENTE**.

@@ -51,6 +51,24 @@ export function validateReconciliationCommitPayload(payload = {}, context = {}) 
     blockers.push('context_missing')
   }
 
+  // L'identità del movimento e della decisione è obbligatoria: mai costruire
+  // una idempotency key su placeholder generici ("movement"/"decision").
+  if (!text(payload?.movementId) || !text(payload?.decisionId)) {
+    blockers.push('movement_or_decision_id_missing')
+  }
+
+  // Non permettere a un contesto UI diverso di validare il movimento di un'altra società.
+  for (const field of ['societaId', 'esercizioId', 'bankAccountId']) {
+    if (text(context?.[field]) && text(payload?.[field]) && text(context[field]) !== text(payload[field])) {
+      blockers.push('reconciliation_context_mismatch')
+      break
+    }
+  }
+
+  if (rows.some((row) => !['dare', 'avere'].includes(lower(row?.sezione)))) {
+    blockers.push('prima_nota_righe_sezione_non_valida')
+  }
+
   if (payload?.valid !== true && asArray(payload?.blockers).length > 0) {
     blockers.push(...asArray(payload?.blockers))
   }
