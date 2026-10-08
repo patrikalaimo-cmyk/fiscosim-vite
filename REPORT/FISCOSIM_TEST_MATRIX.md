@@ -293,3 +293,8 @@ Questi gate **non** attestano PDF fascicolo, registri definitivi basati su hash 
 Aggiunto `tests/stampeSaldiPerContoEsercizioModel.test.js` al profilo `test:stampe`: verifiche con fixture di prima nota e piano dei conti sintetici per saldi precedenti, progressivi, nota credito, classificazioni, conti senza movimenti, esclusione storno/stornata, isolamento tenant, confine esercizi, date impossibili, duplicati, conti non foglia e schema classificazione incoerente.
 
 Verifica di dominio **non** equivalente a test con banca dati, riapertura precedente esercizio, caricamento paginato o stampa definitiva. Risultati CI da verificare dopo commit.
+
+
+## Checkpoint CI saldo precedente intraesercizio — 2026-10-08
+
+Commit `1ec940c`: GitHub Actions `37766190172` SUCCESS su Ubuntu/Windows. Ogni piattaforma: Stampe 61/61; Bank 11/11; Core 629/629; All safe 1004/1004; build PASS. Esclusi dal gate saldi riportati dal precedente esercizio, snapshot e collaudi browser/database/PDF.

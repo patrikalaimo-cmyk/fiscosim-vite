@@ -81,3 +81,8 @@ Nuovo `buildSaldiPerContoEsercizioModel` (dominio application): da testate/righe
 Questo **non** risolve saldi d'apertura derivanti da chiusura/riapertura esercizio precedente: i campi precalcolati `saldo_iniziale` del piano conti non sono una base verificata; l'algoritmo li ignora. Anche quando il modello è matematicamente valido, `definitive: false` e avvisi impediscono di promuoverlo a bilancio definitivo. Lettura/snapshot e UI non integrate, fascicolo PDF e checksum ancora mancanti.
 
 Test sintetici inclusi in `test:stampe`; CI del commit in corso di verifica. Nessun gate finale dichiarato.
+
+
+## Gate automatico addendum saldi intraesercizio
+
+Commit `1ec940c` verificato in GitHub Actions run `37766190172`: **SUCCESS** Windows e Ubuntu; `test:stampe` **61/61**, `test:all` **1004/1004**, build PASS. Stato modulo invariato **IN CORSO / NON FREEZE** fino a chiusura saldi d'apertura verificati, UI/export/PDF e collaudi.

@@ -222,3 +222,8 @@ Rimane non chiuso il requisito residuo: pagamento parziale di parcella con riten
 - **Stato P1: PARZIALE / non freeze**. Il saldo precedente è *intraesercizio*; riapertura dai precedenti esercizi, completezza e snapshot coerente non verificati. Nessuna UI o stampa definitiva abilitata da questo intervento.
 - Prossimo gate: tracciare/approntare il caricamento completo di PN e scritture di riapertura da fonte autoritativa, riconciliare saldi iniziali storici con chiusura anno precedente e solo dopo validare bilancio e mastrini finali.
 - CI del nuovo intervento: PENDENTE al commit di codice.
+
+
+## Gate 2026-10-08 — STAMPE saldi intraesercizio
+
+Commit `1ec940c`, GitHub Actions `37766190172` **SUCCESS** Ubuntu/Windows; stampe 61/61, bank 11/11, core 629/629, all safe 1004/1004, build OK su entrambe le piattaforme. P1 resta parziale: saldi precedenti intraesercizio da PN canonica e piano conti verificati automaticamente; riapertura anno precedente e validazione snapshot non coperte. Stampe/Bilancio non freeze.

@@ -212,3 +212,12 @@
 - Guardrail: il modello non usa `piano_conti.saldo_iniziale` come riapertura verificata, non attraversa anni e non si presenta come bilancio definitivo. Mancano copertura della riapertura da anno precedente, letture complete/snapshot, UX e PDF. Il blocco Stampe resta IN CORSO / NON FREEZE.
 - Sicurezza: nessuna modifica a .env, auth, RLS, migrazioni, DB live o società reali; Bank commit non abilitato. Modifiche GitHub limitate ai file del sottoblocco, working tree remoto non applicabile.
 - Test/CI: PENDENTI all'apertura del commit. Prossimo intervento: saldi di riapertura da Prima Nota e verifica chiusura dell'esercizio precedente.
+
+
+## 2026-10-08 — STAMPE / certificazione CI saldo precedente intraesercizio
+
+- Commit codice+regressioni: `1ec940caf9fe70539e8a5bf80c1a8267074d0965`.
+- GitHub Actions `37766190172`: **SUCCESS** Ubuntu e Windows, build produzione compresa.
+- Profili su ciascuna piattaforma: `test:stampe` **61/61**, `test:bank` **11/11**, `test:core` **629/629**, `test:all` **1004/1004**; zero falliti.
+- **Gate automatico del sottoblocco verde; STAMPE-EXPORT-FASCICOLO ancora NON FREEZE**. Riapertura dai precedenti esercizi, service letture complete, snapshot, UI, mastrini/bilancio definitivi, fascicolo unico e QA manuale ancora aperti.
+- Nessuna scrittura su società reali, Supabase live, migration, auth/RLS o file env. Prossimo: saldi di riapertura e corrispondenza documentabile con anno precedente.
