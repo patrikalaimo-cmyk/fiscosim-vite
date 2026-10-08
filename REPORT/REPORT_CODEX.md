@@ -332,3 +332,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **NON CERTIFICATO E2E**: serve ambiente locale completo Supabase Auth + API e utenti JWT reali fittizi. Il container PostgreSQL P0 non sostituisce l'intero stack applicativo.
 - Residuo bloccante successivo: `src/modules/utenti/index.jsx` conserva `select('*')`, campo `password_hash` e insert/update diretti; `api/auth/users.js` usa service_role e non verifica il confine inter-studio nella selezione/mutazione dei profili. `resolveProvisionedSocietaIds` accetta societa richieste non dimostrate in scope e fallback su tutte le societa attive. **Non cablare l'UI fino a una policy server-side dimostrata con due studi indipendenti.**
 - Nessun merge, deploy, modifica a `mio-branch`, `.env`, Supabase live o dati clienti. P0 rimane APERTO.
+
+
+## 2026-10-08 — P0 STAGE3I / audit FK, RLS e relazioni studio (solo metadata)
+- Creato `sql/security_p0/27_stage3i_studio_mapping_READ_ONLY.sql`: elenca colonne, vincoli FK, policy, ACL e definizioni delle funzioni di contesto per `utenti_studio`, `utenti_studio_societa`, `societa`, `studios`, `users`, `clients`, `clienti`, `f24_scadenze`, `f24_righe`, `liquidazioni_iva`.
+- Creato `tests/securityP0Stage3iStudioMap.test.js`: assicurazione statica che il nuovo controllo non introduca DML.
+- **Non applicata nessuna RLS**: i riferimenti studio/cliente e `studio_id` nullable restano da determinare tramite output del LAB. Non dedurre relazioni dal nome delle tabelle.
+- Il controllo sarà eseguito esclusivamente nel Docker P0 già esistente e non interroga righe cliente. CI e verifica PostgreSQL Stage3I pendenti al commit tecnico `a9c9a7d37d502cb737eb06c2cde47b1e50c24ce7`.
+- Nessun accesso write al progetto Supabase reale; `mio-branch`, .env e produzione invariati.
