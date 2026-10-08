@@ -265,3 +265,7 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - Gating `validateStampaDefinitivaEvidence(precheck,expected)` esteso a società, tipo e periodo: nessun riuso cross-tenant/cross-period di un attestato apparentemente valido.
 - `StampaDefinitivaPanel` resetta il precheck al cambio `societa?.id` e ricontrolla i campi del contesto sia dopo il precheck sia prima del consolidamento. Test puri e assert strutturali aggiunti.
 - La RPC attuale non restituisce la prova di file/snapshot e resta da indurire lato server, quindi UI fail-closed. CI pendente.
+
+## CI 2026-10-08 — aggiornamento test gating al nuovo binding
+
+La prima CI dopo l'estensione tenant/periodo ha segnalato una sola asserzione strutturale obsoleta: cercava `validateStampaDefinitivaEvidence(data)` mentre la chiamata ora deve ricevere anche il contesto. Aggiornate entrambe le regex senza rimuovere i controlli sostanziali. CI del fix pendente.
