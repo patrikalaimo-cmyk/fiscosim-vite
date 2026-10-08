@@ -169,3 +169,12 @@
 - Test automatici di regressione aggiunti al profilo Bank; nessun commit contabile reale abilitato.
 - Nessuna migration, modifica auth/RLS/env o scrittura su dati reali.
 - Stato: **CI PENDENTE**.
+
+
+## 2026-10-08 — STAMPE / neutralizzazione formule CSV
+
+- Audit: `escapeCsv` quotava separatori e virgolette ma non impediva a Excel/LibreOffice di interpretare celle descrittive che iniziano con `=`, `+`, `-` o `@` come formule.
+- Correzione in `exportStampeProvvisorie.js`: neutralizzazione con apostrofo iniziale anche in presenza di spazi/tab/caratteri invisibili, mantenendo escaping CSV RFC-style per separatori.
+- Regressioni aggiunte per Registro IVA e Libro Giornale con controparti e descrizioni sintetiche ostili.
+- Il fascicolo PDF unico, Bilancio/Mastrini/Partitario canonici e checksum basato sul contenuto restano aperti; **non freeze**.
+- CI codice Stampe: **PENDENTE**.

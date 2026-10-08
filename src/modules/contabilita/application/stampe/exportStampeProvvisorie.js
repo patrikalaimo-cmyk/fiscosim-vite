@@ -34,13 +34,16 @@ export function fmtEur(num) {
   return val.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 }
 
-// Helper per escape CSV
+// Escape CSV: i testi di controparte e descrizione provengono anche da documenti
+// esterni. Excel/LibreOffice non devono interpretarli come formule eseguibili.
 function escapeCsv(value) {
   const text = String(value ?? '');
-  if (/[",\r\n;]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
+  const spreadsheetFormula = /^[\u0000-\u0020\uFEFF\u200B-\u200D]*[=+\-@]/u.test(text);
+  const safeText = spreadsheetFormula ? `'${text}` : text;
+  if (/["\t\r\n;]/.test(safeText)) {
+    return `"${safeText.replace(/"/g, '""')}"`;
   }
-  return text;
+  return safeText;
 }
 
 // Genera stringa CSV per Registri IVA

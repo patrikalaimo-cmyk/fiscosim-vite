@@ -47,3 +47,43 @@ test('la stampa provvisoria non dichiara falsamente una singola pagina', async (
   assert.equal(source.includes('Pagina 1 di 1'), false)
   assert.match(source, /Paginazione del browser - non definitiva/)
 })
+
+
+test('CSV registro IVA neutralizza formule provenienti da documenti esterni', async () => {
+  const { buildRegistroIvaCsv } = await import('../src/modules/contabilita/application/stampe/exportStampeProvvisorie.js')
+  const csv = buildRegistroIvaCsv({
+    rows: [{
+      id: 'iva-test',
+      data_registrazione: '2026-10-08',
+      data_documento: '2026-10-08',
+      progressivoProvvisorio: 1,
+      numero_documento: '+SUM(1,2)',
+      soggetto_denominazione: '=HYPERLINK("https://example.invalid","click")',
+      soggetto_piva: '99999999999',
+      imponibile: 100,
+      iva: 22,
+      aliquota: 22,
+    }],
+    totaleImponibile: 100,
+    totaleIva: 22,
+  }, {
+    registroTipo: 'acquisti',
+    periodoInizio: '2026-10-01',
+    periodoFine: '2026-10-31',
+    societa: { denominazione: 'Società di test' },
+  })
+  assert.ok(csv.includes(";'+SUM(1,2);"), 'formula nel numero documento non neutralizzata')
+  assert.ok(csv.includes(';"\'=HYPERLINK('), 'la formula nella controparte deve iniziare con apostrofo')
+  assert.equal(csv.includes(';"=HYPERLINK('), false)
+})
+
+test('CSV giornale neutralizza formule con spazi o tab iniziali', async () => {
+  const { buildGiornaleCsv } = await import('../src/modules/contabilita/application/stampe/exportStampeProvvisorie.js')
+  const csv = buildGiornaleCsv([
+    { data: '2026-10-08', numero_pn: '1', causale: 'GEN', descrizione: '  =2+3', conto: '100', descrizione_conto: '\t@SUM(1+1)', dare: 100, avere: 0, stato: 'confermata' },
+    { data: '2026-10-08', numero_pn: '1', causale: 'GEN', descrizione: 'Contropartita', conto: '200', descrizione_conto: 'Ricavi', dare: 0, avere: 100, stato: 'confermata' },
+  ], { periodoInizio: '2026-10-01', periodoFine: '2026-10-31', societa: { denominazione: 'Test' } })
+  assert.ok(csv.includes(";\'  =2+3;"))
+  assert.ok(csv.includes(';"\'\t@SUM(1+1)";'))
+  assert.equal(csv.includes(';  =2+3;'), false)
+})
