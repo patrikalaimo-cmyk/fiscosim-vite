@@ -11,25 +11,6 @@ let cachedAccessToken = ''
 let cachedAccessTokenAt = 0
 let inflightAccessTokenPromise = null
 
-function isLocalHostLike() {
-  if (typeof window === 'undefined') return false
-  const host = String(window.location?.hostname || '').trim().toLowerCase()
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1'
-}
-
-function parseTruthyFlag(value) {
-  const s = String(value || '').trim().toLowerCase()
-  return s === '1' || s === 'true' || s === 'yes' || s === 'on'
-}
-
-export function isLocalAuthDisabled() {
-  const isDev = Boolean(import.meta.env.DEV);
-  const localHostLike = isLocalHostLike();
-  const rawBypass = import.meta.env.VITE_DEV_LOCAL_AUTH_BYPASS;
-  const parsedBypass = parseTruthyFlag(rawBypass);
-  return Boolean(isDev && localHostLike && parsedBypass);
-}
-
 function clearAccessTokenCache() {
   cachedAccessToken = ''
   cachedAccessTokenAt = 0
@@ -51,7 +32,6 @@ function isSameOriginApiPath(url) {
 }
 
 export async function getAccessToken() {
-  if (isLocalAuthDisabled()) return ''
   const span = authClientSpan('getAccessToken')
   const now = Date.now()
   if (cachedAccessToken && now - cachedAccessTokenAt < ACCESS_TOKEN_CACHE_TTL_MS) {
@@ -227,7 +207,7 @@ export async function fetchSessionProfile(accessToken = '') {
 }
 
 export function installApiAuthFetchInterceptor() {
-  if (typeof window === 'undefined' || window.__fiscosimAuthFetchInstalled || isLocalAuthDisabled()) return
+  if (typeof window === 'undefined' || window.__fiscosimAuthFetchInstalled) return
   authClientLog('installApiAuthFetchInterceptor', { installed: true })
   const nativeFetch = window.fetch.bind(window)
   window.fetch = async (input, init = {}) => {
