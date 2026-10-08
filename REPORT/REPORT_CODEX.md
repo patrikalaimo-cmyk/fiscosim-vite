@@ -371,3 +371,17 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Comportamento desiderato: utenti owner/admin privi di assegnazioni esplicite non vedono i dati società; non si ricostruiscono né si inferiscono membership dai ruoli. Potenziale regressione applicativa fino a provisioning esplicito delle assegnazioni da collaudare; NON si attiva su Supabase reale.
 - Permangono criticità P0 separate: altre 3 role-only table, 5 TRUE policy con grants legacy attualmente revocati, API `/api/auth/users` con service_role e scoping assente, 3 `studio_id` legacy nullable, end-to-end Auth e fiscali non eseguiti.
 - Nessuna applicazione al Docker, nessuna scrittura a Supabase reale, nessun cambiamento su `mio-branch`, .env, PR o deploy.
+
+
+## 2026-10-08 — P0 STAGE3K LAB PASS + residui catalogati
+- Ricevuto file operatore `STAGE3K_RESULT.txt`: `STAGE3K LAB SQL PASS` su commit `a4fc89f513664fa718f9f3a929729704929491f3`; eseguiti `31_stage3k_explicit_company_membership_LAB_ONLY.sql` (`CREATE FUNCTION` + `COMMIT`) e `32_stage3k_company_membership_TEST_ONLY.sql` (fixture A/B, 5 auth users, 4 staff, 4 membership, 2 movimenti; test zero errori + `ROLLBACK`).
+- Rischi Stage3F: `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH=0`, `RISK_NULLABLE_LEGACY_FISCAL_STUDIO_IDS=3`, `RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK=0`, `RISK_ROLE_ONLY_AUTHENTICATED_TABLES=3`, `RISK_TRUE_POLICY_AUTH_TABLES=5`.
+- I residui ATTUALMENTE rilevanti (esposizione authenticated, non solo policy nel catalogo) sono 3 role-only: `avvisi_ade`, `client_modules`, `client_responsabili`; 5 true-policy: `invii_log`, `revisioni_dichiarativi`, `test_cases`, `test_datasets`, `test_runs`. Le policy residue legacy 3J sono ancora catalogate ma prive di grant browser.
+- Conclusione: Stage3K SQL lab PASS; non ancora E2E Supabase Auth JWT/REST né cicli fiscali reali.
+- Nessuna modifica al database reale, nessun merge su `mio-branch`.
+
+## 2026-10-08 — P0 STAGE3L READ ONLY PREP
+- Predisposto `sql/security_p0/34_stage3l_remaining_access_READ_ONLY.sql`: query esclusivamente dei cataloghi PostgreSQL per le otto tabelle con rischio residuo autenticato (RLS, column schema, policy, FK, grants, indici).
+- Predisposto `tests/securityP0Stage3lRemainingAccess.test.js`: guardia statica su sole query catalogo e copertura di otto tabelle.
+- Nessun DDL/DML, nessuna fixture, nessuna scrittura al LAB; output serve per decidere patch selettive senza rompere `avvisi_ade` e `revisioni_dichiarativi` usati dall'applicazione.
+- Stage3L CI e audit SQL Docker pendenti. Nessuna azione su Supabase reale, ambiente .env, deploy, produzione o `mio-branch`.
