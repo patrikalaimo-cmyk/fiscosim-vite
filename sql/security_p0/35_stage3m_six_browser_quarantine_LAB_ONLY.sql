@@ -13,8 +13,8 @@ DO $gate$
 DECLARE
  t text;
  pname text;
- condition text;
- target_role text;
+ policy_kind text;
+ policy_role name;
  n integer;
 BEGIN
  IF current_setting('fiscosim.p0_stage3m_approval',true)
@@ -22,7 +22,7 @@ BEGIN
   RAISE EXCEPTION 'Stage3M LAB opt-in missing';
  END IF;
 
- FOR t,pname,condition,target_role IN
+ FOR t,pname,policy_kind,policy_role IN
   SELECT * FROM (VALUES
    ('client_modules','Allow authenticated','auth','public'),
    ('client_responsabili','Allow authenticated','auth','public'),
@@ -30,7 +30,7 @@ BEGIN
    ('test_cases','allow_all_test_cases','true','public'),
    ('test_datasets','allow_all_test_datasets','true','public'),
    ('test_runs','allow_all_test_runs','true','public')
-  ) x(t,pname,condition,target_role)
+  ) x(t,pname,policy_kind,policy_role)
  LOOP
   IF NOT EXISTS(
    SELECT 1 FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace
@@ -41,11 +41,11 @@ BEGIN
   END IF;
   SELECT count(*) INTO n FROM pg_policies p WHERE p.schemaname='public'
    AND p.tablename=t AND p.policyname=pname AND p.cmd='ALL'
-   AND p.permissive='PERMISSIVE' AND target_role=ANY(p.roles)
+   AND p.permissive='PERMISSIVE' AND policy_role=ANY(p.roles)
    AND (
-      (condition='auth' AND p.qual LIKE '%auth.role()%')
+      (policy_kind='auth' AND p.qual LIKE '%auth.role()%')
       OR
-      (condition='true' AND lower(btrim(p.qual))='true'
+      (policy_kind='true' AND lower(btrim(p.qual))='true'
           AND lower(btrim(p.with_check))='true')
    );
   IF n<>1 THEN
