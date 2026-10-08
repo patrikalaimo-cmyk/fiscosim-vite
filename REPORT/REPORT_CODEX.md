@@ -201,3 +201,14 @@
 - Nessun freeze A100: mancano saldi iniziali/classificazione per bilancio, UI stampa canonica, fascicolo PDF unico, hash dei contenuti, snapshot, QA browser, RPC Bank atomica/idempotente e collaudi.
 - Nessuna migration, env, auth/RLS/policy, scrittura su società reali.
 - Stato commit documentale: **CI PENDENTE**.
+
+
+## 2026-10-08 — STAMPE / saldo precedente e classificazione conto (P1 parziale)
+
+- Audit: `buildMovimentiPerContoModel` forniva solo movimenti di periodo e progressivi, senza saldi precedenti né classificazione; individuato inoltre stato canonico `storno` non previsto fra le esclusioni.
+- Creato `src/modules/contabilita/application/stampe/buildSaldiPerContoEsercizioModel.js`: saldo precedente da PN dal giorno iniziale esercizio al giorno prima del periodo, movimentazione del periodo, progressivo e saldo finale; classificazione e conto di dettaglio da piano conti canonico con controlli tenant, ID/codice, gerarchia, anno, date e quadratura in centesimi.
+- Corretto `src/modules/contabilita/application/stampe/buildMovimentiPerContoModel.js` per escludere il movimento `storno` insieme alla scrittura `stornata`, senza alterare saldi del periodo.
+- Aggiunti `tests/stampeSaldiPerContoEsercizioModel.test.js` e profilo dedicato in `scripts/run-node-tests.mjs`. Fixture esclusivamente fittizie: conto patrimoniale/economico, nota credito, Dare/Avere, saldo precedente, zero movimenti, data invalida, cambio esercizio, tenant, doppioni, gerarchia, classificazione e stati di storno.
+- Guardrail: il modello non usa `piano_conti.saldo_iniziale` come riapertura verificata, non attraversa anni e non si presenta come bilancio definitivo. Mancano copertura della riapertura da anno precedente, letture complete/snapshot, UX e PDF. Il blocco Stampe resta IN CORSO / NON FREEZE.
+- Sicurezza: nessuna modifica a .env, auth, RLS, migrazioni, DB live o società reali; Bank commit non abilitato. Modifiche GitHub limitate ai file del sottoblocco, working tree remoto non applicabile.
+- Test/CI: PENDENTI all'apertura del commit. Prossimo intervento: saldi di riapertura da Prima Nota e verifica chiusura dell'esercizio precedente.

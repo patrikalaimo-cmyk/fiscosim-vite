@@ -195,3 +195,8 @@ La protezione CSV e il modello puro di movimenti per conto sono coperti da test 
 6. collaudare il futuro commit transazionale bancario e il rollback prima di qualunque scrittura reale.
 
 Restano aperti fascicolo PDF unico, modelli/UX completi, hash di contenuto, importi parziali con ritenuta, collaudo browser di Import/Manuale/IVA e Bank. Nessuno di questi è dichiarato eseguito.
+
+
+## Saldi intraesercizio — ulteriore debito QA (2026-10-08)
+
+Prima della qualifica di Mastrini e Bilancio verificare: (1) saldi da scritture di chiusura/riapertura dell'anno precedente e loro origine provata; (2) saldo precedente per periodo intermedio, separato dal saldo d'inizio esercizio; (3) piano conti gerarchico con conti senza movimenti; (4) cancellazioni, storni, note credito e scritture simulate; (5) totale Dare/Avere e saldi in quadratura; (6) completezza dei dati a pagine e consistenza durante scritture concorrenti. Il nuovo modello non è ancora collegato alla UI e non è certificato per output definitivi.

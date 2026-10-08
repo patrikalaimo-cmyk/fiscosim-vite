@@ -286,3 +286,10 @@ Copertura integrativa Stampe:
 - il modello resta **non definitivo** e non prova i saldi d'apertura; non è collegato alla UI.
 
 Questi gate **non** attestano PDF fascicolo, registri definitivi basati su hash di contenuto, verifica saldi iniziali, Bank commit atomico o collaudo browser/DB reale.
+
+
+## STAMPE — Saldi intraesercizio da PN (sottofase P1, 2026-10-08)
+
+Aggiunto `tests/stampeSaldiPerContoEsercizioModel.test.js` al profilo `test:stampe`: verifiche con fixture di prima nota e piano dei conti sintetici per saldi precedenti, progressivi, nota credito, classificazioni, conti senza movimenti, esclusione storno/stornata, isolamento tenant, confine esercizi, date impossibili, duplicati, conti non foglia e schema classificazione incoerente.
+
+Verifica di dominio **non** equivalente a test con banca dati, riapertura precedente esercizio, caricamento paginato o stampa definitiva. Risultati CI da verificare dopo commit.

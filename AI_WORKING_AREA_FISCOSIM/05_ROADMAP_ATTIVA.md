@@ -212,3 +212,13 @@ Rimane non chiuso il requisito residuo: pagamento parziale di parcella con riten
 - **STAMPE-EXPORT-FASCICOLO resta IN CORSO / NON FREEZE**: necessario fascicolo PDF unico, collegamento UI reale Partitari/Mastrini/Bilancio, saldi iniziali/classificazione, checksum su contenuti effettivi, snapshot coerente e collaudo PDF/browser.
 - **BANK-DEV resta attivo**, ma il commit reale e la release bancaria restano vietati finché non saranno validati RPC atomica, audit/idempotenza, tenant scope e collaudi.
 - Non applicate migration; nessuna modifica auth/RLS/env o dati di società reali.
+
+
+## Avanzamento 2026-10-08 — STAMPE saldi infrannuali per conto (P1, sottofase)
+
+- Introdotto `buildSaldiPerContoEsercizioModel`: da PN canonica dal primo giorno dell'esercizio selezionato, separa movimenti pre-periodo e movimenti del periodo, genera saldo precedente, progressivo e saldo finale di ogni conto.
+- Piano dei conti usato come fonte di identità, natura patrimoniale/economica e gerarchia; conti terminali senza movimenti esposti a zero. I campi `saldo_iniziale` del piano dei conti **non** sono usati come prova di riapertura.
+- Vincoli: esercizio solare singolo, società unica, quadrature al centesimo, periodi reali, classificazioni/gerarchia e assenza doppioni. Corretto anche il filtro dello stato `storno` nel modello per conto.
+- **Stato P1: PARZIALE / non freeze**. Il saldo precedente è *intraesercizio*; riapertura dai precedenti esercizi, completezza e snapshot coerente non verificati. Nessuna UI o stampa definitiva abilitata da questo intervento.
+- Prossimo gate: tracciare/approntare il caricamento completo di PN e scritture di riapertura da fonte autoritativa, riconciliare saldi iniziali storici con chiusura anno precedente e solo dopo validare bilancio e mastrini finali.
+- CI del nuovo intervento: PENDENTE al commit di codice.

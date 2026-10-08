@@ -1,7 +1,7 @@
 // Prospetto analitico dei movimenti per conto ricostruiti dalla Prima Nota canonica.
 // NON e un bilancio definitivo: per la chiusura servono saldi di apertura e policy esercizio.
 const VALID_STATES = new Set(['confermata', 'definitiva'])
-const EXCLUDED_STATES = new Set(['bozza', 'simulata', 'annullata', 'stornata'])
+const EXCLUDED_STATES = new Set(['bozza', 'simulata', 'annullata', 'stornata', 'storno'])
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 function str(value) {

@@ -72,3 +72,12 @@ Evidenza sintetica: fixture oltre 1000 righe, errore a metà, doppione, multiplo
 - L'output è deliberatamente `definitive: false` e porta warning esplicito per saldo iniziale/esercizi precedenti non ricostruiti. Nessuna UI sostituita con un presunto bilancio reale.
 - Restano bloccanti: base saldi iniziali e classificazione piano dei conti, integrazione UI e stampe reali, fascicolo PDF unico, checksum del contenuto, controllo snapshot e collaudo.
 - Il perimetro Bank resta in sola simulazione; sviluppo sbloccato, commit reale non autorizzato.
+
+
+## Addendum 2026-10-08 — Saldi per conto e progressivi intraesercizio
+
+Nuovo `buildSaldiPerContoEsercizioModel` (dominio application): da testate/righe Prima Nota canoniche all'interno dello stesso esercizio distingue saldi precedenti e movimenti periodo; aggancia piano dei conti per natura patrimoniale/economica e conti terminali. Restituisce saldi finali, progressivi e quadratura al centesimo. Rifiuta classi conto sconosciute, differenze di società, conti mancanti/doppi, periodi inesistenti, movimenti su conto non foglia, gerarchie cicliche e squadrature.
+
+Questo **non** risolve saldi d'apertura derivanti da chiusura/riapertura esercizio precedente: i campi precalcolati `saldo_iniziale` del piano conti non sono una base verificata; l'algoritmo li ignora. Anche quando il modello è matematicamente valido, `definitive: false` e avvisi impediscono di promuoverlo a bilancio definitivo. Lettura/snapshot e UI non integrate, fascicolo PDF e checksum ancora mancanti.
+
+Test sintetici inclusi in `test:stampe`; CI del commit in corso di verifica. Nessun gate finale dichiarato.
