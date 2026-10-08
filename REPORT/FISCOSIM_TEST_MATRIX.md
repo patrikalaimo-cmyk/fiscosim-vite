@@ -333,3 +333,9 @@ La certificazione riguarda i test automatici del codice, NON lo stato funzionale
 ## STAMPE — gate service prima dell'invocazione RPC (2026-10-08)
 
 `motoreStampaDefinitiva.test.js` ora differenzia gli scenari SQL simulati (mock server attestato **solo per fixture**, SHA-256 costante di test) dal percorso reale non certificato: verifica no-write/no-RPC se attestazione snapshot/file assente, se checksum SHA-256 discordante oppure se tenant non coincide. `stampaDefinitivaUiHelpers.test.js` controlla anche anno fiscale divergente. Non sono test SQL/Postgres su Supabase live. CI da verificare.
+
+## Checkpoint 2026-10-08 — Fiscosim Supabase / gate RPC Stampe (CI certificata)
+
+Codice: `a0b2480ab556492b77f4748428dc6686d838362f`. GitHub Actions `37781154980`: **SUCCESS Windows + Ubuntu**, build Vite PASS. Su entrambe le piattaforme: `test:stampe` **93/93**, `test:bank` **11/11**, `test:core` **661/661**, `test:all` **1036/1036**. Suite import 231/231, manuale 414/414, consultazione 38/38, IVA 148/148, split 25/25, ritenute 27/27.
+
+Il consolidamento resta **NON FREEZE / NON PRONTO** nonostante la CI verde: il nuovo gate al service è solo difesa in profondità. Le funzioni SQL SECURITY DEFINER e il reale checksum server/snapshot non sono state verificate sul database. Supabase connesso; unico progetto nominativamente FiscoSim rilevato `Fiscosim v4p`, INACTIVE e senza branch; timeout su tabelle/migrazioni. Nessuna modifica DB, nessuna riattivazione o applicazione migration. L'utente deve scegliere/confermare un ambiente di test isolato e accessibile prima del collaudo SQL/E2E.
