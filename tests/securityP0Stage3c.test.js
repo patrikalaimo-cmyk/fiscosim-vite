@@ -8,7 +8,9 @@ test('Stage3C local patch is gated and removes staff public access and user role
  assert.match(sql,/^BEGIN;/m)
  assert.match(sql,/^COMMIT;/m)
  assert.match(sql,/fiscosim\.p0_stage3c_approval/)
- assert.match(sql,/DROP POLICY public_access ON public\.utenti_studio/)
+ assert.match(sql,/Stage3C requires Stage1 removal of staff public_access/)
+ assert.doesNotMatch(sql,/DROP POLICY public_access ON public\.utenti_studio/)
+ assert.match(sql,/policyname='public_access'/)
  assert.match(sql,/DROP POLICY "Lettura autenticati" ON public\.user_roles/)
  assert.match(sql,/DROP POLICY "Gestione solo owner" ON public\.user_roles/)
  assert.match(sql,/CREATE POLICY p0_user_roles_self_owner_select_lab_only/)
@@ -33,4 +35,12 @@ test('Stage3C unsafe rollback is protected by a unique lab approval',()=>{
  const sql=read('16_stage3c_rollback_TEST_ONLY.sql')
  assert.match(sql,/fiscosim\.p0_stage3c_rollback_approval/)
  assert.match(sql,/unsafe-lab-rollback-only/)
+})
+
+test('Stage3C consumes Stage1 safely: no duplicate staff policy drop',()=>{
+ const stage1=read('01_containment_STAGING_ONLY.sql')
+ const stage3c=read('14_stage3c_staff_roles_LAB_ONLY.sql')
+ assert.match(stage1,/DROP POLICY IF EXISTS "public_access" ON public\.utenti_studio/)
+ assert.match(stage3c,/Stage1 removal of staff public_access/)
+ assert.doesNotMatch(stage3c,/DROP POLICY public_access ON public\.utenti_studio/)
 })

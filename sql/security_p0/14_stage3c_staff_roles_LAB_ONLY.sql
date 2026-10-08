@@ -27,12 +27,12 @@ BEGIN
      AND NOT has_function_privilege('anon',p.oid,'EXECUTE')
      AND has_function_privilege('authenticated',p.oid,'EXECUTE');
  IF n<>2 THEN RAISE EXCEPTION 'Stage3C requires hardened role helpers'; END IF;
+ -- Stage 1 already removed public_access; requiring its presence here
+ -- would incorrectly reject the valid post-Stage1 clone before any DDL.
  SELECT count(*) INTO n FROM pg_policies
    WHERE schemaname='public' AND tablename='utenti_studio'
-     AND policyname='public_access' AND cmd='ALL'
-     AND roles=ARRAY['public']::name[]
-     AND lower(btrim(qual))='true' AND lower(btrim(with_check))='true';
- IF n<>1 THEN RAISE EXCEPTION 'Stage3C users baseline mismatch'; END IF;
+     AND policyname='public_access';
+ IF n<>0 THEN RAISE EXCEPTION 'Stage3C requires Stage1 removal of staff public_access'; END IF;
  SELECT count(*) INTO n FROM pg_policies
    WHERE schemaname='public' AND tablename='utenti_studio'
      AND policyname IN ('utenti_studio_owner_manage','utenti_studio_self_or_owner_select');
@@ -56,8 +56,9 @@ END $guard$;
 
 REVOKE ALL PRIVILEGES ON TABLE public.utenti_studio,public.user_roles FROM anon;
 
--- Existing restricted user policies (self/owner select and owner manage) stay.
-DROP POLICY public_access ON public.utenti_studio;
+-- Existing restricted staff policies (self/owner select and owner manage)
+-- stay unchanged. Stage 1 already dropped the unsafe public_access policy.
+-- Stage 3C only changes user_roles and anon grants; never re-add public_access.
 
 -- Replace self-referencing owner rule and unrestricted authenticated list.
 DROP POLICY "Lettura autenticati" ON public.user_roles;
