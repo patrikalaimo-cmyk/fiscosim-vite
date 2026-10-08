@@ -56,7 +56,7 @@ GRANT INSERT (nome,cognome,email,ruolo,attivo,permessi,clienti_assegnati)
  ON TABLE public.utenti_studio TO authenticated;
 GRANT UPDATE (nome,cognome,email,ruolo,attivo,permessi,clienti_assegnati)
  ON TABLE public.utenti_studio TO authenticated;
-GRANT DELETE ON TABLE public.utenti_studio TO authenticated;
+-- Direct row DELETE is not used by soft-deactivation and stays server-only.
 
 DO $verify$
 DECLARE col text;
@@ -73,7 +73,7 @@ BEGIN
     RAISE EXCEPTION 'Stage3G auth_user_id remains writable with %',col;
   END IF;
  END LOOP;
- FOREACH col IN ARRAY ARRAY['TRUNCATE','TRIGGER','REFERENCES','MAINTAIN'] LOOP
+ FOREACH col IN ARRAY ARRAY['DELETE','TRUNCATE','TRIGGER','REFERENCES','MAINTAIN'] LOOP
   IF has_table_privilege('authenticated','public.utenti_studio',col) THEN
     RAISE EXCEPTION 'Stage3G dangerous table privilege remains: %',col;
   END IF;
@@ -85,6 +85,14 @@ BEGIN
   OR NOT has_column_privilege('authenticated','public.utenti_studio',
      'ruolo','UPDATE') THEN
     RAISE EXCEPTION 'Stage3G necessary profile ACL was lost';
+ END IF;
+ IF NOT has_column_privilege('service_role','public.utenti_studio',
+      'password_hash','SELECT')
+  OR NOT has_column_privilege('service_role','public.utenti_studio',
+      'password_hash','UPDATE')
+  OR NOT has_column_privilege('service_role','public.utenti_studio',
+      'auth_user_id','UPDATE') THEN
+    RAISE EXCEPTION 'Stage3G server provisioning privilege missing';
  END IF;
  IF has_table_privilege('anon','public.utenti_studio','SELECT') THEN
     RAISE EXCEPTION 'Stage3G anonymous staff grant was reopened';

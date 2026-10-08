@@ -12,6 +12,9 @@ test('Stage3G explicit column grants are guarded and transactional',()=>{
  assert.ok(sql.includes('GRANT SELECT ('))
  assert.ok(sql.includes('GRANT UPDATE ('))
  assert.ok(sql.includes('GRANT INSERT ('))
+ assert.ok(sql.includes("'DELETE','TRUNCATE'"))
+ assert.ok(sql.includes("has_column_privilege('service_role'"))
+ assert.doesNotMatch(sql, /^\s*GRANT\s+DELETE\s+ON\s+TABLE\s+public\.utenti_studio\s+TO\s+authenticated/gmi)
  assert.ok(sql.includes('TRUNCATE'))
  assert.ok(sql.includes('COMMIT;'))
 })
@@ -19,6 +22,16 @@ test('Stage3G isolated SQL test ends with rollback',()=>{
  const sql=read('25_stage3g_staff_secret_acl_TEST_ONLY.sql')
  assert.ok(sql.includes('local-staff-acl-test-only'))
  assert.ok(sql.includes('SET LOCAL ROLE authenticated'))
+ for(const marker of [
+  'SELECT password_hash FROM public.utenti_studio LIMIT 0',
+  'SELECT * FROM public.utenti_studio LIMIT 0',
+  'INSERT INTO public.utenti_studio (password_hash) SELECT NULL WHERE false',
+  'UPDATE public.utenti_studio SET password_hash=NULL WHERE false',
+  'INSERT INTO public.utenti_studio (auth_user_id) SELECT NULL WHERE false',
+  'UPDATE public.utenti_studio SET auth_user_id=NULL WHERE false',
+  'DELETE FROM public.utenti_studio WHERE false',
+  "has_column_privilege('service_role'",
+ ]) assert.ok(sql.includes(marker),marker)
  assert.ok(sql.includes('ROLLBACK;'))
 })
 test('Stage3G rollback cannot run without explicit local approval',()=>{

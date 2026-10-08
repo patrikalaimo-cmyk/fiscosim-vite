@@ -308,3 +308,12 @@ Candidato SQL SOLO STAGING: `sql/security_p0/01_containment_STAGING_ONLY.sql`. C
 
 Costo branch Supabase identificato: 0.01344 USD/ora, da confermare esplicitamente dall'utente prima della creazione. Nessun clone DB presente. ATTENZIONE: `supabase_migrations.schema_migrations` assente sul reale benché il repo contenga 72 files migration; non ricreare da sole migrations.
 Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-membro/anon, snapshot schema, verifica integrale API e UX, piano rollback e autorizzazione specifica. Nessuna modifica al database reale approvata o eseguita in questa fase.
+
+
+## 2026-10-08 — P0 STAGE3G / regressione ACL rafforzata (branch isolato)
+- HEAD Stage3G `4673d395` già presente su PR #2 Draft; baseline CI run `37838912768` PASS Linux/Windows. Test PostgreSQL Stage3G **NON ESEGUITO**.
+- LAB ONLY: esclusa concessione DELETE diretta da `utenti_studio` (la UI disattiva logicamente), SELECT/INSERT/UPDATE limitati a colonne esplicite; postcondition conserva service_role per il provisioning server.
+- TEST ONLY: prove SQL transazionali zero-row per INSERT/UPDATE `password_hash` e `auth_user_id`, DELETE e SELECT *; `ROLLBACK` obbligatorio. Verifica PostgreSQL reale pendente.
+- Test statico: assert espliciti per DML vietato, visibilità segreti, service_role.
+- Debito applicativo: legacy `login` browser legge password_hash quando bypass abilitato; `utenti` usa SELECT * e credenziali dal client. API `/api/auth/users` adotta Supabase Auth e service_role ma richiede audit di segregazione inter-studio prima del collegamento UI.
+- Nessun merge, deploy, intervento DB live, modifica `mio-branch`, env o Docker remoto. P0 rimane aperto.

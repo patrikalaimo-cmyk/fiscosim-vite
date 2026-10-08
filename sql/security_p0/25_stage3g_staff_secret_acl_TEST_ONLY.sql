@@ -29,8 +29,13 @@ BEGIN
   OR has_column_privilege('authenticated','public.utenti_studio','auth_user_id','INSERT') THEN
    RAISE EXCEPTION 'SECURITY FAILURE: auth user link writable';
  END IF;
- IF has_table_privilege('authenticated','public.utenti_studio','TRUNCATE') THEN
-   RAISE EXCEPTION 'SECURITY FAILURE: TRUNCATE still granted';
+ IF has_table_privilege('authenticated','public.utenti_studio','TRUNCATE')
+  OR has_table_privilege('authenticated','public.utenti_studio','DELETE') THEN
+   RAISE EXCEPTION 'SECURITY FAILURE: dangerous table DML still granted';
+ END IF;
+ IF NOT has_column_privilege('service_role','public.utenti_studio','password_hash','SELECT')
+   OR NOT has_column_privilege('service_role','public.utenti_studio','auth_user_id','UPDATE') THEN
+   RAISE EXCEPTION 'SECURITY FAILURE: server role provisioning grants missing';
  END IF;
  -- A SQL SELECT of the sensitive column MUST fail even with zero rows.
  BEGIN
@@ -43,6 +48,32 @@ BEGIN
   RAISE EXCEPTION 'SECURITY FAILURE: credential exposed by SELECT star';
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
- RAISE NOTICE 'PASS: authenticated role sees explicit profile projection only; secret, * and TRUNCATE blocked';
+ -- Zero-row DML proves denial without altering existing business records.
+ BEGIN
+  EXECUTE 'INSERT INTO public.utenti_studio (password_hash) SELECT NULL WHERE false';
+  RAISE EXCEPTION 'SECURITY FAILURE: password_hash INSERT permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  EXECUTE 'UPDATE public.utenti_studio SET password_hash=NULL WHERE false';
+  RAISE EXCEPTION 'SECURITY FAILURE: password_hash UPDATE permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  EXECUTE 'INSERT INTO public.utenti_studio (auth_user_id) SELECT NULL WHERE false';
+  RAISE EXCEPTION 'SECURITY FAILURE: auth_user_id INSERT permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  EXECUTE 'UPDATE public.utenti_studio SET auth_user_id=NULL WHERE false';
+  RAISE EXCEPTION 'SECURITY FAILURE: auth_user_id UPDATE permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  EXECUTE 'DELETE FROM public.utenti_studio WHERE false';
+  RAISE EXCEPTION 'SECURITY FAILURE: direct staff DELETE permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ RAISE NOTICE 'PASS: explicit profile SELECT allowed; credential SELECT, star, secret/link DML, DELETE and TRUNCATE denied';
 END $check$;
 ROLLBACK;
