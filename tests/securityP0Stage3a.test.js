@@ -24,3 +24,16 @@ test('Stage 3A QA uses synthetic company, real role switch and rolls back',()=>{
  assert.match(qa,/fiscosim\.p0_stage3a_test_approval/)
  assert.doesNotMatch(qa,/COMMIT;/)
 })
+
+test('Stage 3A policy names match PostgreSQL canonical lowercase catalog names',()=>{
+  const policyName='p0_societa_member_all_lab_only'
+  const created=[...patch.matchAll(/CREATE POLICY (\w+) ON public\./g)].map(m=>m[1])
+  assert.equal(created.length,3)
+  for(const name of created){
+    assert.equal(name,policyName)
+    assert.equal(name,name.toLowerCase())
+  }
+  assert.ok(patch.includes("policyname='"+policyName+"'"))
+  assert.ok(qa.includes("policyname='"+policyName+"'"))
+  assert.doesNotMatch(qa,/policyname='[^']*[A-Z][^']*'/)
+})

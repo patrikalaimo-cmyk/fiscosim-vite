@@ -11,7 +11,7 @@ DO $guard$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies
     WHERE schemaname='public' AND tablename='corrispettivi_giornalieri'
-    AND policyname='p0_societa_member_all_LAB_ONLY') THEN
+    AND policyname='p0_societa_member_all_lab_only') THEN
     RAISE EXCEPTION 'Stage3a policy missing; test aborted';
   END IF;
 END $guard$;

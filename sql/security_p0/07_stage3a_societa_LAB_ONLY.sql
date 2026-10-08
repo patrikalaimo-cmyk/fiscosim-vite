@@ -63,7 +63,7 @@ BEGIN
     END IF;
     IF EXISTS(SELECT 1 FROM pg_policies
        WHERE schemaname='public' AND tablename=t
-         AND policyname='p0_societa_member_all_LAB_ONLY') THEN
+         AND policyname='p0_societa_member_all_lab_only') THEN
       RAISE EXCEPTION 'Stage3a already applied to %',t;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace ns
@@ -100,15 +100,15 @@ DROP POLICY "Accesso autenticati" ON public.ritenute_dacconto;
 
 -- LAB candidate policy: company membership for reading and writing.
 -- Actual RBAC for edit/close/lock remains to design and test separately.
-CREATE POLICY p0_societa_member_all_LAB_ONLY ON public.corrispettivi_giornalieri
+CREATE POLICY p0_societa_member_all_lab_only ON public.corrispettivi_giornalieri
  FOR ALL TO authenticated
  USING (public.user_has_societa_access(societa_id))
  WITH CHECK (public.user_has_societa_access(societa_id));
-CREATE POLICY p0_societa_member_all_LAB_ONLY ON public.intrastat_operazioni
+CREATE POLICY p0_societa_member_all_lab_only ON public.intrastat_operazioni
  FOR ALL TO authenticated
  USING (public.user_has_societa_access(societa_id))
  WITH CHECK (public.user_has_societa_access(societa_id));
-CREATE POLICY p0_societa_member_all_LAB_ONLY ON public.liquidazioni_iva_societa
+CREATE POLICY p0_societa_member_all_lab_only ON public.liquidazioni_iva_societa
  FOR ALL TO authenticated
  USING (public.user_has_societa_access(societa_id))
  WITH CHECK (public.user_has_societa_access(societa_id));

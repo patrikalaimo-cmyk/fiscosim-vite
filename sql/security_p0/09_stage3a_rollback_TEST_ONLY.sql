@@ -10,13 +10,13 @@ BEGIN
  END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public'
     AND tablename='corrispettivi_giornalieri'
-    AND policyname='p0_societa_member_all_LAB_ONLY') THEN
+    AND policyname='p0_societa_member_all_lab_only') THEN
     RAISE EXCEPTION 'Expected stage3a missing';
  END IF;
 END $guard$;
-DROP POLICY p0_societa_member_all_LAB_ONLY ON public.corrispettivi_giornalieri;
-DROP POLICY p0_societa_member_all_LAB_ONLY ON public.intrastat_operazioni;
-DROP POLICY p0_societa_member_all_LAB_ONLY ON public.liquidazioni_iva_societa;
+DROP POLICY p0_societa_member_all_lab_only ON public.corrispettivi_giornalieri;
+DROP POLICY p0_societa_member_all_lab_only ON public.intrastat_operazioni;
+DROP POLICY p0_societa_member_all_lab_only ON public.liquidazioni_iva_societa;
 CREATE POLICY "Accesso autenticati" ON public.corrispettivi_giornalieri
  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Accesso autenticati" ON public.intrastat_operazioni
