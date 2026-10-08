@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sb } from './lib/supabase'
+import { signOutSession } from './lib/auth'
 
 // Context
 import { AIStatusProvider, AIBadge } from './context/AIStatusContext'
@@ -243,7 +244,17 @@ function App() {
     setDeferredPrompt(null)
     setShowInstall(false)
   }
-  const logout = () => { setUtente(null); setTab('dashboard'); setShowLogoutConfirm(false) }
+  const logout = async () => {
+    try {
+      const { error } = await signOutSession()
+      if (error) throw error
+      setUtente(null)
+      setTab('dashboard')
+      setShowLogoutConfirm(false)
+    } catch {
+      window.alert('Disconnessione Supabase non riuscita. Riprova.')
+    }
+  }
   const navigateTo = (nextTab) => {
     if (nextTab === 'import_nuovo') {
       setTab('import_contabilita')
