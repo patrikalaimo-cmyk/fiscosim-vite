@@ -71,12 +71,23 @@ export async function generateStampaChecksum({
  * certificano il file effettivo. La RPC deve ancora verificare questi attestati
  * lato server nella stessa transazione di lock, prima del freeze STAMPE.
  */
-export function validateStampaDefinitivaEvidence(precheck) {
+export function validateStampaDefinitivaEvidence(precheck, expected = {}) {
   const blockers = []
   if (precheck?.success !== true) blockers.push('Precheck contabile non superato.')
   if (precheck?.snapshot_certified !== true) blockers.push('Snapshot contabile verificato non disponibile.')
   if (precheck?.stored_file_verified !== true) blockers.push('File finale archiviato e verificato non disponibile.')
   if (precheck?.checksum_verified !== true) blockers.push('Digest dei byte del file non attestato dal server.')
+  for (const [expectedKey, actualKey] of [
+    ['societaId', 'societa_id'],
+    ['tipoStampa', 'tipo_stampa'],
+    ['periodoInizio', 'periodo_inizio'],
+    ['periodoFine', 'periodo_fine'],
+  ]) {
+    if (expected[expectedKey] != null
+      && String(precheck?.[actualKey] ?? '').trim() !== String(expected[expectedKey]).trim()) {
+      blockers.push('Precheck non riferito al contesto richiesto: ' + expectedKey)
+    }
+  }
   const checksum = String(precheck?.content_sha256 || '').trim()
   if (!/^[a-f0-9]{64}$/.test(checksum)) blockers.push('Checksum SHA-256 del documento effettivo assente.')
   if (!Number.isSafeInteger(precheck?.file_size_bytes) || precheck.file_size_bytes <= 0) {

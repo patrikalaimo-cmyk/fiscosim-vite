@@ -265,3 +265,9 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - Eliminato dal pannello l'uso del checksum da metadati: quando il nuovo protocollo server sarà pronto, il valore sarà quello attestato dal server. La RPC attuale non restituisce queste attestazioni: **il consolidamento UI viene quindi bloccato intenzionalmente**, preservando anteprime ed export provvisori.
 - Non è una mitigazione completa lato server: l'RPC DB può essere richiamata esternamente finché non sarà indurita sotto migration approvata. Occorre progettare il protocollo snapshot/hash/archivio/lock transazionale, non inventare attestazioni client.
 - Test del gate aggiunti, CI pendente; nessuna migration/auth/RLS/DB live, Bank live sempre vietata.
+
+## 2026-10-08 — gate definitivo legato al tenant
+
+- Ulteriore controllo sulla verifica: attestazioni server devono riportare stesso `societa_id`, `tipo_stampa`, `periodo_inizio`, `periodo_fine` del pannello; mismatch o attributo assente bloccano. Il cambio della società attiva invalida lo stato del precheck React.
+- Regressioni: cambio tenant, periodo/tipo divergente e invalidazione dell'effetto al cambio società. Non è una sostituzione della validazione server-side nella RPC.
+- CI di questa integrazione: pendente.

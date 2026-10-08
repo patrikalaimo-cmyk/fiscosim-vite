@@ -319,3 +319,7 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 ## STAMPE — gate UI consolidamento senza attestazione file
 
 Test aggiornati `stampaDefinitivaUiHelpers.test.js`: precheck positivo senza prove obbligatorie bloccato, fallback/metadati/zero byte bloccati; percorso UI privo di `generateStampaChecksum` e vincolato a `validateStampaDefinitivaEvidence`. Solo fixture/lettura codice, non test RPC/Postgres o browser. CI pendente.
+
+## STAMPE — binding precheck definitivo a contesto
+
+Nuove verifiche con precheck sinteticamente completo: società diversa, periodo diverso, tipo diverso e attributi mancanti non superano la validazione; cambi società invalidano il precheck React. Si tratta di regressioni UI/helper, non test database/migrazione. CI pendente.

@@ -259,3 +259,9 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - UI non genera più checksum da timestamp/rowsCount. Vecchio helper rimane per compatibilità test storici ma non costituisce prova. Test di gate e percorso Panel aggiornati.
 - Attenzione: la RPC corrente non valida la veridicità del checksum ricevuto, quindi il gate è **solo client-side**. Nessuna migration applicata né rilascio dichiarato.
 - CI PENDENTE.
+
+## 2026-10-08 — binding delle attestazioni di stampa al contesto reale
+
+- Gating `validateStampaDefinitivaEvidence(precheck,expected)` esteso a società, tipo e periodo: nessun riuso cross-tenant/cross-period di un attestato apparentemente valido.
+- `StampaDefinitivaPanel` resetta il precheck al cambio `societa?.id` e ricontrolla i campi del contesto sia dopo il precheck sia prima del consolidamento. Test puri e assert strutturali aggiunti.
+- La RPC attuale non restituisce la prova di file/snapshot e resta da indurire lato server, quindi UI fail-closed. CI pendente.
