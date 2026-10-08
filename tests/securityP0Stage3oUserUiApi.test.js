@@ -20,7 +20,6 @@ test('P0 Stage3O users UI does not directly query or mutate staff records',()=>{
 test('P0 Stage3O user provisioning chooses explicitly authorized companies',()=>{
  for(const fragment of [
   'utente?.societa_assegnate',
-  'utente?.societa_default_id',
   'societa_assegnate',
   'societaOptions.filter(s=>allowedSocietaIds.includes(s.id))',
   "data.societa_assegnate",
@@ -32,6 +31,8 @@ test('P0 Stage3O user provisioning chooses explicitly authorized companies',()=>
   if(fragment==='getAccessToken')continue
   assert.ok(ui.includes(fragment),fragment)
  }
+ assert.ok(ui.includes('societa_assegnate:[]'))
+ assert.ok(!ui.includes('defaultSocietaId'))
  assert.match(app, /<ModuloUtenti ruolo=\{ruolo\} utente=\{utente\} \/>/)
  assert.ok(api.includes('areRequestedSocietaIdsAllowed(payload.societa_assegnate, managedSocietaIds)'))
 })
