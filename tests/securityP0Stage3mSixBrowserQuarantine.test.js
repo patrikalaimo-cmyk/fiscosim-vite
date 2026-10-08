@@ -50,3 +50,15 @@ test('Stage3M rollback explicitly dangerous and opt-in only',()=>{
  assert.match(rollback,/TO authenticated/)
  assert.match(rollback,/DANGEROUS/)
 })
+
+test('Stage3M PowerShell runner pins HEAD and writes verified result',()=>{
+ const ps = readFileSync(new URL('../scripts/security_p0/run-stage3m.ps1',import.meta.url),'utf8')
+ for (const snippet of [
+  'ExpectedCommit', 'rev-parse HEAD', 'LASTEXITCODE',
+  'Out-File -LiteralPath', 'STAGE3M LAB SQL PASS',
+  'RISK_ROLE_ONLY_AUTHENTICATED_TABLES|1',
+  'RISK_TRUE_POLICY_AUTH_TABLES|1',
+  'RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK|0'
+ ]) assert.ok(ps.includes(snippet),snippet)
+ assert.ok(!ps.includes('Tee-Object'))
+})
