@@ -6,8 +6,11 @@ const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf
 
 test('P0 Stage3H disallows client-side secret and bypass login', () => {
   const login = read('src/modules/login/index.jsx')
-  assert.match(login, /auth\.signInWithPassword\(/)
-  assert.match(login, /\.eq\("auth_user_id", authUserId\)/)
+  assert.match(login, /await signInWithPassword\(/)
+  assert.match(login, /await fetchSessionProfile\(authData\.session\.access_token\)/)
+  assert.match(login, /profile\.attivo === false/)
+  assert.match(login, /await signOutSession\(\)/)
+  assert.doesNotMatch(login, /sb\.from\(/)
   assert.doesNotMatch(login, /password_hash|dev_bypass|isLocalAuthDisabled/)
 })
 
