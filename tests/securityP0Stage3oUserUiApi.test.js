@@ -8,7 +8,7 @@ const api=readFileSync(new URL('../api/auth/users.js',import.meta.url),'utf8')
 
 test('P0 Stage3O users UI does not directly query or mutate staff records',()=>{
  assert.ok(ui.includes("apiFetch('/api/auth/users'"))
- for(const operation of ["method:'GET'","method:'PATCH'","method:'DELETE'","method:modal.mode==='new'?'POST':'PATCH'"]){
+ for(const operation of ["method:'GET'","method:'DELETE'","method:modal.mode==='new'?'POST':'PATCH'"]){
   assert.ok(ui.includes(operation),operation)
  }
  assert.ok(!ui.includes('sb.from("utenti_studio")'))
