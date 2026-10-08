@@ -404,3 +404,5 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - `avvisi_ade` and `revisioni_dichiarativi` are deliberately **excluded** to avoid silently breaking AgeCon and review. These **remain exposed** until explicit customer/company ownership and REST auth tests. Their current policy is not safe for release.
 - Stage3M does not repair unscoped legacy/test access or functional workflows; merely quarantines them. Real services for these six tables may stop serving browser calls until a verified server-scoped workflow exists. Full E2E study-grade requirement remains mandatory for every module.
 - Only dedicated draft security branch affected; no write to real Supabase, no merge, deploy, .env or local Docker changes.
+
+- Added PowerShell 5.1 runner `scripts/security_p0/run-stage3m.ps1` with pinned commit check, dedicated Docker lab selection and fail-closed result reporting. Expected after Stage3M: role-only=1, TRUE-policy reachable=1, password ACL=0, global owner fallback=0, legacy nullable=3. Stage3M is not yet executed in Docker.
