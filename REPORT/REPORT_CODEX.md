@@ -317,3 +317,18 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Test statico: assert espliciti per DML vietato, visibilità segreti, service_role.
 - Debito applicativo: legacy `login` browser legge password_hash quando bypass abilitato; `utenti` usa SELECT * e credenziali dal client. API `/api/auth/users` adotta Supabase Auth e service_role ma richiede audit di segregazione inter-studio prima del collegamento UI.
 - Nessun merge, deploy, intervento DB live, modifica `mio-branch`, env o Docker remoto. P0 rimane aperto.
+
+
+## 2026-10-08 — P0 STAGE3G / COLLLaUDO POSTGRESQL IN DOCKER ISOLATO
+- L'operatore ha eseguito `24_stage3g_staff_secret_acl_LAB_ONLY.sql`, `25_stage3g_staff_secret_acl_TEST_ONLY.sql`, `23_stage3f_role_only_READ_ONLY.sql` e `04_residuals_READ_ONLY.sql` nel container `supabase_db_FiscoSim-P0-LAB-20261008-164658`, con esito finale `STAGE 3G - SQL ESEGUITO SENZA ERRORI`.
+- Report `04_residuals`: `RESIDUAL_AUTH_TRUE_POLICY_TABLES=8`; tutti gli altri sette indicatori principali a zero. Il dettaglio delle notice Stage3G e l'indicatore `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH` non sono inclusi nell'estratto trasmesso.
+- **Stage3G PostgreSQL PASS come esecuzione script/test; JWT/API browser e login E2E ancora NON TESTATI**. Non ripetere il laboratorio o le Stage 1–3F.
+
+## 2026-10-08 — P0 STAGE3H / LOGIN AUTH CLIENT SICURO
+- Solo branch `security/p0-isolated-hardening-20261008`: `src/modules/login/index.jsx` rimuove il bypass con confronto password locale; usa `signInWithPassword` e `fetchSessionProfile` per profilo operativo autorizzato. Sessioni create con profilo mancante vengono disconnesse.
+- `src/lib/auth.js` rimuove `isLocalAuthDisabled` e la soppressione dell'Authorization Bearer nelle chiamate API. `src/App.jsx` effettua `signOutSession` prima di azzerare lo stato UI.
+- Aggiunto `tests/securityP0Stage3hAuthClient.test.js` per bloccare regressioni sul bypass e logout.
+- Codice finale `0add80e7024b842328afb3921f4254d213cfce97`; GitHub Actions `37842316343`: **SUCCESS Linux e Windows**, build inclusa.
+- **NON CERTIFICATO E2E**: serve ambiente locale completo Supabase Auth + API e utenti JWT reali fittizi. Il container PostgreSQL P0 non sostituisce l'intero stack applicativo.
+- Residuo bloccante successivo: `src/modules/utenti/index.jsx` conserva `select('*')`, campo `password_hash` e insert/update diretti; `api/auth/users.js` usa service_role e non verifica il confine inter-studio nella selezione/mutazione dei profili. `resolveProvisionedSocietaIds` accetta societa richieste non dimostrate in scope e fallback su tutte le societa attive. **Non cablare l'UI fino a una policy server-side dimostrata con due studi indipendenti.**
+- Nessun merge, deploy, modifica a `mio-branch`, `.env`, Supabase live o dati clienti. P0 rimane APERTO.
