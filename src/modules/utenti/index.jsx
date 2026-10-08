@@ -96,7 +96,7 @@ export function ModuloUtenti({ utente, ruolo }){
                       })}
                       {u.permessi?.clienti?.solo_assegnati&&<span title="Solo clienti assegnati" style={{fontSize:".62rem",background:"rgba(34,211,238,.1)",border:"1px solid rgba(34,211,238,.3)",borderRadius:4,padding:".05rem .3rem",color:"var(--cy)"}}>👤</span>}
                     </div>
-                  ):<span style={{fontSize:".72rem",color:"var(--mu)"}}>Accesso totale</span>}
+                  ): <span style={{fontSize:".72rem",color:"var(--mu)"}}>Accesso per società assegnate</span>}
                 </td>
                 <td><div className="tbl-actions">
                   <button className="btn-icon" onClick={()=>setModal({mode:"edit",data:u})}>✏️</button>
@@ -168,8 +168,8 @@ function UtenteModal({mode,data,onSave,onClose,saving,err,societaOptions,allowed
                 {ruoloGestore==='owner'&&<option value="owner">Owner</option>}
               </select>
               <div style={{marginTop:".35rem",background:"var(--s2)",border:"1px solid var(--bd)",borderRadius:7,padding:".45rem .65rem",fontSize:".7rem",color:"var(--mu)"}}>
-                {f.ruolo==="owner"&&"🔑 Accesso totale a tutto · Unico che gestisce utenti e ruoli"}
-                {f.ruolo==="admin"&&"⚙️ Accesso totale a tutti i moduli · Non può gestire utenti studio"}
+                {f.ruolo==="owner"&&"🔑 Gestione utenti e ruoli limitata alle società assegnate"}
+                {f.ruolo==="admin"&&"⚙️ Gestione utenti nelle società assegnate · Non può creare Owner"}
                 {f.ruolo==="collaboratore"&&"👤 Permessi configurabili modulo per modulo (vedi sotto)"}
               </div>
             </div>
