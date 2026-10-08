@@ -75,6 +75,22 @@ BEGIN
     RAISE EXCEPTION 'Stage3J browser privilege remains on %.%',t,op;
    END IF;
   END LOOP;
+  -- Table grants and column grants are independent. Abort if any
+  -- authenticated/anon column privilege survives on a legacy table.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns c
+    WHERE c.table_schema='public' AND c.table_name=t
+     AND (
+       has_column_privilege('authenticated',format('public.%I',t),c.column_name,'SELECT')
+       OR has_column_privilege('authenticated',format('public.%I',t),c.column_name,'INSERT')
+       OR has_column_privilege('authenticated',format('public.%I',t),c.column_name,'UPDATE')
+       OR has_column_privilege('anon',format('public.%I',t),c.column_name,'SELECT')
+       OR has_column_privilege('anon',format('public.%I',t),c.column_name,'INSERT')
+       OR has_column_privilege('anon',format('public.%I',t),c.column_name,'UPDATE')
+     )
+  ) THEN
+    RAISE EXCEPTION 'Stage3J column-level browser grant remains on %',t;
+  END IF;
   FOREACH op IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE'] LOOP
    IF NOT has_table_privilege('service_role',format('public.%I',t),op) THEN
     RAISE EXCEPTION 'Stage3J server privilege lost on %.%',t,op;
