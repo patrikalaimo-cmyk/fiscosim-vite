@@ -104,3 +104,9 @@ Aggiunto `hashStampaContenuto` (SHA-256, input `Uint8Array`/`ArrayBuffer`), che 
 ## Addendum 2026-10-08 — sospensione consolidamento UI non attestato
 
 Il pannello definitivo ora richiede un attestato di snapshot coerente, file effettivo archiviato, hash di contenuto verificato dal server e dimensione positiva. Poiché la RPC precheck corrente non restituisce questi dati, la UI blocca esplicitamente il consolidamento, evitando di inviare il vecchio digest metadata-only. **Non modifica né corregge la funzione SQL sottostante**: il bypass client della RPC resta un gap server-side bloccante che richiede successiva migration autorizzata e test E2E. Stampe provvisorie non modificate; STAMPE non freeze.
+
+## Gate 2026-10-08 — audit raccordo, SHA-256 contenuto e blocco definitiva non attestata
+
+Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o società reali.
+
+La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI è volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e può essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
