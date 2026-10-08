@@ -8,7 +8,15 @@ param(
 )
 $ErrorActionPreference='Stop'
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+# Preserve previous PASS evidence. Never replace the original audit report.
 $report=Join-Path $Lab 'STAGE3N_RESULT.txt'
+if (Test-Path -LiteralPath $report) {
+  $timestamp=(Get-Date).ToString('yyyyMMdd-HHmmss')
+  $report=Join-Path $Lab ('STAGE3N_RECHECK_' + $timestamp + '.txt')
+  if (Test-Path -LiteralPath $report) {
+    throw 'Stage3N: report name collision; abort without overwriting evidence'
+  }
+}
 $lines=New-Object System.Collections.Generic.List[string]
 if (!(Test-Path -LiteralPath $Lab -PathType Container)) {
   throw 'Stage3N: dedicated lab missing'
