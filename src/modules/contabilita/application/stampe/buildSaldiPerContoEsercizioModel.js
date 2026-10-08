@@ -117,6 +117,10 @@ export function buildSaldiPerContoEsercizioModel(entries = [], pianoConti = [], 
     }
   }
 
+  // Un conto puo apparire sia per ID sia per solo codice in PN storiche.
+  // Prima unificare i movimenti sul conto canonico, poi ordinarli per data:
+  // aggregare gruppi separati falserebbe il saldo progressivo del mastro.
+  const byLedger = new Map()
   for (const movementAccount of base.conti) {
     const matching = movementAccount.contoId
       ? byId.get(movementAccount.contoId)
@@ -128,12 +132,22 @@ export function buildSaldiPerContoEsercizioModel(entries = [], pianoConti = [], 
     if (movementAccount.codice && movementAccount.codice !== matching.codice) {
       add(blockers, 'codice_conto_non_coerente')
     }
-    const row = resultRows.get(matching.id)
-    if (!row) {
+    if (!resultRows.has(matching.id)) {
       add(blockers, 'conto_non_foglia_movimentato')
       continue
     }
-    for (const movement of movementAccount.movimenti) {
+    if (!byLedger.has(matching.id)) byLedger.set(matching.id, [])
+    byLedger.get(matching.id).push(...movementAccount.movimenti)
+  }
+  for (const [id, entriesForAccount] of byLedger) {
+    const row = resultRows.get(id)
+    const ordered = [...entriesForAccount].sort((a, b) =>
+      text(a.dataRegistrazione).localeCompare(text(b.dataRegistrazione))
+      || Number(a.numeroRegistrazione || 0) - Number(b.numeroRegistrazione || 0)
+      || text(a.primaNotaId).localeCompare(text(b.primaNotaId))
+      || Number(a.rigaNumero || 0) - Number(b.rigaNumero || 0)
+    )
+    for (const movement of ordered) {
       const dare = cent(movement.dare)
       const avere = cent(movement.avere)
       if (!Number.isSafeInteger(dare) || !Number.isSafeInteger(avere)) {

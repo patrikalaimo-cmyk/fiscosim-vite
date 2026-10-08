@@ -117,3 +117,21 @@ test('rimane non definitivo: nessuna inferenza automatica sui saldi di esercizi 
   assert.equal(r.conti.find(c => c.contoId === 'bank').saldoPrecedente, 0)
   assert.ok(r.warnings.some(w => /non verificati/i.test(w)))
 })
+
+test('mastrino: ID e codice riferiti allo stesso conto seguono l\'ordine cronologico', () => {
+  const codeOnly = (entry) => ({
+    ...entry,
+    righe: entry.righe.map(r => r.conto_id === 'bank' ? { ...r, conto_id: null } : r),
+  })
+  const es = [
+    pn('mar2', '2026-03-09', 'bank', 'ricavi', 20),
+    codeOnly(pn('mar1', '2026-03-01', 'bank', 'ricavi', 50)),
+    codeOnly(pn('mar3', '2026-03-15', 'costi', 'bank', 30)),
+  ]
+  const out = build(es)
+  assert.equal(out.valid, true, out.blockers.join(', '))
+  const bank = out.conti.find(c => c.contoId === 'bank')
+  assert.deepEqual(bank.movimenti.map(m => m.dataRegistrazione), ['2026-03-01', '2026-03-09', '2026-03-15'])
+  assert.deepEqual(bank.movimenti.map(m => m.saldoProgressivo), [50, 70, 40])
+  assert.equal(bank.saldoFinale, 40)
+})

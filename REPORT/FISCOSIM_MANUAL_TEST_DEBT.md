@@ -200,3 +200,7 @@ Restano aperti fascicolo PDF unico, modelli/UX completi, hash di contenuto, impo
 ## Saldi intraesercizio — ulteriore debito QA (2026-10-08)
 
 Prima della qualifica di Mastrini e Bilancio verificare: (1) saldi da scritture di chiusura/riapertura dell'anno precedente e loro origine provata; (2) saldo precedente per periodo intermedio, separato dal saldo d'inizio esercizio; (3) piano conti gerarchico con conti senza movimenti; (4) cancellazioni, storni, note credito e scritture simulate; (5) totale Dare/Avere e saldi in quadratura; (6) completezza dei dati a pagine e consistenza durante scritture concorrenti. Il nuovo modello non è ancora collegato alla UI e non è certificato per output definitivi.
+
+## Debito audit raccordo esercizi (2026-10-08)
+
+Prima di abilitare bilancio/mastri definitivi: recuperare via repository canonico tutte le PN dei due esercizi e tutte le causali, incluse inattive storiche; certificare che le chiusure patrimoniali selezionate siano realmente quelle del workflow e che l'intero esercizio precedente sia completo; verificare saldi iniziali verificabili dalla catena di esercizi, stornate/rettifiche, assestamenti, cambio conti e annualità precedenti; transazione/snapshot durante letture concorrenti; classificazione conti che cambiano natura; rifiuto della definitiva su blocker. Test con società fittizie e controllo contabile indipendente obbligatori. L'audit puro resta `definitive:false`.

@@ -86,3 +86,9 @@ Test sintetici inclusi in `test:stampe`; CI del commit in corso di verifica. Nes
 ## Gate automatico addendum saldi intraesercizio
 
 Commit `1ec940c` verificato in GitHub Actions run `37766190172`: **SUCCESS** Windows e Ubuntu; `test:stampe` **61/61**, `test:all` **1004/1004**, build PASS. Stato modulo invariato **IN CORSO / NON FREEZE** fino a chiusura saldi d'apertura verificati, UI/export/PDF e collaudi.
+
+## Addendum 2026-10-08 — raccordo inter-esercizio e mastrini ID/codice
+
+Implementato `auditRaccordoEserciziModel` in sola lettura: esige causali apertura/chiusura canoniche tramite `causale_id`, ID espliciti delle chiusure patrimoniali e PN dell'esercizio precedente; controlla azzeramento del precedente, economici esclusi dalla chiusura patrimoniale e saldi della riapertura opposti per conto. Non sostituisce una procedura contabile reale, né dimostra completezza/snapshot, perciò non promuove il bilancio a stampa definitiva. Il report precedente della sola movimentazione infrannuale resta non certificato.
+Corretto anche l'ordinamento dei saldi progressivi quando PN storiche usano alternativamente `conto_id` e `conto_codice`: l'aggregazione per conto precede ora il sorting cronologico.
+Fascicolo unico, UI Bilancio/Mastri/Partitario, checksum, snapshot e QA PDF ancora NON FREEZE.

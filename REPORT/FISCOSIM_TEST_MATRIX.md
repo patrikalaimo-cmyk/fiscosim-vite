@@ -298,3 +298,8 @@ Verifica di dominio **non** equivalente a test con banca dati, riapertura preced
 ## Checkpoint CI saldo precedente intraesercizio — 2026-10-08
 
 Commit `1ec940c`: GitHub Actions `37766190172` SUCCESS su Ubuntu/Windows. Ogni piattaforma: Stampe 61/61; Bank 11/11; Core 629/629; All safe 1004/1004; build PASS. Esclusi dal gate saldi riportati dal precedente esercizio, snapshot e collaudi browser/database/PDF.
+
+## STAMPE — audit raccordo apertura/chiusura (2026-10-08)
+
+Nuovo profilo `stampeRaccordoEserciziModel.test.js`: fixture due esercizi, scrittura economica e suo azzeramento, chiusura patrimoniale e riapertura opposta, mismatch centesimi, stato e tenant, causali ID/tipo, date/anno, chiusure duplicate/omesse, conti economici indebitamente movimentati, `saldo_iniziale` ignorato e dataset incoerente. In `stampeSaldiPerContoEsercizioModel.test.js` nuovo scenario cronologico con conto associato alternativamente via codice e ID. Gate CI pendente.
+Non si tratta di collaudo di chiusura automatica, RLS, database, concorrenza, export o PDF.

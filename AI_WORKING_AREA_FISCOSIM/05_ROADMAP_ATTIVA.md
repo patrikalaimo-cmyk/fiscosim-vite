@@ -227,3 +227,11 @@ Rimane non chiuso il requisito residuo: pagamento parziale di parcella con riten
 ## Gate 2026-10-08 — STAMPE saldi intraesercizio
 
 Commit `1ec940c`, GitHub Actions `37766190172` **SUCCESS** Ubuntu/Windows; stampe 61/61, bank 11/11, core 629/629, all safe 1004/1004, build OK su entrambe le piattaforme. P1 resta parziale: saldi precedenti intraesercizio da PN canonica e piano conti verificati automaticamente; riapertura anno precedente e validazione snapshot non coperte. Stampe/Bilancio non freeze.
+
+## Sottofase 2026-10-08 — audit raccordo esercizi / progressivi mastro (CI da validare)
+
+- Introdotto `auditRaccordoEserciziModel`, puro/read-only: verifiche su Prima Nota esercizio precedente, identificativi ESPLICITI delle chiusure patrimoniali, scritture di riapertura e causali canoniche (`causali_contabili.tipo=chiusura/apertura`) tenant-scoped.
+- Verifica finale esercizio precedente azzerato, assenza di economici nella chiusura patrimoniale/riapertura, corrispondenza di segno opposto al centesimo per conto tra chiusura e riapertura. Stati non contabilizzati, documenti fuori esercizio e input incoerenti bloccati.
+- Corretto ordinamento dei progressivi di mastro nel caso di registrazioni miste con `conto_id` oppure soltanto `conto_codice`, senza perdere la cronologia tra gruppi.
+- **Non è una procedura di chiusura o riapertura, non scrive PN**. Se la fonte non espone causali/ID o l'esercizio precedente non è realmente chiuso, l'audit fallisce esplicitamente. L'esito è sempre `definitive:false`: snapshot atomico, completezza della lettura e certificazione catena esercizi NON provati.
+- Nessuna stampa Bilancio/Mastri sbloccata, nessuna banca live. Prossimo gate: fonte canonica completa/paginata per periodo e causali storiche, consistenza sotto concorrenza, collegamento applicativo/UI solo dopo audit contabile, workflow reale di assestamento/chiusura.

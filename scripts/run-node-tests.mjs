@@ -26,6 +26,7 @@ const STAMPE_ROOT_TESTS = new Set([
   'stampeSafetyGuard.test.js',
   'stampeMovimentiPerContoModel.test.js',
   'stampeSaldiPerContoEsercizioModel.test.js',
+  'stampeRaccordoEserciziModel.test.js',
   'stampePagination.test.js',
 ])
 
