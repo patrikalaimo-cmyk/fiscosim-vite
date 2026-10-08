@@ -340,3 +340,19 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Non applicata nessuna RLS**: i riferimenti studio/cliente e `studio_id` nullable restano da determinare tramite output del LAB. Non dedurre relazioni dal nome delle tabelle.
 - Il controllo sarà eseguito esclusivamente nel Docker P0 già esistente e non interroga righe cliente. CI e verifica PostgreSQL Stage3I pendenti al commit tecnico `a9c9a7d37d502cb737eb06c2cde47b1e50c24ce7`.
 - Nessun accesso write al progetto Supabase reale; `mio-branch`, .env e produzione invariati.
+
+
+## 2026-10-08 — P0 STAGE3I ANALYZED / legacy studios security boundary
+- L'operatore ha caricato il report `STAGE3I_RELATIONSHIP_AUDIT.txt`: `STAGE3I READ-ONLY PASS`, 370 righe, transazione terminata con `ROLLBACK`.
+- Verificato: `f24_righe`, `f24_scadenze`, `liquidazioni_iva` appartengono al sottoschema legacy `studios/users/clients` (FK studio_id->studios.id; cliente_id->clients.id); hanno studio_id nullable. Nessun FK documentato che renda automaticamente equivalente `studios.id` a `societa.id` o `users.id` a `utenti_studio.id`.
+- RLS: `Allow authenticated` per `studios/users/clients` e tabelle fiscali; `allow_all_*` policy TRUE per 3 tabelle; authenticated aveva SELECT/INSERT/UPDATE/DELETE a livello tabella per le sei. `user_has_societa_access` restituisce TRUE agli owner/admin senza membership target.
+- BUG applicativi CONFERMATI STATICAMENTE: `src/modules/f24/index.jsx` popola clienti dalla tabella `clienti` e salva su `f24_righe` usando `client_id`, campo assente (schema contiene `cliente_id` FK verso `clients`); crea `f24_scadenze` senza studio_id. `src/modules/iva/index.jsx` invia `trimestre`, `iva_saldo`, `iva_dovuta` e ordina per `trimestre`, colonne assenti nello schema `liquidazioni_iva`; usa `clienti` anziché `clients`. L'AI agent/test_mode legacy interroga campi `societa_id` / `importo` incoerenti con le medesime tabelle.
+- Nessuna correttezza funzionale F24/IVA deducibile dai PASS SQL di sicurezza; sono necessari redesign e test E2E prima dello sblocco di questi moduli.
+
+## 2026-10-08 — P0 STAGE3J PREPARED / laboratorio-only quarantine legacy
+- Predisposti `sql/security_p0/28_stage3j_legacy_quarantine_LAB_ONLY.sql`, `29_stage3j_legacy_quarantine_TEST_ONLY.sql`, `30_stage3j_rollback_TEST_ONLY.sql` e `tests/securityP0Stage3jLegacyQuarantine.test.js`.
+- Patch gated/atomica: `REVOKE ALL` browser anon/authenticated/PUBLIC sulle sei tabelle `studios/users/clients/f24_scadenze/f24_righe/liquidazioni_iva`, con guard FK studio, nullable legacy e postcheck service_role + column grants; non migra dati né altera nullable/FK/policy o società principale.
+- Esito deliberatamente **fail closed**: i browser user non possono più leggere/scrivere in quei sei endpoint legacy; **i vecchi moduli F24/IVA rimangono BLOCCATI** e non sono considerati funzionalmente sistemati. Server service_role deve mantenere accesso (pre/post condition).
+- TEST_ONLY usa SQL a zero righe con `SET LOCAL ROLE authenticated` e ROLLBACK, senza dati fiscali. Rollback pericoloso solo con opt-in esplicito LAB.
+- Stato: codice/staging preparato ma **NON APPLICATO al laboratorio Docker**, nessun test SQL reale Stage3J; CI del commit finale da verificare. Supabase reale `mlydfspmrkaedsocubku` read-only; `mio-branch`, produzione, .env e PR Draft immutati.
+- Successivi P0: protezione dell'API `/api/auth/users` da modifiche tra studi, rimozione owner/admin fallback globale, altre policy TRUE/auth-only, JWT E2E; poi flusso contabile XML->staging->PN->IVA->stampe e test fiscali.
