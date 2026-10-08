@@ -38,7 +38,7 @@ function Invoke-P0Sql {
   if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
     throw ('Stage3M: missing SQL file ' + $Name)
   }
-  $header = "SET client_min_messages TO notice;`n"
+  $header = "SET client_min_messages TO warning;`n"
   if ($ApprovalSetting) {
     $header += "SET $ApprovalSetting = '$ApprovalValue';`n"
   }
@@ -87,12 +87,12 @@ try {
     }
   }
   @('STAGE3M LAB SQL PASS', 'COMMIT=' + $ExpectedCommit) +
-    $logLines | Out-File -LiteralPath $report -Encoding UTF8
+    @($logLines.ToArray()) | Out-File -LiteralPath $report -Encoding UTF8
   Write-Host 'STAGE3M LAB SQL PASS' -ForegroundColor Green
   Write-Host ('Report: ' + $report)
   $risks | Where-Object { $_ -match '^RISK_' } | Out-Host
 } catch {
   @('STAGE3M FAILED', 'COMMIT=' + $ExpectedCommit) +
-    $logLines | Out-File -LiteralPath $report -Encoding UTF8
+    @($logLines.ToArray()) | Out-File -LiteralPath $report -Encoding UTF8
   throw
 }
