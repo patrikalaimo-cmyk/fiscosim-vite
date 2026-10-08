@@ -49,6 +49,7 @@ test('P0 service-role users API filters GET and checks scope before CRUD',()=>{
  assert.ok(guard >= 0 && guard < get)
  assert.ok(source.includes('visibleMembershipsForManager'))
  assert.ok(source.indexOf('visibleMembershipsForManager(linkedMemberships') > get)
+ assert.ok(source.indexOf('areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds)',get) < post)
  assert.ok(source.indexOf('areRequestedSocietaIdsAllowed',post) < patch)
  assert.ok(source.indexOf('areTargetMembershipsFullyAllowed',patch) < remove)
  assert.ok(source.indexOf('areTargetMembershipsFullyAllowed',remove) > remove)
