@@ -41,3 +41,18 @@ test('Stage3N unsafe rollback is separately guarded and never automatic',()=>{
  assert.match(unsafe,/TO authenticated/)
  assert.match(unsafe,/NEVER run on production/)
 })
+
+test('Stage3N runner pins actual Git HEAD and checks SQL exit status',()=>{
+ const runner=readFileSync(new URL('../scripts/security_p0/run-stage3n.ps1',import.meta.url),'utf8')
+ for(const snippet of [
+  '$ExpectedCommit','rev-parse HEAD',
+  'Stage3N: refusing unexpected container',
+  '$code=$LASTEXITCODE',
+  "($apply -contains 'COMMIT')",
+  "($test -contains 'ROLLBACK')",
+  'STAGE3N LAB SQL PASS',
+  'RISK_ROLE_ONLY_AUTHENTICATED_TABLES|1',
+  'RISK_TRUE_POLICY_AUTH_TABLES|1'
+ ]) assert.ok(runner.includes(snippet),snippet)
+ assert.ok(!runner.includes('Tee-Object'))
+})
