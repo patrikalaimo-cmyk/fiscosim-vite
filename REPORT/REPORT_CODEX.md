@@ -356,3 +356,18 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - TEST_ONLY usa SQL a zero righe con `SET LOCAL ROLE authenticated` e ROLLBACK, senza dati fiscali. Rollback pericoloso solo con opt-in esplicito LAB.
 - Stato: codice/staging preparato ma **NON APPLICATO al laboratorio Docker**, nessun test SQL reale Stage3J; CI del commit finale da verificare. Supabase reale `mlydfspmrkaedsocubku` read-only; `mio-branch`, produzione, .env e PR Draft immutati.
 - Successivi P0: protezione dell'API `/api/auth/users` da modifiche tra studi, rimozione owner/admin fallback globale, altre policy TRUE/auth-only, JWT E2E; poi flusso contabile XML->staging->PN->IVA->stampe e test fiscali.
+
+
+## 2026-10-08 — P0 STAGE3J LAB PASS / residui dopo quarantena
+- L'operatore ha eseguito il comando Stage3J sul solo container Docker `supabase_db_FiscoSim-P0-LAB-20261008-164658`; il comando ha raggiunto la generazione di `STAGE3J_RESULT.txt`, senza errori segnalati.
+- Output `23_stage3f_role_only_READ_ONLY.sql` riportato: `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH=0`; `RISK_NULLABLE_LEGACY_FISCAL_STUDIO_IDS=3`; `RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK=1`; `RISK_ROLE_ONLY_AUTHENTICATED_TABLES=3`; `RISK_TRUE_POLICY_AUTH_TABLES=5`.
+- Quarantena Stage3J confermata tramite calo contatori 9→3 role-only e 8→5 true-policy visibili al browser; report completo non allegato e JWT/API E2E non testati. RLS true legacy rimane catalogata e non deve essere riabilitata con futuri GRANT.
+
+## 2026-10-08 — P0 STAGE3K PREP / owner-admin global company fallback
+- Patch candidata **SOLO LAB**: `31_stage3k_explicit_company_membership_LAB_ONLY.sql` sostituisce `user_has_societa_access(uuid)` in modalità `SECURITY INVOKER` con `EXISTS` su membership + utente attivo e uguaglianza esatta di entrambe le identità auth; rimuove ramo owner/admin `RETURN TRUE` globale.
+- `32_stage3k_company_membership_TEST_ONLY.sql`: test reale RLS SQL su due società sintetiche e cinque identità (owner, admin, collaboratore, disabilitato, esterno), verifica positiva accesso società A e negativa B, lettura e aggiornamento transazionale, con ROLLBACK.
+- `33_stage3k_rollback_TEST_ONLY.sql`: ripristino esplicitamente **insicuro**, LAB ONLY con GUC opt-in, mai produzione.
+- `tests/securityP0Stage3kCompanyMembership.test.js`: static regressions. CI e PostgreSQL Stage3K pendenti.
+- Comportamento desiderato: utenti owner/admin privi di assegnazioni esplicite non vedono i dati società; non si ricostruiscono né si inferiscono membership dai ruoli. Potenziale regressione applicativa fino a provisioning esplicito delle assegnazioni da collaudare; NON si attiva su Supabase reale.
+- Permangono criticità P0 separate: altre 3 role-only table, 5 TRUE policy con grants legacy attualmente revocati, API `/api/auth/users` con service_role e scoping assente, 3 `studio_id` legacy nullable, end-to-end Auth e fiscali non eseguiti.
+- Nessuna applicazione al Docker, nessuna scrittura a Supabase reale, nessun cambiamento su `mio-branch`, .env, PR o deploy.
