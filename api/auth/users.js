@@ -205,8 +205,10 @@ export default async function handler(req, res) {
       }
       const visibleUsers = studioUsers.flatMap((row) => {
         const linkedMemberships = membershipsByUtenteId.get(String(row.id || '').trim()) || []
+        // Do not return partially owned profiles: a user shared with another
+        // company must not expose global profile fields to this manager.
+        if (!areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds)) return []
         const visible = visibleMembershipsForManager(linkedMemberships, managedSocietaIds)
-        if (!visible.length) return []
         return [sanitizeUtenteProfile(buildUserProfileSnapshot({
           profileRow: { ...row, ruolo: normalizeRole(row?.ruolo) },
           membershipRows: visible,
