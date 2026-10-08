@@ -204,3 +204,7 @@ Prima della qualifica di Mastrini e Bilancio verificare: (1) saldi da scritture 
 ## Debito audit raccordo esercizi (2026-10-08)
 
 Prima di abilitare bilancio/mastri definitivi: recuperare via repository canonico tutte le PN dei due esercizi e tutte le causali, incluse inattive storiche; certificare che le chiusure patrimoniali selezionate siano realmente quelle del workflow e che l'intero esercizio precedente sia completo; verificare saldi iniziali verificabili dalla catena di esercizi, stornate/rettifiche, assestamenti, cambio conti e annualità precedenti; transazione/snapshot durante letture concorrenti; classificazione conti che cambiano natura; rifiuto della definitiva su blocker. Test con società fittizie e controllo contabile indipendente obbligatori. L'audit puro resta `definitive:false`.
+
+## Raccordo / lettura database reale (2026-10-08)
+
+Verificare su società fittizia con DB di test: presenza di `causale_id` nelle PN storiche, classificazione `tipo` realmente allineata alle causali chiusura/apertura, piano dei conti con inattivi, anno completo e righe PN complete; riapertura richiesta di altra società fail-closed; stesso dato durante scritture concorrenti e snapshot consistente. I test del loader attualmente usano un query-builder mock e NON risolvono questo debito.

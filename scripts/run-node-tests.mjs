@@ -27,6 +27,7 @@ const STAMPE_ROOT_TESTS = new Set([
   'stampeMovimentiPerContoModel.test.js',
   'stampeSaldiPerContoEsercizioModel.test.js',
   'stampeRaccordoEserciziModel.test.js',
+  'stampeRaccordoLoad.test.js',
   'stampePagination.test.js',
 ])
 

@@ -239,3 +239,12 @@ Commit `1ec940c`, GitHub Actions `37766190172` **SUCCESS** Ubuntu/Windows; stamp
 ## Fix CI 2026-10-08 — conto per solo codice in PN storiche
 
 La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.
+
+## 2026-10-08 — STAMPE raccordo: loader read-only del repository
+
+- Il fix `73578a3` ha superato CI Windows/Ubuntu `37775668769`.
+- Implementato `loadAuditRaccordoEsercizi(db,input)`: carica PN intera dell'esercizio precedente tramite paginazione completa, righe PN in batch, riaperture puntuali con ID obbligatori, piano dei conti e causali incluse quelle storicamente inattive.
+- Esposta funzione applicativa read-only `getAuditRaccordoEserciziPerStampa(input)` in `contabilitaRepo.js`; ritorna audit e statistiche evidence con `completenessCertified:false`, `snapshotCertified:false`.
+- Scope societario esplicito su tutte le intestazioni/causali/conti e join righe tramite soli ID già filtrati; fallimento esplicito su PN senza righe, ID mancanti, duplicati o errori di lettura. Nessun flusso UI o commit contabile abilitato.
+- Test di lettura simulata query DB con oltre 500 PN, batch righe, inattivi storici, leakage di ID, errori e blocker. CI del loader pendente.
+- Residui: snapshot transazionale da fonte DB, politica reale chiusure/riaperture e report finale certificato.

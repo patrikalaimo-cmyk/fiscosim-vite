@@ -307,3 +307,7 @@ Non si tratta di collaudo di chiusura automatica, RLS, database, concorrenza, ex
 ## Fix CI 2026-10-08 — conto per solo codice in PN storiche
 
 La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.
+
+## STAMPE — loader read-only di audit inter-esercizio
+
+`stampeRaccordoLoad.test.js`: letture paginated, join a lotti, tenant scope, causali/conti inattivi, 513 PN senza troncamenti, errore su PN senza righe, riapertura di altra società e ID mancanti, input temporale non valido. Suite `test:stampe`; nessun DB reale né verifica consistenza snapshot, CI pendente.

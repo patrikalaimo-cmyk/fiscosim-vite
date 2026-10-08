@@ -7,6 +7,7 @@ import {
 } from '../../../../services/primaNotaService.js'
 import { syncPercipienteFromDocumentoContabilita } from '../application/percipientiRegistryService.js'
 import { fetchAllStampeRows, chunkStampeIds } from '../application/stampe/fetchAllStampeRows.js'
+import { loadAuditRaccordoEsercizi } from '../application/stampe/loadAuditRaccordoEsercizi.js'
 
 export function normalizeUuidOrNull(value) {
   const text = String(value ?? '').trim()
@@ -1714,3 +1715,11 @@ export async function getStampeDefinitiveValide(societaId, db = sb) {
   }
 }
 
+
+/**
+ * Dataset inter-esercizio read-only, completo a pagine e tenant-scoped.
+ * Non abilita bilanci/stampe definitivi: snapshot e catena storica non certificati.
+ */
+export async function getAuditRaccordoEserciziPerStampa(input) {
+  return loadAuditRaccordoEsercizi(sb, input)
+}

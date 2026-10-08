@@ -234,3 +234,11 @@
 ## Fix CI 2026-10-08 — conto per solo codice in PN storiche
 
 La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.
+
+## 2026-10-08 — Raccordo / read-only loader e regressioni
+
+- CI fix `73578a3`: run `37775668769` SUCCESS Windows e Ubuntu (stampe e baseline).
+- `loadAuditRaccordoEsercizi` legge da `prima_nota`, `prima_nota_righe`, `piano_conti`, `causali_contabili` con `fetchAllStampeRows` e batch, senza filtro `attivo` nei metadati storici. Identità di chiusure/riaperture espressa da ID, no euristiche testo.
+- Wrapper in repository `getAuditRaccordoEserciziPerStampa` usa `sb` soltanto in lettura. `auditRaccordoEserciziModel` continua a bloccare risultati incoerenti.
+- Nuovi test query-builder mock testano processo completo (non DB reale), righe mancanti, dati >500, metadata inattivi, ID di altro tenant, errori lettura. CI PENDENTE.
+- Snapshot atomico e completezza temporale non attestati; output sempre `definitive:false`, UI e PDF finale ancora non abilitati.
