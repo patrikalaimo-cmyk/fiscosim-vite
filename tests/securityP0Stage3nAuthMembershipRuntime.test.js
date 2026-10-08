@@ -11,7 +11,8 @@ function fakeAdmin({profile=null,assignments=[]}={}) {
    const query={
     select() {return query},
     eq(column,value){filters.push([column,value]);return query},
-    order(){return Promise.resolve({data:assignments,error:null})},
+    order(){return query},
+    then(resolve,reject){return Promise.resolve({data:assignments,error:null}).then(resolve,reject)},
     maybeSingle() {
      if(table==='utenti_studio') {
       const id=filters.find(([c])=>c==='auth_user_id')?.[1]
