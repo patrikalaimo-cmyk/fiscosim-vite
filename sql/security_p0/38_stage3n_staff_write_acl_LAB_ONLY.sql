@@ -18,13 +18,20 @@ BEGIN
  ) THEN
   RAISE EXCEPTION 'Stage3N staff RLS prerequisite absent';
  END IF;
- IF NOT has_column_privilege('authenticated','public.utenti_studio','nome','INSERT')
-  OR NOT has_column_privilege('authenticated','public.utenti_studio','ruolo','UPDATE')
-  OR has_column_privilege('authenticated','public.utenti_studio','password_hash','SELECT')
-  OR NOT has_column_privilege('authenticated','public.utenti_studio','nome','SELECT')
-  OR NOT has_column_privilege('service_role','public.utenti_studio','ruolo','UPDATE')
+ -- Two supported states: original Stage3G grants or already-applied Stage3N.
+ -- Any partial/mixed state is rejected. The subsequent verification checks
+ -- *every* column so a stray grant cannot be silently accepted.
+ IF has_column_privilege('authenticated','public.utenti_studio','nome','INSERT')
+    IS DISTINCT FROM
+    has_column_privilege('authenticated','public.utenti_studio','ruolo','UPDATE')
  THEN
-  RAISE EXCEPTION 'Stage3N unexpected Stage3G staff-ACL baseline';
+  RAISE EXCEPTION 'Stage3N inconsistent staff ACL: partial prior patch';
+ END IF;
+ IF has_column_privilege('authenticated','public.utenti_studio','password_hash','SELECT')
+    OR NOT has_column_privilege('authenticated','public.utenti_studio','nome','SELECT')
+    OR NOT has_column_privilege('service_role','public.utenti_studio','ruolo','UPDATE')
+ THEN
+  RAISE EXCEPTION 'Stage3N unexpected protected staff-ACL baseline';
  END IF;
  IF has_table_privilege('authenticated','public.utenti_studio','INSERT')
    OR has_table_privilege('authenticated','public.utenti_studio','UPDATE') THEN
