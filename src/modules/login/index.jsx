@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { sb } from '../../lib/supabase'
-import { isLocalAuthDisabled } from '../../lib/auth'
 
 export function Login({onLogin}){
   const [email,setEmail]=useState("");
@@ -12,40 +11,6 @@ export function Login({onLogin}){
     e.preventDefault();
     if(!email||!password){setErr("Inserisci email e password");return;}
     setLoading(true);setErr(null);
-
-    const bypass = isLocalAuthDisabled();
-
-    if (bypass) {
-      try {
-        const { data, error } = await sb.from("utenti_studio")
-          .select("id,nome,cognome,email,ruolo,permessi,clienti_assegnati,password_hash,auth_user_id")
-          .eq("email", email.toLowerCase().trim())
-          .eq("attivo", true)
-          .single();
-        
-        if (error || !data) {
-          setErr("Utente non trovato");
-          setLoading(false);
-          return;
-        }
-        if (data.password_hash !== password) {
-          setErr("Password non corretta");
-          setLoading(false);
-          return;
-        }
-
-        const { password_hash, ...utenteSicuro } = data;
-        onLogin({
-          ...utenteSicuro,
-          login_origin: 'dev_bypass'
-        });
-      } catch (errVal) {
-        setErr("Errore di connessione");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
 
     try {
       // 1. Authenticate with Supabase Auth
