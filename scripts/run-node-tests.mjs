@@ -28,6 +28,7 @@ const STAMPE_ROOT_TESTS = new Set([
   'stampeSaldiPerContoEsercizioModel.test.js',
   'stampeRaccordoEserciziModel.test.js',
   'stampeRaccordoLoad.test.js',
+  'stampeChecksumContenuto.test.js',
   'stampePagination.test.js',
 ])
 

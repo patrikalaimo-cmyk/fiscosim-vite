@@ -248,3 +248,11 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - Scope societario esplicito su tutte le intestazioni/causali/conti e join righe tramite soli ID già filtrati; fallimento esplicito su PN senza righe, ID mancanti, duplicati o errori di lettura. Nessun flusso UI o commit contabile abilitato.
 - Test di lettura simulata query DB con oltre 500 PN, batch righe, inattivi storici, leakage di ID, errori e blocker. CI del loader pendente.
 - Residui: snapshot transazionale da fonte DB, politica reale chiusure/riaperture e report finale certificato.
+
+## 2026-10-08 — checksum effettivo del file in STAMPE (componente preparatorio)
+
+- Loader read-only raccordo `dc282af`, CI `37776049729`: SUCCESS Windows/Ubuntu.
+- Introdotto `hashStampaContenuto`: SHA-256 WebCrypto su byte reali del file emesso (Uint8Array/ArrayBuffer), con separazione di dominio e metadati identificativi (società, tipo, anno, periodo, MIME, lunghezza), sempre fallendo se contenuto assente/vuoto o crypto indisponibile.
+- Test di determinismo, sensibilità a singolo byte, periodo, società, tipo, MIME, contenuto vuoto e fallimenti crittografici nel profilo `test:stampe`.
+- **Non collegato al pannello definitivo**. `generateStampaChecksum` e la UI storica usano ancora soli metadati: non promuovere la definitività né trattare questo helper come protezione completa. Serve generazione del file reale, digest degli stessi byte archiviati, snapshot DB, lock e riscontro persistito (digest+versione) nella RPC.
+- CI del componente checksum: pendente.

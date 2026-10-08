@@ -311,3 +311,7 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 ## STAMPE — loader read-only di audit inter-esercizio
 
 `stampeRaccordoLoad.test.js`: letture paginated, join a lotti, tenant scope, causali/conti inattivi, 513 PN senza troncamenti, errore su PN senza righe, riapertura di altra società e ID mancanti, input temporale non valido. Suite `test:stampe`; nessun DB reale né verifica consistenza snapshot, CI pendente.
+
+## STAMPE — checksum byte contenuto effettivo
+
+`stampeChecksumContenuto.test.js` nel profilo `test:stampe`: SHA-256 stabile sugli stessi bytes, varia per 1 byte e cambio società/periodo/tipo/MIME; blocco su contenuto/anno/date invalidi o crittografia indisponibile. Test puro Node con WebCrypto reale, non prova l'integrazione RPC o la produzione del PDF cliente. CI pendente.

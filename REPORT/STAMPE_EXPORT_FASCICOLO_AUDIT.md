@@ -96,3 +96,7 @@ Fascicolo unico, UI Bilancio/Mastri/Partitario, checksum, snapshot e QA PDF anco
 ## Addendum 2026-10-08 — repository evidence storico
 
 Nuovo loader read-only per il raccordo: query società filtrate per PN precedente completo, aperture per ID, conti e causali compresi inattivi storici, righe PN paginated e join in batch; indisponibilità di righe ed errori di lettura bloccano. Wrapper in `contabilitaRepo`. Non è una sorgente transazionale serializzabile: `snapshotCertified` e `completenessCertified` restano falsi anche in presenza di audit contabile localmente valido. Nessuna UI o definitiva sbloccata.
+
+## Addendum 2026-10-08 — hash file reale, utility indipendente
+
+Aggiunto `hashStampaContenuto` (SHA-256, input `Uint8Array`/`ArrayBuffer`), che fallisce esplicitamente senza bytes del documento o provider WebCrypto. Identità del file, tipo stampa e periodo inclusi nel digest; non più soltanto il numero righe o timestamp. **L'utility non è ancora usata dal componente `StampaDefinitivaPanel` e non corregge da sola il consolidamento storico metadata-only.** Occorrono byte finali effettivamente archiviati, acquisizione in transazione/snapshot, hash verificato server-side, versionamento e test E2E; STAMPE NON FREEZE.

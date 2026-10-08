@@ -242,3 +242,11 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - Wrapper in repository `getAuditRaccordoEserciziPerStampa` usa `sb` soltanto in lettura. `auditRaccordoEserciziModel` continua a bloccare risultati incoerenti.
 - Nuovi test query-builder mock testano processo completo (non DB reale), righe mancanti, dati >500, metadata inattivi, ID di altro tenant, errori lettura. CI PENDENTE.
 - Snapshot atomico e completezza temporale non attestati; output sempre `definitive:false`, UI e PDF finale ancora non abilitati.
+
+## 2026-10-08 — STAMPE / digest byte effettivi (non ancora definitivo)
+
+- Loader evidence `dc282af` PASS CI `37776049729` su Windows/Ubuntu.
+- Nuova utility `hashStampaContenuto` basata esclusivamente su WebCrypto SHA-256: file reale binario obbligatorio, metadati identificativi incorporati con separazione dominio, nessun fallback hash debole.
+- Regressioni aggiunte per modifica byte singolo, contesto/periodo, dati invalidi, SHA non disponibile. Non modificato l'attuale flusso RPC di consolidamento, che resta NON certificato perché usa il vecchio checksum metadata-only.
+- Per il gate definitivo: prima generare e verificare file esportato da snapshot coerente, poi collegare checksum e audit con verifica server-side nella stessa operazione di lock. Non eseguire ancora su società reali.
+- CI PENDENTE.

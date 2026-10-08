@@ -208,3 +208,7 @@ Prima di abilitare bilancio/mastri definitivi: recuperare via repository canonic
 ## Raccordo / lettura database reale (2026-10-08)
 
 Verificare su società fittizia con DB di test: presenza di `causale_id` nelle PN storiche, classificazione `tipo` realmente allineata alle causali chiusura/apertura, piano dei conti con inattivi, anno completo e righe PN complete; riapertura richiesta di altra società fail-closed; stesso dato durante scritture concorrenti e snapshot consistente. I test del loader attualmente usano un query-builder mock e NON risolvono questo debito.
+
+## Debito QA hash documento (2026-10-08)
+
+Verificare che il PDF/fascicolo consegnato corrisponda esattamente ai byte oggetto del digest persistito, anche per documenti multipagina, rigenerazione e ristampa; fallire su mismatch, output vuoto, file modificato, dati aggiornati in concorrenza e assenza WebCrypto. Il digest del nuovo helper non costituisce prova di integrità se non collegato a snapshot/lock e verificato lato server.
