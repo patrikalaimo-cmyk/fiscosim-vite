@@ -56,3 +56,21 @@ test('Stage3N runner pins actual Git HEAD and checks SQL exit status',()=>{
  ]) assert.ok(runner.includes(snippet),snippet)
  assert.ok(!runner.includes('Tee-Object'))
 })
+
+test('Stage3N patch can be rerun safely on an already-hardened LAB database',()=>{
+ assert.match(patch,/already-applied Stage3N/)
+ assert.match(patch,/IS DISTINCT FROM/)
+ assert.match(patch,/Stage3N inconsistent staff ACL: partial prior patch/)
+ assert.match(patch,/FOREACH op IN ARRAY ARRAY\['INSERT','UPDATE'\]/)
+ assert.match(patch,/has_column_privilege\('authenticated'/)
+ assert.match(patch,/REVOKE INSERT/)
+ assert.match(patch,/COMMIT;/)
+})
+
+test('Stage3N diagnostic runner must preserve earlier PASS evidence',()=>{
+ const runner=readFileSync(new URL('../scripts/security_p0/run-stage3n.ps1',import.meta.url),'utf8')
+ assert.match(runner,/Test-Path -LiteralPath \$report/)
+ assert.match(runner,/STAGE3N_RECHECK_/)
+ assert.match(runner,/report name collision/)
+ assert.match(runner,/git -C \$repo rev-parse HEAD/)
+})
