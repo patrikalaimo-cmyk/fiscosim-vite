@@ -66,3 +66,13 @@ test('P0 session profile cannot be resolved by email or stale staff membership',
  assert.ok(rows.includes('deny-unlinked-membership'))
  assert.ok(rows.includes('row?.utente_id'))
 })
+
+test('P0 profile helper never auto-provisions every company or trusts metadata fallback',()=>{
+ const source=readFileSync(new URL('../lib/authMembership.js',import.meta.url),'utf8')
+ const resolver=source.slice(source.indexOf('export async function resolveProvisionedSocietaIds'),source.indexOf('export async function buildSessionProfile'))
+ assert.ok(resolver.includes('explicit-assignment-required'))
+ assert.ok(!resolver.includes('all-active-default'))
+ const scope=source.slice(source.indexOf('export async function resolveUserSocietaScope'))
+ assert.ok(scope.includes('const fallbackIds = []'))
+ assert.ok(!scope.includes('fallbackIds = metadataIds.length > 0'))
+})
