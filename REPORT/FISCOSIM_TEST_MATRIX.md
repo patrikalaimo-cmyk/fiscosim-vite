@@ -265,3 +265,24 @@ I test automatici non certificano da soli consistenza sotto scritture concorrent
 - Stampe: `test:stampe` 44/44 PASS su entrambi i sistemi; CI `37701699556`.
 - All safe e build: PASS Ubuntu/Windows.
 - Questi gate non certificano operatività bancaria in produzione né fascicolo cliente PDF completo.
+
+
+## Checkpoint automatico 2026-10-08 — Bank/CSV/Mastri
+
+Gate:
+- Bank `ad773a5`, run `37737965871`: **PASS** Ubuntu/Windows.
+- CSV Stampe `d0bb3ed`, run `37738239233`: **PASS** Ubuntu/Windows.
+- Modello movimenti per conto `5524709`, run `37738561308`: **PASS** Ubuntu/Windows.
+
+Copertura integrativa Bank:
+- sourceDocumentId del commit riferito al singolo movimento e non all'estratto conto;
+- obbligo movementId/decisionId e coerenza società/esercizio/conto banca tra contesto e payload;
+- righe PN solo nelle sezioni Dare/Avere.
+
+Copertura integrativa Stampe:
+- protezione da interpretazione come formula delle celle CSV in Registro IVA e Giornale;
+- modello deterministico per conto da PN canonica, saldi di movimentazione del periodo in centesimi, quadra Dare/Avere e blocca PN incoerenti, doppie, di altra società o prive di conto;
+- esclusione esplicita di bozze e simulazioni;
+- il modello resta **non definitivo** e non prova i saldi d'apertura; non è collegato alla UI.
+
+Questi gate **non** attestano PDF fascicolo, registri definitivi basati su hash di contenuto, verifica saldi iniziali, Bank commit atomico o collaudo browser/DB reale.

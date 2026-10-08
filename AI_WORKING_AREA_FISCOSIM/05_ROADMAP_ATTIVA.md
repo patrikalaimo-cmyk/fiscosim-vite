@@ -201,3 +201,14 @@ Rimane non chiuso il requisito residuo: pagamento parziale di parcella con riten
 - Stampe ora legge registri IVA e Giornale paginati e completi, con errori espliciti su anomalie; non è ancora la versione definitiva del fascicolo.
 - Sviluppo Riconciliazione Bancaria attivo, commit reale bloccato fino ai gate.
 - I blocchi LOCK-PERIODO-AUDIT e RELEASE A100 mantengono i propri prerequisiti; pagamenti parziali con ritenuta restano requisito residuo.
+
+
+## Checkpoint 2026-10-08 — BANK-DEV identità contabile + STAMPE modelli per conto
+
+- **BANK-DEV**: `ad773a5bdf37c0afdd59ba50e6a8569042295697`, CI `37737965871` **SUCCESS** Ubuntu/Windows. Il commit input identifica il singolo `movementId` come `sourceDocumentId`, non l'estratto conto; validazione richiede movimento+decisione, blocca mismatch società/esercizio/conto e sezioni PN non riconosciute.
+- **Stampe CSV**: `d0bb3ed7214a4f609a3a20b1ea9570411517f190`, CI `37738239233` **SUCCESS** Ubuntu/Windows. Neutralizzazione delle formule nei dati testuali dei CSV Registro IVA e Giornale.
+- **Stampe dominio**: `552470928f41276bf1e169779d1f3b15e9799f6f`, CI `37738561308` **SUCCESS** Ubuntu/Windows. Nuovo `buildMovimentiPerContoModel`: movimenti contabili e saldi periodici Dare/Avere da PN canonica, in centesimi, con guardrail per società, periodo, quadratura, stato e dati incompleti.
+- **Non è il bilancio definitivo:** il nuovo modello non ricostruisce saldi iniziali/esercizi precedenti; non è ancora esposto nella UI.
+- **STAMPE-EXPORT-FASCICOLO resta IN CORSO / NON FREEZE**: necessario fascicolo PDF unico, collegamento UI reale Partitari/Mastrini/Bilancio, saldi iniziali/classificazione, checksum su contenuti effettivi, snapshot coerente e collaudo PDF/browser.
+- **BANK-DEV resta attivo**, ma il commit reale e la release bancaria restano vietati finché non saranno validati RPC atomica, audit/idempotenza, tenant scope e collaudi.
+- Non applicate migration; nessuna modifica auth/RLS/env o dati di società reali.

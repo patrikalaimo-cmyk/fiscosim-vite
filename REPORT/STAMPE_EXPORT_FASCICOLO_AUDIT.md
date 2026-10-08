@@ -63,3 +63,12 @@ Il blocco a 999 righe introdotto come protezione temporanea è sostituito dall'h
 Evidenza sintetica: fixture oltre 1000 righe, errore a metà, doppione, multiplo esatto e limite di paginazione.
 
 **Non chiude il freeze.** Residui: verifica dello snapshot sotto modifiche concorrenti, PDF fascicolo unico, report canonici di Mastrini/Bilancio/Partitario, hash su contenuti di stampa, test browser e PDF.
+
+
+## Addendum 2026-10-08 — Export sicuro e modello saldi di movimentazione
+
+- `d0bb3ed` CI `37738239233` SUCCESS: stringhe CSV potenzialmente interpretabili come formule (inizio `=`, `+`, `-`, `@`, anche precedute da whitespace) vengono rese testo prima dell'escaping CSV. Test fittizi su Registro IVA e Libro Giornale.
+- `5524709` CI `37738561308` SUCCESS: creato modello puro di aggregazione per conto su PN canonica; verifica quadratura in centesimi, coerenza di società/periodo, stato confermato/definitivo, anagrafica conto e riferimenti univoci. Il modello produce saldi di **movimentazione nel periodo** e progressivi analitici, non saldo di apertura.
+- L'output è deliberatamente `definitive: false` e porta warning esplicito per saldo iniziale/esercizi precedenti non ricostruiti. Nessuna UI sostituita con un presunto bilancio reale.
+- Restano bloccanti: base saldi iniziali e classificazione piano dei conti, integrazione UI e stampe reali, fascicolo PDF unico, checksum del contenuto, controllo snapshot e collaudo.
+- Il perimetro Bank resta in sola simulazione; sviluppo sbloccato, commit reale non autorizzato.

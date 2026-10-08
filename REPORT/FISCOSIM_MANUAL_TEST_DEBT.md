@@ -182,3 +182,16 @@ Stato: **IN CORSO — NON CONGELATO**.
 ## Stampe — QA aggiornato per la paginazione
 
 L'export oltre 1000 righe usa ora paginazione a batch; verificare in browser con azienda di test il conteggio completo, l'ordinamento, l'assenza di duplicati, la presenza dei join causale/Prima Nota e il comportamento durante modifiche concorrenti. I collaudi manuali del PDF unico e dei report canonici restano pendenti.
+
+
+## Debito aggiornato 2026-10-08 — Bank e Stampe
+
+La protezione CSV e il modello puro di movimenti per conto sono coperti da test automatici, ma richiedono collaudo applicativo:
+1. esportare in CSV da Registro IVA e Giornale contenuti sintetici che iniziano con caratteri formula e verificare in Excel/LibreOffice che restino testo, senza esecuzione;
+2. alimentare il nuovo modello tramite servizio applicativo e verificarne la parità con le PN confermate della società test;
+3. verificare saldi di apertura, esercizi precedenti e piano dei conti prima di presentare il risultato come Bilancio di verifica;
+4. verificare che dati non conformi blocchino la stampa, senza fallback a fac-simile;
+5. verificare Bank singolo movimento contro estratto conto intero, idempotenza e scope societario, usando solo fixture test;
+6. collaudare il futuro commit transazionale bancario e il rollback prima di qualunque scrittura reale.
+
+Restano aperti fascicolo PDF unico, modelli/UX completi, hash di contenuto, importi parziali con ritenuta, collaudo browser di Import/Manuale/IVA e Bank. Nessuno di questi è dichiarato eseguito.

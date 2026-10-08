@@ -190,3 +190,14 @@
 - Aggiunta suite Node dedicata nel profilo `test:stampe`, fixture sintetiche.
 - Fascicolo unico e PDF definitivo ancora aperti; Bank commit reale ancora vietato.
 - Stato: **CI codice PENDENTE**.
+
+
+## 2026-10-08 — BANK-DEV e STAMPE / checkpoint CI finale
+
+- Bank input `ad773a5bdf37c0afdd59ba50e6a8569042295697`: run `37737965871` **SUCCESS** Windows e Ubuntu. sourceDocumentId punta al movimento; identità e tenant del commit validate; nessun write reale abilitato.
+- Stampe CSV `d0bb3ed7214a4f609a3a20b1ea9570411517f190`: run `37738239233` **SUCCESS** Windows e Ubuntu. Formula injection mitigata su campi testuali CSV Registro IVA/Giornale.
+- Stampe movimenti per conto `552470928f41276bf1e169779d1f3b15e9799f6f`: run `37738561308` **SUCCESS** Windows e Ubuntu. Helper pure JS dalla PN canonica, controlli saldo, quadratura, periodo, società, conti e stati; regressioni sintetiche aggiunte a `test:stampe`.
+- Aggiornati `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`, roadmap A100, matrice test, debito collaudi.
+- Nessun freeze A100: mancano saldi iniziali/classificazione per bilancio, UI stampa canonica, fascicolo PDF unico, hash dei contenuti, snapshot, QA browser, RPC Bank atomica/idempotente e collaudi.
+- Nessuna migration, env, auth/RLS/policy, scrittura su società reali.
+- Stato commit documentale: **CI PENDENTE**.
