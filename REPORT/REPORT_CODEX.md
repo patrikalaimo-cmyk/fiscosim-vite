@@ -385,3 +385,22 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Predisposto `tests/securityP0Stage3lRemainingAccess.test.js`: guardia statica su sole query catalogo e copertura di otto tabelle.
 - Nessun DDL/DML, nessuna fixture, nessuna scrittura al LAB; output serve per decidere patch selettive senza rompere `avvisi_ade` e `revisioni_dichiarativi` usati dall'applicazione.
 - Stage3L CI e audit SQL Docker pendenti. Nessuna azione su Supabase reale, ambiente .env, deploy, produzione o `mio-branch`.
+
+
+## 2026-10-09 — P0 STAGE3L LAB PASS / eight-table residual ACL findings
+- User file `STAGE3L_REMAINING_ACCESS.txt` ends with `ROLLBACK`. Confirmed metadata for eight tables, no SQL mutations.
+- `avvisi_ade`: RLS on, `anon` no SELECT table grant, but authenticated has all table privileges; permissive `full_access_authenticated` policy `auth.role()='authenticated'` and residual `anon_access_test` policy (anon role true), no verified studio mapping. FK cliente_id -> `clienti`; AgeCon and import_unificato use this table.
+- `revisioni_dichiarativi`: authenticated TRUE ALL policy; anon table DML grants (RLS denies anon according to role-specific policy, not equivalent to ACL denial); FK cliente_id -> `clienti`; nullable `tenant_id`/`company_id`/`owner_user_id`; review UI directly uses it.
+- `client_modules`, `client_responsabili`: `auth.role()` all policy; anon/authenticated ALL grants; join to legacy `clients/users` which are already quarantined (Stage3J).
+- `invii_log`: ALL TRUE policy; authenticated ALL grants; FK `invio_id` to `invii_schedulati` with ON DELETE SET NULL. No direct company ID.
+- `test_cases`, `test_datasets`, `test_runs`: ALL TRUE policies; authenticated ALL privileges; no tenancy columns; `test_runs.test_case_id` FK only.
+- **Not safe** to apply a generic company_id filter to avvisi/revisioni: `clienti` lacks verified company FK and revisions company_id is nullable; no invented mapping/backfill.
+- Distinction: anon table grants are material attack surface but row-level policies may still deny the role. JWT/API E2E remains outstanding.
+
+## 2026-10-09 — P0 STAGE3M PREP / segregated six-table browser quarantine
+- Added `sql/security_p0/35_stage3m_six_browser_quarantine_LAB_ONLY.sql`: gated transaction removing anon/authenticated/PUBLIC browser ACL from `client_modules`, `client_responsabili`, `invii_log`, `test_cases`, `test_datasets`, `test_runs`. Verifies RLS, exact expected policies, baseline ACL, post-revocation column ACL, preserved service_role privileges.
+- Added `36_stage3m_six_browser_quarantine_TEST_ONLY.sql`: SQL negative probes with `SET LOCAL ROLE authenticated` and `anon`, SELECT LIMIT 0 + INSERT/UPDATE/DELETE WHERE false, then ROLLBACK. Added `37_stage3m_rollback_TEST_ONLY.sql`: explicitly unsafe legacy grants restoration, restricted by session opt-in.
+- Added `tests/securityP0Stage3mSixBrowserQuarantine.test.js`, enforce table scope and SQL guard. Candidate patch has NOT been applied to Docker; CI pending.
+- `avvisi_ade` and `revisioni_dichiarativi` are deliberately **excluded** to avoid silently breaking AgeCon and review. These **remain exposed** until explicit customer/company ownership and REST auth tests. Their current policy is not safe for release.
+- Stage3M does not repair unscoped legacy/test access or functional workflows; merely quarantines them. Real services for these six tables may stop serving browser calls until a verified server-scoped workflow exists. Full E2E study-grade requirement remains mandatory for every module.
+- Only dedicated draft security branch affected; no write to real Supabase, no merge, deploy, .env or local Docker changes.
