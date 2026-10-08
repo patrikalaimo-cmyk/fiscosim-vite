@@ -23,6 +23,16 @@ BEGIN
   IF to_regprocedure('public.user_has_societa_access(uuid)') IS NULL THEN
     RAISE EXCEPTION 'Missing expected user_has_societa_access(uuid) helper';
   END IF;
+  SELECT count(*) INTO n FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid=p.pronamespace
+  WHERE ns.nspname='public'
+    AND p.proname IN ('current_utente_ruolo','current_utente_studio_id')
+    AND p.prosecdef
+    AND NOT has_function_privilege('anon',p.oid,'EXECUTE')
+    AND has_function_privilege('authenticated',p.oid,'EXECUTE');
+  IF n <> 2 THEN
+    RAISE EXCEPTION 'Stage3a requires two hardened role helper functions; found %',n;
+  END IF;
   SELECT count(*) INTO n FROM pg_class c
     JOIN pg_namespace ns ON ns.oid = c.relnamespace
     WHERE ns.nspname='public' AND c.relkind='v'
