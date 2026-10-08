@@ -220,3 +220,11 @@ Verificare in browser con società fittizia che "Consolida definitivo" resti non
 ## Blocco ambiente test database / sicurezza RPC stampe (2026-10-08)
 
 Supabase "Fiscosim v4p" risulta inattivo e senza branch; lettura schema/migrations via connettore non disponibile per timeout. Non scegliere autonomamente la riattivazione né presumere che sia l'ambiente usato in produzione. Richiesto all'utente: identificare il progetto corrente e predisporre un branch/database isolato senza dati clienti reali; verificare funzioni SQL e permessi (PUBLIC/anon/authenticated) con ruoli di test, chiamante/operatore/società, intertenant, snapshot e checksum su PDF archivio; eseguire QA E2E prima di migration. Dettagli in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.
+
+## 2026-10-08 — SUPABASE LIVE RIPRISTINATO: P0 SICUREZZA (read-only)
+
+Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) è tornato `ACTIVE_HEALTHY`. Durante `COMING_UP` i cataloghi risultavano temporaneamente vuoti, poi sono riapparse **73 tabelle public, 27 funzioni, 141 policy**. `prima_nota`, `piano_conti` e `stampe_definitive` esistono. `list_migrations` resta vuoto e la relazione di tracking `supabase_migrations.schema_migrations` non risulta presente: vietata applicazione indiscriminata delle 72 migrations repository.
+
+**P0 confermato via introspezione:** 8 funzioni `SECURITY DEFINER` eseguibili da anon; due RPC stampa owner postgres senza controlli `auth.uid`/società; **22 tabelle con policy permissiva per anon/PUBLIC e grants anon SELECT/INSERT/UPDATE/DELETE**, incluse `prima_nota_righe` e `utenti_studio`. `get_advisors(security)` senza lint ma non risolve il rischio. Non è stato tentato accesso anon via HTTP o letto dato di cliente.
+
+Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalità operative.
