@@ -6,7 +6,7 @@ import {
 } from '../../application/stampe/motoreStampaDefinitiva.js';
 import {
   mapUiTypeToCanonical,
-  generateStampaChecksum
+  validateStampaDefinitivaEvidence
 } from '../../application/stampe/stampaDefinitivaUiHelpers.js';
 import { resolveStampaDefinitivaOperatore } from '../../application/stampe/resolveStampaDefinitivaOperatore.js';
 
@@ -76,8 +76,15 @@ export default function StampaDefinitivaPanel({
 
       if (data) {
         if (data.success) {
-          setStatus('Verifica superata');
-          setWarnings(data.warnings || []);
+          const evidence = validateStampaDefinitivaEvidence(data);
+          if (evidence.ready) {
+            setStatus('Verifica superata');
+            setWarnings(data.warnings || []);
+          } else {
+            setStatus('Bloccata');
+            setBlockers(evidence.blockers);
+            setWarnings(data.warnings || []);
+          }
         } else {
           setStatus('Bloccata');
           setBlockers(data.blocking_reasons || []);
@@ -96,6 +103,12 @@ export default function StampaDefinitivaPanel({
 
   const executeConsolidation = async () => {
     if (busy || status !== 'Verifica superata') return;
+    const evidence = validateStampaDefinitivaEvidence(precheckResult);
+    if (!evidence.ready) {
+      setStatus('Bloccata');
+      setBlockers(evidence.blockers);
+      return;
+    }
 
     const confirmMsg = 'La stampa definitiva blocca il periodo e numera progressivamente le righe. Procedere?';
     if (!window.confirm(confirmMsg)) {
@@ -111,18 +124,10 @@ export default function StampaDefinitivaPanel({
       const operatorId = await resolveStampaDefinitivaOperatore();
 
       const year = new Date(periodoInizio).getFullYear();
-      const timestamp = new Date().toISOString();
 
-      // 2. Generate deterministic checksum
-      const checksum = await generateStampaChecksum({
-        societaId: societa.id,
-        tipoStampa: canonicalType,
-        annoFiscale: year,
-        periodoInizio,
-        periodoFine,
-        timestamp,
-        rowsCount: precheckResult?.rows_count || 0
-      });
+      // Il vecchio checksum da metadati non e prova dei byte stampati.
+      // Usare solo il digest del file effettivo attestato dal server.
+      const checksum = evidence.checksum;
 
       // 3. Call the consolidation RPC wrapper
       const { data, error } = await consolidazioneStampaDefinitiva(sb, {

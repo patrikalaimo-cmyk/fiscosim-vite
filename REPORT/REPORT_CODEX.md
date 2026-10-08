@@ -250,3 +250,12 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - Regressioni aggiunte per modifica byte singolo, contesto/periodo, dati invalidi, SHA non disponibile. Non modificato l'attuale flusso RPC di consolidamento, che resta NON certificato perché usa il vecchio checksum metadata-only.
 - Per il gate definitivo: prima generare e verificare file esportato da snapshot coerente, poi collegare checksum e audit con verifica server-side nella stessa operazione di lock. Non eseguire ancora su società reali.
 - CI PENDENTE.
+
+## 2026-10-08 — protezione UI del consolidamento non certificato
+
+- Hash byte effettivi `d147b43` SUCCESS Windows/Ubuntu `37776465805`.
+- Individuata criticità: `StampaDefinitivaPanel` passa digest di soli metadati a `consolidazione_stampa_definitiva`, senza verifica del documento esportato; le dichiarazioni "definitiva" e "pagine" non erano supportate da prova file reale.
+- Implementato `validateStampaDefinitivaEvidence`: precheck fiscale non basta; obbligatori snapshot, file archiviato, digest content SHA-256, dimensione e verifica server. In assenza (RPC attuale) la UI mostra blocker e non espone il consolidamento.
+- UI non genera più checksum da timestamp/rowsCount. Vecchio helper rimane per compatibilità test storici ma non costituisce prova. Test di gate e percorso Panel aggiornati.
+- Attenzione: la RPC corrente non valida la veridicità del checksum ricevuto, quindi il gate è **solo client-side**. Nessuna migration applicata né rilascio dichiarato.
+- CI PENDENTE.

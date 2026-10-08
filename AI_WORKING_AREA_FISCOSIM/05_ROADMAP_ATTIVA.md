@@ -256,3 +256,12 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 - Test di determinismo, sensibilità a singolo byte, periodo, società, tipo, MIME, contenuto vuoto e fallimenti crittografici nel profilo `test:stampe`.
 - **Non collegato al pannello definitivo**. `generateStampaChecksum` e la UI storica usano ancora soli metadati: non promuovere la definitività né trattare questo helper come protezione completa. Serve generazione del file reale, digest degli stessi byte archiviati, snapshot DB, lock e riscontro persistito (digest+versione) nella RPC.
 - CI del componente checksum: pendente.
+
+## 2026-10-08 — gate UI Stampa Definitiva: evidenza reale obbligatoria
+
+- Nuovo helper SHA-256 bytes `d147b43` PASS CI `37776465805` Windows/Ubuntu.
+- Audit del percorso `StampaDefinitivaPanel`: il client passava ancora `generateStampaChecksum` metadata-only alla RPC, che accetta `p_checksum` senza verifica che rappresenti il PDF. La numerazione pagine SQL non corrisponde necessariamente alla paginazione effettiva.
+- Introduzione di `validateStampaDefinitivaEvidence` nel pannello e blocco fail-closed del bottone consolidamento se il precheck non attesta `snapshot_certified`, `stored_file_verified`, `checksum_verified`, `file_size_bytes > 0` e un `content_sha256` valido. Nessuna chiamata di consolidamento viene proposta dalla UI senza tali prove.
+- Eliminato dal pannello l'uso del checksum da metadati: quando il nuovo protocollo server sarà pronto, il valore sarà quello attestato dal server. La RPC attuale non restituisce queste attestazioni: **il consolidamento UI viene quindi bloccato intenzionalmente**, preservando anteprime ed export provvisori.
+- Non è una mitigazione completa lato server: l'RPC DB può essere richiamata esternamente finché non sarà indurita sotto migration approvata. Occorre progettare il protocollo snapshot/hash/archivio/lock transazionale, non inventare attestazioni client.
+- Test del gate aggiunti, CI pendente; nessuna migration/auth/RLS/DB live, Bank live sempre vietata.

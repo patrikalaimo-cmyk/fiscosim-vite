@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   mapUiTypeToCanonical,
-  generateStampaChecksum
+  generateStampaChecksum,
+  validateStampaDefinitivaEvidence
 } from '../src/modules/contabilita/application/stampe/stampaDefinitivaUiHelpers.js';
 
 test('Verifica mapping UI -> Tipi Canonici', () => {
@@ -55,3 +56,41 @@ test('Generazione Checksum deterministico non vuoto', async () => {
   assert.notStrictEqual(checksum1, checksumDifferent);
 });
 
+
+test('un precheck contabile positivo SENZA prova file e snapshot non abilita il consolidamento', () => {
+  const result = validateStampaDefinitivaEvidence({ success: true, rows_count: 120 })
+  assert.strictEqual(result.ready, false)
+  assert.strictEqual(result.checksum, null)
+  assert.ok(result.blockers.some(x => /Snapshot/i.test(x)))
+  assert.ok(result.blockers.some(x => /byte/i.test(x)))
+})
+
+test('hash metadata-only o file vuoto non costituiscono evidenza valida', () => {
+  const base = {
+    success: true, snapshot_certified: true, stored_file_verified: true,
+    checksum_verified: true, file_size_bytes: 220,
+  }
+  assert.equal(validateStampaDefinitivaEvidence({ ...base, content_sha256: 'sha256-fallback-abc' }).ready, false)
+  assert.equal(validateStampaDefinitivaEvidence({ ...base, file_size_bytes: 0, content_sha256: 'a'.repeat(64) }).ready, false)
+  assert.equal(validateStampaDefinitivaEvidence({ ...base, checksum_verified: false, content_sha256: 'a'.repeat(64) }).ready, false)
+})
+
+test('prontezza solo con tutte le attestazioni e un SHA-256 effettivo', () => {
+  const checksum = '7a'.repeat(32)
+  const out = validateStampaDefinitivaEvidence({
+    success: true, snapshot_certified: true, stored_file_verified: true,
+    checksum_verified: true, file_size_bytes: 220, content_sha256: checksum,
+  })
+  assert.equal(out.ready, true)
+  assert.equal(out.checksum, checksum)
+})
+
+test('UI non usa piu il checksum da soli metadati per consolidare', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const path = new URL('../src/modules/contabilita/components/stampe/StampaDefinitivaPanel.jsx', import.meta.url)
+  const source = await readFile(path, 'utf8')
+  assert.match(source, /validateStampaDefinitivaEvidence\(data\)/)
+  assert.match(source, /validateStampaDefinitivaEvidence\(precheckResult\)/)
+  assert.match(source, /const checksum = evidence\.checksum/)
+  assert.doesNotMatch(source, /generateStampaChecksum\(/)
+})

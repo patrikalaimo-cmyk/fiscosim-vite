@@ -65,3 +65,22 @@ export async function generateStampaChecksum({
     return 'sha256-fallback-' + Math.abs(hash).toString(16);
   }
 }
+
+/**
+ * Gate UI fail-closed: il solo precheck contabile e un hash di metadati NON
+ * certificano il file effettivo. La RPC deve ancora verificare questi attestati
+ * lato server nella stessa transazione di lock, prima del freeze STAMPE.
+ */
+export function validateStampaDefinitivaEvidence(precheck) {
+  const blockers = []
+  if (precheck?.success !== true) blockers.push('Precheck contabile non superato.')
+  if (precheck?.snapshot_certified !== true) blockers.push('Snapshot contabile verificato non disponibile.')
+  if (precheck?.stored_file_verified !== true) blockers.push('File finale archiviato e verificato non disponibile.')
+  if (precheck?.checksum_verified !== true) blockers.push('Digest dei byte del file non attestato dal server.')
+  const checksum = String(precheck?.content_sha256 || '').trim()
+  if (!/^[a-f0-9]{64}$/.test(checksum)) blockers.push('Checksum SHA-256 del documento effettivo assente.')
+  if (!Number.isSafeInteger(precheck?.file_size_bytes) || precheck.file_size_bytes <= 0) {
+    blockers.push('Dimensione dei byte effettivi non certificata.')
+  }
+  return { ready: blockers.length === 0, blockers, checksum: blockers.length ? null : checksum }
+}

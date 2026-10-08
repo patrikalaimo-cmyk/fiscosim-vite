@@ -100,3 +100,7 @@ Nuovo loader read-only per il raccordo: query società filtrate per PN precedent
 ## Addendum 2026-10-08 — hash file reale, utility indipendente
 
 Aggiunto `hashStampaContenuto` (SHA-256, input `Uint8Array`/`ArrayBuffer`), che fallisce esplicitamente senza bytes del documento o provider WebCrypto. Identità del file, tipo stampa e periodo inclusi nel digest; non più soltanto il numero righe o timestamp. **L'utility non è ancora usata dal componente `StampaDefinitivaPanel` e non corregge da sola il consolidamento storico metadata-only.** Occorrono byte finali effettivamente archiviati, acquisizione in transazione/snapshot, hash verificato server-side, versionamento e test E2E; STAMPE NON FREEZE.
+
+## Addendum 2026-10-08 — sospensione consolidamento UI non attestato
+
+Il pannello definitivo ora richiede un attestato di snapshot coerente, file effettivo archiviato, hash di contenuto verificato dal server e dimensione positiva. Poiché la RPC precheck corrente non restituisce questi dati, la UI blocca esplicitamente il consolidamento, evitando di inviare il vecchio digest metadata-only. **Non modifica né corregge la funzione SQL sottostante**: il bypass client della RPC resta un gap server-side bloccante che richiede successiva migration autorizzata e test E2E. Stampe provvisorie non modificate; STAMPE non freeze.

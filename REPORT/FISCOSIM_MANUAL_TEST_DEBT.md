@@ -212,3 +212,7 @@ Verificare su società fittizia con DB di test: presenza di `causale_id` nelle P
 ## Debito QA hash documento (2026-10-08)
 
 Verificare che il PDF/fascicolo consegnato corrisponda esattamente ai byte oggetto del digest persistito, anche per documenti multipagina, rigenerazione e ristampa; fallire su mismatch, output vuoto, file modificato, dati aggiornati in concorrenza e assenza WebCrypto. Il digest del nuovo helper non costituisce prova di integrità se non collegato a snapshot/lock e verificato lato server.
+
+## QA protezione consolidamento stampe (2026-10-08)
+
+Verificare in browser con società fittizia che "Consolida definitivo" resti non operativo se il precheck non restituisce prove snapshot e SHA-256 del file archiviato, che la UI illustri il motivo e che le stampe provvisorie rimangano accessibili. Il backend deve essere oggetto di redesign: oggi la RPC accetta checksum client non certificato e può essere richiamata bypassando la UI. Non approvare una stampa definitiva finché il server non ricontrolla contenuto/lock in transazione.
