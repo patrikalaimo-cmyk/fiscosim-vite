@@ -36,6 +36,8 @@ test('P0 manager cannot mutate a user with any membership outside its scope',()=
  assert.equal(areTargetMembershipsFullyAllowed(members,['company-a']),false)
  assert.equal(areTargetMembershipsFullyAllowed([members[0]],['company-a']),true)
  assert.equal(areTargetMembershipsFullyAllowed([],['company-a']),false)
+ assert.equal(areTargetMembershipsFullyAllowed([{societa_id:'company-a',auth_user_id:'auth-a'}],['company-a'],'auth-a'),true)
+ assert.equal(areTargetMembershipsFullyAllowed([{societa_id:'company-a',auth_user_id:'auth-b'}],['company-a'],'auth-a'),false)
  assert.deepEqual(visibleMembershipsForManager(members,['company-a']),[members[0]])
 })
 
@@ -49,7 +51,7 @@ test('P0 service-role users API filters GET and checks scope before CRUD',()=>{
  assert.ok(guard >= 0 && guard < get)
  assert.ok(source.includes('visibleMembershipsForManager'))
  assert.ok(source.indexOf('visibleMembershipsForManager(linkedMemberships') > get)
- assert.ok(source.indexOf('areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds)',get) < post)
+ assert.ok(source.indexOf('areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds, row.auth_user_id)',get) < post)
  assert.ok(source.indexOf('areRequestedSocietaIdsAllowed',post) < patch)
  assert.ok(source.indexOf('areTargetMembershipsFullyAllowed',patch) < remove)
  assert.ok(source.indexOf('areTargetMembershipsFullyAllowed',remove) > remove)
