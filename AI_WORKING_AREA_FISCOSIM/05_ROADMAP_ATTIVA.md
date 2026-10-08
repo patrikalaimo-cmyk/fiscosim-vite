@@ -277,3 +277,11 @@ La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `con
 Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o società reali.
 
 La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI è volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e può essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
+
+## 2026-10-08 — Gate di sicurezza Stampe: Supabase collegato, database non utilizzabile
+
+- Connesso Supabase: il progetto denominato "Fiscosim v4p" risulta INACTIVE, senza branch di sviluppo, con timeout su list_tables/list_migrations. Identità con il database operativo non verificata; nessuna query ai dati, riattivazione o modifica.
+- Audit statico SQL in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`: procedure di precheck/consolidamento `SECURITY DEFINER`, senza prova di autorizzazione utente→società né verifica effettiva dei byte del file all'interno della transazione; la configurazione reale dei permessi deve essere accertata sul DB di test. Non assumere vulnerabilità confermata sul database inattivo.
+- Esteso il blocco della definitiva dal pannello al wrapper `consolidazioneStampaDefinitiva`: firma SHA-256 del file, certificazioni precheck, identità (società, anno, tipo, periodo) e checksum identico a quello attestato obbligatori prima di RPC; blocco sicuro senza invocare la RPC in mancanza.
+- Test simulati della precedente paginazione/numero/protocolli mantengono mock di **server fittizio attestante** per non rappresentarli come evidenza del database reale; aggiunti test fail-closed del service per mancanza prova, SHA discordante, identità intertenant.
+- **Non è un freeze**: l'RPC SQL sottostante resta da indurire/testare server-side su database isolato, poi fascicolo PDF e UI finali. CI da validare.

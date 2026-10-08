@@ -329,3 +329,7 @@ Nuove verifiche con precheck sinteticamente completo: società diversa, periodo 
 Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o società reali.
 
 La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI è volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e può essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
+
+## STAMPE — gate service prima dell'invocazione RPC (2026-10-08)
+
+`motoreStampaDefinitiva.test.js` ora differenzia gli scenari SQL simulati (mock server attestato **solo per fixture**, SHA-256 costante di test) dal percorso reale non certificato: verifica no-write/no-RPC se attestazione snapshot/file assente, se checksum SHA-256 discordante oppure se tenant non coincide. `stampaDefinitivaUiHelpers.test.js` controlla anche anno fiscale divergente. Non sono test SQL/Postgres su Supabase live. CI da verificare.

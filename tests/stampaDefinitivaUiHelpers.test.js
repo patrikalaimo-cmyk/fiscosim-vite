@@ -98,19 +98,20 @@ test('UI non usa piu il checksum da soli metadati per consolidare', async () => 
 test('attestazione legata a societa, tipo e periodo: nessun riuso del precheck di altro tenant', () => {
   const expected = {
     societaId: 'tenant-A', tipoStampa: 'libro_giornale',
-    periodoInizio: '2026-01-01', periodoFine: '2026-12-31',
+    annoFiscale: 2026, periodoInizio: '2026-01-01', periodoFine: '2026-12-31',
   }
   const valid = {
     success: true, snapshot_certified: true, stored_file_verified: true,
     checksum_verified: true, file_size_bytes: 10, content_sha256: 'a'.repeat(64),
     societa_id: 'tenant-A', tipo_stampa: 'libro_giornale',
-    periodo_inizio: '2026-01-01', periodo_fine: '2026-12-31',
+    anno_fiscale: 2026, periodo_inizio: '2026-01-01', periodo_fine: '2026-12-31',
   }
   assert.equal(validateStampaDefinitivaEvidence(valid, expected).ready, true)
   assert.equal(validateStampaDefinitivaEvidence({ ...valid, societa_id: 'tenant-B' }, expected).ready, false)
   assert.equal(validateStampaDefinitivaEvidence({ ...valid, periodo_fine: '2026-11-30' }, expected).ready, false)
   assert.equal(validateStampaDefinitivaEvidence({ ...valid, tipo_stampa: 'registro_iva_vendite' }, expected).ready, false)
   assert.equal(validateStampaDefinitivaEvidence({ ...valid, periodo_inizio: null }, expected).ready, false)
+  assert.equal(validateStampaDefinitivaEvidence({ ...valid, anno_fiscale: 2025 }, expected).ready, false)
 })
 
 test('se cambia societa attiva il pannello invalida il precheck memorizzato', async () => {

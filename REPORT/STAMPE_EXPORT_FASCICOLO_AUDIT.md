@@ -110,3 +110,8 @@ Il pannello definitivo ora richiede un attestato di snapshot coerente, file effe
 Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o società reali.
 
 La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI è volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e può essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
+
+## Addendum 2026-10-08 — audit RPC e validazione anche nel service
+
+Analisi delle migrations SQL identifica `SECURITY DEFINER` per precheck/consolidamento, controlli hash solo formali e pagine teoriche; senza introspezione di un DB funzionante non sono attestati né i permessi effettivi né l'applicazione delle migrations. Il controllo `validateStampaDefinitivaEvidence` è ora richiamato anche dal servizio applicativo prima della RPC, con confronto SHA-256 e vincolo tenant/periodo/anno/tipo. Il mock storico produce certificazioni fittizie **esplicite per i soli test**.
+Stato Supabase: progetto "Fiscosim v4p" inattivo, nessun branch; query schema/migrations timeout. Richiede intervento utente su ambiente di test. **Consolidamento non dichiarato sicuro o definitivo**; gap SQL server e fascicolo restano aperti.

@@ -76,7 +76,7 @@ export default function StampaDefinitivaPanel({
 
       if (data) {
         if (data.success) {
-          const evidence = validateStampaDefinitivaEvidence(data, { societaId: societa?.id, tipoStampa: canonicalType, periodoInizio, periodoFine });
+          const evidence = validateStampaDefinitivaEvidence(data, { societaId: societa?.id, tipoStampa: canonicalType, annoFiscale: Number(periodoInizio?.slice(0, 4)), periodoInizio, periodoFine });
           if (evidence.ready) {
             setStatus('Verifica superata');
             setWarnings(data.warnings || []);
@@ -103,7 +103,7 @@ export default function StampaDefinitivaPanel({
 
   const executeConsolidation = async () => {
     if (busy || status !== 'Verifica superata') return;
-    const evidence = validateStampaDefinitivaEvidence(precheckResult, { societaId: societa?.id, tipoStampa: canonicalType, periodoInizio, periodoFine });
+    const evidence = validateStampaDefinitivaEvidence(precheckResult, { societaId: societa?.id, tipoStampa: canonicalType, annoFiscale: Number(periodoInizio?.slice(0, 4)), periodoInizio, periodoFine });
     if (!evidence.ready) {
       setStatus('Bloccata');
       setBlockers(evidence.blockers);

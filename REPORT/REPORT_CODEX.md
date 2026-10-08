@@ -275,3 +275,11 @@ La prima CI dopo l'estensione tenant/periodo ha segnalato una sola asserzione st
 Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o società reali.
 
 La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI è volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e può essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
+
+## 2026-10-08 — Estensione gate stampa definitiva al service e audit DB non raggiungibile
+
+- Supabase plugin connesso, progetto con nome "Fiscosim v4p" INACTIVE e senza branch; timeout su lettura schema/migrations. Nessun accesso DB dati, alterazioni o riattivazione. Appartenenza del progetto al deployment corrente NON verificata.
+- Da migrazioni versionate: `precheck_stampa_definitiva` / `consolidazione_stampa_definitiva` `SECURITY DEFINER`; non dimostrata autorizzazione auth.uid→p_societa_id, conferma p_creato_by né hash byte file. Annotati rilievi, verifiche necessarie e rischi in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.
+- Defense-in-depth nel wrapper `motoreStampaDefinitiva.js`: prima della RPC ricontrolla precheck e attestazioni, anno/periodo/società/tipo, checksum contenuto coincidente e 64 hex; un precheck success senza prove non può più avviare il consolidamento anche bypassando il pannello.
+- Nella suite fake DB le attestazioni positive sono chiaramente simulative: non fingono un server reale certificato. Test di assenza di RPC in caso di evidenza mancante, checksum divergente, società estranea e anno divergente.
+- Nessuna migration applicata, nessun auth/RLS/env/DB reale o Bank commit. CI nuovo blocco pendente.

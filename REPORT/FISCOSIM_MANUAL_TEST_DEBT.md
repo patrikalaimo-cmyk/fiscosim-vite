@@ -216,3 +216,7 @@ Verificare che il PDF/fascicolo consegnato corrisponda esattamente ai byte ogget
 ## QA protezione consolidamento stampe (2026-10-08)
 
 Verificare in browser con società fittizia che "Consolida definitivo" resti non operativo se il precheck non restituisce prove snapshot e SHA-256 del file archiviato, che la UI illustri il motivo e che le stampe provvisorie rimangano accessibili. Il backend deve essere oggetto di redesign: oggi la RPC accetta checksum client non certificato e può essere richiamata bypassando la UI. Non approvare una stampa definitiva finché il server non ricontrolla contenuto/lock in transazione.
+
+## Blocco ambiente test database / sicurezza RPC stampe (2026-10-08)
+
+Supabase "Fiscosim v4p" risulta inattivo e senza branch; lettura schema/migrations via connettore non disponibile per timeout. Non scegliere autonomamente la riattivazione né presumere che sia l'ambiente usato in produzione. Richiesto all'utente: identificare il progetto corrente e predisporre un branch/database isolato senza dati clienti reali; verificare funzioni SQL e permessi (PUBLIC/anon/authenticated) con ruoli di test, chiamante/operatore/società, intertenant, snapshot e checksum su PDF archivio; eseguire QA E2E prima di migration. Dettagli in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.

@@ -1,3 +1,5 @@
+import { validateStampaDefinitivaEvidence } from './stampaDefinitivaUiHelpers.js'
+
 /**
  * Motore Stampa Definitiva e Blocco Periodo - FASE 13D-B2/B3
  * Gestisce l'interfacciamento con le funzioni di precheck e consolidamento transazionali del database.
@@ -85,6 +87,13 @@ export async function consolidazioneStampaDefinitiva(supabaseClient, {
   motivo = null,
   metadata = {}
 }) {
+  // Defense-in-depth nel service: nessun RPC di consolidamento sulla base
+  // del solo precheck contabile o di un checksum scelto dal browser.
+  if (!creatoBy) return { data: null, error: new Error('Operatore creato_by obbligatorio.') };
+  if (!/^[a-f0-9]{64}$/.test(String(checksum ?? ''))) {
+    return { data: null, error: new Error('Firma checksum obbligatoria: necessario SHA-256 del contenuto verificato.') };
+  }
+
   // 1. Eseguiamo prima la validazione formale
   const checkRes = await precheckStampaDefinitiva(supabaseClient, {
     societaId,
@@ -98,13 +107,27 @@ export async function consolidazioneStampaDefinitiva(supabaseClient, {
     return { data: null, error: checkRes.error };
   }
   
-  if (checkRes.data && !checkRes.data.success) {
+  if (!checkRes.data || checkRes.data.success !== true) {
     return {
-      data: checkRes.data,
-      error: new Error('Precheck fallito: ' + checkRes.data.blocking_reasons.join('; '))
+      data: checkRes.data ?? null,
+      error: new Error('Precheck fallito: ' + (checkRes.data?.blocking_reasons || ['risposta non valida']).join('; '))
     };
   }
 
+  const evidence = validateStampaDefinitivaEvidence(checkRes.data, {
+    societaId, tipoStampa, annoFiscale, periodoInizio, periodoFine
+  });
+  if (!evidence.ready || evidence.checksum !== checksum) {
+    return {
+      data: null,
+      error: new Error('Consolidamento bloccato: prova documento e snapshot non certificata ('
+        + [...evidence.blockers,
+          ...(evidence.checksum !== checksum ? ['checksum documento divergente'] : [])].join('; ') + ')')
+    };
+  }
+
+  // NB: il controllo effettivo deve stare anche nella RPC SQL, che oggi
+  // non certifica ne' verifica questi attributi. Non equivale al freeze.
   // 2. Chiamata alla stored procedure transazionale PostgreSQL (RPC)
   const { data, error } = await supabaseClient.rpc('consolidazione_stampa_definitiva', {
     p_societa_id: societaId,

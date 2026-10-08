@@ -80,6 +80,7 @@ export function validateStampaDefinitivaEvidence(precheck, expected = {}) {
   for (const [expectedKey, actualKey] of [
     ['societaId', 'societa_id'],
     ['tipoStampa', 'tipo_stampa'],
+    ['annoFiscale', 'anno_fiscale'],
     ['periodoInizio', 'periodo_inizio'],
     ['periodoFine', 'periodo_fine'],
   ]) {

@@ -4,6 +4,8 @@ import {
   precheckStampaDefinitiva,
   consolidazioneStampaDefinitiva
 } from '../src/modules/contabilita/application/stampe/motoreStampaDefinitiva.js';
+const CERTIFIED_SHA_FIXTURE = 'c'.repeat(64); // solo test: attestazione server fittizia
+
 
 // Setup Mock database state and client with new functional rules
 function createMockSupabaseClient() {
@@ -259,7 +261,21 @@ function createMockSupabaseClient() {
           success: blockingReasons.length === 0,
           blocking_reasons: blockingReasons,
           warnings,
-          rows_count: rowsCount
+          rows_count: rowsCount,
+          // Solo MOCK esplicito: simuliamo il futuro server con file e snapshot
+          // attestati; il backend reale FiscoSim NON emette ancora queste prove.
+          ...(blockingReasons.length === 0 ? {
+            societa_id: societaId,
+            tipo_stampa: tipoStampa,
+            anno_fiscale: annoFiscale,
+            periodo_inizio: periodoInizio,
+            periodo_fine: periodoFine,
+            snapshot_certified: true,
+            stored_file_verified: true,
+            checksum_verified: true,
+            file_size_bytes: 512,
+            content_sha256: CERTIFIED_SHA_FIXTURE
+          } : {})
         },
         error: null
       };
@@ -456,7 +472,7 @@ test('Verifica famiglie numerazione e progressione condivisa', async () => {
     periodoInizio: '2026-01-01',
     periodoFine: '2026-01-31',
     creatoBy: 'op-1',
-    checksum: 'check-1'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   assert.strictEqual(resVendite.data.success, true);
   assert.strictEqual(resVendite.data.pagina_iniziale, 1);
@@ -471,7 +487,7 @@ test('Verifica famiglie numerazione e progressione condivisa', async () => {
     periodoInizio: '2026-01-01',
     periodoFine: '2026-01-31',
     creatoBy: 'op-1',
-    checksum: 'check-2'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   
   assert.strictEqual(resLiq.data.success, true);
@@ -611,7 +627,7 @@ test('Verifica correttezza formula paginazione (no off-by-one)', async () => {
     periodoInizio: '2026-01-01',
     periodoFine: '2026-01-31',
     creatoBy: 'op-1',
-    checksum: 'chk-limit'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   assert.strictEqual(res1.data.pagina_finale, 1);
 
@@ -637,7 +653,7 @@ test('Verifica correttezza formula paginazione (no off-by-one)', async () => {
     periodoInizio: '2026-01-01',
     periodoFine: '2026-01-31',
     creatoBy: 'op-1',
-    checksum: 'chk-limit-2'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   assert.strictEqual(res2.data.pagina_finale, 2);
 });
@@ -653,7 +669,7 @@ test('Verifica consistenza UUID assegnati tra stampa_definitiva e righe collegat
     periodoInizio: '2026-01-01',
     periodoFine: '2026-02-28',
     creatoBy: 'op-1',
-    checksum: 'chk-uuid-1'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   assert.strictEqual(resGiornale.data.success, true);
   const createdStampaId = resGiornale.data.stampa_id;
@@ -674,7 +690,7 @@ test('Verifica consistenza UUID assegnati tra stampa_definitiva e righe collegat
     periodoInizio: '2026-01-01',
     periodoFine: '2026-01-31',
     creatoBy: 'op-1',
-    checksum: 'chk-uuid-2'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   assert.strictEqual(resIva.data.success, true);
   const createdIvaStampaId = resIva.data.stampa_id;
@@ -698,7 +714,7 @@ test('Verifica corretto operation_type e source_module nella scrittura di audit_
     periodoInizio: '2026-01-01',
     periodoFine: '2026-02-28',
     creatoBy: 'op-1',
-    checksum: 'chk-audit-1'
+    checksum: CERTIFIED_SHA_FIXTURE
   });
   
   assert.strictEqual(res.data.success, true);
@@ -713,3 +729,68 @@ test('Verifica corretto operation_type e source_module nella scrittura di audit_
 });
 
 
+
+test('service blocca RPC anche con precheck positivo ma senza prova snapshot/file', async () => {
+  const client = createMockSupabaseClient();
+  const original = client.rpc;
+  let writes = 0;
+  client.rpc = async (name, args) => {
+    if (name === 'consolidazione_stampa_definitiva') writes += 1;
+    const result = await original(name, args);
+    if (name === 'precheck_stampa_definitiva' && result.data?.success) {
+      delete result.data.snapshot_certified;
+      delete result.data.stored_file_verified;
+      delete result.data.checksum_verified;
+    }
+    return result;
+  };
+  const r = await consolidazioneStampaDefinitiva(client, {
+    societaId: 'soc-A', tipoStampa: 'registro_iva_acquisti', annoFiscale: 2026,
+    periodoInizio: '2026-01-01', periodoFine: '2026-01-31',
+    creatoBy: 'op-1', checksum: CERTIFIED_SHA_FIXTURE
+  });
+  assert.strictEqual(r.data, null);
+  assert.match(r.error.message, /non certificata/);
+  assert.strictEqual(writes, 0);
+  assert.strictEqual(client.db.stampe.length, 0);
+});
+
+test('service blocca checksum divergente anche se il precheck simula certificazione completa', async () => {
+  const client = createMockSupabaseClient();
+  let writes = 0;
+  const original = client.rpc;
+  client.rpc = async (name, args) => {
+    if (name === 'consolidazione_stampa_definitiva') writes += 1;
+    return original(name, args);
+  };
+  const r = await consolidazioneStampaDefinitiva(client, {
+    societaId: 'soc-A', tipoStampa: 'registro_iva_vendite', annoFiscale: 2026,
+    periodoInizio: '2026-01-01', periodoFine: '2026-01-31',
+    creatoBy: 'op-1', checksum: 'd'.repeat(64)
+  });
+  assert.strictEqual(r.data, null);
+  assert.match(r.error.message, /divergente/);
+  assert.strictEqual(writes, 0);
+});
+
+test('service blocca contesto cross-tenant, anche se il precheck riporta successo', async () => {
+  const client = createMockSupabaseClient();
+  let writes = 0;
+  const original = client.rpc;
+  client.rpc = async (name, args) => {
+    if (name === 'consolidazione_stampa_definitiva') writes += 1;
+    const result = await original(name, args);
+    if (name === 'precheck_stampa_definitiva' && result.data?.success) {
+      result.data.societa_id = 'soc-B';
+    }
+    return result;
+  };
+  const r = await consolidazioneStampaDefinitiva(client, {
+    societaId: 'soc-A', tipoStampa: 'registro_iva_vendite', annoFiscale: 2026,
+    periodoInizio: '2026-01-01', periodoFine: '2026-01-31',
+    creatoBy: 'op-1', checksum: CERTIFIED_SHA_FIXTURE
+  });
+  assert.strictEqual(r.data, null);
+  assert.match(r.error.message, /societaId/);
+  assert.strictEqual(writes, 0);
+});
