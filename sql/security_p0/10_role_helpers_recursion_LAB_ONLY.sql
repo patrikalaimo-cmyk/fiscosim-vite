@@ -35,12 +35,12 @@ BEGIN
 END $guard$;
 
 ALTER FUNCTION public.current_utente_ruolo() SECURITY DEFINER;
-ALTER FUNCTION public.current_utente_ruolo() SET search_path = pg_catalog, public, auth;
+ALTER FUNCTION public.current_utente_ruolo() SET search_path = pg_catalog;
 REVOKE EXECUTE ON FUNCTION public.current_utente_ruolo() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.current_utente_ruolo() TO authenticated, service_role;
 
 ALTER FUNCTION public.current_utente_studio_id() SECURITY DEFINER;
-ALTER FUNCTION public.current_utente_studio_id() SET search_path = pg_catalog, public, auth;
+ALTER FUNCTION public.current_utente_studio_id() SET search_path = pg_catalog;
 REVOKE EXECUTE ON FUNCTION public.current_utente_studio_id() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.current_utente_studio_id() TO authenticated, service_role;
 
@@ -50,7 +50,7 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY['current_utente_ruolo','current_utente_studio_id']::text[] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('public.'||fn||'()')
         AND p.prosecdef AND p.proowner::regrole::text='postgres'
-        AND p.proconfig @> ARRAY['search_path=pg_catalog, public, auth']::text[]) THEN
+        AND p.proconfig @> ARRAY['search_path=pg_catalog']::text[]) THEN
       RAISE EXCEPTION 'Helper privilege/search_path assertion failed for %',fn;
     END IF;
     IF has_function_privilege('anon','public.'||fn||'()','EXECUTE') OR

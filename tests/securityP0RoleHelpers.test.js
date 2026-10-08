@@ -8,7 +8,7 @@ test('P0 helper fix is local opt-in, narrow caller-bound and guard-checked',()=>
  assert.match(sql,/p0-local-only-rls-recursion/)
  assert.match(sql,/current_utente_ruolo\(\) SECURITY DEFINER/)
  assert.match(sql,/current_utente_studio_id\(\) SECURITY DEFINER/)
- assert.match(sql,/SET search_path = pg_catalog, public, auth/)
+ assert.match(sql,/SET search_path = pg_catalog;/)
  assert.match(sql,/REVOKE EXECUTE.*current_utente_ruolo\(\).*PUBLIC, anon/)
  assert.match(sql,/REVOKE EXECUTE.*current_utente_studio_id\(\).*PUBLIC, anon/)
  assert.match(sql,/proowner::regrole::text='postgres'/)
