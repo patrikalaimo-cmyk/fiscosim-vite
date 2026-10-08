@@ -178,3 +178,15 @@
 - Regressioni aggiunte per Registro IVA e Libro Giornale con controparti e descrizioni sintetiche ostili.
 - Il fascicolo PDF unico, Bilancio/Mastrini/Partitario canonici e checksum basato sul contenuto restano aperti; **non freeze**.
 - CI codice Stampe: **PENDENTE**.
+
+
+## 2026-10-08 — STAMPE / base deterministica movimenti per conto
+
+- Introduzione di `buildMovimentiPerContoModel` nel layer application Stampe, alimentato esclusivamente da testate/righe di Prima Nota canonica (senza mock nel modello).
+- Controlli fail-closed su società, periodo, stati contabilizzati, identificativi duplicati, conto mancante, importi non validi e quadratura testata/righe.
+- Aggregazione Dare/Avere, saldi di movimentazione per conto, movimento analitico e saldo progressivo nel periodo con unità monetaria in centesimi.
+- Righe simulate, bozze, annullate e stornate escluse dal prospetto del periodo con evidenza esplicita; stato sconosciuto produce blocker.
+- Questa è una **base di dominio**, non una stampa definitiva: i saldi iniziali e i movimenti di esercizi precedenti non sono ricostruiti e la UI Stampe attende ancora integrazione.
+- Aggiunta suite Node dedicata nel profilo `test:stampe`, fixture sintetiche.
+- Fascicolo unico e PDF definitivo ancora aperti; Bank commit reale ancora vietato.
+- Stato: **CI codice PENDENTE**.
