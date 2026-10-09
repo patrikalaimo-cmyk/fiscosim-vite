@@ -70,8 +70,14 @@ export async function assertStage3vPinnedLab({expectedCommit,fixture,admin,authI
   throw Error('STAGE3V_WINDOWS_LAB_ONLY')
  const lab=join(process.env.USERPROFILE,'FiscoSim-P0-LAB-20261008-164658')
  if(!existsSync(lab))throw Error('STAGE3V_ISOLATED_LAB_PATH_MISSING')
+ // A detached worktree is the intended operator setup. Accept it ONLY at
+ // the fixed isolated P0 path, with the exact pinned SHA and clean tree.
+ const checkoutBranch=run('git',['branch','--show-current'],{cwd:ROOT})
+ const isolatedWorktree=resolve(join(process.env.USERPROFILE,'FiscoSim-P0-Stage3V-ReadOnly'))
+ const pinnedWorktree=checkoutBranch==='' &&
+  ROOT.toLowerCase()===isolatedWorktree.toLowerCase()
  if(run('git',['rev-parse','HEAD'],{cwd:ROOT})!==expectedCommit ||
-    run('git',['branch','--show-current'],{cwd:ROOT})!==BRANCH)
+    (checkoutBranch!==BRANCH && !pinnedWorktree))
   throw Error('STAGE3V_UNEXPECTED_GIT_CHECKOUT')
  if(run('git',['status','--porcelain'],{cwd:ROOT}))
   throw Error('STAGE3V_DIRTY_WORKTREE')
