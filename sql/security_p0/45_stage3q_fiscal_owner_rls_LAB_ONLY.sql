@@ -34,11 +34,10 @@ BEGIN
    AND NOT p.prosecdef) THEN
   RAISE EXCEPTION 'Stage3Q customer helper must be SECURITY INVOKER';
  END IF;
- IF has_table_privilege('anon','public.avvisi_ade','SELECT')
-    OR has_table_privilege('anon','public.revisioni_dichiarativi','SELECT')
-    OR has_table_privilege('anon','public.clienti','SELECT') THEN
-  RAISE EXCEPTION 'Stage3Q unexpected anonymous table-wide SELECT grant';
- END IF;
+ -- Legacy Supabase public-schema defaults can grant anon SELECT.
+ -- Do not assume these grants are absent: explicitly revoke them BELOW,
+ -- atomically with the RLS migration, then assert actual role privileges.
+ -- The prior preflight rejected this remediable state before any DDL.
  FOREACH name IN ARRAY ARRAY['avvisi_ade','revisioni_dichiarativi'] LOOP
   IF EXISTS(SELECT 1 FROM pg_attribute
    WHERE attrelid=format('public.%I',name)::regclass
@@ -58,6 +57,57 @@ BEGIN
   RAISE EXCEPTION 'Stage3Q unexpected fiscal baseline policies';
  END IF;
 END $preflight$;
+
+-- Normalize the legacy public/anon ACL before enabling new fiscal policies.
+-- This is deliberate hardening, NOT bypassing a failed preflight.
+-- The entire change stays within Stage3Q's transaction and rolls back if
+-- any role still has unexpected anonymous access.
+REVOKE SELECT ON TABLE
+ public.clienti, public.avvisi_ade, public.revisioni_dichiarativi
+ FROM PUBLIC, anon;
+
+-- Explicitly remove independent column grants too. REVOKE table SELECT does
+-- not imply a separate column-only grant was removed on all legacy schemas.
+DO $revoke_anon_columns$
+DECLARE target text; column_name text;
+BEGIN
+ FOREACH target IN ARRAY ARRAY['clienti','avvisi_ade','revisioni_dichiarativi'] LOOP
+  FOR column_name IN
+   SELECT c.column_name FROM information_schema.columns c
+   WHERE c.table_schema='public' AND c.table_name=target
+  LOOP
+   EXECUTE format(
+    'REVOKE SELECT (%I) ON TABLE public.%I FROM PUBLIC, anon',
+    column_name,target);
+  END LOOP;
+ END LOOP;
+END $revoke_anon_columns$;
+
+-- Signed-in access is kept explicitly: it is still restricted by RLS.
+-- Do not rely on an inherited PUBLIC grant for authorized studio reads.
+GRANT SELECT ON TABLE
+ public.clienti, public.avvisi_ade, public.revisioni_dichiarativi
+ TO authenticated;
+
+DO $verify_anon_closed$
+DECLARE target text; column_name text;
+BEGIN
+ FOREACH target IN ARRAY ARRAY['clienti','avvisi_ade','revisioni_dichiarativi'] LOOP
+  IF has_table_privilege('anon',format('public.%I',target),'SELECT')
+   OR NOT has_table_privilege('authenticated',format('public.%I',target),'SELECT')
+   OR NOT has_table_privilege('service_role',format('public.%I',target),'SELECT') THEN
+   RAISE EXCEPTION 'Stage3Q ACL normalization failed: %',target;
+  END IF;
+  FOR column_name IN
+   SELECT c.column_name FROM information_schema.columns c
+   WHERE c.table_schema='public' AND c.table_name=target
+  LOOP
+   IF has_column_privilege('anon',format('public.%I',target),column_name,'SELECT') THEN
+    RAISE EXCEPTION 'Stage3Q anonymous column access remains: %.%',target,column_name;
+   END IF;
+  END LOOP;
+ END LOOP;
+END $verify_anon_closed$;
 
 -- The link becomes SELECT-able only to authenticated users with a verified
 -- company membership AND permission to that particular client.
