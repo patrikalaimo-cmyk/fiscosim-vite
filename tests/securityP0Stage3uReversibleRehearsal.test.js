@@ -62,8 +62,8 @@ test('Stage3U PowerShell wrapper does not duplicate its transaction or leave tru
   '$payload=@"',
   '$migration=Unwrap-PinnedSql',
   '$matrix=Unwrap-PinnedSql',
-  'STAGE3U_REHEARSAL_EXECUTED',
  ]) assert.equal(runner.split(marker).length-1,1,marker)
+ assert.equal(runner.split("SELECT 'STAGE3U_REHEARSAL_EXECUTED' AS result;").length-1,1)
  assert.ok(runner.includes('$withoutEnd=$withoutStart.Substring(0,$endOffset)'))
  assert.equal(runner.includes("),'')"),false)
 })
