@@ -59,7 +59,7 @@ const ESITO_COLORS = {
 
 
 // ─── MODAL IMPORT PDF AVVISO ─────────────────────────────────
-function ModalImportPDFAvviso({ clienti, utenti, onSave, onClose }) {
+function ModalImportPDFAvviso({ clienti, utenti, societaChoices, onSave, onClose }) {
   const [file, setFile]       = useState(null)
   const [parsing, setParsing] = useState(false)
   const [parsed, setParsed]   = useState(null)  // dati estratti
@@ -125,6 +125,8 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
         responsabile_id:          '',
         note:                     estratto.note_estratte         || '',
         cliente_id:               '',
+        societa_id:              '',
+        motivazione:             '',
         cliente_nome:             estratto.destinatario          || '',
         _cf_estratto:             estratto.codice_fiscale        || '',
         _warnings:                [],
@@ -170,10 +172,10 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
 
 
   const handleSave = async () => {
-    if (!form.tipo_avviso) return alert('Tipo avviso obbligatorio')
+    if (!form.tipo_avviso || !form.cliente_id || !form.societa_id) return alert('Seleziona società, cliente e tipo avviso')
+    if(String(form.motivazione||'').trim().length<12)return alert('Motivazione obbligatoria (almeno 12 caratteri)')
     setSaving(true)
-    await onSave(form)
-    setSaving(false)
+    try{await onSave(form)}finally{setSaving(false)}
   }
 
   return (
@@ -246,6 +248,16 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
 
               {/* Form dati estratti */}
               <div className="form-grid">
+                <div className="fg full"><label>Società contabile proprietaria *</label>
+                  <select value={form.societa_id||''} onChange={e=>setForm(p=>({...p,societa_id:e.target.value,cliente_id:''}))}>
+                    <option value="">— Seleziona società —</option>
+                    {societaChoices.map(x=><option key={x.id} value={x.id}>{x.denominazione}</option>)}
+                  </select>
+                </div>
+                <div className="fg full"><label>Motivazione associazione *</label>
+                  <textarea rows={2} value={form.motivazione||''}
+                    onChange={e=>up('motivazione',e.target.value)}/>
+                </div>
                 <div className="fg full">
                   <label>Cliente *</label>
                   <select value={form.cliente_id} onChange={e=>{
@@ -254,7 +266,7 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
                     up('cliente_nome',c?(c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()):'')
                   }}>
                     <option value="">— Seleziona cliente —</option>
-                    {clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()}</option>)}
+                    {clienti.filter(c=>(c.societa_assegnate||[]).includes(form.societa_id)).map(c=><option key={c.id} value={c.id}>{c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()}</option>)}
                   </select>
                 </div>
                 <div className="fg">
@@ -533,10 +545,10 @@ Sii specifico e pratico, non generico.`
 }
 
 // ─── MODAL AVVISO (nuovo / modifica) ─────────────────────────
-function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
+function ModalAvviso({ avviso, clienti, utenti, societaChoices, onSave, onClose }) {
   const isNew = !avviso?.id
   const [form, setForm] = useState({
-    cliente_id: '', cliente_nome: '',
+    cliente_id: '', cliente_nome: '', societa_id:'', motivazione:'',
     tipo_avviso: TIPI_AVVISO[0],
     modello: MODELLI[0],
     importo: '',
@@ -554,7 +566,8 @@ function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   const handleSave = async () => {
-    if (!form.cliente_id && !form.cliente_nome) return alert('Seleziona o inserisci il cliente')
+    if (!form.cliente_id || !form.societa_id) return alert('Seleziona società e cliente autorizzato')
+    if(String(form.motivazione||'').trim().length<12)return alert('Indica una motivazione di almeno 12 caratteri')
     if (!form.tipo_avviso) return alert('Tipo avviso obbligatorio')
     setSaving(true)
     await onSave(form)
@@ -571,16 +584,27 @@ function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
         </div>
         <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
           <div className="form-grid">
+            <div className="fg full"><label>Società contabile proprietaria *</label>
+              <select disabled={!isNew} value={form.societa_id||''}
+                onChange={e=>setForm(p=>({...p,societa_id:e.target.value,cliente_id:'',cliente_nome:''}))}>
+                <option value="">— Seleziona società —</option>
+                {societaChoices.map(c=><option key={c.id} value={c.id}>{c.denominazione}</option>)}
+              </select>
+            </div>
+            <div className="fg full"><label>Motivazione operazione *</label>
+              <textarea rows={2} value={form.motivazione||''}
+                onChange={e=>up('motivazione',e.target.value)}/>
+            </div>
             {/* Cliente */}
             <div className="fg full">
               <label>Cliente *</label>
-              <select value={form.cliente_id} onChange={e => {
+              <select disabled={!isNew} value={form.cliente_id} onChange={e => {
                 const c = clienti.find(x => x.id === e.target.value)
                 up('cliente_id', e.target.value)
                 up('cliente_nome', c ? (c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()) : '')
               }}>
                 <option value="">— Seleziona cliente —</option>
-                {clienti.map(c => <option key={c.id} value={c.id}>{c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}</option>)}
+                {clienti.filter(c=>(c.societa_assegnate||[]).includes(form.societa_id)).map(c => <option key={c.id} value={c.id}>{c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}</option>)}
               </select>
             </div>
 
