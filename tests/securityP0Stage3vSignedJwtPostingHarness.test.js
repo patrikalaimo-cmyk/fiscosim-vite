@@ -2,12 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const path=new URL('../scripts/security_p0/stage3v-signed-jwt-general-journal-e2e.mjs',import.meta.url)
 const script=readFileSync(path,'utf8')
 
 test('Stage3V signed JWT real-DB E2E harness fails closed without localhost opt-in',()=>{
- const run=spawnSync(process.execPath,[path.pathname],{
+ const run=spawnSync(process.execPath,[fileURLToPath(path)],{
   encoding:'utf8',timeout:8000,
   env:{FISCOSIM_ISOLATED_LAB_API:'false',PATH:process.env.PATH||''},
  })
