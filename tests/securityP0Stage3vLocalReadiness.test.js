@@ -27,6 +27,8 @@ test('Stage3V readiness scans only pinned Docker database and localhost services
   'AUTH_CONTAINER_ON_DB_NETWORK',
   'POSTGREST_CONTAINER_ON_DB_NETWORK',
   'GATEWAY_54321_BOUND_ONLY_TO_LOOPBACK',
+  'GATEWAY_54321_HOST_BINDINGS',
+  'NONE_ON_PINNED_DB_NETWORK',
   "HostPort)!=='54321'",
   "'127.0.0.1','::1'",
   'REAL_SIGNED_JWT_E2E=false',
@@ -45,4 +47,11 @@ test('Stage3V readiness does not claim actual signed-JWT posting from infrastruc
  assert.ok(code.includes('REAL_SIGNED_JWT_E2E=false'))
  assert.ok(code.includes('ACCOUNTING_HTTP_POST_E2E=false'))
  assert.doesNotMatch(code,/STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS/)
+})
+
+test('Stage3V reports actual host bindings without relaxing loopback-only condition',()=>{
+ assert.match(code,/bindings\.length>0/)
+ assert.match(code,/bindings\.every\(b=>\['127\.0\.0\.1','::1'\]/)
+ assert.match(code,/GATEWAY_54321_HOST_BINDINGS/)
+ assert.doesNotMatch(code,/docker\('?(?:update|network|compose)/)
 })
