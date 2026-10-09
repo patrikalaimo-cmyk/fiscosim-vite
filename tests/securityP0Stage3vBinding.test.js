@@ -1,8 +1,9 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
+import {join} from 'node:path'
 import {
- parseStage3vBindingOutput,assertStage3vFixtureParity,
+ parseStage3vBindingOutput,assertStage3vFixtureParity,isStage3vAllowedCheckout,
 } from '../scripts/security_p0/stage3v-lab-binding.mjs'
 
 const A='61000000-0000-4000-8000-000000000001'
@@ -75,4 +76,27 @@ test('Stage3V signed JWT runner requires explicit opt-in before any Auth login o
   'STAGE3V_PINNED_DB_NOT_RUNNING',
  ])assert.ok(binding.includes(marker),marker)
  assert.doesNotMatch(binding,/run\('docker',\['(?:run|start|stop|rm|restart)'/i)
+})
+
+test('Stage3V accepts clean pinned detached worktree without switching mio-branch',()=>{
+ const userProfile=join('user','patri')
+ const lab=join(userProfile,'FiscoSim-P0-Stage3V-ReadOnly')
+ assert.equal(isStage3vAllowedCheckout({
+  root:lab,branch:'',userProfile,
+ }),true)
+ assert.equal(isStage3vAllowedCheckout({
+  root:join(userProfile,'fiscosim-viteBACKUPAntigravity'),
+  branch:'',userProfile,
+ }),false)
+ assert.equal(isStage3vAllowedCheckout({
+  root:lab,branch:'mio-branch',userProfile,
+ }),false)
+ assert.equal(isStage3vAllowedCheckout({
+  root:join(userProfile,'original'),
+  branch:'security/p0-isolated-hardening-20261008',userProfile,
+ }),true)
+ const binding=readFileSync(new URL('../scripts/security_p0/stage3v-lab-binding.mjs',import.meta.url),'utf8')
+ assert.match(binding,/STAGE3V_DIRTY_WORKTREE/)
+ assert.match(binding,/STAGE3V_REQUIRES_PINNED_SHA/)
+ assert.match(binding,/rev-parse','HEAD/)
 })
