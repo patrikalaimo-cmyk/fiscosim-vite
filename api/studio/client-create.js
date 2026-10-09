@@ -34,7 +34,15 @@ export default async function handler(req,res){
  if(!hasSupabaseServiceRoleConfigured()){
   return res.status(503).json({error:'Provisioning clienti non configurato sul server'})
  }
- const body=typeof req.body==='string'?JSON.parse(req.body):req.body||{}
+ let body
+ try{
+  body=typeof req.body==='string'?JSON.parse(req.body):req.body||{}
+ }catch{
+  return res.status(400).json({error:'Richiesta JSON non valida'})
+ }
+ if(!body || typeof body!=='object' || Array.isArray(body)){
+  return res.status(400).json({error:'Richiesta cliente non valida'})
+ }
  const societaId=String(body.societa_id||'').trim()
  const reason=String(body.motivazione||'').trim()
  const allowed=scopedCompanyIds(ctx)
