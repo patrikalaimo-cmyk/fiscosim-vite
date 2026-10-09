@@ -52,6 +52,8 @@ BEGIN
   WHERE us.auth_user_id=p_auth_user_id AND us.attivo IS TRUE
     AND us.ruolo IN ('owner','admin')
     AND m.societa_id=p_societa_id
+    AND EXISTS (SELECT 1 FROM public.societa company
+      WHERE company.id=p_societa_id AND company.attiva IS TRUE)
  ) THEN
   RAISE EXCEPTION 'Customer actor lacks verified company membership';
  END IF;
