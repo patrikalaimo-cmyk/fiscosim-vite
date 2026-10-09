@@ -151,3 +151,15 @@ test('Stage3S single isolated LAB runner pins commit, gates baseline and all eig
  assert.match(ps,/COMMIT/)
  assert.ok(!ps.includes('mlydfspmrkaedsocubku'))
 })
+
+test('Stage3S report retains actual PostgreSQL native errors and verifies anonymous ACL after commit',()=>{
+ const ps=src('scripts/security_p0/run-stage3s-full-lab.ps1')
+ assert.match(ps,/\$ErrorActionPreference='Continue'/)
+ assert.match(ps,/\$oldPreference=\$ErrorActionPreference/)
+ assert.match(ps,/foreach\(\$l in \$result\)/)
+ assert.match(ps,/3S_ACL_BEFORE\|/)
+ assert.match(ps,/3S_ACL_AFTER\|/)
+ assert.match(ps,/anon_select=false\|authenticated_select=true\|service_select=true/)
+ assert.match(ps,/\$aclVerified/)
+ assert.match(ps,/inspect captured output in report/)
+})
