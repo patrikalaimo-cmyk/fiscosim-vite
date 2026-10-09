@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
- scopedCompanyIds,allowedClientIds,rowIsAuthorized,canReadFiscalResource,
+ scopedCompanyIds,allowedClientIds,rowIsAuthorized,canReadFiscalResource,resolveFiscalScope,
  clientSelectionLimited,listScopedClients,listScopedFiscalRows,listScopedStaff,
 } from '../lib/fiscalReadScope.js'
 
@@ -48,17 +48,17 @@ function dbMock(datasets){
  const client={
   calls,
   from(table){
-   let col='',ids=[],active=false
+   let col='',ids=[],filters=[]
    const query={
     select(){return query},
     in(name,values){col=name;ids=values;return query},
-    eq(name,value){if(name==='attivo')active=value;return query},
+    eq(name,value){filters.push([name,value]);return query},
     limit(){return query},
     then(resolve,reject){
      let rows=(datasets[table]||[])
      if(ids.length)rows=rows.filter(x=>ids.includes(x[col]))
      else rows=[]
-     if(active)rows=rows.filter(x=>x.attivo===true)
+     for(const [key,value] of filters)rows=rows.filter(x=>x[key]===value)
      calls.push({table,col,ids})
      return Promise.resolve({data:rows,error:null}).then(resolve,reject)
     }
@@ -121,4 +121,22 @@ test('Stage3R server enforces module read privilege, regardless of UI routing',(
  const api=readFileSync(new URL('../api/studio/fiscal-read.js',import.meta.url),'utf8')
  assert.match(api,/canReadFiscalResource\(ctx\.profile,resource\)/)
  assert.match(api,/status\(403\)/)
+})
+
+test('Stage3S read scope intersects live per-company membership role',async()=>{
+ const db=dbMock({
+  utenti_studio_societa:[
+   {utente_id:'staff-a',auth_user_id:'auth-a',societa_id:'company-a',ruolo:'owner'},
+   {utente_id:'staff-a',auth_user_id:'auth-a',societa_id:'company-b',ruolo:'collaboratore'},
+  ],
+  crm_cliente_societa_link:links,
+ })
+ const ctx={user:{id:'auth-a'},profile:{
+   id:'staff-a',auth_user_id:'auth-a',attivo:true,ruolo:'owner',
+   societa_assegnate:['company-a','company-b'],
+ }}
+ const scope=await resolveFiscalScope(db,ctx)
+ assert.deepEqual(scope.companies,['company-a'])
+ assert.deepEqual(scope.clientIds,['a','shared'])
+ assert.equal(scope.links.some(l=>l.societa_id==='company-b'),false)
 })
