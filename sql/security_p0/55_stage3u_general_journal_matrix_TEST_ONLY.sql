@@ -36,6 +36,35 @@ INSERT INTO public.piano_conti(id,societa_id,codice,descrizione,tipo,attivo) VAL
  ('61000000-0000-4000-8000-000000000011','61000000-0000-4000-8000-000000000001','1.02','Bank A','patrimoniale',true),
  ('61000000-0000-4000-8000-000000000012','61000000-0000-4000-8000-000000000002','1.01','Cash B','patrimoniale',true);
 
+-- No browser role may call the privileged journal RPC or read claims.
+SET LOCAL ROLE anon;
+DO $anon_acl$
+BEGIN
+ BEGIN
+  PERFORM public.fiscosim_post_general_journal(
+    NULL::uuid,NULL::uuid,NULL::uuid,NULL::jsonb,NULL::jsonb,NULL::text);
+  RAISE EXCEPTION 'SECURITY FAILURE: anon journal RPC execution permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  PERFORM request_id FROM public.fiscosim_general_journal_claim LIMIT 1;
+  RAISE EXCEPTION 'SECURITY FAILURE: anon journal claim readable';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+END $anon_acl$;
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+DO $authenticated_acl$
+BEGIN
+ BEGIN
+  PERFORM public.fiscosim_post_general_journal(
+    NULL::uuid,NULL::uuid,NULL::uuid,NULL::jsonb,NULL::jsonb,NULL::text);
+  RAISE EXCEPTION 'SECURITY FAILURE: authenticated direct journal RPC execution permitted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+END $authenticated_acl$;
+RESET ROLE;
+
 SET LOCAL ROLE service_role;
 DO $test$
 DECLARE
