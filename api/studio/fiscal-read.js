@@ -36,6 +36,15 @@ export default async function handler(req,res){
     data=await listScopedFiscalRows(admin,resource,scope,ctx.profile,companies)
     // The notices table never permits anonymous/unlinked client ownership.
     if(resource==='avvisi_ade')data=data.filter(row=>Boolean(row.cliente_id))
+    if(resource==='revisioni_dichiarativi'){
+      const cf=String(req.query?.codice_fiscale||'').trim().toUpperCase()
+      if(cf)data=data.filter(row=>String(row.codice_fiscale||'').trim().toUpperCase()===cf)
+      const clients=await listScopedClients(admin,scope)
+      const byId=new Map(clients.map(c=>[c.id,{
+        nome:c.nome,cognome:c.cognome,ragione_sociale:c.ragione_sociale,
+      }]))
+      data=data.map(row=>({...row,clienti:byId.get(row.cliente_id)||null}))
+    }
   }
   res.setHeader('Cache-Control','no-store')
   return res.status(200).json({ok:true,data})
