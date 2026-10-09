@@ -34,7 +34,17 @@ BEGIN
     OR (SELECT count(*) FROM pg_constraint
       WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='f')<>3
     OR (SELECT count(*) FROM pg_constraint
-      WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='p')<>1 THEN
+      WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='p')<>1
+    OR (SELECT count(*) FROM pg_attribute a
+      WHERE a.attrelid='public.crm_cliente_societa_link'::regclass
+       AND NOT a.attisdropped AND
+       ((a.attname IN ('cliente_id','societa_id','assigned_by') AND a.atttypid='uuid'::regtype)
+        OR (a.attname='assigned_at' AND a.atttypid='timestamptz'::regtype)
+        OR (a.attname='decision_reason' AND a.atttypid='text'::regtype)))<>5
+    OR (SELECT count(*) FROM pg_constraint
+      WHERE conrelid='public.crm_cliente_societa_link'::regclass
+       AND contype='f' AND confrelid IN
+         ('public.clienti'::regclass,'public.societa'::regclass,'auth.users'::regclass))<>3 THEN
    RAISE EXCEPTION 'Stage3P unexpected existing CRM link schema';
   END IF;
  END IF;
