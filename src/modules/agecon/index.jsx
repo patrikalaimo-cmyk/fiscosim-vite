@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { analyzeWithClaude } from '../../shared/utils/parseDoc'
 import { sb } from '../../lib/supabase'
+import { fetchScopedFiscalData } from '../../lib/fiscalApi'
 import { ModuleHeader } from '../../shared/components'
 
 // ─── COSTANTI ────────────────────────────────────────────────
@@ -676,15 +677,23 @@ export function ModuloAgeCon({ utente, ruolo }) {
 
   const carica = useCallback(async () => {
     setLoading(true)
-    const [{ data: av }, { data: cl }, { data: ut }] = await Promise.all([
-      sb.from('avvisi_ade').select('*').order('data_scadenza', { ascending: true }),
-      sb.from('clienti').select('id,nome,cognome,ragione_sociale,codice_fiscale').eq('attivo', true).order('nome'),
-      sb.from('utenti_studio').select('id,nome,cognome,ruolo').eq('attivo', true),
-    ])
-    setAvvisi(av || [])
-    setClienti(cl || [])
-    setUtenti(ut || [])
-    setLoading(false)
+    try {
+      const [av,cl,ut]=await Promise.all([
+        fetchScopedFiscalData('avvisi_ade'),
+        fetchScopedFiscalData('clienti'),
+        fetchScopedFiscalData('utenti'),
+      ])
+      setAvvisi(av.sort((a,b)=>String(a.data_scadenza||'').localeCompare(String(b.data_scadenza||''))))
+      setClienti(cl)
+      setUtenti(ut)
+    } catch(error) {
+      setAvvisi([])
+      setClienti([])
+      setUtenti([])
+      alert(error.message||'Lettura protetta AgeCon non disponibile')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { carica() }, [carica])
