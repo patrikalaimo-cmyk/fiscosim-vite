@@ -132,3 +132,16 @@ test('Stage3T signed-JWT E2E harness requires real Auth, two distinct A/B fixtur
  assert.match(dev,/listenHost = process\.env\.FISCOSIM_ISOLATED_LAB_API === 'true'/)
  assert.match(dev,/\? '127\.0\.0\.1' : undefined/)
 })
+
+
+test('Stage3U atomic general-journal route stays 503 even with isolated dev HTTP adapter',async()=>{
+ const response=await requestStudio({
+  env:LAB_ENV,
+  path:'/api/studio/general-journal-post',
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({unexpected:'do not post'}),
+ })
+ assert.equal(response.status,503)
+ assert.equal(response.body?.error,'GENERAL_JOURNAL_LAB_ONLY_DISABLED')
+})
