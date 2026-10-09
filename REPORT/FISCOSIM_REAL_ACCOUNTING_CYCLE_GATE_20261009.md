@@ -108,3 +108,18 @@ Eseguire **solo su un laboratorio isolato senza dati clienti reali**. Nessun tes
 **Conclusione esatta:** `GATE 1 / movimento generale atomico: POSTGRESQL TRANSACTIONAL REHEARSAL PASS (rollback)`, ma `GATE 1 / HTTP con JWT e salvataggio persistente: NOT_EXECUTED`; `GATE 1 / fattura con IVA/partita/ritenuta: NOT_CERTIFIED`. Nessuna validazione dell'intero ciclo 0–8 e nessuna certificazione contabile A100. PostgreSQL `nextval` può avanzare anche se la rehearsal termina con `ROLLBACK`.
 
 Prossima attività **senza ripetere la rehearsal**: installazione persistente LAB Stage3U soggetta ad approvazione esplicita, prova con JWT reale API e successivo sviluppo di transazione canonica completa (IVA, partite, ritenute, import, chiusure). `mio-branch` e Supabase LIVE invariati.
+
+
+## 8. Stato Stage3U persistente e Stage3V JWT (evidenza 09/10/2026 23:26)
+
+**Conferma reale ricevuta:** `STAGE3U_PERSISTENT_LAB_INSTALL_20261009-232611-790.txt` sul commit `1434acf59bc53449b81b2411dbfeaaffa24b26d6` e container isolato `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
+
+- `STAGE3U_PERSISTENT_LAB_INSTALL_PASS` con migrazione 54 `COMMIT` e tabella claim, RLS/ACL, RPC `fiscosim_post_general_journal` **effettivamente persistenti nel Docker**. Matrice SQL 55 PASS con replay idempotente, divisione A/B, quadratura e failure injection tardiva su audit. Fixture test in `ROLLBACK`.
+- `3U_PERSISTENT_INSTALL|SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS` certifica **nessuna registrazione campione permanente**; l'installazione strutturale rimane. Le annotazioni precedenti relative alla sola rehearsal o all'installazione ancora pendente sono storiche e non rappresentano lo stato attuale.
+- `REAL_JWT_E2E=false` nel report. È scorretto indicare come superati API/HTTP con sessioni reali, registrazioni persistite e confronti contabili da browser.
+
+**Stage3V codice aggiunto (non eseguito):** `scripts/security_p0/stage3v-signed-jwt-general-journal-e2e.mjs`, con gate localhost su Supabase Auth/Rest e API, account A e B distinti verificati da Auth, società reali del LAB con codice `STAGE3V-`, piano conti attivo e appartenente alla società, negazione accesso anonimo/token alterato/cross-company, rifiuto squadrature. Il test positivo è opt-in mediante `FISCOSIM_STAGE3V_PERSISTENT_WRITE_APPROVAL=LAB_SYNTHETIC_WRITE_APPROVED`. Se esplicitamente autorizzato, pubblica una PN generale per società A e B, confronta l'UUID al replay, nega il riuso della stessa chiave con importo diverso e rilegge testata, righe, audit e claim persistiti via PostgREST local con service role. Non cancella silenziosamente il risultato: fixture e cleanup devono essere gestiti esplicitamente. Nessun token o password viene stampato.
+
+**Prerequisiti non ancora attestati:** Auth GoTrue locale collegato **allo stesso** database Stage3U (non solo al singolo container PostgreSQL), gateway PostgREST locale e chiavi LAB valide, due identità emesse da Auth e due società sintetiche `STAGE3V-` con 2 conti ciascuna; ogni assenza deve dare `BLOCKED`, non `PASS`. Test Node di guardia del harness non equivale a E2E firmato. Nessun nuovo comando necessario finché non esistono i prerequisiti.
+
+**Perimetro invariato:** test Stage3U generale non convalida IVA/partitario/ritenute/import/chiusura annua. L'attuale `createPrimaNotaCompleta` salva più tabelle con rollback best-effort; deve essere sostituito da transazione completa quando pronta, senza adesso reindirizzare le UI fiscali alla RPC generale.
