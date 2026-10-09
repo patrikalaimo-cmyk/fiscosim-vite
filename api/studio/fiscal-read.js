@@ -32,7 +32,11 @@ export default async function handler(req,res){
       clientIds:scope.clientIds.filter(clientId=>
         scope.links.some(link=>link.cliente_id===clientId&&allowed.has(link.societa_id))),
     }
-    data=await listScopedClients(admin,filteredScope)
+    data=(await listScopedClients(admin,filteredScope)).map(c=>({
+      ...c,
+      societa_assegnate:[...new Set(scope.links.filter(l=>
+        l.cliente_id===c.id&&allowed.has(l.societa_id)).map(l=>l.societa_id))],
+    }))
   } else if(resource==='utenti'){
     data=await listScopedStaff(admin,companies)
   } else {
