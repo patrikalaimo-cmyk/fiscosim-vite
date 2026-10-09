@@ -91,3 +91,20 @@ test('Stage3R fiscal modules use the protected reads, with writes explicitly pen
  assert.match(agecon,/sb\.from\('avvisi_ade'\)\.insert/)
  assert.match(revisions,/sb\.from\('revisioni_dichiarativi'\)\.insert/)
 })
+
+test('Stage3R real SQL atomic transaction fixture remains rollback-only',()=>{
+ const qa=read('sql/security_p0/48_stage3r_atomic_client_create_TEST_ONLY.sql')
+ for(const k of [
+  'local-atomic-client-rpc-rollback-fixture',
+  'SET LOCAL ROLE service_role',
+  'public.fiscosim_studio_create_cliente',
+  'INSERT INTO auth.users',
+  'INSERT INTO public.utenti_studio_societa',
+  'source + link not created together',
+  'nonmember created A client',
+  'customer payload changed scope',
+  'failed RPC left extra orphan/linked clients',
+  'ROLLBACK;'
+ ]) assert.ok(qa.includes(k),k)
+ assert.doesNotMatch(qa,/\bCOMMIT\s*;/i)
+})
