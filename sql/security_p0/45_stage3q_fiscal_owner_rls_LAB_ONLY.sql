@@ -228,15 +228,18 @@ BEGIN
  IF NEW.societa_id IS DISTINCT FROM OLD.societa_id THEN
   RAISE EXCEPTION 'Fiscal record company ownership is immutable';
  END IF;
+ IF NEW.cliente_id IS DISTINCT FROM OLD.cliente_id THEN
+  RAISE EXCEPTION 'Fiscal record customer ownership is immutable';
+ END IF;
  RETURN NEW;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.prevent_fiscal_societa_reassignment() FROM PUBLIC,anon,authenticated;
 CREATE TRIGGER trg_avvisi_ade_company_immutable
- BEFORE UPDATE OF societa_id ON public.avvisi_ade
+ BEFORE UPDATE OF societa_id,cliente_id ON public.avvisi_ade
  FOR EACH ROW EXECUTE FUNCTION public.prevent_fiscal_societa_reassignment();
 CREATE TRIGGER trg_revisioni_company_immutable
- BEFORE UPDATE OF societa_id ON public.revisioni_dichiarativi
+ BEFORE UPDATE OF societa_id,cliente_id ON public.revisioni_dichiarativi
  FOR EACH ROW EXECUTE FUNCTION public.prevent_fiscal_societa_reassignment();
 
 DO $verify$
