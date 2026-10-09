@@ -521,3 +521,16 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - `46_stage3q_two_company_fiscal_TEST_ONLY.sql`: ora verifica concretamente come ruolo `anon` il rifiuto di SELECT su ciascuna delle tre tabelle.
 - Runner migliorato per salvare nel report gli stderr di `psql` che Windows PowerShell 5.1 altrimenti trasformava in eccezione nativa senza log; aggiunte evidenze `3S_ACL_BEFORE` e `3S_ACL_AFTER` e obbligo di tripla prova `anon_select=false|authenticated_select=true|service_select=true`.
 - **Stato attuale NON PASS PostgreSQL**: patch sul branch isolato, nessun nuovo comando né nuova esecuzione LAB; riprovare solo con SHA esatto del commit finale dopo CI Windows/Ubuntu. Non accedere né scrivere a Supabase LIVE o a `mio-branch`. Test JWT/API/UI ancora pendenti.
+
+
+## 2026-10-09 — Stage3S FULL POSTGRESQL LAB PASS (evidenza successiva e prevalente)
+- **Prova primaria:** file operatore `STAGE3S_FULL_LAB_RESULT_20261009-171254-583.txt`. Header testuale esatto `STAGE3S FULL LAB PASS`, commit immutabile `7c42086d7687bcd59ad29b86fe56fc07a184cb08`, container isolato `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
+- Baseline in sola lettura PASS; ACL legacy rilevati **prima** della patch: `anon_select avvisi_ade=false`, `clienti=true`, `revisioni_dichiarativi=true`. Il precedente blocco iniziale anon non era falso positivo: due tabelle avevano davvero SELECT anon. Correzione Stage3Q applicata e ricontrollata.
+- SQL `45_stage3q_fiscal_owner_rls_LAB_ONLY.sql`: `COMMIT` PASS; `46_stage3q_two_company_fiscal_TEST_ONLY.sql`: `ROLLBACK` PASS.
+- SQL `47_stage3r_atomic_client_create_LAB_ONLY.sql`: `COMMIT` PASS; `48_stage3r_atomic_client_create_TEST_ONLY.sql`: `ROLLBACK` PASS.
+- SQL `49_stage3s_shared_crm_update_LAB_ONLY.sql`, `50_stage3s_agecon_write_LAB_ONLY.sql`, `51_stage3s_declaration_archive_LAB_ONLY.sql`: tutti `COMMIT` PASS; `52_stage3s_mutation_matrix_TEST_ONLY.sql`: `NOTICE: Stage3S SQL transactional write matrix PASS`, `ROLLBACK` PASS.
+- Postflight `BEGIN READ ONLY`: `3S_FINAL|0|0|0|0|0|3` = zero righe di prova in clienti, avvisi, revisioni, CRM bridge e registro audit; tre policy RESTRICTIVE; `ROLLBACK` finale.
+- Post-ACL effettivi **su tutte e tre le tabelle**: `anon_select=false|authenticated_select=true|service_select=true`. Il test SQL role-based verifica l'assenza di accesso anonimo, non sostituisce Auth firmato.
+- **Conclusione di questo blocco:** Stage3Q/Stage3R/Stage3S SQL e test PostgreSQL role-based **PASS nel LAB Docker**; schema e funzioni della patch sono persistenti soltanto nel LAB. Il precedente report "NON PASS PostgreSQL" descriveva un tentativo antecedente e **non rappresenta lo stato attuale**. La sequenza AgeCon può essere avanzata anche con fixture in ROLLBACK.
+- **P0 generale ancora APERTO:** test HTTP con JWT Auth firmati e API reali, UI integrata, vincoli import unificato→AgeCon, email/notification queue, update moduli batch, test massivi/legacy non vuoti, eventuali privilege/RLS su altre tabelle, regression fiscale-contabile Studio Grade. CI statica/build e test SQL non certificano da soli il rilascio.
+- **Perimetro:** nessun merge; PR #2 Draft/Open, base `mio-branch`, HEAD di test `7c42086d7687bcd59ad29b86fe56fc07a184cb08`. Nessuna modifica al Supabase live, nessun deploy. Non far ripetere le Stage già superate.
