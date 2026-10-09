@@ -27,7 +27,7 @@ async function requestStudio({env={},path='/api/studio/fiscal-read?resource=clie
    method,headers, ...(body!==null?{body}:{}),
   })
   const raw=await response.text()
-  return {status:response.status,headers:response.headers,body:JSON.parse(raw)}
+  return {status:response.status,headers:response.headers,body:raw?JSON.parse(raw):null}
  }finally{
   await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()))
  }
