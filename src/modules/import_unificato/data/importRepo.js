@@ -175,8 +175,14 @@ export function insertDocumentoContabilita(payload) {
     })
 }
 
-export function insertAvvisoAde(payload) {
-  return sb.from('avvisi_ade').insert([payload]).select()
+export async function insertAvvisoAde(_payload) {
+  // Stage3Q requires explicit customer/company ownership and an audited
+  // server-side transaction. The legacy import has no verified assignment
+  // intent and must not bypass the canonical AgeCon write API.
+  return {
+    data: null,
+    error: new Error('Importazione avviso sospesa: conferma società, cliente e motivazione in AgeCon.'),
+  }
 }
 
 export function markDocumentoImportProcessed(id, tipo) {
