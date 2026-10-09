@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { fetchScopedFiscalData } from '../../lib/fiscalApi'
+import { apiFetch } from '../../lib/auth'
 import { useAIStatus } from '../../context/AIStatusContext'
 import { renderPDFPagesToImages } from '../../shared/utils'
 import { ModuleHeader } from '../../shared/components'
@@ -165,12 +166,26 @@ export function ModuloRevisioneDich({ utente }) {
   const [sceltaArch, setSceltaArch] = useState(null) // 'archivia'|'senza'|'annulla'
   const [clienti, setClienti] = useState([])
   const [clienteSelId, setClienteSelId] = useState('')
+  const [societaSelId,setSocietaSelId]=useState('')
+  const [societaChoices,setSocietaChoices]=useState([])
+  const [motivazioneArchivio,setMotivazioneArchivio]=useState('')
+  const [motivazioneCliente,setMotivazioneCliente]=useState('')
+  const [archiviando,setArchiviando]=useState(false)
   const [creaCliente, setCreaCliente] = useState(false)
   const [nuovoCliente, setNuovoCliente] = useState({ nome: '', cognome: '', ragione_sociale: '', codice_fiscale: '', tipo_cliente: 'ordinario' })
 
   // Storico
   const [storico, setStorico] = useState([])
   const [loadingStorico, setLoadingStorico] = useState(false)
+
+  useEffect(()=>{
+    let mounted=true
+    const ids=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[]
+    if(!ids.length){setSocietaChoices([]);return}
+    sb.from('societa').select('id,denominazione').in('id',ids).order('denominazione')
+      .then(({data,error})=>{if(mounted)setSocietaChoices(error?[]:(data||[]))})
+    return ()=>{mounted=false}
+  },[utente])
 
   const dichRef  = useRef()
   const docRef   = useRef()
@@ -248,37 +263,42 @@ export function ModuloRevisioneDich({ utente }) {
   }
 
   const salvaArchiviazione = async () => {
-    let clienteId = clienteSelId || null
-
-    // Crea nuovo cliente se richiesto
-    if (creaCliente && nuovoCliente.nome || creaCliente && nuovoCliente.ragione_sociale) {
-      const { data: newC } = await sb.from('clienti').insert([{
-        ...nuovoCliente, nome: nuovoCliente.nome || nuovoCliente.ragione_sociale, attivo: true
-      }]).select('id').single()
-      clienteId = newC?.id || null
+    if(archiviando)return
+    if(!societaSelId||!societaChoices.some(s=>s.id===societaSelId)){
+      setErrore('Seleziona la società proprietaria della revisione');return
     }
-
-    // Salva revisione
-    await sb.from('revisioni_dichiarativi').insert([{
-      cliente_id: clienteId,
-      anno_imposta: report?.anno_imposta,
-      tipo_dichiarativo: report?.tipo_dichiarativo,
-      contribuente: report?.contribuente,
-      codice_fiscale: report?.codice_fiscale,
-      reddito_imponibile: report?.reddito_imponibile,
-      imposta_netta: report?.imposta_netta,
-      saldo_dovuto: report?.saldo_dovuto,
-      report_json: report,
-      num_documenti: documenti.length,
-      created_by: utente?.id,
-    }])
-    setFase('report')
+    if(motivazioneArchivio.trim().length<12){
+      setErrore('Indica una motivazione per archiviare la revisione');return
+    }
+    if(creaCliente && motivazioneCliente.trim().length<12){
+      setErrore('Motivazione obbligatoria per la nuova anagrafica');return
+    }
+    const nuovo=creaCliente?{...nuovoCliente,nome:nuovoCliente.nome||nuovoCliente.ragione_sociale}:null
+    if(!nuovo&&!clienteSelId){setErrore('Seleziona un cliente esistente o crea una nuova anagrafica');return}
+    setArchiviando(true);setErrore(null)
+    try{
+      const response=await apiFetch('/api/studio/revision-archive',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          societa_id:societaSelId,cliente_id:nuovo?null:clienteSelId,
+          nuovo_cliente:nuovo,
+          motivazione_cliente:nuovo?motivazioneCliente.trim():null,
+          report,num_documenti:documenti.length,
+          motivazione:motivazioneArchivio.trim(),
+        }),
+      })
+      const result=await response.json().catch(()=>({}))
+      if(!response.ok)throw new Error(result.error||'Archiviazione non riuscita')
+      setFase('report')
+    }catch(error){setErrore(error.message)}
+    finally{setArchiviando(false)}
   }
 
   const reset = () => {
     setFase('upload'); setDichiarativo(null); setDocumenti([])
     setReport(null); setErrore(null); setSceltaArch(null)
     setClienteSelId(''); setCreaCliente(false)
+    setSocietaSelId('');setMotivazioneArchivio('');setMotivazioneCliente('')
   }
 
   // ── RENDER ──────────────────────────────────────────────────
@@ -411,10 +431,17 @@ export function ModuloRevisioneDich({ utente }) {
                 📁 Collega a cliente studio
               </div>
               <div style={{ marginBottom: '.75rem' }}>
+                <label>Società contabile proprietaria *</label>
+                <select value={societaSelId} onChange={e=>{
+                  setSocietaSelId(e.target.value);setClienteSelId('');setCreaCliente(false)
+                }}>
+                  <option value="">— Seleziona la società —</option>
+                  {societaChoices.map(c=><option value={c.id} key={c.id}>{c.denominazione}</option>)}
+                </select>
                 <label style={{ fontSize: '.78rem', color: 'var(--mu)', display: 'block', marginBottom: '.3rem' }}>Cliente</label>
                 <select value={clienteSelId} onChange={e => { setClienteSelId(e.target.value); setCreaCliente(false) }} style={{ width: '100%', marginBottom: '.5rem' }}>
                   <option value="">-- Seleziona cliente --</option>
-                  {clienti.map(c => (
+                  {clienti.filter(c=>(c.societa_assegnate||[]).includes(societaSelId)).map(c => (
                     <option key={c.id} value={c.id}>
                       {c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()} · {c.codice_fiscale || ''}
                     </option>
@@ -423,7 +450,8 @@ export function ModuloRevisioneDich({ utente }) {
 
                 {/* Match automatico da CF estratto dall'AI */}
                 {report.codice_fiscale && !clienteSelId && (() => {
-                  const match = clienti.find(c => c.codice_fiscale === report.codice_fiscale)
+                  const match = clienti.find(c => c.codice_fiscale === report.codice_fiscale &&
+                    (c.societa_assegnate||[]).includes(societaSelId))
                   if (match) return (
                     <div style={{ fontSize: '.75rem', color: '#34c27a', marginBottom: '.5rem' }}>
                       ✓ Trovato cliente corrispondente: <strong>{match.ragione_sociale || match.nome}</strong>
@@ -461,10 +489,20 @@ export function ModuloRevisioneDich({ utente }) {
                 </div>
               )}
 
+              <div className="fg" style={{marginBottom:'.75rem'}}>
+                <label>Motivazione archiviazione *</label>
+                <textarea rows={2} value={motivazioneArchivio}
+                  onChange={e=>setMotivazioneArchivio(e.target.value)}/>
+              </div>
+              {creaCliente&&<div className="fg" style={{marginBottom:'.75rem'}}>
+                <label>Motivazione creazione anagrafica *</label>
+                <textarea rows={2} value={motivazioneCliente}
+                  onChange={e=>setMotivazioneCliente(e.target.value)}/>
+              </div>}
               <div style={{ display: 'flex', gap: '.5rem', justifyContent: 'flex-end' }}>
                 <button className="btn-sec" onClick={() => setFase('report')}>Salta → vai al report</button>
                 <button className="btn" onClick={salvaArchiviazione}
-                  disabled={!clienteSelId && !creaCliente}>
+                  disabled={archiviando||!societaSelId||(!clienteSelId&&!creaCliente)}>
                   💾 Archivia e vai al report
                 </button>
               </div>
