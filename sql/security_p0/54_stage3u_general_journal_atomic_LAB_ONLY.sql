@@ -25,6 +25,14 @@ BEGIN
   OR (SELECT count(*) FROM public.piano_conti)<>0 THEN
   RAISE EXCEPTION 'Stage3U candidate restricted to an empty accounting LAB';
  END IF;
+ -- If the line does not have its own societa_id, the parent FK is the
+ -- mandatory tenant boundary: never allow orphan or detached journal lines.
+ IF NOT EXISTS(
+  SELECT 1 FROM pg_catalog.pg_constraint c
+  WHERE c.conrelid='public.prima_nota_righe'::regclass
+   AND c.confrelid='public.prima_nota'::regclass
+   AND c.contype='f'
+ ) THEN RAISE EXCEPTION 'Stage3U journal rows require FK to Prima Nota header'; END IF;
  IF to_regclass('public.fiscosim_general_journal_claim') IS NOT NULL
   OR to_regprocedure('public.fiscosim_post_general_journal(uuid,uuid,uuid,jsonb,jsonb,text)') IS NOT NULL
  THEN RAISE EXCEPTION 'Stage3U already present: never rerun without a fresh audit'; END IF;
