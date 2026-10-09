@@ -194,8 +194,12 @@ ON public.revisioni_dichiarativi AS RESTRICTIVE FOR ALL TO authenticated
 USING (
   public.user_has_societa_access(societa_id)
   AND (
-    cliente_id IS NULL OR (
-      public.user_can_access_cliente(cliente_id)
+    (cliente_id IS NULL AND (
+      public.current_utente_ruolo() IN ('owner','admin')
+      OR created_by=public.current_utente_studio_id()
+    )) OR (
+      cliente_id IS NOT NULL
+      AND public.user_can_access_cliente(cliente_id)
       AND EXISTS (
        SELECT 1 FROM public.crm_cliente_societa_link link
        WHERE link.cliente_id=revisioni_dichiarativi.cliente_id
@@ -207,8 +211,12 @@ USING (
 WITH CHECK (
   public.user_has_societa_access(societa_id)
   AND (
-    cliente_id IS NULL OR (
-      public.user_can_access_cliente(cliente_id)
+    (cliente_id IS NULL AND (
+      public.current_utente_ruolo() IN ('owner','admin')
+      OR created_by=public.current_utente_studio_id()
+    )) OR (
+      cliente_id IS NOT NULL
+      AND public.user_can_access_cliente(cliente_id)
       AND EXISTS (
        SELECT 1 FROM public.crm_cliente_societa_link link
        WHERE link.cliente_id=revisioni_dichiarativi.cliente_id
