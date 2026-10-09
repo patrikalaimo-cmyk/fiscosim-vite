@@ -36,19 +36,19 @@ INSERT INTO public.utenti_studio_societa
 
 SET LOCAL ROLE service_role;
 DO $rpc$
-DECLARE id uuid; n bigint;
+DECLARE v_client_id uuid; n bigint;
 BEGIN
- id:=public.fiscosim_studio_create_cliente(
+ v_client_id:=public.fiscosim_studio_create_cliente(
   '70000000-0000-4000-8000-000000000101',
   '70000000-0000-4000-8000-000000000103',
   '{"nome":"Cliente sintetico A","codice_fiscale":"STAGE3R-CF","telefono":"000","moduli_attivi":["iva","f24"]}'::jsonb,
   'Manual verification of test company A');
- IF id IS NULL THEN RAISE EXCEPTION 'Stage3R atomic RPC did not return client id'; END IF;
- IF (SELECT count(*) FROM public.clienti WHERE id=id)<>1 THEN
+ IF v_client_id IS NULL THEN RAISE EXCEPTION 'Stage3R atomic RPC did not return client id'; END IF;
+ IF (SELECT count(*) FROM public.clienti c WHERE c.id=v_client_id)<>1 THEN
    RAISE EXCEPTION 'Stage3R source customer not created';
  END IF;
  IF (SELECT count(*) FROM public.crm_cliente_societa_link
-  WHERE cliente_id=id AND societa_id='70000000-0000-4000-8000-000000000101')<>1 THEN
+  WHERE cliente_id=v_client_id AND societa_id='70000000-0000-4000-8000-000000000101')<>1 THEN
   RAISE EXCEPTION 'Stage3R source + link not created together';
  END IF;
 
