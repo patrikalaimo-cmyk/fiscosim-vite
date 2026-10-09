@@ -130,3 +130,27 @@ test('Stage3U is not auto-enabled in browser Manuale or importer',()=>{
  assert.doesNotMatch(api,/VITE_SUPABASE_SERVICE_ROLE_KEY/)
  assert.match(sql,/Stage3U requires explicit isolated LAB approval/)
 })
+
+test('Stage3U pinned preflight is strictly READ ONLY and never installs migration',()=>{
+ const sqlPre=source('sql/security_p0/56_stage3u_accounting_preflight_READ_ONLY.sql')
+ const ps=source('scripts/security_p0/run-stage3u-accounting-preflight.ps1')
+ const workflow=source('.github/workflows/fiscosim-test-baseline.yml')
+ for(const x of [
+  'BEGIN READ ONLY;',
+  'ROLLBACK;',
+  'local-general-journal-readonly-preflight',
+  'STAGE3U_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST',
+  'Stage3U accounting columns MISSING',
+  'Stage3U service-role accounting table grants incomplete',
+ ])assert.ok(sqlPre.includes(x),x)
+ assert.doesNotMatch(sqlPre,/^COMMIT;/m)
+ assert.doesNotMatch(sqlPre,/^INSERT INTO /m)
+ assert.doesNotMatch(sqlPre,/^UPDATE /m)
+ assert.doesNotMatch(sqlPre,/^CREATE (?:TABLE|FUNCTION)/m)
+ assert.match(ps,/ExpectedCommit/)
+ assert.match(ps,/rev-parse HEAD/)
+ assert.match(ps,/STAGE3U_ACCOUNTING_PREFLIGHT/)
+ assert.match(ps,/56_stage3u_accounting_preflight_READ_ONLY\.sql/)
+ assert.doesNotMatch(ps,/54_stage3u_general_journal_atomic_LAB_ONLY/)
+ assert.match(workflow,/run-stage3u-accounting-preflight\.ps1/)
+})
