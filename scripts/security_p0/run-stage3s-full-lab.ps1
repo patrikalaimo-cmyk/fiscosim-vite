@@ -39,12 +39,24 @@ function Invoke-PsqlStage {
   throw ('Required SQL file missing: '+$File)
  }
  $payload="SET $Setting = '$Approval';`n"+(Get-Content -LiteralPath $path -Raw -Encoding UTF8)
- $result=@($payload | & docker exec -i $Container psql -X -v ON_ERROR_STOP=1 `
+ # Windows PowerShell 5.1 turns native stderr into ErrorRecord, and
+ # ErrorActionPreference=Stop aborts before collecting the actual SQL error.
+ # Suppress that *conversion* only while capturing stderr; exit code still
+ # fails the stage, and the original error is preserved in the report.
+ $result=@()
+ $code=1
+ $oldPreference=$ErrorActionPreference
+ try {
+  $ErrorActionPreference='Continue'
+  $result=@($payload | & docker exec -i $Container psql -X -v ON_ERROR_STOP=1 `
    -U postgres -d postgres -A -t -F '|' -P pager=off 2>&1)
- $code=$LASTEXITCODE
+  $code=$LASTEXITCODE
+ } finally {
+  $ErrorActionPreference=$oldPreference
+ }
  $script:lines.Add('=== '+$File+' ===')
  foreach($l in $result){$script:lines.Add([string]$l)}
- if($code -ne 0){throw ('Stage3S SQL failed: '+$File)}
+ if($code -ne 0){throw ('Stage3S SQL failed: '+$File+' (inspect captured output in report)')}
  if(-not ($result -contains $ExpectedEnd)){
   throw ('Stage3S SQL missing '+$ExpectedEnd+': '+$File)
  }
@@ -62,6 +74,10 @@ SELECT '3S_BASELINE|'||
  (SELECT count(*) FROM public.crm_cliente_societa_link)::text||'|'||
  (SELECT count(*) FROM pg_policies WHERE schemaname='public'
   AND tablename='clienti' AND policyname='clienti_company_boundary')::text;
+SELECT '3S_ACL_BEFORE|'||t.name||'|anon_select='||
+ has_table_privilege('anon',format('public.%I',t.name),'SELECT')::text
+ FROM (VALUES('clienti'),('avvisi_ade'),('revisioni_dichiarativi')) AS t(name)
+ ORDER BY t.name;
 ROLLBACK;
 '@
  $out=@($pre | & docker exec -i $Container psql -X -v ON_ERROR_STOP=1 `
@@ -70,6 +86,11 @@ ROLLBACK;
   throw 'Stage3S baseline not empty or Stage3Q already exists; no SQL applied'
  }
  $lines.Add('STAGE3S_BASELINE_PASS')
+ foreach($entry in $out){
+  if(([string]$entry) -like '3S_ACL_BEFORE|*'){
+   $lines.Add([string]$entry)
+  }
+ }
 
  Invoke-PsqlStage '45_stage3q_fiscal_owner_rls_LAB_ONLY.sql' `
   'fiscosim.p0_stage3q_approval' 'local-explicit-fiscal-row-ownership-only' 'COMMIT'
@@ -99,12 +120,29 @@ SELECT '3S_FINAL|'||
  (SELECT count(*) FROM pg_policies WHERE schemaname='public'
   AND tablename IN ('clienti','avvisi_ade','revisioni_dichiarativi')
   AND permissive='RESTRICTIVE')::text;
+SELECT '3S_ACL_AFTER|'||t.name||'|anon_select='||
+ has_table_privilege('anon',format('public.%I',t.name),'SELECT')::text||
+ '|authenticated_select='||
+ has_table_privilege('authenticated',format('public.%I',t.name),'SELECT')::text||
+ '|service_select='||
+ has_table_privilege('service_role',format('public.%I',t.name),'SELECT')::text
+ FROM (VALUES('clienti'),('avvisi_ade'),('revisioni_dichiarativi')) AS t(name)
+ ORDER BY t.name;
 ROLLBACK;
 '@
  $out=@($final | & docker exec -i $Container psql -X -v ON_ERROR_STOP=1 `
   -U postgres -d postgres -A -t -F '|' -P pager=off 2>&1)
  foreach($l in $out){$lines.Add([string]$l)}
- if(($LASTEXITCODE -ne 0) -or (-not ($out -contains '3S_FINAL|0|0|0|0|0|3')) -or (-not ($out -contains 'ROLLBACK'))){
+ $expectedAclRows=@(
+  '3S_ACL_AFTER|clienti|anon_select=false|authenticated_select=true|service_select=true',
+  '3S_ACL_AFTER|avvisi_ade|anon_select=false|authenticated_select=true|service_select=true',
+  '3S_ACL_AFTER|revisioni_dichiarativi|anon_select=false|authenticated_select=true|service_select=true'
+ )
+ $aclVerified=$true
+ foreach($expectedRow in $expectedAclRows){
+  if(-not ($out -contains $expectedRow)){$aclVerified=$false}
+ }
+ if(($LASTEXITCODE -ne 0) -or (-not ($out -contains '3S_FINAL|0|0|0|0|0|3')) -or (-not ($out -contains 'ROLLBACK')) -or (-not $aclVerified)){
   throw 'Stage3S final sealed, empty tables and 3 restrictive RLS not verified'
  }
  (@('STAGE3S FULL LAB PASS') + $lines.ToArray()) |
