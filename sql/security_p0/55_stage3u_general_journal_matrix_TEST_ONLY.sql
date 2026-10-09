@@ -123,8 +123,11 @@ BEGIN
  SELECT count(*) INTO n FROM public.prima_nota
   WHERE societa_id=a AND id=id_first;
  IF n<>1 THEN RAISE EXCEPTION 'Stage3U header persisted count mismatch'; END IF;
- SELECT count(*) INTO n FROM public.prima_nota_righe
-  WHERE societa_id=a AND prima_nota_id=id_first;
+ -- Ownership of a journal line is determined by its parent PN. This
+ -- works whether prima_nota_righe has a denormalized societa_id or not.
+ SELECT count(*) INTO n FROM public.prima_nota_righe line
+ JOIN public.prima_nota parent ON parent.id=line.prima_nota_id
+ WHERE parent.societa_id=a AND parent.id=id_first;
  IF n<>2 THEN RAISE EXCEPTION 'Stage3U persisted journal lines mismatch'; END IF;
  SELECT count(*) INTO n FROM public.audit_contabile
   WHERE societa_id=a AND entity_id=id_first AND operation_type='INSERT';
