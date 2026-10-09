@@ -103,14 +103,44 @@ SET search_path = pg_catalog AS $$
   );
 $$;
 
--- Restrictive policies intersect every existing permissive policy (OR),
--- blocking owner/admin global fallback while retaining base operations
--- on already-linked clients. Browser INSERT is intentionally blocked until
--- a transactional server route creates the client and its link atomically.
+-- Restrictive policies intersect every existing permissive policy (OR).
+-- CRM customer profiles may be shared between companies; editing one from
+-- browser A would change the SAME record seen by browser B. Therefore
+-- block ALL direct browser CRM mutation until atomic, server-verified
+-- create/edit/deactivate endpoints are implemented and JWT tested.
 CREATE POLICY clienti_company_boundary
 ON public.clienti AS RESTRICTIVE FOR ALL TO authenticated
 USING (public.user_can_access_cliente(id))
 WITH CHECK (public.user_can_access_cliente(id));
+
+-- Preserve company-scoped reads but prohibit direct customer mutation from
+-- any browser role. Service role is not modified. Column-grant leftovers
+-- are treated as a hard failure rather than an implicit exception.
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.clienti
+ FROM authenticated, anon, PUBLIC;
+DO $client_acl$
+DECLARE col text; op text;
+BEGIN
+ FOR col IN SELECT column_name FROM information_schema.columns
+   WHERE table_schema='public' AND table_name='clienti'
+ LOOP
+  FOREACH op IN ARRAY ARRAY['INSERT','UPDATE'] LOOP
+   IF has_column_privilege('authenticated','public.clienti',col,op)
+      OR has_column_privilege('anon','public.clienti',col,op) THEN
+     RAISE EXCEPTION 'Stage3Q CRM browser column mutation remains: % %',col,op;
+   END IF;
+  END LOOP;
+ END LOOP;
+ FOREACH op IN ARRAY ARRAY['INSERT','UPDATE','DELETE'] LOOP
+  IF has_table_privilege('authenticated','public.clienti',op)
+    OR has_table_privilege('anon','public.clienti',op) THEN
+   RAISE EXCEPTION 'Stage3Q CRM browser table mutation remains: %',op;
+  END IF;
+  IF NOT has_table_privilege('service_role','public.clienti',op) THEN
+   RAISE EXCEPTION 'Stage3Q CRM service role privilege lost: %',op;
+  END IF;
+ END LOOP;
+END $client_acl$;
 
 -- Every fiscal row must have exactly one company scope, even if its CRM
 -- customer is linked to two companies. A nullable client on declarations
