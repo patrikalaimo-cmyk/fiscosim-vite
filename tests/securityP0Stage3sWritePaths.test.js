@@ -126,3 +126,28 @@ test('Stage3S real PostgreSQL A/B mutation matrix is guarded and transactional',
  assert.doesNotMatch(matrix,/\bCOMMIT\s*;/)
  assert.match(matrix,/sequence[\s\S]{0,12}MAY still advance/)
 })
+
+test('Stage3S single isolated LAB runner pins commit, gates baseline and all eight SQL steps',()=>{
+ const ps=src('scripts/security_p0/run-stage3s-full-lab.ps1')
+ for(const marker of [
+  'ExpectedCommit','rev-parse HEAD','STAGE3S_BASELINE_PASS',
+  '3S_BASELINE|0|0|0|0|0',
+  '45_stage3q_fiscal_owner_rls_LAB_ONLY.sql',
+  '46_stage3q_two_company_fiscal_TEST_ONLY.sql',
+  '47_stage3r_atomic_client_create_LAB_ONLY.sql',
+  '48_stage3r_atomic_client_create_TEST_ONLY.sql',
+  '49_stage3s_shared_crm_update_LAB_ONLY.sql',
+  '50_stage3s_agecon_write_LAB_ONLY.sql',
+  '51_stage3s_declaration_archive_LAB_ONLY.sql',
+  '52_stage3s_mutation_matrix_TEST_ONLY.sql',
+  '3S_FINAL|0|0|0|0|0|3',
+  'STAGE3S FULL LAB PASS','STAGE3S FULL LAB FAIL',
+  'STAGE3S_FULL_LAB_RESULT','AgeCon sequence nextval may advance',
+  "if(Test-Path -LiteralPath $report)",
+  'Signed JWT/API/UI E2E remains untested',
+ ]) assert.ok(ps.includes(marker),marker)
+ assert.match(ps,/ON_ERROR_STOP=1/)
+ assert.match(ps,/ROLLBACK/)
+ assert.match(ps,/COMMIT/)
+ assert.ok(!ps.includes('mlydfspmrkaedsocubku'))
+})
