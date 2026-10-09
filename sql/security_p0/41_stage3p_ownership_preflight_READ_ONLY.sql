@@ -40,7 +40,7 @@ WHERE schemaname='public'
 ORDER BY tablename,policyname;
 
 SELECT '3P_FUNCTION' AS label,proname||'('||pg_get_function_identity_arguments(p.oid)||')' AS object_name,
- 'security_definer='||prosecdef::text||';volatility='||provolatile AS details
+ 'security_definer='||prosecdef::text||';volatility='||p.provolatile::text AS details
 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
 WHERE n.nspname='public' AND proname IN
  ('user_can_access_cliente','user_has_societa_access','current_utente_ruolo',
