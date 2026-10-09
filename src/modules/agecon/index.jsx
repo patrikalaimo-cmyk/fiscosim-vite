@@ -611,7 +611,7 @@ function ModalAvviso({ avviso, clienti, utenti, societaChoices, onSave, onClose 
             {/* Tipo avviso e modello */}
             <div className="fg">
               <label>Tipo avviso *</label>
-              <select value={form.tipo_avviso} onChange={e => up('tipo_avviso', e.target.value)}>
+              <select disabled={!isNew} value={form.tipo_avviso} onChange={e => up('tipo_avviso', e.target.value)}>
                 {TIPI_AVVISO.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
