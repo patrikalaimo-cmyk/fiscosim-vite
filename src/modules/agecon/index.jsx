@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { analyzeWithClaude } from '../../shared/utils/parseDoc'
 import { sb } from '../../lib/supabase'
 import { fetchScopedFiscalData } from '../../lib/fiscalApi'
+import { apiFetch } from '../../lib/auth'
 import { ModuleHeader } from '../../shared/components'
 
 // ─── COSTANTI ────────────────────────────────────────────────
@@ -151,8 +152,9 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
           cl.codice_fiscale === cf || cl.partita_iva === cf
         )
         if (match) {
-          preform.cliente_id   = match.id
-          preform.cliente_nome = match.ragione_sociale || `${match.nome} ${match.cognome||''}`.trim()
+          // CF/PIVA is an operator suggestion only: NEVER silently assign a
+          // fiscal notice to a CRM customer based on heuristic matching.
+          preform._warnings = ['Possibile cliente con CF/PIVA corrispondente: selezionalo esplicitamente']
         } else {
           preform._warnings = [`CF/PIVA ${cf} non trovato tra i clienti — seleziona manualmente`]
         }
@@ -663,6 +665,20 @@ function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
 
 // ─── MODULO PRINCIPALE ────────────────────────────────────────
 export function ModuloAgeCon({ utente, ruolo }) {
+  const [societaChoices,setSocietaChoices]=useState([])
+  useEffect(()=>{
+    let active=true
+    const ids=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[]
+    if(!ids.length){setSocietaChoices([]);return}
+    sb.from('societa').select('id,denominazione').in('id',ids).order('denominazione')
+      .then(({data,error})=>{
+        if(!active)return
+        if(error){setSocietaChoices([]);return}
+        setSocietaChoices(Array.isArray(data)?data:[])
+      })
+    return ()=>{active=false}
+  },[utente])
+
   const [avvisi, setAvvisi]         = useState([])
   const [clienti, setClienti]       = useState([])
   const [utenti, setUtenti]         = useState([])
