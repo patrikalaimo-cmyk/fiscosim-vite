@@ -41,6 +41,25 @@ function matchingContainer(names,pattern,dbNets){
  }
  return connected.length
 }
+function isGatewayBoundOnlyToLoopback(names,dbNets){
+ let observed=false
+ for(const name of names){
+  try{
+   if(!linked(networks(name),dbNets))continue
+   const ports=JSON.parse(docker('inspect','--format','{{json .NetworkSettings.Ports}}',name)||'{}')
+   for(const bindings of Object.values(ports||{})){
+    for(const binding of bindings||[]){
+     if(String(binding.HostPort)!=='54321')continue
+     observed=true
+     if(!['127.0.0.1','::1'].includes(String(binding.HostIp))){
+      return false
+     }
+    }
+   }
+  }catch{ /* Unknown network/binding cannot establish a safe service */ }
+ }
+ return observed
+}
 async function ping(path){
  try{
   const response=await fetch('http://127.0.0.1:54321'+path,{
@@ -76,8 +95,9 @@ const [authHttp,restHttp]=await Promise.all([
  ping('/auth/v1/health'),ping('/rest/v1/'),
 ])
 const connected=authCount>0 && restCount>0
+const safeBinding=isGatewayBoundOnlyToLoopback(names,dbNetworks)
 const endpoints=authHttp===200 && Number.isInteger(restHttp) && restHttp>=200 && restHttp<500
-const status=installed&&connected&&endpoints
+const status=installed&&connected&&safeBinding&&endpoints
  ? 'STAGE3V_LOCAL_NETWORK_AND_HTTP_DISCOVERED_NOT_JWT_VERIFIED'
  : 'STAGE3V_LOCAL_AUTH_POSTGREST_PREREQUISITES_INCOMPLETE'
 const report=[
@@ -87,6 +107,7 @@ const report=[
  'DB_RPC_INSTALLED='+installed,
  'AUTH_CONTAINER_ON_DB_NETWORK='+(authCount>0),
  'POSTGREST_CONTAINER_ON_DB_NETWORK='+(restCount>0),
+ 'GATEWAY_54321_BOUND_ONLY_TO_LOOPBACK='+safeBinding,
  'AUTH_LOCAL_HEALTH_HTTP='+authHttp,
  'REST_LOCAL_GATEWAY_HTTP='+restHttp,
  'REAL_SIGNED_JWT_E2E=false',
