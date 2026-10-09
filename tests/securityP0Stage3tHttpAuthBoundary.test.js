@@ -106,3 +106,29 @@ test('Stage3T actual dev-api registers studio routes before wildcard OPTIONS',as
  assert.ok(src.indexOf('if (matchesStudioRoute(path))')<src.indexOf("if (req.method === 'OPTIONS')"))
  assert.ok(src.includes('await handleStudioDevRoute(req,res)'))
 })
+
+test('Stage3T signed-JWT E2E harness requires real Auth, two distinct A/B fixtures and no mutations',async()=>{
+ const {readFileSync}=await import('node:fs')
+ const harness=readFileSync(new URL('../scripts/security_p0/stage3t-signed-jwt-read-e2e.mjs',import.meta.url),'utf8')
+ for(const fragment of [
+  "FISCOSIM_ISOLATED_LAB_API",
+  "FISCOSIM_E2E_AUTH_URL",
+  "FISCOSIM_E2E_API_URL",
+  "FISCOSIM_E2E_A_EMAIL",
+  "FISCOSIM_E2E_B_EMAIL",
+  "FISCOSIM_E2E_SHARED_CLIENT",
+  "signInWithPassword",
+  "client.auth.getUser(token)",
+  "Stage3T requires explicit isolated lab opt-in",
+  "Tampered signed JWT must be denied",
+  "foreign fiscal notice leaked",
+  "foreign declaration leaked",
+  "REAL SIGNED JWT HTTP READ E2E PASS",
+ ]) assert.ok(harness.includes(fragment),fragment)
+ assert.doesNotMatch(harness,/auth\.admin\.(createUser|deleteUser)/)
+ assert.doesNotMatch(harness,/method:\s*['"](?:POST|PATCH|PUT|DELETE)/)
+ assert.doesNotMatch(harness,/SUPABASE_SERVICE_ROLE_KEY/)
+ const dev=readFileSync(new URL('../scripts/dev-api.mjs',import.meta.url),'utf8')
+ assert.match(dev,/listenHost = process\.env\.FISCOSIM_ISOLATED_LAB_API === 'true'/)
+ assert.match(dev,/\? '127\.0\.0\.1' : undefined/)
+})
