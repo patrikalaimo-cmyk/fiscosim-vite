@@ -36,12 +36,13 @@ export default async function handler(req,res){
   } else if(resource==='utenti'){
     data=await listScopedStaff(admin,companies)
   } else {
-    data=await listScopedFiscalRows(admin,resource,scope,ctx.profile,companies)
+    const cf=String(req.query?.codice_fiscale||'').trim().toUpperCase()
+    data=await listScopedFiscalRows(admin,resource,scope,ctx.profile,companies,{
+      codice_fiscale:cf,
+    })
     // The notices table never permits anonymous/unlinked client ownership.
     if(resource==='avvisi_ade')data=data.filter(row=>Boolean(row.cliente_id))
     if(resource==='revisioni_dichiarativi'){
-      const cf=String(req.query?.codice_fiscale||'').trim().toUpperCase()
-      if(cf)data=data.filter(row=>String(row.codice_fiscale||'').trim().toUpperCase()===cf)
       const clients=await listScopedClients(admin,scope)
       const byId=new Map(clients.map(c=>[c.id,{
         nome:c.nome,cognome:c.cognome,ragione_sociale:c.ragione_sociale,
