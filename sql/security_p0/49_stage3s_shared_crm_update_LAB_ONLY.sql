@@ -19,6 +19,23 @@ BEGIN
  END IF;
 END $gate$;
 
+-- Append-only operational record, protected from every browser role.
+CREATE TABLE public.fiscosim_operational_audit (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ entity_kind text NOT NULL CHECK(entity_kind IN ('cliente','avviso_ade','revisione_dichiarativi')),
+ entity_id uuid NOT NULL,
+ societa_id uuid NOT NULL REFERENCES public.societa(id) ON DELETE RESTRICT,
+ actor_auth_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
+ action text NOT NULL,
+ reason text NOT NULL CHECK(char_length(btrim(reason)) BETWEEN 12 AND 500),
+ created_at timestamptz NOT NULL DEFAULT transaction_timestamp()
+);
+CREATE INDEX fiscosim_operational_audit_entity_idx
+ ON public.fiscosim_operational_audit(entity_kind,entity_id,created_at);
+ALTER TABLE public.fiscosim_operational_audit ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.fiscosim_operational_audit FROM PUBLIC,anon,authenticated,service_role;
+GRANT SELECT,INSERT ON public.fiscosim_operational_audit TO service_role;
+
 CREATE FUNCTION public.fiscosim_studio_update_cliente(
  p_cliente_id uuid, p_auth_user_id uuid, p_action text,
  p_data jsonb, p_reason text
@@ -32,7 +49,7 @@ DECLARE
  v_targets integer;
 BEGIN
  IF p_cliente_id IS NULL OR p_auth_user_id IS NULL
-    OR p_action NOT IN ('edit','modules','deactivate')
+    OR p_action IS NULL OR p_action NOT IN ('edit','modules','deactivate')
     OR char_length(btrim(coalesce(p_reason,''))) NOT BETWEEN 12 AND 500 THEN
   RAISE EXCEPTION 'Invalid CRM update intent';
  END IF;
@@ -111,6 +128,10 @@ BEGIN
   UPDATE public.clienti SET attivo=false,updated_at=transaction_timestamp()
    WHERE id=p_cliente_id;
  END IF;
+ INSERT INTO public.fiscosim_operational_audit
+  (entity_kind,entity_id,societa_id,actor_auth_id,action,reason)
+ SELECT 'cliente',p_cliente_id,l.societa_id,p_auth_user_id,p_action,btrim(p_reason)
+ FROM public.crm_cliente_societa_link l WHERE l.cliente_id=p_cliente_id;
  RETURN p_cliente_id;
 END;
 $fn$;
@@ -121,6 +142,12 @@ GRANT EXECUTE ON FUNCTION public.fiscosim_studio_update_cliente(uuid,uuid,text,j
  TO service_role;
 DO $verify$
 BEGIN
+ IF EXISTS(SELECT 1 FROM pg_policies
+  WHERE schemaname='public' AND tablename='fiscosim_operational_audit')
+  OR has_table_privilege('authenticated','public.fiscosim_operational_audit','SELECT')
+  OR has_table_privilege('authenticated','public.fiscosim_operational_audit','INSERT')
+  OR has_table_privilege('anon','public.fiscosim_operational_audit','SELECT')
+ THEN RAISE EXCEPTION 'Stage3S audit table exposure detected'; END IF;
  IF (SELECT prosecdef FROM pg_proc
   WHERE oid='public.fiscosim_studio_update_cliente(uuid,uuid,text,jsonb,text)'::regprocedure)
  OR has_function_privilege('anon','public.fiscosim_studio_update_cliente(uuid,uuid,text,jsonb,text)','EXECUTE')
