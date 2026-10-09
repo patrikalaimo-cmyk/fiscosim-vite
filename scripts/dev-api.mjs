@@ -31,6 +31,7 @@ import { propostaContabileHandler } from '../services/api/accounting/proposta-co
 import { copilotAccountingHandler } from '../services/api/accounting/copilot-accounting.js'
 import { runProactiveInsightEngine } from '../services/proactiveInsightEngine.js'
 import { runTestScenario } from '../services/testScenarioEngine.js'
+import { handleStudioDevRoute, matchesStudioRoute } from '../lib/devStudioHttp.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
@@ -74,9 +75,14 @@ function pathnameOnly(url) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.method === 'OPTIONS') return send(res, 200, { ok: true })
-
     const path = pathnameOnly(req.url)
+    // Route real protected endpoints BEFORE the legacy wildcard OPTIONS handler.
+    // Inactive unless the entire Auth+PostgREST stack is loopback-only.
+    if (matchesStudioRoute(path)) {
+      await handleStudioDevRoute(req,res)
+      return
+    }
+    if (req.method === 'OPTIONS') return send(res, 200, { ok: true })
 
     // Browser su http://localhost:3001/ → nessuna pagina HTML: solo API (il frontend è su Vite :5173)
     if (path === '/' && (req.method === 'GET' || req.method === 'HEAD')) {
