@@ -12,8 +12,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
+import { assertStage3vPinnedLab } from './stage3v-lab-binding.mjs'
 
 const env=process.env
+const commitIndex=process.argv.indexOf('--expected-commit')
+const expectedCommit=commitIndex>=0 ? String(process.argv[commitIndex+1]||'') : ''
+if(!/^[0-9a-f]{40}$/i.test(expectedCommit))throw Error('STAGE3V_REQUIRES_PINNED_SHA')
 const required=(name)=>{
  const value=String(env[name]||'').trim()
  if(!value)throw Error('STAGE3V_PRECONDITION_MISSING:'+name)
@@ -157,10 +161,21 @@ async function inspectRejected(f,key){
   .select('request_id').eq('societa_id',f.company).eq('request_id',key)
  if(result.error||result.data?.length!==0)throw Error('STAGE3V_REJECTED_OPERATION_LEFT_CLAIM')
 }
+// All checks before approval must be read-only; even Auth login may update
+// last_sign_in_at. POST negatives can become writes if a regression occurs.
+await assertStage3vPinnedLab({expectedCommit,fixture,admin})
 await ensureSyntheticFixtures()
+if(env.FISCOSIM_STAGE3V_PERSISTENT_WRITE_APPROVAL!=='LAB_SYNTHETIC_WRITE_APPROVED'){
+ console.log('STAGE3V_PINNED_LAB_READ_ONLY_PREFLIGHT_PASS; no Auth login, HTTP POST or accounting commit')
+ process.exit(0)
+}
 const a=await login(fixture.A)
 const b=await login(fixture.B)
 assert.notEqual(a.authUserId,b.authUserId)
+await assertStage3vPinnedLab({expectedCommit,fixture,admin,authIds:[
+ {id:a.authUserId,company:fixture.A.company},
+ {id:b.authUserId,company:fixture.B.company},
+]})
 const unsigned=await post(null,{})
 assert.equal(unsigned.status,401,'unsigned request should be rejected')
 const tampered=a.token.split('.')
@@ -176,10 +191,6 @@ unbalanced.rows[1].avere=99.99
 assert.equal((await post(a.token,unbalanced)).status,400)
 await inspectRejected(fixture.A,unbalancedKey)
 
-if(env.FISCOSIM_STAGE3V_PERSISTENT_WRITE_APPROVAL!=='LAB_SYNTHETIC_WRITE_APPROVED'){
- console.log('STAGE3V_JWT_NEGATIVE_PREFLIGHT_PASS; actual accounting COMMIT not executed (opt-in absent)')
- process.exit(0)
-}
 // Ensure absence of prior persisted marker data; reruns are prohibited.
 for(const f of Object.values(fixture)){
  const {data,error}=await admin.from('prima_nota').select('id')
