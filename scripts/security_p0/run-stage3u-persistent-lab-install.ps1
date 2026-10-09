@@ -132,7 +132,7 @@ SELECT CASE WHEN
 ROLLBACK;
 '@
  Invoke-LabSql 'postflight READ ONLY' $post @('3U_PERSISTENT_INSTALL|SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS','ROLLBACK')
- @('STAGE3U_PERSISTENT_LAB_INSTALL_PASS')+$log.ToArray() |
+ (@('STAGE3U_PERSISTENT_LAB_INSTALL_PASS') + $log.ToArray()) |
    Out-File -LiteralPath $report -Encoding UTF8
  Write-Host 'STAGE3U PERSISTENT LAB SCHEMA INSTALL PASS; FIXTURE ROWS ROLLED BACK' -ForegroundColor Green
  Write-Host ('Report: '+$report)
