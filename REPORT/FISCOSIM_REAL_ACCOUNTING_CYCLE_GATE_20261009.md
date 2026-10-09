@@ -94,3 +94,17 @@ Eseguire **solo su un laboratorio isolato senza dati clienti reali**. Nessun tes
 - `sql/security_p0/56_stage3u_accounting_preflight_READ_ONLY.sql` più `scripts/security_p0/run-stage3u-accounting-preflight.ps1`: esame dello schema/prerequisiti su Docker P0 con SHA vincolato e report conservato; esegue soltanto `BEGIN READ ONLY` / `ROLLBACK`. Non è stato eseguito; non avvia la migrazione.
 - Stato effettivo **Stage3U PREPARED / Node CI da verificare / POSTGRESQL NOT EXECUTED / JWT NOT EXECUTED / UI NOT CONNECTED**. In particolare nessuna evidenza autorizza a trattare l'intero `createPrimaNotaCompleta` come atomico: i flussi IVA, partitario, pagamenti, ritenute, import, periodi chiusi e progressivi richiedono ancora la propria RPC unica e la verifica reale. Il percorso Stage3U è sperimentale e **inaccessibile in produzione**.
 - Ordine prossimo: audit read-only del Docker 56; compatibilità schema+grants; solo poi collaudo 54+55, verifica effettiva atomicità generale; in seguito progettazione e collaudo dei payload fiscali canonici più complessi senza rompere il workflow attuale.
+
+
+## 7. Evidenza Stage3U del 09/10/2026: prova SQL atomica generale PASS in ROLLBACK
+
+**Stato aggiornato rispetto alle annotazioni preliminari della sezione 6.** Il file effettivamente prodotto dal Docker `STAGE3U_REHEARSAL_20261009-225419-200.txt` attesta sul commit immutabile `65f9b6738a2e0be8ac4d677289f3544a3bb10805`:
+
+- `Stage3U general journal balance / owner / idempotency matrix PASS`: una registrazione generale quadrata, controlli sull'assegnazione società/conti, idempotenza e rifiuto replay modificato
+- `Stage3U late failure rollback PASS`: fallimento forzato nell'audit dopo aver iniziato la registrazione, senza righe residue della transazione fallita
+- `STAGE3U_LAB_MATRIX|PASS|FIXTURE_ROLLBACK`: esecuzione reale della matrice SQL con ruoli simulati, non MockDb
+- `STAGE3U_ROLLBACK_VERIFIED|NO_SCHEMA_OR_ACCOUNTING_ROWS_PERSISTED`: verificato dopo `ROLLBACK` che né schema Stage3U né scritture contabili sintetiche rimangono installati/salvati
+
+**Conclusione esatta:** `GATE 1 / movimento generale atomico: POSTGRESQL TRANSACTIONAL REHEARSAL PASS (rollback)`, ma `GATE 1 / HTTP con JWT e salvataggio persistente: NOT_EXECUTED`; `GATE 1 / fattura con IVA/partita/ritenuta: NOT_CERTIFIED`. Nessuna validazione dell'intero ciclo 0–8 e nessuna certificazione contabile A100. PostgreSQL `nextval` può avanzare anche se la rehearsal termina con `ROLLBACK`.
+
+Prossima attività **senza ripetere la rehearsal**: installazione persistente LAB Stage3U soggetta ad approvazione esplicita, prova con JWT reale API e successivo sviluppo di transazione canonica completa (IVA, partite, ritenute, import, chiusure). `mio-branch` e Supabase LIVE invariati.
