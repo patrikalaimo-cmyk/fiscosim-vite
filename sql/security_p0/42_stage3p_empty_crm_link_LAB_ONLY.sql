@@ -24,6 +24,13 @@ BEGIN
  IF to_regclass('auth.users') IS NULL THEN
   RAISE EXCEPTION 'Stage3P requires local Auth schema';
  END IF;
+ -- This opt-in LAB migration is intended for the empty CRM/AE/revision
+ -- clone verified by Stage3P preflight. Never infer ownership for old rows.
+ IF (SELECT count(*) FROM public.clienti) <> 0
+    OR (SELECT count(*) FROM public.avvisi_ade) <> 0
+    OR (SELECT count(*) FROM public.revisioni_dichiarativi) <> 0 THEN
+  RAISE EXCEPTION 'Stage3P requires empty CRM, notices and declarations in this LAB clone';
+ END IF;
  IF to_regclass('public.crm_cliente_societa_link') IS NOT NULL THEN
   IF (SELECT count(*) FROM public.crm_cliente_societa_link)<>0 THEN
    RAISE EXCEPTION 'Stage3P refuses an existing nonempty binding table';
