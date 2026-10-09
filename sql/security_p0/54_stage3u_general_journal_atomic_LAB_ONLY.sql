@@ -66,6 +66,7 @@ DECLARE
  v_header_keys text[];
  v_line jsonb;
  v_index integer:=0;
+ v_line_count bigint:=0;
  v_conto uuid;
  v_dare numeric;
  v_avere numeric;
@@ -204,7 +205,10 @@ BEGIN
    WHERE pc.id=v_conto AND pc.societa_id=p_societa_id
     AND pc.attivo IS TRUE;
   END IF;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Stage3U chart account changed during posting'; END IF;
+  -- EXECUTE does not reliably update PL/pgSQL FOUND: inspect ROW_COUNT
+  -- for BOTH the dynamic legacy branch and the static canonical branch.
+  GET DIAGNOSTICS v_line_count = ROW_COUNT;
+  IF v_line_count<>1 THEN RAISE EXCEPTION 'Stage3U chart account changed during posting'; END IF;
  END LOOP;
  INSERT INTO public.audit_contabile(
   societa_id,entity_type,entity_id,operation_type,operation_reason,
