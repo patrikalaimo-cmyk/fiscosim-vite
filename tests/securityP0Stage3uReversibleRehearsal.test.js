@@ -58,10 +58,12 @@ test('Stage3U no claims of release or real fiscal posting; audit failure is late
 })
 
 test('Stage3U PowerShell wrapper does not duplicate its transaction or leave truncated syntax',()=>{
- assert.equal((runner.match(/\\$payload=@"/g)||[]).length,1)
- assert.equal((runner.match(/\\$migration=Unwrap-PinnedSql/g)||[]).length,1)
- assert.equal((runner.match(/\\$matrix=Unwrap-PinnedSql/g)||[]).length,1)
- assert.equal((runner.match(/STAGE3U_REHEARSAL_EXECUTED/g)||[]).length,1)
- assert.doesNotMatch(runner,/^\),''\)/m)
- assert.match(runner,/\\$withoutEnd=\\$withoutStart\\.Substring\\(0,\\$endOffset\\)/)
+ for(const marker of [
+  '$payload=@"',
+  '$migration=Unwrap-PinnedSql',
+  '$matrix=Unwrap-PinnedSql',
+  'STAGE3U_REHEARSAL_EXECUTED',
+ ]) assert.equal(runner.split(marker).length-1,1,marker)
+ assert.ok(runner.includes('$withoutEnd=$withoutStart.Substring(0,$endOffset)'))
+ assert.equal(runner.includes("),'')"),false)
 })
