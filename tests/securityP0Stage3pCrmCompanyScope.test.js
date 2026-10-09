@@ -57,3 +57,14 @@ test('Stage3P SQL roles deny browser access and grant insert-only service role',
  assert.doesNotMatch(qa,/\bCOMMIT\s*;/i)
  assert.match(qa,/Stage3P QA unexpectedly wrote CRM bindings/)
 })
+
+test('Stage3P preflight runner uses pinned SHA and READ ONLY rollback',()=>{
+ const runner=readFileSync(new URL('../scripts/security_p0/run-stage3p-preflight.ps1',import.meta.url),'utf8')
+ for(const token of [
+  '$ExpectedCommit','rev-parse HEAD','BEGIN READ ONLY','ROLLBACK;',
+  'LASTEXITCODE','STAGE3P READ-ONLY PASS','STAGE3P_OWNERSHIP_PREFLIGHT',
+  'No database modifications','Test-Path -LiteralPath $base'
+ ]) assert.ok(runner.includes(token),token)
+ assert.ok(!runner.includes('Tee-Object'))
+ assert.ok(!runner.includes('Invoke-Expression'))
+})
