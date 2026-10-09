@@ -14,7 +14,6 @@ import {
 } from '../../lib/authMembership.js'
 import { sanitizeUtenteProfile } from '../../src/shared/utils/userProfile.js'
 import {
-  normalizeClienteIds,
   loadClientCompanyLinks,
   scopedClienteIds,
   areClienteAssignmentsWithinScope,
