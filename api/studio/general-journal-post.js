@@ -63,6 +63,7 @@ export default async function handler(req,res) {
  // This is not enabled for live development/production. Isolated LAB only,
  // until period locks, fiscal posting, JWT and PostgreSQL E2E are certified.
  if(!isIsolatedStudioEnvironment()||
+  !String(process.env.VITE_SUPABASE_URL||'').trim()||
   process.env.FISCOSIM_GENERAL_JOURNAL_POST_LAB_ENABLED!=='true'){
   return res.status(503).json({error:'GENERAL_JOURNAL_LAB_ONLY_DISABLED'})
  }
