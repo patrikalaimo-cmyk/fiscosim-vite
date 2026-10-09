@@ -71,7 +71,7 @@ test('Stage3S SQL RPCs guarded, SEC INVOKER, browser-execute denied, audit in tr
  assert.match(crm,/FOR UPDATE/)
  assert.match(crm,/NOT EXISTS \(\s*SELECT 1 FROM public\.utenti_studio/)
  assert.match(crm,/FROM public\.crm_cliente_societa_link l/)
- assert.match(age,/ON public\.avvisi_ade/)
+ assert.match(age,/UPDATE public\.avvisi_ade SET/)
  assert.match(age,/WHERE id=p_avviso_id AND societa_id=p_societa_id/)
  assert.match(age,/esito='chiuso'/)
  assert.doesNotMatch(age,/DELETE FROM public\.avvisi_ade/)
