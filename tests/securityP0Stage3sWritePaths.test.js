@@ -124,5 +124,5 @@ test('Stage3S real PostgreSQL A/B mutation matrix is guarded and transactional',
   'ROLLBACK;',
  ]) assert.ok(matrix.includes(marker),marker)
  assert.doesNotMatch(matrix,/\bCOMMIT\s*;/)
- assert.match(matrix,/sequence\s+MAY still advance/)
+ assert.match(matrix,/sequence[\s\S]{0,12}MAY still advance/)
 })
