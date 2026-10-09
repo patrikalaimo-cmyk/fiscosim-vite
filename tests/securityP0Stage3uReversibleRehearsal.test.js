@@ -35,6 +35,7 @@ test('Stage3U runner preserves evidence and verifies BOTH rollback and no persis
   'STAGE3U_ROLLBACK_VERIFIED|NO_SCHEMA_OR_ACCOUNTING_ROWS_PERSISTED',
   'STAGE3U_LAB_MATRIX|PASS|FIXTURE_ROLLBACK',
   'SINGLE_TRANSACTION_ROLLBACK=true','NO_REAL_JWT_OR_UI_TEST=true',
+  'sequence nextval may advance despite ROLLBACK',
   'STAGE3U_REHEARSAL_',
   'psql -X -v ON_ERROR_STOP=1','DO NOT rerun',
  ]) assert.ok(runner.includes(marker),marker)
