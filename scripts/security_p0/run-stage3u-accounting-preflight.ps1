@@ -44,6 +44,15 @@ $logLines=@('STAGE3U_ACCOUNTING_PREFLIGHT',
 $logLines | Out-File -LiteralPath $report -Encoding UTF8
 if($code -ne 0 -or -not ($log -contains 'STAGE3U_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST') -or
  -not ($log -contains 'ROLLBACK')){
+ Write-Host 'STAGE3U PREFLIGHT BLOCKED: PostgreSQL diagnostics (read-only)' -ForegroundColor Yellow
+ $diagnosticLines=@($log | ForEach-Object { [string]$_ } |
+  Where-Object { $_ -match '(?i)(ERROR:|FATAL:|DETAIL:|HINT:|CONTEXT:|psql:|STAGE3U.*MISSING|Stage3U.*incomplete|Stage3U LAB has existing)' })
+ if($diagnosticLines.Count -eq 0){
+  Write-Host 'No PostgreSQL error line recognized; inspect full report for preceding messages.' -ForegroundColor Yellow
+ }else{
+  foreach($entry in $diagnosticLines){Write-Host $entry -ForegroundColor Yellow}
+ }
+ Write-Host ('Preserved report: '+$report)
  throw ('Stage3U preflight BLOCKED; see report: '+$report)
 }
 Write-Host 'STAGE3U ACCOUNTING PREFLIGHT READ-ONLY PASS' -ForegroundColor Green
