@@ -41,24 +41,28 @@ function matchingContainer(names,pattern,dbNets){
  }
  return connected.length
 }
-function isGatewayBoundOnlyToLoopback(names,dbNets){
- let observed=false
+function inspectGatewayLoopbackBindings(names,dbNets){
+ const bindings=[]
  for(const name of names){
   try{
    if(!linked(networks(name),dbNets))continue
    const ports=JSON.parse(docker('inspect','--format','{{json .NetworkSettings.Ports}}',name)||'{}')
-   for(const bindings of Object.values(ports||{})){
-    for(const binding of bindings||[]){
+   for(const [containerPort,published] of Object.entries(ports||{})){
+    for(const binding of published||[]){
      if(String(binding.HostPort)!=='54321')continue
-     observed=true
-     if(!['127.0.0.1','::1'].includes(String(binding.HostIp))){
-      return false
-     }
+     bindings.push({
+      container:name,containerPort,
+      hostIp:String(binding.HostIp),hostPort:String(binding.HostPort),
+     })
     }
    }
-  }catch{ /* Unknown network/binding cannot establish a safe service */ }
+  }catch{ /* Uninspectable container never establishes a safe binding */ }
  }
- return observed
+ const safe=bindings.length>0 &&
+  bindings.every(b=>['127.0.0.1','::1'].includes(b.hostIp))
+ return {safe,details:bindings.length
+  ? bindings.map(b=>b.container+'@'+b.hostIp+':'+b.hostPort+'->'+b.containerPort).join(';')
+  : 'NONE_ON_PINNED_DB_NETWORK'}
 }
 async function ping(path){
  try{
@@ -95,7 +99,8 @@ const [authHttp,restHttp]=await Promise.all([
  ping('/auth/v1/health'),ping('/rest/v1/'),
 ])
 const connected=authCount>0 && restCount>0
-const safeBinding=isGatewayBoundOnlyToLoopback(names,dbNetworks)
+const gateway=inspectGatewayLoopbackBindings(names,dbNetworks)
+const safeBinding=gateway.safe
 const endpoints=authHttp===200 && Number.isInteger(restHttp) && restHttp>=200 && restHttp<500
 const status=installed&&connected&&safeBinding&&endpoints
  ? 'STAGE3V_LOCAL_NETWORK_AND_HTTP_DISCOVERED_NOT_JWT_VERIFIED'
@@ -108,6 +113,7 @@ const report=[
  'AUTH_CONTAINER_ON_DB_NETWORK='+(authCount>0),
  'POSTGREST_CONTAINER_ON_DB_NETWORK='+(restCount>0),
  'GATEWAY_54321_BOUND_ONLY_TO_LOOPBACK='+safeBinding,
+ 'GATEWAY_54321_HOST_BINDINGS='+gateway.details,
  'AUTH_LOCAL_HEALTH_HTTP='+authHttp,
  'REST_LOCAL_GATEWAY_HTTP='+restHttp,
  'REAL_SIGNED_JWT_E2E=false',
