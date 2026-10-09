@@ -42,7 +42,9 @@ test('Stage3Q locks both fiscal company and customer, even with shared CRM',()=>
   'AS RESTRICTIVE FOR ALL TO authenticated',
   'BEFORE UPDATE OF societa_id,cliente_id',
   'Fiscal record company ownership is immutable',
-  'Fiscal record customer ownership is immutable'
+  'Fiscal record customer ownership is immutable',
+  "public.current_utente_ruolo() IN ('owner','admin')",
+  'created_by=public.current_utente_studio_id()'
  ]) assert.ok(patch.includes(key),key)
  for(const table of ['avvisi_ade','revisioni_dichiarativi']){
   assert.match(patch,new RegExp('public\\.'+table+' AS RESTRICTIVE FOR ALL TO authenticated'))
@@ -64,6 +66,7 @@ test('Stage3Q actual A/B SQL fixtures are rollback-only and test a shared client
   'request.jwt.claim.sub',
   'Owner A CRM/fiscal scope',
   'Owner B sees shared A fiscal notice',
+  'collaborator B saw orphan/clientless declaration',
   'outsider visible fiscal data',
   'foreign_key_violation',
   'Fiscal record company ownership is immutable',
