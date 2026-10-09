@@ -14,6 +14,12 @@ import {
 } from '../../lib/authMembership.js'
 import { sanitizeUtenteProfile } from '../../src/shared/utils/userProfile.js'
 import {
+  normalizeClienteIds,
+  loadClientCompanyLinks,
+  scopedClienteIds,
+  areClienteAssignmentsWithinScope,
+} from '../../lib/tenantClientAssignments.js'
+import {
   authorizedManagerSocietaIds,
   areRequestedSocietaIdsAllowed,
   areTargetMembershipsFullyAllowed,
@@ -214,7 +220,16 @@ export default async function handler(req, res) {
           membershipRows: visible,
         }))]
       })
-      return res.status(200).json({ ok: true, users: visibleUsers })
+      // Users' global stored client arrays are untrusted: a manager may
+      // receive only clients explicitly linked to each target user's own
+      // assigned companies, never all clients present in service-role rows.
+      const links = await loadClientCompanyLinks(admin,
+        visibleUsers.flatMap((user) => user.clienti_assegnati || []))
+      const safeUsers = visibleUsers.map((user) => ({
+        ...user,
+        clienti_assegnati: scopedClienteIds(user.clienti_assegnati, links, user.societa_assegnate),
+      }))
+      return res.status(200).json({ ok: true, users: safeUsers })
     }
 
     if (req.method === 'POST') {
@@ -235,6 +250,14 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Società richiesta fuori dall’ambito autorizzato' })
       }
       const provisionedSocietaIds = normalizeSocietaIds(payload.societa_assegnate)
+      const requestedClientLinks = await loadClientCompanyLinks(admin, payload.clienti_assegnati)
+      if (!areClienteAssignmentsWithinScope(
+        payload.clienti_assegnati,
+        requestedClientLinks,
+        provisionedSocietaIds,
+      )) {
+        return res.status(403).json({ error: 'Cliente assegnato fuori dalle società autorizzate' })
+      }
       // Do not overwrite a pre-existing Auth identity belonging to another tenant.
       const existingAuth = await findAuthUserByEmail(admin, payload.email)
       const existingProfile = await getUtenteByEmail(admin, payload.email)
@@ -306,6 +329,14 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Società richiesta fuori dall’ambito autorizzato' })
       }
       const provisionedSocietaIds = normalizeSocietaIds(payload.societa_assegnate)
+      const requestedClientLinks = await loadClientCompanyLinks(admin, payload.clienti_assegnati)
+      if (!areClienteAssignmentsWithinScope(
+        payload.clienti_assegnati,
+        requestedClientLinks,
+        provisionedSocietaIds,
+      )) {
+        return res.status(403).json({ error: 'Cliente assegnato fuori dalle società autorizzate' })
+      }
       let authUser = null
       if (existing.auth_user_id) {
         authUser = await updateAuthUser(admin, existing.auth_user_id, payload, Boolean(payload.password))
