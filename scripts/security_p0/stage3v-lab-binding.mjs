@@ -21,6 +21,13 @@ const run=(command,args,options={})=>execFileSync(command,args,{
 }).trim()
 const asUUID=(v)=>{assert.match(String(v||''),UUID);return String(v).toLowerCase()}
 
+export function isStage3vAllowedCheckout({root,branch,userProfile}) {
+ if(branch===BRANCH)return true
+ return branch==='' && resolve(root).toLowerCase()===
+  resolve(join(userProfile,'FiscoSim-P0-Stage3V-ReadOnly')).toLowerCase()
+}
+
+
 export function parseStage3vBindingOutput(output) {
  const result={RPC:[],COMPANY:[],ACCOUNT:[],AUTH:[],MEMBERSHIP:[]}
  for(const line of String(output||'').split(/\r?\n/)){
@@ -73,11 +80,10 @@ export async function assertStage3vPinnedLab({expectedCommit,fixture,admin,authI
  // A detached worktree is the intended operator setup. Accept it ONLY at
  // the fixed isolated P0 path, with the exact pinned SHA and clean tree.
  const checkoutBranch=run('git',['branch','--show-current'],{cwd:ROOT})
- const isolatedWorktree=resolve(join(process.env.USERPROFILE,'FiscoSim-P0-Stage3V-ReadOnly'))
- const pinnedWorktree=checkoutBranch==='' &&
-  ROOT.toLowerCase()===isolatedWorktree.toLowerCase()
  if(run('git',['rev-parse','HEAD'],{cwd:ROOT})!==expectedCommit ||
-    (checkoutBranch!==BRANCH && !pinnedWorktree))
+    !isStage3vAllowedCheckout({
+     root:ROOT,branch:checkoutBranch,userProfile:process.env.USERPROFILE,
+    }))
   throw Error('STAGE3V_UNEXPECTED_GIT_CHECKOUT')
  if(run('git',['status','--porcelain'],{cwd:ROOT}))
   throw Error('STAGE3V_DIRTY_WORKTREE')
