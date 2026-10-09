@@ -1,7 +1,7 @@
 import { requireApiAuth } from '../../lib/auth.js'
 import { getSupabaseAdmin, hasSupabaseServiceRoleConfigured } from '../../lib/db.js'
 import {
- resolveFiscalScope, parseQueryCompany,
+ resolveFiscalScope, parseQueryCompany, canReadFiscalResource,
  listScopedClients, listScopedFiscalRows, listScopedStaff,
 } from '../../lib/fiscalReadScope.js'
 
@@ -15,6 +15,9 @@ export default async function handler(req,res){
  }
  const resource=String(req.query?.resource||'').trim()
  if(!RESOURCES.has(resource))return res.status(400).json({error:'Risorsa non supportata'})
+ if(!canReadFiscalResource(ctx.profile,resource)){
+  return res.status(403).json({error:'Modulo non autorizzato per questo operatore'})
+ }
  try{
   const admin=await getSupabaseAdmin()
   const scope=await resolveFiscalScope(admin,ctx)
