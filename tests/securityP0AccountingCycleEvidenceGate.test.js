@@ -25,7 +25,7 @@ test('Accounting E2E report cannot misrepresent safe Node tests as PostgreSQL po
   'GATE 5','GATE 6','GATE 7','GATE 8',
   'NOT_EXECUTED','BLOCKED','NOT_IMPLEMENTED','NOT_FREEZE',
   'All safe 1150','Manuale 414','Bank 11','Import 231',
-  'nessuna scrittura su un database reale',
+  'senza connessioni o scritture DB reali',
  ]){
   assert.ok(report.includes(marker),marker)
  }
