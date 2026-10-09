@@ -531,7 +531,7 @@ function App() {
           {tab === 'ai_agent'     && <ModuloAIAgent utente={utente} />}
           {tab === 'cu'           && <ModuloCU />}
           {tab === 'revisione_dich' && <ModuloRevisioneDich utente={utente} />}
-          {tab === 'agecon'         && <ModuloAgeCon ruolo={ruolo} />}
+          {tab === 'agecon'         && <ModuloAgeCon ruolo={ruolo} utente={utente} />}
 
           {/* COMUNICAZIONI */}
           {tab === 'adempimenti' && (canLeggi(perm, 'adempimenti') ? <ModuloAdempimenti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
