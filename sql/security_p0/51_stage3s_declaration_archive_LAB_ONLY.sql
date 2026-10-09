@@ -53,8 +53,8 @@ BEGIN
  JOIN public.societa company ON company.id=member.societa_id
  WHERE us.auth_user_id=p_auth_user_id AND us.attivo IS TRUE
   AND member.societa_id=p_societa_id AND company.attiva IS TRUE
-  AND (us.ruolo IN ('owner','admin') OR (
-   us.ruolo='collaboratore'
+  AND ((us.ruolo IN ('owner','admin') AND member.ruolo IN ('owner','admin')) OR (
+   us.ruolo='collaboratore' AND member.ruolo='collaboratore'
    AND coalesce((us.permessi->'revisione_dich'->>'modifica')::boolean,false)
   ))
  LIMIT 1;
