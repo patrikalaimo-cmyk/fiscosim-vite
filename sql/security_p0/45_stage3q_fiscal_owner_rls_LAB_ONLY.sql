@@ -148,6 +148,36 @@ ALTER TABLE public.clienti
  ADD COLUMN telefono text,
  ADD COLUMN indirizzo text;
 
+-- Fiscal mutations must flow through the authenticated API -> service-only
+-- RPC with explicit ownership checks and an append-only audit entry.
+-- Legacy browser imports/tests are intentionally not privileged.
+REVOKE INSERT,UPDATE,DELETE ON TABLE
+ public.avvisi_ade, public.revisioni_dichiarativi
+ FROM PUBLIC,anon,authenticated;
+DO $fiscal_dml_guard$
+DECLARE t text; col text; op text;
+BEGIN
+ FOREACH t IN ARRAY ARRAY['avvisi_ade','revisioni_dichiarativi'] LOOP
+  FOR col IN SELECT column_name FROM information_schema.columns
+    WHERE table_schema='public' AND table_name=t
+  LOOP
+   FOREACH op IN ARRAY ARRAY['INSERT','UPDATE'] LOOP
+    IF has_column_privilege('authenticated',format('public.%I',t),col,op)
+      OR has_column_privilege('anon',format('public.%I',t),col,op) THEN
+     RAISE EXCEPTION 'Stage3Q browser fiscal column DML grant survives: % % %',t,col,op;
+    END IF;
+   END LOOP;
+  END LOOP;
+  FOREACH op IN ARRAY ARRAY['INSERT','UPDATE','DELETE'] LOOP
+   IF has_table_privilege('authenticated',format('public.%I',t),op)
+    OR has_table_privilege('anon',format('public.%I',t),op)
+    OR NOT has_table_privilege('service_role',format('public.%I',t),op) THEN
+    RAISE EXCEPTION 'Stage3Q fiscal table ACL inconsistent: % %',t,op;
+   END IF;
+  END LOOP;
+ END LOOP;
+END $fiscal_dml_guard$;
+
 -- Every fiscal row must have exactly one company scope, even if its CRM
 -- customer is linked to two companies. A nullable client on declarations
 -- is allowed for "without archiving"; the company remains mandatory.
