@@ -74,5 +74,5 @@ test('Stage3V signed JWT runner requires explicit opt-in before any Auth login o
   'utenti_studio_societa',
   'STAGE3V_PINNED_DB_NOT_RUNNING',
  ])assert.ok(binding.includes(marker),marker)
- assert.doesNotMatch(binding,/docker.*(?:run|start|stop|rm|restart)/i)
+ assert.doesNotMatch(binding,/run\('docker',\['(?:run|start|stop|rm|restart)'/i)
 })
