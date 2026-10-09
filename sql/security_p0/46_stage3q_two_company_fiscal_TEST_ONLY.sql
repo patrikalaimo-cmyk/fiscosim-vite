@@ -65,6 +65,29 @@ BEGIN
  END;
 END $fk$;
 
+-- Real PostgreSQL role-negative check: each table must reject anonymous SELECT
+-- even when legacy Supabase had granted table/column SELECT by default.
+SET LOCAL ROLE anon;
+DO $anon_deny$
+BEGIN
+ BEGIN
+  PERFORM id FROM public.clienti LIMIT 1;
+  RAISE EXCEPTION 'SECURITY FAILURE: anon could read CRM customer';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  PERFORM id FROM public.avvisi_ade LIMIT 1;
+  RAISE EXCEPTION 'SECURITY FAILURE: anon could read fiscal notice';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  PERFORM id FROM public.revisioni_dichiarativi LIMIT 1;
+  RAISE EXCEPTION 'SECURITY FAILURE: anon could read declaration';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+END $anon_deny$;
+RESET ROLE;
+
 SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.role"='authenticated';
 SET LOCAL "request.jwt.claim.sub"='60000000-0000-4000-8000-000000000903';
