@@ -23,14 +23,17 @@ INSERT INTO public.societa (id,codice,denominazione) VALUES
  ('60000000-0000-4000-8000-000000000902','P0-3Q-B','Stage3Q synthetic B');
 INSERT INTO auth.users (id,instance_id,aud,role,email,created_at,updated_at) VALUES
  ('60000000-0000-4000-8000-000000000903','00000000-0000-0000-0000-000000000000','authenticated','authenticated','stage3q-owner-a@example.invalid',now(),now()),
- ('60000000-0000-4000-8000-000000000904','00000000-0000-0000-0000-000000000000','authenticated','authenticated','stage3q-owner-b@example.invalid',now(),now());
+ ('60000000-0000-4000-8000-000000000904','00000000-0000-0000-0000-000000000000','authenticated','authenticated','stage3q-owner-b@example.invalid',now(),now()),
+ ('60000000-0000-4000-8000-000000000916','00000000-0000-0000-0000-000000000000','authenticated','authenticated','stage3q-collab-b@example.invalid',now(),now());
 INSERT INTO public.utenti_studio (id,nome,email,ruolo,attivo,auth_user_id) VALUES
  ('60000000-0000-4000-8000-000000000905','Stage3Q Owner A','stage3q-owner-a@example.invalid','owner',true,'60000000-0000-4000-8000-000000000903'),
- ('60000000-0000-4000-8000-000000000906','Stage3Q Owner B','stage3q-owner-b@example.invalid','owner',true,'60000000-0000-4000-8000-000000000904');
+ ('60000000-0000-4000-8000-000000000906','Stage3Q Owner B','stage3q-owner-b@example.invalid','owner',true,'60000000-0000-4000-8000-000000000904'),
+ ('60000000-0000-4000-8000-000000000917','Stage3Q Collab B','stage3q-collab-b@example.invalid','collaboratore',true,'60000000-0000-4000-8000-000000000916');
 INSERT INTO public.utenti_studio_societa
  (utente_id,auth_user_id,societa_id,ruolo,is_default) VALUES
  ('60000000-0000-4000-8000-000000000905','60000000-0000-4000-8000-000000000903','60000000-0000-4000-8000-000000000901','owner',true),
- ('60000000-0000-4000-8000-000000000906','60000000-0000-4000-8000-000000000904','60000000-0000-4000-8000-000000000902','owner',true);
+ ('60000000-0000-4000-8000-000000000906','60000000-0000-4000-8000-000000000904','60000000-0000-4000-8000-000000000902','owner',true),
+ ('60000000-0000-4000-8000-000000000917','60000000-0000-4000-8000-000000000916','60000000-0000-4000-8000-000000000902','collaboratore',true);
 INSERT INTO public.clienti (id,nome) VALUES
  ('60000000-0000-4000-8000-000000000907','Stage3Q CRM A'),
  ('60000000-0000-4000-8000-000000000908','Stage3Q CRM B'),
@@ -115,6 +118,17 @@ BEGIN
   END IF;
  END;
 END $owner_b$;
+
+SET LOCAL "request.jwt.claim.sub"='60000000-0000-4000-8000-000000000916';
+DO $collaborator_b$
+BEGIN
+ IF public.current_utente_ruolo()<>'collaboratore'
+ OR (SELECT count(*) FROM public.clienti)<>2
+ OR (SELECT count(*) FROM public.avvisi_ade)<>1
+ OR (SELECT count(*) FROM public.revisioni_dichiarativi)<>0 THEN
+  RAISE EXCEPTION 'SECURITY FAILURE: collaborator B saw orphan/clientless declaration';
+ END IF;
+END $collaborator_b$;
 
 SET LOCAL "request.jwt.claim.sub"='60000000-0000-4000-8000-000000000915';
 DO $outsider$
