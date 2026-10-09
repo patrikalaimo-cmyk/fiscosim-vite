@@ -450,3 +450,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Architecture fact: `clienti` legacy compatibility bootstrap contains only `id`; functional schema in Docker may have a different set of columns, preflight required before policy changes. Existing user-can-access-cliente policies allow global owner/admin; actual P0 closure needs direct RLS ownership, not just bridge.
 - Follow-up after preflight: verify active production-like table schema, design single-owner fiscal row scope on AgeCon/revisions and explicit associations for legacy records, test negative cross-company JWT/Auth/API. All fiscal E2E remain mandatory.
 - No write to live Supabase, no local Docker changes from ChatGPT, no merge to `mio-branch`, PR #2 remains DRAFT.
+
+
+## 2026-10-09 — Stage3P preflight PostgreSQL `text || "char"` fix
+- User ran `scripts/security_p0/run-stage3p-preflight.ps1` on isolated LAB and received `ERROR: operator is not unique: text || "char"`. This happened inside a `BEGIN READ ONLY` preflight query: no DB data or schema modifications.
+- Root cause: the catalog query `3P_FUNCTION` concatenated `pg_proc.provolatile` (PostgreSQL internal `"char"`) without a cast. Exact fix: `';volatility='||p.provolatile::text AS details` in `41_stage3p_ownership_preflight_READ_ONLY.sql`.
+- Added regression assertion to `tests/securityP0Stage3pCrmCompanyScope.test.js` requiring explicit cast and denying uncast concatenation. CI validates static/test suite; a real LAB `3P READ-ONLY PASS` report is still needed and **must not** be inferred from CI.
+- `42_stage3p_empty_crm_link_LAB_ONLY.sql` and `43_stage3p_empty_crm_link_TEST_ONLY.sql` remain unexecuted. No other patch/Stage should be applied before auditing real Docker schema.
+- Do not rerun previously closed SQL Stage3N/Stage3M. Keep PR #2 Draft/unmerged; no changes to `mio-branch` or live Supabase.
