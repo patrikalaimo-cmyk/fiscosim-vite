@@ -25,11 +25,22 @@ BEGIN
   RAISE EXCEPTION 'Stage3P requires local Auth schema';
  END IF;
  IF to_regclass('public.crm_cliente_societa_link') IS NOT NULL THEN
-  RAISE EXCEPTION 'Stage3P CRM link already exists: inspect before rerun; no implicit ALTER';
+  IF (SELECT count(*) FROM public.crm_cliente_societa_link)<>0 THEN
+   RAISE EXCEPTION 'Stage3P refuses an existing nonempty binding table';
+  END IF;
+  IF (SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='crm_cliente_societa_link'
+      AND column_name IN ('cliente_id','societa_id','assigned_by','assigned_at','decision_reason'))<>5
+    OR (SELECT count(*) FROM pg_constraint
+      WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='f')<>3
+    OR (SELECT count(*) FROM pg_constraint
+      WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='p')<>1 THEN
+   RAISE EXCEPTION 'Stage3P unexpected existing CRM link schema';
+  END IF;
  END IF;
 END $guard$;
 
-CREATE TABLE public.crm_cliente_societa_link (
+CREATE TABLE IF NOT EXISTS public.crm_cliente_societa_link (
  cliente_id uuid NOT NULL REFERENCES public.clienti(id) ON DELETE RESTRICT,
  societa_id uuid NOT NULL REFERENCES public.societa(id) ON DELETE RESTRICT,
  assigned_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
@@ -40,7 +51,7 @@ CREATE TABLE public.crm_cliente_societa_link (
 );
 COMMENT ON TABLE public.crm_cliente_societa_link IS
  'LAB ONLY Stage3P: manual verified CRM-accounting associations; no automatic backfill; no browser access. NOT a replacement for studio tenancy or child fiscal record ownership.';
-CREATE INDEX crm_cliente_societa_societa_idx
+CREATE INDEX IF NOT EXISTS crm_cliente_societa_societa_idx
  ON public.crm_cliente_societa_link(societa_id,cliente_id);
 ALTER TABLE public.crm_cliente_societa_link ENABLE ROW LEVEL SECURITY;
 
@@ -60,6 +71,15 @@ BEGIN
   WHERE schemaname='public' AND tablename='crm_cliente_societa_link'
  ) THEN
   RAISE EXCEPTION 'Stage3P CRM binding RLS or policy invariant failed';
+ END IF;
+ IF (SELECT count(*) FROM pg_constraint
+    WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='f')<>3
+  OR (SELECT count(*) FROM pg_constraint
+    WHERE conrelid='public.crm_cliente_societa_link'::regclass AND contype='p')<>1
+  OR (SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='crm_cliente_societa_link')<>5
+ THEN
+  RAISE EXCEPTION 'Stage3P scope table constraints/columns mismatch';
  END IF;
  IF (SELECT count(*) FROM public.crm_cliente_societa_link)<>0 THEN
   RAISE EXCEPTION 'Stage3P new link must start empty';
