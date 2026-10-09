@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
- scopedCompanyIds,allowedClientIds,rowIsAuthorized,
+ scopedCompanyIds,allowedClientIds,rowIsAuthorized,canReadFiscalResource,
  clientSelectionLimited,listScopedClients,listScopedFiscalRows,listScopedStaff,
 } from '../lib/fiscalReadScope.js'
 
@@ -107,4 +107,18 @@ test('Stage3R read endpoint is GET-only, service-scoped and never writes',()=>{
   assert.ok(src.includes(x),x)
  assert.doesNotMatch(src,/\.insert\(|\.update\(|\.delete\(|\.upsert\(/)
  assert.match(src,/clienti:byId\.get\(row\.cliente_id\)\|\|null/)
+})
+
+test('Stage3R server enforces module read privilege, regardless of UI routing',()=>{
+ const owner={ruolo:'owner'}
+ const collab={ruolo:'collaboratore',permessi:{clienti:{leggi:true},revisione_dich:{leggi:false}}}
+ assert.equal(canReadFiscalResource(owner,'avvisi_ade'),true)
+ assert.equal(canReadFiscalResource(collab,'clienti'),true)
+ assert.equal(canReadFiscalResource(collab,'avvisi_ade'),false)
+ assert.equal(canReadFiscalResource(collab,'revisioni_dichiarativi'),false)
+ assert.equal(canReadFiscalResource({ruolo:'collaboratore',permessi:{agecon:{leggi:true}}},'avvisi_ade'),true)
+ assert.equal(canReadFiscalResource(null,'clienti'),false)
+ const api=readFileSync(new URL('../api/studio/fiscal-read.js',import.meta.url),'utf8')
+ assert.match(api,/canReadFiscalResource\(ctx\.profile,resource\)/)
+ assert.match(api,/status\(403\)/)
 })
