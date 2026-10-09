@@ -30,6 +30,83 @@ test('Stage3Q grants only authenticated scoped read on bridge, never direct writ
  assert.doesNotMatch(patch,/GRANT\s+(?:INSERT|UPDATE|DELETE)\s+ON\s+TABLE\s+public\.crm_cliente_societa_link\s+TO\s+authenticated/i)
 })
 
+test('Stage3Q explicitly repairs legacy anonymous SELECT grants and fails closed',()=>{
+ const targetNames=['public.clienti','public.avvisi_ade','public.revisioni_dichiarativi']
+ for(const name of targetNames) assert.ok(patch.includes(name))
+ for(const marker of [
+  'REVOKE SELECT ON TABLE',
+  'FROM PUBLIC, anon;',
+  'REVOKE SELECT (%I) ON TABLE public.%I FROM PUBLIC, anon',
+  'GRANT SELECT ON TABLE',
+  'TO authenticated;',
+  'DO $verify_anon_closed
+ for(const key of [
+  'ADD COLUMN societa_id uuid NOT NULL REFERENCES public.societa(id)',
+  'FOREIGN KEY (cliente_id,societa_id)',
+  'REFERENCES public.crm_cliente_societa_link(cliente_id,societa_id)',
+  'avvisi_ade_cliente_required CHECK (cliente_id IS NOT NULL)',
+  'CREATE POLICY clienti_company_boundary',
+  'CREATE POLICY avvisi_ade_company_boundary',
+  'CREATE POLICY revisioni_company_boundary',
+  'AS RESTRICTIVE FOR ALL TO authenticated',
+  'BEFORE UPDATE OF societa_id,cliente_id',
+  'Fiscal record company ownership is immutable',
+  'Fiscal record customer ownership is immutable',
+  "us.ruolo IN ('owner','admin') AND m.ruolo IN ('owner','admin')",
+  "m.societa_id=crm_cliente_societa_link.societa_id",
+  'created_by=public.current_utente_studio_id()',
+  'REVOKE INSERT,UPDATE,DELETE ON TABLE',
+  'fiscal table ACL inconsistent'
+ ]) assert.ok(patch.includes(key),key)
+ for(const table of ['avvisi_ade','revisioni_dichiarativi']){
+  assert.match(patch,new RegExp('public\\.'+table+' AS RESTRICTIVE FOR ALL TO authenticated'))
+ }
+ assert.match(patch,/SECURITY INVOKER/)
+ assert.doesNotMatch(patch,/SECURITY DEFINER/)
+})
+
+test('Stage3Q actual A/B SQL fixtures are rollback-only and test a shared client',()=>{
+ for(const key of [
+  'local-fiscal-ownership-matrix-rollback-only',
+  'INSERT INTO auth.users',
+  'INSERT INTO public.utenti_studio',
+  'INSERT INTO public.utenti_studio_societa',
+  'INSERT INTO public.crm_cliente_societa_link',
+  'INSERT INTO public.avvisi_ade',
+  'INSERT INTO public.revisioni_dichiarativi',
+  'SET LOCAL ROLE authenticated',
+  'request.jwt.claim.sub',
+  'Owner A CRM/fiscal scope',
+  'Owner B sees shared A fiscal notice',
+  'collaborator B saw orphan/clientless declaration',
+  'outsider visible fiscal data',
+  'foreign_key_violation',
+  'fiscal owner override allowed',
+  'insufficient_privilege',
+  'ROLLBACK;',
+ ]) assert.ok(fixture.includes(key),key)
+ assert.doesNotMatch(fixture,/\bCOMMIT\s*;/i)
+})
+,
+  "has_table_privilege('anon'",
+  "has_column_privilege('anon'",
+  "has_table_privilege('service_role'",
+  'Stage3Q ACL normalization failed:',
+  'Stage3Q anonymous column access remains:',
+ ]) assert.ok(patch.includes(marker),marker)
+ assert.doesNotMatch(patch,/Stage3Q unexpected anonymous table-wide SELECT grant/)
+ assert.match(fixture,/SET LOCAL ROLE anon/)
+ assert.match(fixture,/PERFORM id FROM public\.clienti LIMIT 1/)
+ assert.match(fixture,/PERFORM id FROM public\.avvisi_ade LIMIT 1/)
+ assert.match(fixture,/PERFORM id FROM public\.revisioni_dichiarativi LIMIT 1/)
+ for(const marker of [
+  'anon could read CRM customer',
+  'anon could read fiscal notice',
+  'anon could read declaration',
+  'EXCEPTION WHEN insufficient_privilege THEN NULL',
+ ]) assert.ok(fixture.includes(marker),marker)
+})
+
 test('Stage3Q locks both fiscal company and customer, even with shared CRM',()=>{
  for(const key of [
   'ADD COLUMN societa_id uuid NOT NULL REFERENCES public.societa(id)',
