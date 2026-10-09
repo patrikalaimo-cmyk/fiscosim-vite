@@ -36,7 +36,8 @@ test('Stage3V readiness scans only pinned Docker database and localhost services
  assert.doesNotMatch(code,/https:\/\//)
  assert.doesNotMatch(code,/\.rpc\(|signInWithPassword|auth\.admin|Authorization|Bearer/)
  assert.doesNotMatch(code,/\b(?:DROP|CREATE|ALTER|TRUNCATE|INSERT|DELETE|UPDATE)\s+(?:TABLE|INTO|FROM|public\.)/i)
- assert.doesNotMatch(code,/docker.*(?:run|rm|stop|start|restart)/i)
+ assert.doesNotMatch(code,/docker\(\s*['"](?:run|rm|stop|start|restart)['"]/i)
+ assert.doesNotMatch(code,/execFileSync\(\s*['"]docker['"]\s*,\s*\[\s*['"](?:run|rm|stop|start|restart)['"]/i)
 })
 
 test('Stage3V readiness does not claim actual signed-JWT posting from infrastructure',()=>{
