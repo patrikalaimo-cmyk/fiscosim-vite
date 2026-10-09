@@ -38,12 +38,17 @@ try{
 }finally{
  $ErrorActionPreference=$old
 }
-$logLines=@('STAGE3U_ACCOUNTING_PREFLIGHT',
- 'COMMIT='+$sha.Trim(),'LAB_ONLY='+$Container,'READ_ONLY=true')+
- @($log | ForEach-Object {[string]$_})
+$logLines=@(
+ 'STAGE3U_ACCOUNTING_PREFLIGHT',
+ "COMMIT=$($sha.Trim())",
+ "LAB_ONLY=$Container",
+ 'READ_ONLY=true'
+) + @($log | ForEach-Object {[string]$_})
 $logLines | Out-File -LiteralPath $report -Encoding UTF8
+$lineScopeValid=(($log -contains 'STAGE3U_LINE_TENANT_SCOPE|PARENT_ONLY_COMPANY') -or
+ ($log -contains 'STAGE3U_LINE_TENANT_SCOPE|PARENT_AND_LINE_COMPANY'))
 if($code -ne 0 -or -not ($log -contains 'STAGE3U_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST') -or
- -not ($log -contains 'ROLLBACK')){
+ -not ($log -contains 'ROLLBACK') -or -not $lineScopeValid){
  Write-Host 'STAGE3U PREFLIGHT BLOCKED: PostgreSQL diagnostics (read-only)' -ForegroundColor Yellow
  $diagnosticLines=@($log | ForEach-Object { [string]$_ } |
   Where-Object { $_ -match '(?i)(ERROR:|FATAL:|DETAIL:|HINT:|CONTEXT:|psql:|STAGE3U.*MISSING|Stage3U.*incomplete|Stage3U LAB has existing)' })
