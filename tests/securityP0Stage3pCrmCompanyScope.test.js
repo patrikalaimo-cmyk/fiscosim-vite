@@ -68,3 +68,10 @@ test('Stage3P preflight runner uses pinned SHA and READ ONLY rollback',()=>{
  assert.ok(!runner.includes('Tee-Object'))
  assert.ok(!runner.includes('Invoke-Expression'))
 })
+
+test('Stage3P PostgreSQL pg_proc volatility is explicitly cast from internal char',()=>{
+ // pg_proc.provolatile is an internal \"char\" in PostgreSQL, so text || \"char\"
+ // can raise \"operator is not unique\". Keep the cast in the live catalog query.
+ assert.match(preflight,/';volatility='\s*\|\|\s*p\.provolatile::text\s+AS\s+details/)
+ assert.doesNotMatch(preflight,/\|\|\s*(?:p\.)?provolatile\s+(?:AS|FROM)/)
+})
