@@ -74,7 +74,8 @@ BEGIN
       ON m.utente_id=us.id AND m.auth_user_id=us.auth_user_id
     JOIN public.societa so ON so.id=m.societa_id
     WHERE us.auth_user_id=p_auth_user_id AND us.attivo IS TRUE
-      AND us.ruolo IN ('owner','admin') AND so.attiva IS TRUE
+      AND us.ruolo IN ('owner','admin')
+      AND m.ruolo IN ('owner','admin') AND so.attiva IS TRUE
       AND m.societa_id=l.societa_id
    )
  ) THEN
