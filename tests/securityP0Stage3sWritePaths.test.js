@@ -106,3 +106,23 @@ test('Stage3S all service routes require signed session context, not arbitrary b
   assert.doesNotMatch(s,/\.from\(['"](?:clienti|avvisi_ade|revisioni_dichiarativi)['"]\)\.insert/)
  }
 })
+
+test('Stage3S real PostgreSQL A/B mutation matrix is guarded and transactional',()=>{
+ const matrix=src('sql/security_p0/52_stage3s_mutation_matrix_TEST_ONLY.sql')
+ for(const marker of [
+  'local-stage3s-fiscal-mutations-rollback-only',
+  'fiscosim_studio_create_cliente',
+  'fiscosim_studio_update_cliente',
+  'fiscosim_studio_write_avviso',
+  'fiscosim_studio_archive_revisione',
+  'one-company actor edited shared client',
+  'one-company actor deactivated shared client',
+  'notice owner was overwritten',
+  'invalid_text_representation',
+  'two-phase atomic save failed',
+  'operational_audit',
+  'ROLLBACK;',
+ ]) assert.ok(matrix.includes(marker),marker)
+ assert.doesNotMatch(matrix,/\bCOMMIT\s*;/)
+ assert.match(matrix,/sequence\s+MAY still advance/)
+})
