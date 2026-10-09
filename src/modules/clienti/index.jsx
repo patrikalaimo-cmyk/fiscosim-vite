@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
+import { fetchScopedFiscalData } from '../../lib/fiscalApi'
 import { TIPO_LABEL, TIPO_COLOR, MODULI_DEFAULT, MODULI_DISPONIBILI, TIPO_CLIENTE } from '../../shared/constants'
 import { ModuleHeader } from '../../shared/components'
 
@@ -26,8 +27,14 @@ export function ModuloClienti(){
 
   const carica=useCallback(async()=>{
     setLoading(true);
-    const{data}=await sb.from("clienti").select("*").eq("attivo",true).order("nome");
-    setClienti(data||[]);setLoading(false);
+    try{
+      const rows=await fetchScopedFiscalData('clienti');
+      setClienti(rows);
+      setErr(null);
+    }catch(e){
+      setClienti([]);
+      setErr(e.message||'Elenco clienti non disponibile');
+    }finally{setLoading(false);}
   },[]);
   useEffect(()=>{carica();},[carica]);
 
@@ -80,6 +87,7 @@ export function ModuloClienti(){
         </div>
       )}
 
+      {err&&!modal&&<div className="alert alert-error">{err}</div>}
       {loading?<div className="loading">⏳ Caricamento...</div>:filtered.length===0?(
         <div className="empty"><div className="empty-ico">👥</div><div className="empty-t">{clienti.length===0?"Nessun cliente":"Nessun risultato"}</div><div className="empty-s">{clienti.length===0?"Aggiungi il primo cliente o importa da Excel":"Cambia la ricerca o il filtro"}</div></div>
       ):(
