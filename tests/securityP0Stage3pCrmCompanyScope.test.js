@@ -75,3 +75,40 @@ test('Stage3P PostgreSQL pg_proc volatility is explicitly cast from internal cha
  assert.match(preflight,/';volatility='\s*\|\|\s*p\.provolatile::text\s+AS\s+details/)
  assert.doesNotMatch(preflight,/\|\|\s*(?:p\.)?provolatile\s+(?:AS|FROM)/)
 })
+
+test('Stage3P no writes or backfills to original fiscal tables when creating foundation',()=>{
+ for(const table of ['public.clienti','public.avvisi_ade','public.revisioni_dichiarativi']){
+  assert.ok(schema.includes(table),table)
+ }
+ assert.ok(schema.includes('requires empty CRM, notices and declarations'))
+ assert.doesNotMatch(schema,/\bUPDATE\s+public\.(?:clienti|avvisi_ade|revisioni_dichiarativi)\b/i)
+ assert.doesNotMatch(schema,/\bDELETE\s+FROM\s+public\.(?:clienti|avvisi_ade|revisioni_dichiarativi)\b/i)
+})
+
+test('Stage3P isolated SQL integration verifies real FK-backed A/B fixture and rolls back',()=>{
+ const real=read('44_stage3p_crm_link_real_transaction_TEST_ONLY.sql')
+ for(const term of [
+  'isolated-transactional-crm-link-fixtures-only',
+  'INSERT INTO auth.users','INSERT INTO public.societa','INSERT INTO public.clienti',
+  'INSERT INTO public.crm_cliente_societa_link',
+  'SET LOCAL ROLE service_role','SET LOCAL ROLE authenticated',
+  'check_violation','insufficient_privilege',
+  'Stage3P transaction fixture did not preserve exactly one temporary link',
+  'ROLLBACK;'
+ ]) assert.ok(real.includes(term),term)
+ assert.doesNotMatch(real,/\bCOMMIT\s*;/i)
+})
+
+test('Stage3P lab runner pins commit, verifies SQL exit and preserves previous evidence',()=>{
+ const runner=readFileSync(new URL('../scripts/security_p0/run-stage3p-foundation.ps1',import.meta.url),'utf8')
+ for(const term of [
+  'ExpectedCommit','rev-parse HEAD','LASTEXITCODE','42_stage3p_empty_crm_link_LAB_ONLY.sql',
+  '43_stage3p_empty_crm_link_TEST_ONLY.sql','44_stage3p_crm_link_real_transaction_TEST_ONLY.sql',
+  '($apply -contains \'COMMIT\')',
+  '($negative -contains \'ROLLBACK\')',
+  '($real -contains \'ROLLBACK\')',
+  'BEGIN READ ONLY;','3P_VERIFY|0|0|true','STAGE3P LAB FOUNDATION PASS',
+  'Test-Path -LiteralPath $report'
+ ]) assert.ok(runner.includes(term),term)
+ assert.ok(!runner.includes('Tee-Object'))
+})
