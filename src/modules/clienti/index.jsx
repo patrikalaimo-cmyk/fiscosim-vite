@@ -77,15 +77,36 @@ export function ModuloClienti({ utente }){
         const payload=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(payload.error||'Creazione cliente non riuscita');
       }else{
-        // Existing customer changes are not safe for shared CRM until the
-        // fully scoped transactional update endpoint has been verified.
-        throw new Error('Modifica cliente temporaneamente bloccata: autorizzazione multisocietà non ancora collaudata');
+        const allowedFields=['nome','cognome','ragione_sociale','tipo_cliente','email',
+          'email_cc','codice_fiscale','partita_iva','note','codice_cliente','telefono','indirizzo'];
+        const patch=Object.fromEntries(allowedFields
+          .filter(key=>Object.hasOwn(data,key))
+          .map(key=>[key,data[key]]));
+        const response=await apiFetch('/api/studio/client-update',{
+          method:'PATCH',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:modal.data.id,action:'edit',data:patch,
+            motivazione:String(data.motivazione||'').trim()}),
+        });
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(payload.error||'Modifica cliente non riuscita');
       }
       await carica();setModal(null);
     }catch(e){setErr(e.message||'Salvataggio non riuscito');}
     finally{setSaving(false);}
   };
-  const elimina=async(id)=>{if(!confirm("Eliminare questo cliente?"))return;await sb.from("clienti").update({attivo:false}).eq("id",id);carica();};
+  const elimina=async(id)=>{
+    const reason=prompt('Motivazione della disattivazione cliente (minimo 12 caratteri):');
+    if(reason===null)return;
+    try{
+      const response=await apiFetch('/api/studio/client-update',{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id,action:'deactivate',data:{},motivazione:reason}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||'Disattivazione cliente non riuscita');
+      await carica();
+    }catch(e){setErr(e.message);}
+  };
 
   const salvaModuli=async(clienteId,moduli)=>{
     await sb.from("clienti").update({moduli_attivi:moduli}).eq("id",clienteId);
