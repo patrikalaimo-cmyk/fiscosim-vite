@@ -108,9 +108,18 @@ export function ModuloClienti({ utente }){
     }catch(e){setErr(e.message);}
   };
 
-  const salvaModuli=async(clienteId,moduli)=>{
-    await sb.from("clienti").update({moduli_attivi:moduli}).eq("id",clienteId);
-    await carica();
+  const salvaModuli=async(clienteId,moduli,motivazione)=>{
+    try{
+      const response=await apiFetch('/api/studio/client-update',{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:clienteId,action:'modules',
+          data:{moduli_attivi:moduli},motivazione}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||'Aggiornamento moduli non riuscito');
+      await carica();
+      return true;
+    }catch(e){setErr(e.message);return false;}
   };
 
   const toggleSel=id=>setSelected(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
@@ -142,7 +151,7 @@ export function ModuloClienti({ utente }){
       {selected.size>0&&(
         <div style={{background:"rgba(200,164,94,.08)",border:"1px solid rgba(200,164,94,.3)",borderRadius:10,padding:".65rem 1rem",marginBottom:".75rem",display:"flex",alignItems:"center",gap:".75rem",flexWrap:"wrap"}}>
           <span style={{fontSize:".8rem",fontWeight:600,color:"var(--gld2)"}}>{selected.size} selezionati</span>
-          <button className="btn btn-sm" onClick={()=>setBulkModal(true)}>⚙️ Gestisci moduli</button>
+          <button className="btn btn-sm" onClick={()=>setErr('Aggiornamento moduli multiplo sospeso: è necessaria una transazione unica per tutti i clienti.')}>⚙️ Gestisci moduli</button>
           <button className="btn-sec btn-sm" onClick={()=>setSelected(new Set())}>Deseleziona tutti</button>
         </div>
       )}
@@ -187,7 +196,7 @@ export function ModuloClienti({ utente }){
                     <td><div className="tbl-actions">
                       <button className="btn-icon" title="Moduli" onClick={()=>setModuliModal(c)}>⚙️</button>
                       <button className="btn-icon" onClick={()=>setModal({mode:"edit",data:c})}>✏️</button>
-                      {c.email&&<button className="btn-icon" onClick={()=>setMailModal(c)}>📧</button>}
+                      {c.email&&<button className="btn-icon" title="Invio email non ancora disponibile" onClick={()=>setErr('Invio email disabilitato: tabella notifiche e autorizzazioni da completare.')}>📧</button>}
                       <button className="btn-icon" style={{borderColor:"rgba(224,82,82,.3)",color:"#ff8585"}} onClick={()=>elimina(c.id)}>🗑</button>
                     </div></td>
                   </tr>
@@ -231,11 +240,11 @@ function ClienteModal({mode, data, onSave, onClose, saving, err, societaOptions}
                   {societaOptions.map(item=><option key={item.id} value={item.id}>{item.denominazione}</option>)}
                 </select>
               </div>
-              <div className="fg full"><label>Motivazione dell’assegnazione *</label>
-                <textarea value={form.motivazione||''} onChange={e=>up('motivazione',e.target.value)}
-                  placeholder="Motivo verificato dell’associazione cliente-società" rows={2}/>
-              </div>
             </>}
+            <div className="fg full"><label>{isNew?'Motivazione dell’assegnazione *':'Motivazione della modifica *'}</label>
+              <textarea value={form.motivazione||''} onChange={e=>up('motivazione',e.target.value)}
+                placeholder="Motivo verificato dell’operazione" rows={2}/>
+            </div>
             <div className="fg"><label>Nome</label><input value={form.nome||''} onChange={e=>up('nome',e.target.value)} placeholder="Nome"/></div>
             <div className="fg"><label>Cognome</label><input value={form.cognome||''} onChange={e=>up('cognome',e.target.value)} placeholder="Cognome"/></div>
             <div className="fg full"><label>Ragione Sociale</label><input value={form.ragione_sociale||''} onChange={e=>up('ragione_sociale',e.target.value)} placeholder="Per società e ditte"/></div>
@@ -295,9 +304,16 @@ function SendMailModal({cliente, onClose}){
 // ─── MODAL GESTIONE MODULI SINGOLO CLIENTE ────────────────────
 function ModuliModal({cliente, onSave, onClose}){
   const [moduli,setModuli]=useState(cliente.moduli_attivi||MODULI_DEFAULT);
+  const [motivazione,setMotivazione]=useState('');
   const [saving,setSaving]=useState(false);
   const toggle=id=>setModuli(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const save=async()=>{setSaving(true);await onSave(cliente.id,moduli);setSaving(false);onClose();};
+  const save=async()=>{
+    if(motivazione.trim().length<12){alert('Indica la motivazione di almeno 12 caratteri');return;}
+    setSaving(true);
+    const ok=await onSave(cliente.id,moduli,motivazione.trim());
+    setSaving(false);
+    if(ok)onClose();
+  };
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400}}>
@@ -312,6 +328,11 @@ function ModuliModal({cliente, onSave, onClose}){
               </div>
             ))}
           </div>
+        </div>
+        <div className="modal-body">
+          <label>Motivazione modifica moduli *</label>
+          <textarea rows={2} value={motivazione} onChange={e=>setMotivazione(e.target.value)}
+            placeholder="Motivo verificato della variazione" />
         </div>
         <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={saving} onClick={save}>{saving?'⏳...':'💾 Salva'}</button></div>
       </div>
