@@ -8,7 +8,14 @@ const path=new URL('../scripts/security_p0/stage3v-signed-jwt-general-journal-e2
 const script=readFileSync(path,'utf8')
 
 test('Stage3V signed JWT real-DB E2E harness fails closed without localhost opt-in',()=>{
- const run=spawnSync(process.execPath,[fileURLToPath(path)],{
+ const noSha=spawnSync(process.execPath,[fileURLToPath(path)],{
+  encoding:'utf8',timeout:8000,
+  env:{FISCOSIM_ISOLATED_LAB_API:'false',PATH:process.env.PATH||''},
+ })
+ assert.notEqual(noSha.status,0)
+ assert.match(noSha.stderr,/STAGE3V_REQUIRES_PINNED_SHA/)
+ const run=spawnSync(process.execPath,[fileURLToPath(path),
+  '--expected-commit','a'.repeat(40)],{
   encoding:'utf8',timeout:8000,
   env:{FISCOSIM_ISOLATED_LAB_API:'false',PATH:process.env.PATH||''},
  })
@@ -56,10 +63,13 @@ test('Stage3V verifies real token and persisted PostgreSQL side effects with exa
  assert.doesNotMatch(script,/console\.log\([^)]*(?:token|password|serviceKey)/)
 })
 
-test('Stage3V E2E default flow runs only non-mutating HTTP negatives',()=>{
+test('Stage3V E2E without write approval runs zero Auth logins and zero HTTP POST requests',()=>{
  const gate=script.indexOf("if(env.FISCOSIM_STAGE3V_PERSISTENT_WRITE_APPROVAL")
+ const login=script.indexOf('const a=await login(fixture.A)')
+ const negative=script.indexOf('const unsigned=await post(null,{})')
  const write=script.indexOf("for(const [label,f,identity,amount] of")
  assert.ok(gate>0)
- assert.ok(write>gate)
- assert.match(script,/STAGE3V_JWT_NEGATIVE_PREFLIGHT_PASS/)
+ assert.ok(login>gate && negative>login && write>negative)
+ assert.match(script,/STAGE3V_PINNED_LAB_READ_ONLY_PREFLIGHT_PASS/)
+ assert.match(script,/await assertStage3vPinnedLab\(\{expectedCommit,fixture,admin\}\)/)
 })
