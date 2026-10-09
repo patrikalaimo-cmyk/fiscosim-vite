@@ -14,7 +14,7 @@ BEGIN
   RAISE EXCEPTION 'Stage3U requires explicit isolated LAB approval';
  END IF;
  FOREACH t IN ARRAY ARRAY['societa','utenti_studio','utenti_studio_societa',
-  'piano_conti','prima_nota','prima_nota_righe','audit_contabile'] LOOP
+  'piano_conti','causali_contabili','prima_nota','prima_nota_righe','audit_contabile'] LOOP
   IF to_regclass('public.'||t) IS NULL THEN
    RAISE EXCEPTION 'Stage3U missing accounting prerequisite %',t;
   END IF;
@@ -83,7 +83,7 @@ BEGIN
  WHERE k NOT IN ('data_registrazione','descrizione','causale_id');
  IF cardinality(coalesce(v_header_keys,ARRAY[]::text[]))>0
   OR char_length(btrim(coalesce(p_header->>'descrizione',''))) NOT BETWEEN 5 AND 500
-  OR coalesce(p_header->>'data_registrazione','') !~ '^\\d{4}-\\d{2}-\\d{2}$' THEN
+  OR coalesce(p_header->>'data_registrazione','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
   RAISE EXCEPTION 'Stage3U header missing required fields or has restricted properties';
  END IF;
  v_date:=(p_header->>'data_registrazione')::date;
