@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
+import { fetchScopedFiscalData } from '../../lib/fiscalApi'
 import { useAIStatus } from '../../context/AIStatusContext'
 import { renderPDFPagesToImages } from '../../shared/utils'
 import { ModuleHeader } from '../../shared/components'
@@ -175,16 +176,23 @@ export function ModuloRevisioneDich({ utente }) {
   const docRef   = useRef()
 
   useEffect(() => {
-    sb.from('clienti').select('id,nome,cognome,ragione_sociale,codice_fiscale')
-      .eq('attivo', true).order('nome').then(({ data }) => setClienti(data || []))
+    let active=true
+    fetchScopedFiscalData('clienti')
+      .then(rows=>{if(active)setClienti(rows)})
+      .catch(e=>{if(active){setClienti([]);setErrore(e.message)}})
+    return ()=>{active=false}
   }, [])
 
   const loadStorico = useCallback(async () => {
     setLoadingStorico(true)
-    const { data } = await sb.from('revisioni_dichiarativi')
-      .select('*,clienti(nome,cognome,ragione_sociale)').order('created_at', { ascending: false }).limit(30)
-    setStorico(data || [])
-    setLoadingStorico(false)
+    try{
+      const data=await fetchScopedFiscalData('revisioni_dichiarativi')
+      setStorico([...data].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,30))
+      setErrore(null)
+    }catch(e){
+      setStorico([])
+      setErrore(e.message||'Storico revisioni non disponibile')
+    }finally{setLoadingStorico(false)}
   }, [])
 
   // Drag & drop dichiarativo
@@ -212,11 +220,9 @@ export function ModuloRevisioneDich({ utente }) {
       // Cerca revisioni precedenti per stesso CF per confronto storico
       if (result.codice_fiscale) {
         setProgress('Ricerca storico anni precedenti...')
-        const { data: prev } = await sb.from('revisioni_dichiarativi')
-          .select('anno_imposta,reddito_imponibile,imposta_netta,saldo_dovuto,report_json')
-          .eq('codice_fiscale', result.codice_fiscale)
-          .order('anno_imposta', { ascending: false })
-          .limit(2)
+        const prev = (await fetchScopedFiscalData('revisioni_dichiarativi', {
+          codice_fiscale: result.codice_fiscale,
+        })).sort((a,b)=>(Number(b.anno_imposta)||0)-(Number(a.anno_imposta)||0)).slice(0,2)
         if (prev?.length) {
           result.confronto_anno_precedente = {
             disponibile: true,
