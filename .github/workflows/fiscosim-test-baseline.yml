@@ -76,7 +76,8 @@ jobs:
         run: |
           $paths = @(
             'scripts/security_p0/run-stage3n.ps1',
-            'scripts/security_p0/run-stage3p-preflight.ps1'
+            'scripts/security_p0/run-stage3p-preflight.ps1',
+            'scripts/security_p0/run-stage3p-foundation.ps1'
           )
           foreach ($path in $paths) {
             $tokens = $null
