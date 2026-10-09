@@ -36,7 +36,9 @@ function Unwrap-PinnedSql {
   throw ('Stage3U: unexpected SQL wrapper in '+$File)
  }
  $withoutStart=[regex]::Replace($source,'(?m)^BEGIN;\r?\n','')
- $withoutEnd=[regex]::Replace($withoutStart,('(?m)^'+$FinalTerminator+';\s*
+ $endOffset=$withoutStart.LastIndexOf($FinalTerminator+';')
+ if($endOffset -lt 0){throw ('Stage3U: missing SQL tail '+$FinalTerminator)}
+ $withoutEnd=$withoutStart.Substring(0,$endOffset)
  return $withoutEnd
 }
 $migration=Unwrap-PinnedSql '54_stage3u_general_journal_atomic_LAB_ONLY.sql' 'COMMIT'
