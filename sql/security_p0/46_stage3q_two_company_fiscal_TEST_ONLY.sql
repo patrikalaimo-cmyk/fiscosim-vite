@@ -82,13 +82,18 @@ BEGIN
  OR public.user_can_access_cliente('60000000-0000-4000-8000-000000000908') THEN
   RAISE EXCEPTION 'SECURITY FAILURE: Owner A CRM/fiscal scope';
  END IF;
- UPDATE public.avvisi_ade SET esito='irrelevant' WHERE id='60000000-0000-4000-8000-000000000911';
- GET DIAGNOSTICS n=ROW_COUNT;
- IF n<>0 THEN RAISE EXCEPTION 'SECURITY FAILURE: Owner A updated B notice'; END IF;
- UPDATE public.avvisi_ade SET esito='verificato'
- WHERE id='60000000-0000-4000-8000-000000000910';
- GET DIAGNOSTICS n=ROW_COUNT;
- IF n<>1 THEN RAISE EXCEPTION 'Stage3Q Owner A own notice update failed'; END IF;
+ BEGIN
+  UPDATE public.avvisi_ade SET esito='irrelevant'
+   WHERE id='60000000-0000-4000-8000-000000000911';
+  RAISE EXCEPTION 'SECURITY FAILURE: direct fiscal browser write allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
+ BEGIN
+  UPDATE public.avvisi_ade SET esito='verificato'
+   WHERE id='60000000-0000-4000-8000-000000000910';
+  RAISE EXCEPTION 'SECURITY FAILURE: direct owner browser write allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
 END $owner_a$;
 
 SET LOCAL "request.jwt.claim.sub"='60000000-0000-4000-8000-000000000904';
@@ -104,18 +109,17 @@ BEGIN
    WHERE id='60000000-0000-4000-8000-000000000912') THEN
    RAISE EXCEPTION 'SECURITY FAILURE: Owner B sees shared A fiscal notice';
  END IF;
- UPDATE public.revisioni_dichiarativi SET anno_imposta=2026
- WHERE id='60000000-0000-4000-8000-000000000913';
- GET DIAGNOSTICS n=ROW_COUNT;
- IF n<>0 THEN RAISE EXCEPTION 'SECURITY FAILURE: Owner B updated A declaration'; END IF;
+ BEGIN
+  UPDATE public.revisioni_dichiarativi SET anno_imposta=2026
+   WHERE id='60000000-0000-4000-8000-000000000913';
+  RAISE EXCEPTION 'SECURITY FAILURE: declaration browser write allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
  BEGIN
   UPDATE public.avvisi_ade SET societa_id='60000000-0000-4000-8000-000000000901'
   WHERE id='60000000-0000-4000-8000-000000000911';
-  RAISE EXCEPTION 'SECURITY FAILURE: fiscal company reassignment was allowed';
- EXCEPTION WHEN OTHERS THEN
-  IF SQLERRM NOT LIKE 'Fiscal record company ownership is immutable%' THEN
-   RAISE;
-  END IF;
+  RAISE EXCEPTION 'SECURITY FAILURE: fiscal owner override allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
 END $owner_b$;
 
