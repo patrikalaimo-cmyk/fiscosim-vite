@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { fetchScopedFiscalData } from '../../lib/fiscalApi'
+import { apiFetch } from '../../lib/auth'
 import { TIPO_LABEL, TIPO_COLOR, MODULI_DEFAULT, MODULI_DISPONIBILI, TIPO_CLIENTE } from '../../shared/constants'
 import { ModuleHeader } from '../../shared/components'
 
@@ -11,7 +12,7 @@ const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 const todayStr = () => new Date().toISOString().split('T')[0]
 const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
 
-export function ModuloClienti(){
+export function ModuloClienti({ utente }){
   const [clienti,setClienti]=useState([]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState("");
@@ -23,7 +24,20 @@ export function ModuloClienti(){
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState(null);
   const [selected,setSelected]=useState(new Set());
-  const EMPTY={nome:"",cognome:"",ragione_sociale:"",tipo_cliente:"forfettario",email:"",email_cc:[],codice_fiscale:"",partita_iva:"",note:"",moduli_attivi:MODULI_DEFAULT};
+  const [societaOptions,setSocietaOptions]=useState([]);
+  const EMPTY={nome:"",cognome:"",ragione_sociale:"",tipo_cliente:"forfettario",email:"",email_cc:[],codice_fiscale:"",partita_iva:"",note:"",moduli_attivi:MODULI_DEFAULT,societa_id:"",motivazione:""};
+  useEffect(()=>{
+    let active=true;
+    const assigned=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[];
+    if(!assigned.length){setSocietaOptions([]);return;}
+    sb.from('societa').select('id,denominazione').in('id',assigned).order('denominazione')
+      .then(({data,error})=>{
+        if(!active)return;
+        if(error){setErr(error.message);setSocietaOptions([]);return;}
+        setSocietaOptions(Array.isArray(data)?data:[]);
+      });
+    return ()=>{active=false};
+  },[utente]);
 
   const carica=useCallback(async()=>{
     setLoading(true);
@@ -45,7 +59,32 @@ export function ModuloClienti(){
     return mQ&&mT;
   });
 
-  const salva=async(data)=>{setSaving(true);setErr(null);try{if(modal.mode==="new"){const{error}=await sb.from("clienti").insert([data]);if(error)throw error;}else{const{error}=await sb.from("clienti").update(data).eq("id",modal.data.id);if(error)throw error;}await carica();setModal(null);}catch(e){setErr(e.message);}finally{setSaving(false);}};
+  const salva=async(data)=>{
+    setSaving(true);setErr(null);
+    try{
+      if(modal.mode==='new'){
+        if(!societaOptions.some(s=>s.id===data.societa_id)){
+          throw new Error('Seleziona una società autorizzata')
+        }
+        if(String(data.motivazione||'').trim().length<12){
+          throw new Error('Specifica la motivazione dell’assegnazione (almeno 12 caratteri)')
+        }
+        const {societa_id,motivazione,...newCustomer}=data;
+        const response=await apiFetch('/api/studio/client-create',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({societa_id,motivazione,data:newCustomer}),
+        });
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(payload.error||'Creazione cliente non riuscita');
+      }else{
+        // Existing customer changes are not safe for shared CRM until the
+        // fully scoped transactional update endpoint has been verified.
+        throw new Error('Modifica cliente temporaneamente bloccata: autorizzazione multisocietà non ancora collaudata');
+      }
+      await carica();setModal(null);
+    }catch(e){setErr(e.message||'Salvataggio non riuscito');}
+    finally{setSaving(false);}
+  };
   const elimina=async(id)=>{if(!confirm("Eliminare questo cliente?"))return;await sb.from("clienti").update({attivo:false}).eq("id",id);carica();};
 
   const salvaModuli=async(clienteId,moduli)=>{
@@ -60,7 +99,7 @@ export function ModuloClienti(){
 
   return(
     <div className="page">
-      {modal&&<ClienteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err}/>}
+      {modal&&<ClienteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err} societaOptions={societaOptions}/>} 
       {mailModal&&<SendMailModal cliente={mailModal} onClose={()=>setMailModal(null)}/>}
       {moduliModal&&<ModuliModal cliente={moduliModal} onSave={salvaModuli} onClose={()=>setModuliModal(null)}/>}
       {bulkModal&&<ModuliBulkModal clienti={selClienti} onSave={salvaModuli} onClose={()=>{setBulkModal(false);setSelected(new Set());}}/>}
@@ -143,7 +182,7 @@ export function ModuloClienti(){
 
 
 // ─── MODAL NUOVO/MODIFICA CLIENTE ────────────────────────────
-function ClienteModal({mode, data, onSave, onClose, saving, err}){
+function ClienteModal({mode, data, onSave, onClose, saving, err, societaOptions}){
   const [form,setForm]=useState({...data});
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
   const isNew=mode==='new';
@@ -164,6 +203,18 @@ function ClienteModal({mode, data, onSave, onClose, saving, err}){
         <div className="modal-body">
           {err&&<div className="alert alert-error" style={{marginBottom:'1rem'}}>{err}</div>}
           <div className="form-grid">
+            {isNew&&<>
+              <div className="fg full"><label>Società contabile proprietaria *</label>
+                <select value={form.societa_id||''} onChange={e=>up('societa_id',e.target.value)}>
+                  <option value="">— Seleziona esplicitamente la società —</option>
+                  {societaOptions.map(item=><option key={item.id} value={item.id}>{item.denominazione}</option>)}
+                </select>
+              </div>
+              <div className="fg full"><label>Motivazione dell’assegnazione *</label>
+                <textarea value={form.motivazione||''} onChange={e=>up('motivazione',e.target.value)}
+                  placeholder="Motivo verificato dell’associazione cliente-società" rows={2}/>
+              </div>
+            </>}
             <div className="fg"><label>Nome</label><input value={form.nome||''} onChange={e=>up('nome',e.target.value)} placeholder="Nome"/></div>
             <div className="fg"><label>Cognome</label><input value={form.cognome||''} onChange={e=>up('cognome',e.target.value)} placeholder="Cognome"/></div>
             <div className="fg full"><label>Ragione Sociale</label><input value={form.ragione_sociale||''} onChange={e=>up('ragione_sociale',e.target.value)} placeholder="Per società e ditte"/></div>
