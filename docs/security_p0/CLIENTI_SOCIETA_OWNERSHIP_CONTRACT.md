@@ -56,3 +56,12 @@ Ambito: `clienti`, `societa`, `utenti_studio_societa`, `avvisi_ade`,
 - **Studio-grade complessivo**: non chiuso senza scenari operativi reali contabili/fiscali XML→prima nota→IVA→liquidazioni→stampe, per ciascun regime/caso applicabile.
 
 Non applicare questa specifica come migrazione SQL senza il relativo piano di transizione e collaudo isolato.
+
+
+## Stage3P foundation preparata (non applicata)
+- `sql/security_p0/41_stage3p_ownership_preflight_READ_ONLY.sql` e `scripts/security_p0/run-stage3p-preflight.ps1` raccolgono solo cataloghi e conteggi aggregati su cliente/società/avvisi/revisioni, in transazione `BEGIN READ ONLY ... ROLLBACK`.
+- `sql/security_p0/42_stage3p_empty_crm_link_LAB_ONLY.sql` crea **solo** `public.crm_cliente_societa_link` con PK composta `(cliente_id,societa_id)`, tre FK a `clienti`, `societa` e `auth.users`, obbligo di `assigned_by` e `decision_reason`, RLS attiva, zero policy, zero grants browser, grants service_role `SELECT/INSERT` soltanto. Nessun collegamento creato automaticamente e nessun dato fiscale modificato.
+- `43_stage3p_empty_crm_link_TEST_ONLY.sql` copre `anon`, `authenticated` e `service_role` con SQL a zero righe e `ROLLBACK`. Tutti i risultati SQL Stage3P sono **DA COLLAUDARE NEL DOCKER** prima di accettare la fondazione.
+- La tabella ponte **non è sufficiente** per la sicurezza effettiva dei record. Non vengono modificate RLS o privilegi attuali di `clienti`, `avvisi_ade`, `revisioni_dichiarativi`. Questi ultimi restano P0 APERTI.
+- Una relazione cliente↔società M:N non identifica automaticamente il **singolo proprietario** di un avviso, di una revisione o di un documento. Serviranno scope fiscal-record univoci, vincoli server e RLS complete, con backfill legacy soltanto dopo riconciliazione manuale.
+- Prima di eseguire `42` occorre esaminare l'output effettivo di `41` per verificare nomi, tipi, vincoli e dati preesistenti. Nessuna applicazione automatica al database reale.
