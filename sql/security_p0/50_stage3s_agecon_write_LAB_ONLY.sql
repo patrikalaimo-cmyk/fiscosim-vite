@@ -59,8 +59,8 @@ BEGIN
  WHERE us.auth_user_id=p_auth_user_id AND us.attivo IS TRUE
   AND membership.societa_id=p_societa_id AND so.attiva IS TRUE
   AND (
-   us.ruolo IN ('owner','admin') OR (
-    us.ruolo='collaboratore'
+   (us.ruolo IN ('owner','admin') AND membership.ruolo IN ('owner','admin')) OR (
+    us.ruolo='collaboratore' AND membership.ruolo='collaboratore'
     AND coalesce((us.permessi->'agecon'->>'modifica')::boolean,false)
    )
   )
