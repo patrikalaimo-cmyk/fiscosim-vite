@@ -19,6 +19,12 @@ BEGIN
    RAISE EXCEPTION 'Stage3U missing accounting prerequisite %',t;
   END IF;
  END LOOP;
+ IF (SELECT count(*) FROM public.prima_nota)<>0
+  OR (SELECT count(*) FROM public.prima_nota_righe)<>0
+  OR (SELECT count(*) FROM public.audit_contabile)<>0
+  OR (SELECT count(*) FROM public.piano_conti)<>0 THEN
+  RAISE EXCEPTION 'Stage3U candidate restricted to an empty accounting LAB';
+ END IF;
  IF to_regclass('public.fiscosim_general_journal_claim') IS NOT NULL
   OR to_regprocedure('public.fiscosim_post_general_journal(uuid,uuid,uuid,jsonb,jsonb,text)') IS NOT NULL
  THEN RAISE EXCEPTION 'Stage3U already present: never rerun without a fresh audit'; END IF;
@@ -129,8 +135,8 @@ BEGIN
   IF jsonb_typeof(v_line)<>'object'
    OR (SELECT count(*) FROM jsonb_object_keys(v_line) k
       WHERE k NOT IN ('conto_id','dare','avere','descrizione'))>0
-   OR jsonb_typeof(v_line->'dare')<>'number'
-   OR jsonb_typeof(v_line->'avere')<>'number'
+   OR jsonb_typeof(v_line->'dare') IS DISTINCT FROM 'number'
+   OR jsonb_typeof(v_line->'avere') IS DISTINCT FROM 'number'
   THEN RAISE EXCEPTION 'Stage3U restricted journal row fields'; END IF;
   v_conto:=nullif(v_line->>'conto_id','')::uuid;
   v_dare:=(v_line->>'dare')::numeric;
