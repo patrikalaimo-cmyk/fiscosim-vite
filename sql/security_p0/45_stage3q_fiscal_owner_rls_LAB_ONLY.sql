@@ -70,12 +70,17 @@ USING (
   public.user_has_societa_access(societa_id)
   AND EXISTS (
     SELECT 1 FROM public.utenti_studio us
+    JOIN public.utenti_studio_societa m
+      ON m.utente_id=us.id AND m.auth_user_id=us.auth_user_id
     WHERE us.auth_user_id=auth.uid()
       AND us.attivo IS TRUE
+      AND m.societa_id=crm_cliente_societa_link.societa_id
       AND (
-        us.ruolo IN ('owner','admin')
-        OR coalesce((us.permessi->'clienti'->>'solo_assegnati')::boolean,false)=false
-        OR cliente_id=ANY(coalesce(us.clienti_assegnati,'{}'::uuid[]))
+        (us.ruolo IN ('owner','admin') AND m.ruolo IN ('owner','admin'))
+        OR (us.ruolo='collaboratore' AND m.ruolo='collaboratore' AND (
+          coalesce((us.permessi->'clienti'->>'solo_assegnati')::boolean,false)=false
+          OR cliente_id=ANY(coalesce(us.clienti_assegnati,'{}'::uuid[]))
+        ))
       )
   )
 );
@@ -93,12 +98,17 @@ SET search_path = pg_catalog AS $$
    FROM public.crm_cliente_societa_link link
    JOIN public.utenti_studio us
      ON us.auth_user_id=auth.uid() AND us.attivo IS TRUE
+   JOIN public.utenti_studio_societa m
+     ON m.utente_id=us.id AND m.auth_user_id=us.auth_user_id
+     AND m.societa_id=link.societa_id
    WHERE link.cliente_id=target_cliente
      AND public.user_has_societa_access(link.societa_id)
      AND (
-      us.ruolo IN ('owner','admin')
-      OR coalesce((us.permessi->'clienti'->>'solo_assegnati')::boolean,false)=false
-      OR target_cliente=ANY(coalesce(us.clienti_assegnati,'{}'::uuid[]))
+      (us.ruolo IN ('owner','admin') AND m.ruolo IN ('owner','admin'))
+      OR (us.ruolo='collaboratore' AND m.ruolo='collaboratore' AND (
+       coalesce((us.permessi->'clienti'->>'solo_assegnati')::boolean,false)=false
+       OR target_cliente=ANY(coalesce(us.clienti_assegnati,'{}'::uuid[]))
+      ))
      )
   );
 $$;
@@ -231,7 +241,12 @@ USING (
   public.user_has_societa_access(societa_id)
   AND (
     (cliente_id IS NULL AND (
-      public.current_utente_ruolo() IN ('owner','admin')
+      EXISTS (SELECT 1 FROM public.utenti_studio_societa m
+        JOIN public.utenti_studio us ON us.id=m.utente_id
+         AND us.auth_user_id=m.auth_user_id
+        WHERE us.auth_user_id=auth.uid() AND us.attivo IS TRUE
+         AND us.ruolo IN ('owner','admin') AND m.ruolo IN ('owner','admin')
+         AND m.societa_id=revisioni_dichiarativi.societa_id)
       OR created_by=public.current_utente_studio_id()
     )) OR (
       cliente_id IS NOT NULL
@@ -248,7 +263,12 @@ WITH CHECK (
   public.user_has_societa_access(societa_id)
   AND (
     (cliente_id IS NULL AND (
-      public.current_utente_ruolo() IN ('owner','admin')
+      EXISTS (SELECT 1 FROM public.utenti_studio_societa m
+        JOIN public.utenti_studio us ON us.id=m.utente_id
+         AND us.auth_user_id=m.auth_user_id
+        WHERE us.auth_user_id=auth.uid() AND us.attivo IS TRUE
+         AND us.ruolo IN ('owner','admin') AND m.ruolo IN ('owner','admin')
+         AND m.societa_id=revisioni_dichiarativi.societa_id)
       OR created_by=public.current_utente_studio_id()
     )) OR (
       cliente_id IS NOT NULL
