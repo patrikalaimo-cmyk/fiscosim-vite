@@ -565,6 +565,10 @@ server.on('error', (err) => {
   throw err
 })
 
-server.listen(PORT, () => {
+// Isolated security-lab mode MUST NOT expose its service-role-backed API
+// to LAN interfaces. Keep legacy dev mode behavior unchanged.
+const listenHost = process.env.FISCOSIM_ISOLATED_LAB_API === 'true'
+  ? '127.0.0.1' : undefined
+server.listen(PORT, listenHost, () => {
   console.log(`[dev-api] listening on http://localhost:${PORT}`)
 })
