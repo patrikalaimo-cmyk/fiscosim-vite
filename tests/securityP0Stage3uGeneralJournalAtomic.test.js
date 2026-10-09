@@ -95,3 +95,38 @@ test('Stage3U SQL ensures service-role-only invoker, actual all-or-nothing inser
  assert.doesNotMatch(sql,/DELETE FROM public\./)
  assert.doesNotMatch(sql,/\bEXCEPTION WHEN OTHERS THEN NULL\b/)
 })
+
+test('Stage3U PostgreSQL A/B SQL matrix exercises complete rollback after late audit failure',()=>{
+ const matrix=source('sql/security_p0/55_stage3u_general_journal_matrix_TEST_ONLY.sql')
+ for(const marker of [
+  'local-general-journal-matrix-rollback-only',
+  'SET LOCAL ROLE service_role;',
+  'fiscosim_post_general_journal(',
+  'exact request replay did not return same PN ID',
+  'reused key accepted changed payload',
+  'foreign actor posted PN',
+  'foreign chart account posted PN',
+  'unbalanced journal saved',
+  'audit must occur once on replay',
+  'REVOKE INSERT ON public.audit_contabile FROM service_role',
+  'EXCEPTION WHEN insufficient_privilege THEN NULL',
+  'failed audit left idempotency claim',
+  'failed audit left a posted PN',
+  'GRANT INSERT ON public.audit_contabile TO service_role',
+  'STAGE3U_LAB_MATRIX|PASS|FIXTURE_ROLLBACK',
+  'ROLLBACK;',
+ ])assert.ok(matrix.includes(marker),marker)
+ assert.doesNotMatch(matrix,/\bCOMMIT\s*;/)
+})
+
+test('Stage3U is not auto-enabled in browser Manuale or importer',()=>{
+ const pn=source('src/modules/contabilita/application/persistPrimaNotaDraft.js')
+ const service=source('services/primaNotaService.js')
+ const api=source('api/studio/general-journal-post.js')
+ assert.match(pn,/createPrimaNotaCompleta/)
+ assert.match(service,/cleanupPrimaNotaCompleta/)
+ assert.match(api,/GENERAL_JOURNAL_LAB_ONLY_DISABLED/)
+ assert.doesNotMatch(pn,/fiscosim_post_general_journal/)
+ assert.doesNotMatch(api,/VITE_SUPABASE_SERVICE_ROLE_KEY/)
+ assert.match(sql,/Stage3U requires explicit isolated LAB approval/)
+})
