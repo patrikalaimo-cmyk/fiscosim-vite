@@ -31,6 +31,19 @@ Non esiste, nelle evidenze versionate esaminate, un verbale **PASS** di ciclo co
 
 **Nota fonti:** `REPORT/FISCOSIM_TEST_MATRIX.md`, `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`, `REPORT/REPORT_CODEX.md` (sezioni 2026-10-07/09), `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`, `REPORT/IVA_REGISTRI_LIQUIDAZIONE_FREEZE_AUDIT.md` e roadmap ufficiale `ROADMAP_FISCOSIM_STUDIO_GRADE.md`. I documenti più vecchi che chiamano un sottoblocco "Studio Grade completo" vanno letti come **stato di sviluppo/CI di quella fase**, non come certificazione end-to-end dell'intero ciclo.
 
+## 2a. Rischio P0 contabile verificato direttamente nel codice (non mera ipotesi)
+
+`src/modules/contabilita/application/persistPrimaNotaDraft.js` chiama `createPrimaNotaCompleta` per salvare dati contabili. L'implementazione in `services/primaNotaService.js` attuale esegue **richieste DB distinte**:
+1. INSERT testata `prima_nota` (circa linea 105).
+2. INSERT righe `prima_nota_righe` (circa linea 127).
+3. INSERT `registri_iva` (circa linea 140).
+4. INSERT/apertura `partitario` e UPDATE di partite esistenti (circa linee 164, 182, 305).
+5. INSERT e UPDATE delle `ritenute_dacconto` (circa linee 205, 223).
+
+Il fallback `cleanupPrimaNotaCompleta` (circa linee 74–88) prova a cancellare per `prima_nota_id` le righe create e la testata, sopprimendo errori durante il cleanup. **Non rappresenta una transazione ACID unica**; il cleanup non riporta automaticamente allo stato precedente le UPDATE già eseguite su partite o ritenute precedenti. Inoltre, un guasto di rete può rendere dubbio l'esito del commit e una ritrasmissione può duplicare effetti senza idempotenza server.
+
+**Gate contabile ZERO prima della certificazione:** creare e collaudare una RPC server-side **single-transaction** per il salvataggio canonico PN con dettagli IVA/partitario/ritenute, snapshot/audit, controllo società/Auth, anti-duplicazione e test di errore in ciascuna fase. Non riutilizzare la RPC CRM Stage3R come se coprisse la PN. Nessuna nuova scrittura reale di contabilizzazione è autorizzata finché non sia possibile provare rollback completo in laboratorio.
+
 ## 3. Ordine obbligatorio per il prossimo ciclo E2E reale
 
 Eseguire **solo su un laboratorio isolato senza dati clienti reali**. Nessun test deve impostare automaticamente `PASS` in assenza di prova leggibile su database. Un intervento non richiesto nel Supabase LIVE è vietato.
