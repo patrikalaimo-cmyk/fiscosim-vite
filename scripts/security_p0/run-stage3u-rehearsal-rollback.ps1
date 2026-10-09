@@ -83,6 +83,7 @@ $lines=@(
  ('COMMIT='+$sha.Trim()),
  ('LAB_ONLY='+$Container),
  'SINGLE_TRANSACTION_ROLLBACK=true',
+ 'WARNING=PostgreSQL sequence nextval may advance despite ROLLBACK; no business rows persist',
  'NO_REAL_JWT_OR_UI_TEST=true'
 )+@($log | ForEach-Object {[string]$_})
 $lines | Out-File -LiteralPath $report -Encoding UTF8
@@ -109,6 +110,7 @@ if(-not $ok){
 Write-Host 'STAGE3U POSTGRESQL REHEARSAL PASS; ALL SQL AND FIXTURES ROLLED BACK' -ForegroundColor Green
 Write-Host ('Report: '+$report)
 Write-Host 'No schema or accounting rows installed. JWT / UI / fiscal cycle still not tested.'
+Write-Host 'NOTICE: PostgreSQL sequence counters may advance despite transaction ROLLBACK.' -ForegroundColor Yellow
 ),'')
  return $withoutEnd
 }
