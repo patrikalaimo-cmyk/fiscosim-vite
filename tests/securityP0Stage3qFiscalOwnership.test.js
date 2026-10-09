@@ -43,7 +43,8 @@ test('Stage3Q locks both fiscal company and customer, even with shared CRM',()=>
   'BEFORE UPDATE OF societa_id,cliente_id',
   'Fiscal record company ownership is immutable',
   'Fiscal record customer ownership is immutable',
-  "public.current_utente_ruolo() IN ('owner','admin')",
+  "us.ruolo IN ('owner','admin') AND m.ruolo IN ('owner','admin')",
+  "m.societa_id=crm_cliente_societa_link.societa_id",
   'created_by=public.current_utente_studio_id()',
   'REVOKE INSERT,UPDATE,DELETE ON TABLE',
   'fiscal table ACL inconsistent'
