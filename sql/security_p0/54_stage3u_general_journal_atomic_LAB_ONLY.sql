@@ -167,17 +167,43 @@ BEGIN
  FOR v_line IN SELECT value FROM jsonb_array_elements(p_rows) LOOP
   v_index:=v_index+1;
   v_conto:=(v_line->>'conto_id')::uuid;
-  INSERT INTO public.prima_nota_righe(
-   prima_nota_id,societa_id,riga_numero,conto_id,
-   conto_codice,conto_descrizione,descrizione_riga,
-   importo_dare,importo_avere
-  ) SELECT
-   v_pn_id,p_societa_id,v_index,v_conto,pc.codice,pc.descrizione,
-   nullif(btrim(v_line->>'descrizione'),''),
-   (v_line->>'dare')::numeric,(v_line->>'avere')::numeric
-  FROM public.piano_conti pc
-  WHERE pc.id=v_conto AND pc.societa_id=p_societa_id
-  AND pc.attivo IS TRUE;
+  -- Local Stage3S PostgreSQL and the historical bootstrap differ:
+  -- local prima_nota_righe has NO societa_id; the repo's bootstrap has one.
+  -- Ownership is ALWAYS anchored by prima_nota_id -> prima_nota.societa_id.
+  -- When the denormalized column exists, populate it consistently as well.
+  IF EXISTS(
+   SELECT 1 FROM pg_catalog.pg_attribute
+   WHERE attrelid='public.prima_nota_righe'::regclass
+    AND attname='societa_id' AND attnum>0 AND NOT attisdropped
+  ) THEN
+   EXECUTE $line_with_company$
+    INSERT INTO public.prima_nota_righe(
+     prima_nota_id,societa_id,riga_numero,conto_id,
+     conto_codice,conto_descrizione,descrizione_riga,
+     importo_dare,importo_avere
+    )
+    SELECT $1,$2,$3,$4,pc.codice,pc.descrizione,$5,$6,$7
+    FROM public.piano_conti pc
+    WHERE pc.id=$4 AND pc.societa_id=$2 AND pc.attivo IS TRUE
+   $line_with_company$
+   USING v_pn_id,p_societa_id,v_index,v_conto,
+    nullif(btrim(v_line->>'descrizione'),''),
+    (v_line->>'dare')::numeric,(v_line->>'avere')::numeric;
+  ELSE
+   -- No extra societa_id column is created: deriving from the FK avoids
+   -- competing or silently mismatched company ownership assertions.
+   INSERT INTO public.prima_nota_righe(
+    prima_nota_id,riga_numero,conto_id,
+    conto_codice,conto_descrizione,descrizione_riga,
+    importo_dare,importo_avere
+   ) SELECT
+    v_pn_id,v_index,v_conto,pc.codice,pc.descrizione,
+    nullif(btrim(v_line->>'descrizione'),''),
+    (v_line->>'dare')::numeric,(v_line->>'avere')::numeric
+   FROM public.piano_conti pc
+   WHERE pc.id=v_conto AND pc.societa_id=p_societa_id
+    AND pc.attivo IS TRUE;
+  END IF;
   IF NOT FOUND THEN RAISE EXCEPTION 'Stage3U chart account changed during posting'; END IF;
  END LOOP;
  INSERT INTO public.audit_contabile(
