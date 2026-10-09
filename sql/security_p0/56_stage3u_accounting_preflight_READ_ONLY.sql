@@ -34,7 +34,7 @@ BEGIN
   ('prima_nota','descrizione'),('prima_nota','stato'),
   ('prima_nota','created_by'),('prima_nota','totale_dare'),
   ('prima_nota','totale_avere'),
-  ('prima_nota_righe','prima_nota_id'),('prima_nota_righe','societa_id'),
+  ('prima_nota_righe','prima_nota_id'),
   ('prima_nota_righe','riga_numero'),('prima_nota_righe','conto_id'),
   ('prima_nota_righe','conto_codice'),('prima_nota_righe','conto_descrizione'),
   ('prima_nota_righe','descrizione_riga'),
@@ -51,6 +51,17 @@ BEGIN
  );
  IF missing IS NOT NULL THEN
   RAISE EXCEPTION 'Stage3U accounting columns MISSING: %',missing;
+ END IF;
+ -- Stage3S local PG does not have prima_nota_righe.societa_id. The
+ -- journal's ownership is canonical in parent prima_nota.societa_id.
+ -- Refuse parentless lines: foreign-key scope is mandatory.
+ IF NOT EXISTS(
+  SELECT 1 FROM pg_catalog.pg_constraint c
+  WHERE c.conrelid='public.prima_nota_righe'::regclass
+    AND c.confrelid='public.prima_nota'::regclass
+    AND c.contype='f'
+ ) THEN
+  RAISE EXCEPTION 'Stage3U journal lines require FK to parent prima_nota';
  END IF;
  IF to_regclass('public.fiscosim_general_journal_claim') IS NOT NULL
   OR to_regprocedure('public.fiscosim_post_general_journal(uuid,uuid,uuid,jsonb,jsonb,text)') IS NOT NULL THEN
@@ -71,6 +82,12 @@ BEGIN
 END $guard$;
 SELECT 'STAGE3U_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST' AS result;
 SELECT 'STAGE3U_DB_VERSION|'||current_setting('server_version') AS result;
+SELECT 'STAGE3U_LINE_TENANT_SCOPE|'||
+ CASE WHEN EXISTS(
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  WHERE a.attrelid='public.prima_nota_righe'::regclass
+   AND a.attname='societa_id' AND a.attnum>0 AND NOT a.attisdropped
+ ) THEN 'PARENT_AND_LINE_COMPANY' ELSE 'PARENT_ONLY_COMPANY' END AS result;
 SELECT 'STAGE3U_PN_COUNT|'||(SELECT count(*) FROM public.prima_nota)::text AS result;
 SELECT 'STAGE3U_AUDIT_COUNT|'||(SELECT count(*) FROM public.audit_contabile)::text AS result;
 ROLLBACK;
