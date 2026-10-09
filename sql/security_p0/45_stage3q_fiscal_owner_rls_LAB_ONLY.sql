@@ -142,6 +142,12 @@ BEGIN
  END LOOP;
 END $client_acl$;
 
+-- Clienti UI already offers phone and address, but LAB schema had neither.
+-- Add them only in the gated, empty LAB schema transition.
+ALTER TABLE public.clienti
+ ADD COLUMN telefono text,
+ ADD COLUMN indirizzo text;
+
 -- Every fiscal row must have exactly one company scope, even if its CRM
 -- customer is linked to two companies. A nullable client on declarations
 -- is allowed for "without archiving"; the company remains mandatory.
