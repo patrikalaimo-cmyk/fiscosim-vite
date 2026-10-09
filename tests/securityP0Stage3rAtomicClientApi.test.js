@@ -75,7 +75,7 @@ test('Stage3R studio CRM UI requires explicit society and ownership reason',()=>
  assert.match(ui,/Società contabile proprietaria \*/)
  assert.match(ui,/Motivazione dell’assegnazione \*/)
  assert.doesNotMatch(ui,/sb\.from\("clienti"\)\.insert/)
- assert.match(ui,/Modifica cliente temporaneamente bloccata/)
+ assert.match(ui,/apiFetch\('\/api\/studio\/client-update'/)
  assert.match(dbTransition,/ALTER TABLE public\.clienti\s+ADD COLUMN telefono text,\s+ADD COLUMN indirizzo text/)
 })
 
@@ -87,9 +87,11 @@ test('Stage3R fiscal modules use the protected reads, with writes explicitly pen
  assert.match(revisions,/fetchScopedFiscalData\('clienti'\)/)
  assert.match(readerApi,/canReadFiscalResource\(ctx\.profile,resource\)/)
  assert.equal(canReadFiscalResource({ruolo:'collaboratore',permessi:{}},'avvisi_ade'),false)
- // Not deployed: direct fiscal writes still require the next safe API migration.
- assert.match(agecon,/sb\.from\('avvisi_ade'\)\.insert/)
- assert.match(revisions,/sb\.from\('revisioni_dichiarativi'\)\.insert/)
+ // Candidate scoped APIs replace the previous direct DML, not yet deployed.
+ assert.doesNotMatch(agecon,/sb\.from\('avvisi_ade'\)\.insert/)
+ assert.doesNotMatch(revisions,/sb\.from\('revisioni_dichiarativi'\)\.insert/)
+ assert.match(agecon,/apiFetch\('\/api\/studio\/agecon-write'/)
+ assert.match(revisions,/apiFetch\('\/api\/studio\/revision-archive'/)
 })
 
 test('Stage3R real SQL atomic transaction fixture remains rollback-only',()=>{
