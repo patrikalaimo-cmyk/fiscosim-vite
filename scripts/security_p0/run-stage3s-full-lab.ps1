@@ -104,18 +104,17 @@ ROLLBACK;
  $out=@($final | & docker exec -i $Container psql -X -v ON_ERROR_STOP=1 `
   -U postgres -d postgres -A -t -F '|' -P pager=off 2>&1)
  foreach($l in $out){$lines.Add([string]$l)}
- if($LASTEXITCODE -ne 0 -or -not ($out -contains '3S_FINAL|0|0|0|0|0|3')
-  -or -not ($out -contains 'ROLLBACK')){
+ if(($LASTEXITCODE -ne 0) -or (-not ($out -contains '3S_FINAL|0|0|0|0|0|3')) -or (-not ($out -contains 'ROLLBACK'))){
   throw 'Stage3S final sealed, empty tables and 3 restrictive RLS not verified'
  }
- @('STAGE3S FULL LAB PASS')+$lines.ToArray() |
+ (@('STAGE3S FULL LAB PASS') + $lines.ToArray()) |
   Out-File -LiteralPath $report -Encoding UTF8
  Write-Host 'STAGE3S FULL LAB PASS' -ForegroundColor Green
  Write-Host ('Report: '+$report)
  Write-Host 'No live Supabase access. No customer fixtures persisted.'
  Write-Host 'Signed JWT/API/UI E2E remains untested.'
 }catch{
- @('STAGE3S FULL LAB FAIL',('FAILED_STEP='+$_.Exception.Message))+
-  $lines.ToArray() | Out-File -LiteralPath $report -Encoding UTF8
+ (@('STAGE3S FULL LAB FAIL',('FAILED_STEP='+$_.Exception.Message)) +
+  $lines.ToArray()) | Out-File -LiteralPath $report -Encoding UTF8
  throw
 }
