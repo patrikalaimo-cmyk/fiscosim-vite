@@ -1,6 +1,7 @@
 /**
  * LAB-only HTTP facade for Stage3W fiscal atomic commit.
- * Not wired to Registrazione Manuale / Import UI.
+ * Optional Manuale/Import path only when FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED
+ * (or VITE_…) is true AND this endpoint is lab-enabled. Default remains createPrimaNotaCompleta.
  */
 import { requireApiAuth } from '../../lib/auth.js'
 import { getSupabaseAdmin } from '../../lib/db.js'

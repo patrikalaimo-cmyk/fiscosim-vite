@@ -1,8 +1,8 @@
 # Contratto salvataggio fiscale atomico — SG-P0-01 (2026-10-10)
 
 **Branch:** `feat/studio-grade-accounting-e2e-20261010`  
-**Stato:** CANDIDATO documentato + SQL/API LAB-only. **Non collegato** a Manuale/Import UI.  
-**PostgreSQL LAB:** NON eseguito in Cloud Agent. Prove Windows: preflight READ ONLY → rehearsal ROLLBACK (approvazione richiesta).
+**Stato:** SQL LAB installata (persistente PASS). Wire Manuale/Import **opzionale LAB** via flag (default OFF).  
+**Flag persist:** `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true` + `VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true` e endpoint `FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED=true` su stack isolato.
 
 ---
 

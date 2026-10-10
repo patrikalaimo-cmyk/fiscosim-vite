@@ -751,3 +751,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Esito: `STAGE3W_PERSISTENT_LAB_INSTALL_PASS` — DDL 57 COMMIT; matrix 58 PASS + fixture ROLLBACK; postflight `SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK`.
 - RPC `fiscosim_post_fiscal_journal` presente in LAB; claim table vuota; Stage3U preservato; no LIVE; no UI wire.
 - SG-P0-01 L2 LAB schema: **GREEN**. Prossimi solo su nuovo consenso: wire Manuale/Import (cut-over), L3 JWT (bloccato porte), o altri item roadmap.
+
+
+## 2026-10-10 — Stage3W LAB-gated Manuale/Import persist wire (default OFF)
+
+- Operatore: «ok procedi» dopo install persistente PASS.
+- Aggiunto percorso opzionale in `persistPrimaNotaDraft`: se `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED` / `VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true`, mappa piano DB → POST `/api/studio/fiscal-journal-post` (richiede anche flag endpoint LAB).
+- Moduli: `fiscalJournal/isFiscalJournalPersistLabEnabled.js`, `resolveFiscalContractKind.js`, `mapPersistencePlanToFiscalJournalRequest.js`, `postFiscalJournalAtomicViaStudioApi.js`.
+- Default invariato: `createPrimaNotaCompleta`. Nessun nome RPC in `persistPrimaNotaDraft.js`. JWT L3 non eseguito (porte).

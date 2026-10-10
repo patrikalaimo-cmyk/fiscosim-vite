@@ -154,13 +154,15 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 - Contratto, scenari indipendenti, RPC candidata Stage3W, matrix SQL, API LAB e CI branch: **preparati in codice**.
 - Dettaglio: `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`.
 - Windows P0 LAB: preflight READ-ONLY **PASS** + rehearsal ROLLBACK **PASS** + install persistente **PASS** (`…231404-750.txt`, commit `fe21da0`). RPC Stage3W presente; fixture rolled back; Stage3U OK.
-- Prossimi solo su nuovo consenso: cut-over UI Manuale/Import e/o L3 JWT (porte LAB ancora da sanare).
+- Wire Manuale/Import → Stage3W: **implementato dietro flag LAB (default OFF)**. Attivazione runtime richiede env LAB + `dev-api` + sessione owner/admin.
+- L3 JWT ancora bloccato da porte non-loopback.
 
 ## Prossima sessione
 
 1. **Non** applicare SG-P0-00 senza approvazione.  
 2. ~~Preflight + rehearsal ROLLBACK Stage3W sul LAB P0~~ **FATTO** (2026-10-10).  
 3. ~~Install LAB persistente~~ **FATTO** (`…231404-750.txt`).  
-4. Solo su nuovo consenso: L3 JWT (dopo porte loopback) e/o cut-over UI; path `createPrimaNotaCompleta` resta invariato fino ad allora.
+4. Cut-over UI: codice pronto **flag OFF**; per prove LAB impostare flag persist+endpoint (vedi contratto). Default produttivo resta `createPrimaNotaCompleta`.  
+5. L3 JWT solo dopo porte loopback + nuovo consenso.
 
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
