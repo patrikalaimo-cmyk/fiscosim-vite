@@ -24,11 +24,22 @@ if($LASTEXITCODE -ne 0 -or -not $sha -or $sha.Trim() -ne $ExpectedCommit){
 }
 $sha=$sha.Trim()
 
+function Assert-DockerDaemon(){
+ $probe=(& docker info 2>&1)
+ if($LASTEXITCODE -ne 0){
+  $txt=(@($probe) -join ' ')
+  if($txt -match 'dockerDesktopLinuxEngine|cannot connect|Is the docker daemon running|Impossibile trovare'){
+   throw 'Stage3W LAB UI: Docker Desktop is NOT running. Start Docker Desktop, wait until it is Ready, then re-run this script.'
+  }
+  throw ('Stage3W LAB UI: docker unavailable: '+$txt)
+ }
+}
 function Assert-ContainerRunning([string]$Name,[string]$Label){
  $running=(& docker inspect --format '{{.State.Running}}' $Name 2>&1)
- if($LASTEXITCODE -ne 0){ throw ("Stage3W LAB UI: missing container "+$Name+" ("+$Label+")") }
+ if($LASTEXITCODE -ne 0){ throw ("Stage3W LAB UI: missing container "+$Name+" ("+$Label+") — start the P0 LAB stack first") }
  if((@($running) -join '').Trim() -ne 'true'){ throw ("Stage3W LAB UI: container not running "+$Name) }
 }
+Assert-DockerDaemon
 Assert-ContainerRunning $Container 'PostgreSQL'
 Assert-ContainerRunning $KongContainer 'Kong 55321'
 Assert-ContainerRunning $AuthContainer 'GoTrue Auth'
