@@ -819,3 +819,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Persist id `86b346d6-3560-4c9b-b903-287a5d779d78`; report `REPORT/STAGE3W_LIQUIDAZIONE_SGE2E_20261011-000936.txt`.
 - Non JWT/UI; non RPC consolidamento ufficiale (tabella diretta LAB). Path default Manuale invariato.
 
+
+## 2026-10-11 — Consolidamento IVA RPC ufficiale su SG-E2E PASS
+
+- Script `scripts/security_p0/run-stage3w-liquidazione-consolidamento-sge2e.mjs`: `consolida_periodo_iva_transazionale` su LAB P0 con payload da `calcoloLiquidazioneIvaDefinitiva` sui registri SG-E2E.
+- Esiti: consolidamento **provvisorio** PASS; **riconsolidamento** sostituisce riga precedente PASS; lock `[stato:definitiva]` in note → RPC rifiuta riconsolidamento PASS.
+- Snapshot finale `a9e136d3-93b6-4fba-b962-3124d993b26c`: iva_debito **448.80** (lordo RPC da `ivaVenditeLorda`), credito **220**, saldo **8.80**.
+- Report: `REPORT/STAGE3W_LIQUIDAZIONE_CONSOLIDAMENTO_SGE2E_20261011.txt`.
+- Gap documentato: nello schema LAB allineato non esiste RPC dedicata `mark definitiva`; il blocco usa marker in `note`. Non JWT/UI.
+

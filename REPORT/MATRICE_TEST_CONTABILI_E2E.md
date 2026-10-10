@@ -94,7 +94,7 @@
 | F01 | Liquidazione | Mensile/trimestrale | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 mensile SG-E2E saldo 8.80 | `STAGE3W_LIQUIDAZIONE_SGE2E_20261011-000936.txt` | trimestrale/L3 | P2 |
 | F02 | Liquidazione | Debito/credito/riporti | IMPLEMENTED | L1 | PASS (unit) | liquidazione service | PG | P2 |
 | F03 | Liquidazione | Split / cassa / reverse / NC | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 split escluso + NC su SG-E2E | `…000936.txt` debito eff. 228.80 | cassa/reverse L2; L3 | P2 |
-| F04 | Liquidazione | Provvisorio/definitivo + doppio consolidamento | IMPLEMENTED | L1 | PASS (unit) | blocco definitiva | PG | P2 |
+| F04 | Liquidazione | Provvisorio/definitivo + doppio consolidamento | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 RPC provvisorio+riconsolidamento+blocco definitiva SG-E2E | `STAGE3W_LIQUIDAZIONE_CONSOLIDAMENTO_SGE2E_20261011.txt` | mark-definitiva RPC dedicata assente (note marker); L3 | P2 |
 | F05 | Liquidazione | LIPE XML | PARTIAL | L1 | NOT_IMPLEMENTED ministeriale | generatori semplificati | Spec AdE | P3 |
 | F06 | Liquidazione | Controlli F24 (non compilatore) | PARTIAL | — | NOT_EXECUTED | prospetto F24 | Incrocio ritenute | P2 |
 
