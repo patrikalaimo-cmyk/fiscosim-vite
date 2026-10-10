@@ -700,3 +700,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Actions `38084732523` (push) e `38084735208` (PR): Ubuntu + Windows **PASS**.
 - HEAD collaudato CI: `e9b253ecdac33da26d45206c4ea09b063a498c89`.
 - Prossimo gate: rehearsal LAB Windows operatore (Cloud senza Docker).
+
+
+## 2026-10-10 — Fix Stage3W preflight/rehearsal marker matching (Windows BLOCKED)
+
+- Operatore: `STAGE3W PREFLIGHT BLOCKED` + `STAGE3W REHEARSAL BLOCKED` su container P0 LAB.
+- Causa: SQL 59/58 emettevano `RAISE NOTICE` per i marker PASS; i runner PowerShell cercavano riga esatta come Stage3U (`SELECT … AS result` + `psql -t`). Con `NOTICE:  PREFIX` il `-contains` falliva anche se PostgreSQL era OK.
+- Fix: preflight 59 e matrix 58 usano `SELECT 'STAGE3W_…' AS result;`; PS1 usano match substring + dump diagnostico `ERROR/DETAIL/HINT` su BLOCKED; blob pin install 58 aggiornato a `988e3396d2477d65140e70f6635cab2c5dfe560a`.
+- Test Stage3W: **11/11 PASS**. Nessuna esecuzione PostgreSQL da Cloud. Operatore deve `git pull` e rieseguire preflight + rehearsal con nuovo SHA.
