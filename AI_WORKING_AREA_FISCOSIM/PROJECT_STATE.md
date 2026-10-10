@@ -1,17 +1,17 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Stage3W L2 synthetic persist **MATRIX PASS** (FA22+pay+NC+split+parcella+FP22) su LAB P0.
+* **Fase corrente:** L2 ciclo SG-E2E: Stage3W persist MATRIX + **liquidazione IVA marzo 2026 PASS** (saldo 8.80).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
 * **Worktree:** `C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010`
-* **Società:** `SG-E2E-A` / `SG-E2E-B` (B vuota)
-* **Limite:** service_role RPC, non JWT/UI; default prod ancora multi-step
+* **liquidazione_iva:** `86b346d6-3560-4c9b-b903-287a5d779d78`
+* **Limite:** non JWT/UI; default prod ancora multi-step
 
 ## 2. Prossimo passo operativo
-1. Auth login-ready + UI Manuale/Import (L3/L4) — richiede consenso e probabilmente SG-P0-00 porte
-2. Oppure liquidazione IVA L2 da questi movimenti SG-E2E
+1. Auth login-ready + UI Manuale/Import (L3/L4) — consenso + SG-P0-00 porte consigliato
+2. Oppure consolidamento ufficiale / blocco definitiva su snapshot SG-E2E
 3. Non cleanup silente fixture SG-E2E-*
 
 ## 3. Evidenze
-* `REPORT/STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt`
 * `REPORT/STAGE3W_SYNTHETIC_PERSIST_MATRIX_20261011-000635-684.txt`
+* `REPORT/STAGE3W_LIQUIDAZIONE_SGE2E_20261011-000936.txt`

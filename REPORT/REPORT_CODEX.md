@@ -811,3 +811,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - PN societa A=6, B=0; Stage3U OK; overpay rifiutato
 - Non JWT/UI. Path default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
 
+
+## 2026-10-11 — Liquidazione IVA L2 da registri SG-E2E PASS
+
+- Script `scripts/security_p0/run-stage3w-liquidazione-from-sge2e.mjs`: legge `registri_iva` reali LAB, calcola con `calcoloLiquidazioneIvaDefinitiva`, confronta attesi indipendenti, persiste `liquidazione_iva` con `FISCOSIM_SG_E2E_LIQ_PERSIST=APPROVED`.
+- Periodo mensile 2026-03: vendite lorde **448.80**, split esclusa **220**, debito effettivo **228.80**, acquisti detraibili **220**, saldo **8.80**, F24 dovuto **0** (sotto soglia 25.82), societa B isolata.
+- Persist id `86b346d6-3560-4c9b-b903-287a5d779d78`; report `REPORT/STAGE3W_LIQUIDAZIONE_SGE2E_20261011-000936.txt`.
+- Non JWT/UI; non RPC consolidamento ufficiale (tabella diretta LAB). Path default Manuale invariato.
+
