@@ -25,7 +25,7 @@
 | A07 | PN generale | Replay stessa richiesta (idempotenza) | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W LAB | claim 3U/3W | Default `createPrimaNotaCompleta` senza idempotenza | P0 |
 | A08 | PN generale | Quadratura per scrittura e società | IMPLEMENTED | L1+L2(3U/3W) | PASS unit / PASS 3U/3W | Stage3U/3W + Manuale | Path default non ACID | P0 |
 | A09 | PN generale | Rollback mid-transaction | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W late-fail | rehearsal/install 3U/3W | Cleanup best-effort non ripristina UPDATE | P0 |
-| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2 | **PASS persist LAB** (FA22+pay+NC+split+parcella+FP22) | `STAGE3W_SYNTHETIC_PERSIST_MATRIX_20261011-000635-684.txt` | L3 JWT / UI NOT_EXECUTED | P0 |
+| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2+L3 | PASS L2 matrix; **PASS L3 JWT FA22** | `STAGE3W_JWT_FISCAL_FA22_20261011.txt` | UI Manuale L4; Stage3V port gate | P0 |
 
 ---
 
@@ -159,7 +159,7 @@
 | ID | Scenario | Stato codice | Esito reale | Gap | Priorità |
 |---|---|---|---|---|---|
 | S01 | Società A↔B read/write isolation contabile | PARTIAL | DB_PASS Stage3U/3S perimetri; contabile prod NOT_EXECUTED | JWT contabile | P0 |
-| S02 | JWT assente/scaduto/manomesso/valido | PARTIAL | HTTP boundary unit PASS; signed NOT_EXECUTED | Stage3V | P0 |
+| S02 | JWT assente/scaduto/manomesso/valido | PARTIAL | L3 | PASS JWT valido fiscal post + cross-company 403 | `STAGE3W_JWT_FISCAL_FA22_20261011.txt` | scaduto/manomesso; Stage3V formale | P0 |
 | S03 | Ruoli non autorizzati | PARTIAL | Stage3U owner/admin; UI mista | Matrice ruoli L3 | P0 |
 | S04 | Duplicati / concorrenti / timeout / retry | BROKEN prod | NOT_EXECUTED | Idempotenza fiscale | P0 |
 | S05 | Fallimento a metà + zero residui | BROKEN prod / PASS 3U gen. | PARTIAL | UPDATE partite | P0 |
@@ -174,7 +174,7 @@
 |---|---|---|
 | L1 | Operativo (`test:*` CI) | Mantenere regressione; **1199 PASS** @ sessione Windows |
 | L2 | Stage3U generale PASS; Stage3W fiscale PASS (install LAB) | Smoke HTTP + prova flag ON |
-| L3 | Harness Stage3V pronto; porte BLOCKED; Docker spento in sessione | SG-P0-00 approvazione porte + JWT |
+| L3 | JWT fiscal post PASS su loopback; Stage3V formale porte BLOCKED | SG-P0-00 porte + Stage3V harness |
 | L4 | Playwright/browser fiscali assenti | Dopo L3; debito manuale esistente |
 | L5 | Dataset multi-periodo assente | Dopo L2–L4 verticali |
 | L6 | CI Node only | Estendere a LAB isolato ripetibile |

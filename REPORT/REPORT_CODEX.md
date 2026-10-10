@@ -828,3 +828,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Report: `REPORT/STAGE3W_LIQUIDAZIONE_CONSOLIDAMENTO_SGE2E_20261011.txt`.
 - Gap documentato: nello schema LAB allineato non esiste RPC dedicata `mark definitiva`; il blocco usa marker in `note`. Non JWT/UI.
 
+
+## 2026-10-11 — JWT firmato → HTTP fiscal-journal-post → PG PASS (L3 parziale)
+
+- Script `scripts/security_p0/run-stage3w-jwt-fiscal-fa22.mjs`: ripara stub Auth SG-E2E (password bcrypt, identities, instance, token stringhe vuote per GoTrue), login A/B, POST `/api/studio/fiscal-journal-post` con JWT.
+- Esiti: HTTP **201**, PN `3af7c706-cdf2-420f-8d18-954e5a728367` (`SG-E2E-JWT-FA22-001` 1220/1220, IVA 220, partita 1220), replay stesso `request_id` → stesso UUID, cross-company B→A **403**.
+- Report: `REPORT/STAGE3W_JWT_FISCAL_FA22_20261011.txt`. Token/password non stampati.
+- Limite: harness Stage3V formale resta bloccato dalle porte `0.0.0.0`; questa prova usa URL loopback espliciti 55321/3001. UI browser Manuale non eseguita. Default `createPrimaNotaCompleta` invariato.
+
