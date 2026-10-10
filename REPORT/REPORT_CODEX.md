@@ -693,3 +693,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Script install persistente `run-stage3w-fiscal-persistent-lab-install.ps1` gated da `-ApproveLabSchemaInstall` + prova rehearsal + blob hash SQL; **non eseguito**. Stage3U preservato nel postcheck.
 - Test Cloud: `test:all` **1193/1193 PASS**, build PASS. PostgreSQL LAB ancora NOT_EXECUTED in Cloud.
 - Prossimo: operatore esegue preflight + rehearsal sul PC e allega report; install persistente richiede nuova approvazione esplicita.
+
+
+## 2026-10-10 — CI PASS su e9b253e (runbook Stage3W / matrix ampliata)
+
+- Actions `38084732523` (push) e `38084735208` (PR): Ubuntu + Windows **PASS**.
+- HEAD collaudato CI: `e9b253ecdac33da26d45206c4ea09b063a498c89`.
+- Prossimo gate: rehearsal LAB Windows operatore (Cloud senza Docker).
