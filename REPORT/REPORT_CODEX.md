@@ -675,3 +675,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **CI:** workflow `fiscosim-test-baseline.yml` ora include push/PR su `security/p0-isolated-hardening-20261008` e `feat/studio-grade-accounting-e2e-20261010` (prima solo `mio-branch` → PR #3 non partiva).
 - **Test Cloud (no DB):** `npm run test:all` → **1192/1192 PASS**; build PASS; Stage3W suite 9/9. **PostgreSQL LAB: NOT_EXECUTED** (ambiente Cloud senza Docker P0 Windows).
 - **Stop obbligatorio:** prima operazione che richiede LAB = rehearsal ROLLBACK Stage3W su container P0; proposta rischi/ripristino nel contratto §7. Nessuna install persistente/UI wire senza ulteriore consenso.
+
+
+## 2026-10-10 — CI GitHub PASS su PR #3 / Stage3W (dopo fix trigger)
+
+- Causa storica: workflow `fiscosim-test-baseline.yml` ascoltava solo `mio-branch`; PR #3 verso P0 non partiva.
+- Fix verificato: push `d6b1c0d` e pull_request su `feat/studio-grade-accounting-e2e-20261010` (base P0) hanno eseguito **FiscoSim Test Baseline**.
+- Evidenza: Actions `38084334961` (push) e `38084339341` (PR) — **Ubuntu PASS + Windows PASS**. Nessuna scrittura LAB/DB.
+- Stato invariato: Stage3W candidata codice-only; rehearsal PostgreSQL Windows ancora in attesa di approvazione.
