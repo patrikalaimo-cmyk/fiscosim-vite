@@ -1,4 +1,4 @@
-# MATRICE TEST CONTABILI E2E — 2026-10-10
+﻿# MATRICE TEST CONTABILI E2E — 2026-10-10
 
 **Branch/SHA base audit:** `feat/studio-grade-accounting-e2e-20261010` @ `53e1f8e` (da `ceac722`)  
 **Refresh Windows:** 2026-10-10 — `test:all` 1199/1199; Docker Desktop spento; Stage3W install storico PASS non rieseguito  
@@ -25,7 +25,7 @@
 | A07 | PN generale | Replay stessa richiesta (idempotenza) | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W LAB | claim 3U/3W | Default `createPrimaNotaCompleta` senza idempotenza | P0 |
 | A08 | PN generale | Quadratura per scrittura e società | IMPLEMENTED | L1+L2(3U/3W) | PASS unit / PASS 3U/3W | Stage3U/3W + Manuale | Path default non ACID | P0 |
 | A09 | PN generale | Rollback mid-transaction | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W late-fail | rehearsal/install 3U/3W | Cleanup best-effort non ripristina UPDATE | P0 |
-| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2 | PASS Stage3W matrix+install; **FA22 persist PASS** | `…231404-750.txt` + `STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt` | L3 JWT / UI flag ON NOT_EXECUTED | P0 |
+| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2 | **PASS persist LAB** (FA22+pay+NC+split+parcella+FP22) | `STAGE3W_SYNTHETIC_PERSIST_MATRIX_20261011-000635-684.txt` | L3 JWT / UI NOT_EXECUTED | P0 |
 
 ---
 
@@ -33,12 +33,12 @@
 
 | ID | Modulo | Scenario | Stato codice | Livello test | Esito reale | Evidenza | Gap | Priorità |
 |---|---|---|---|---|---|---|---|---|
-| B01 | Fatture | Vendita ordinaria | IMPLEMENTED | L1+L2 | PASS unit; **PASS L2 persist FA22 LAB** | `…000427-220.txt` PN 0afbcb06… | L3–L5 JWT/UI | P1 |
-| B02 | Fatture | Acquisto ordinario | IMPLEMENTED | L1 | PASS (unit) | idem | L2–L5 | P1 |
+| B01 | Fatture | Vendita ordinaria | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 persist FA22 | `…000427-220.txt` | L3-L5 JWT/UI | P1 |
+| B02 | Fatture | Acquisto ordinario | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 persist FP22 | `…000635-684.txt` | L3-L5 JWT/UI | P1 |
 | B03 | Fatture | IVA 22/10/5/4 e nature supportate | PARTIAL | L1 | PASS casi coperto | Manuale/Import | Elenco aliquote ufficiali vs supportate da chiudere | P1 |
 | B04 | Fatture | Multi-aliquota + multi-riga | IMPLEMENTED | L1 | PASS (unit) | Manuale/Import 25A | E2E persistito | P1 |
 | B05 | Fatture | Esenti / non imponibili / escluse / non soggette | PARTIAL | L1 | PASS parziale | nature in mapper | Matrice nature completa L2 | P2 |
-| B06 | Fatture | NC attiva/passiva totale/parziale | IMPLEMENTED | L1 | PASS (unit) | Manuale + split NC | E2E | P1 |
+| B06 | Fatture | NC attiva/passiva totale/parziale | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 NC attiva persist | `…000635-684.txt` residuo -1220 | NC passiva / L3-L5 | P1 |
 | B07 | Fatture | Acconti / rettificativi | PARTIAL | L1 | NOT_EXECUTED E2E | causali | Specifica casi supportati | P2 |
 | B08 | Fatture | Scadenze singole/multiple | PARTIAL | L1 | PASS apertura | partitario tests | Rate multi-scadenza E2E | P1 |
 | B09 | Fatture | Effetti PN+IVA+partitario+bilancio | PARTIAL | L1 | PASS simulato | MockDb e2e-named tests | PG cross-module | P1 |
@@ -49,7 +49,7 @@
 
 | ID | Modulo | Scenario | Stato codice | Livello test | Esito reale | Evidenza | Gap | Priorità |
 |---|---|---|---|---|---|---|---|---|
-| C01 | Split | Fattura attiva split + NC | IMPLEMENTED | L1 | PASS (unit) | `test:split` 25 | PG/UI | P2 |
+| C01 | Split | Fattura attiva split + NC | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 split persist partita 1000 | `…000635-684.txt` | NC split / L3-L5 | P2 |
 | C02 | IVA cassa | Vendite/acquisti + rilascio | IMPLEMENTED | L1 | PASS (unit) | ivaPerCassa* | PG incassi reali | P2 |
 | C03 | IVA cassa | Incasso/pagamento parziale proporzionale | IMPLEMENTED (dominio) | L1 | PASS (unit) | release tests | E2E | P2 |
 | C04 | Reverse interno | Doppie annotazioni | PARTIAL | L1 | PASS (unit) | Manuale reverse | Policy causali + PG | P2 |
@@ -63,7 +63,7 @@
 
 | ID | Modulo | Scenario | Stato codice | Livello test | Esito reale | Evidenza | Gap | Priorità |
 |---|---|---|---|---|---|---|---|---|
-| D01 | Ritenute | Parcella IVA+cassa+ritenuta | IMPLEMENTED | L1 | PASS (unit) | `test:ritenute` | E2E | P2 |
+| D01 | Ritenute | Parcella IVA+cassa+ritenuta | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 parcella+1040 persist | `…000635-684.txt` rit.200 | L3-L5 | P2 |
 | D02 | Ritenute | Pagamento integrale → debito 1040 | IMPLEMENTED | L1 | PASS (unit) | ritenutePagamentoParcella | E2E | P2 |
 | D03 | Ritenute | Scadenza versamento 16 mese succ. | IMPLEMENTED | L1 | PASS (unit) | scadenzario | E2E | P2 |
 | D04 | Ritenute | Import F24 vs maturato | PARTIAL | L1 | NOT_EXECUTED | roadmap Fase 18 | Modulo controllo incompleto | P2 |
@@ -78,7 +78,7 @@
 | ID | Modulo | Scenario | Stato codice | Livello test | Esito reale | Evidenza | Gap | Priorità |
 |---|---|---|---|---|---|---|---|---|
 | E01 | Partitario | Apertura da fattura | IMPLEMENTED | L1 | PASS (unit) | partitarioDocumentiIva | PG | P1 |
-| E02 | Partitario | Chiusura totale/parziale | IMPLEMENTED | L1 | PASS (unit) | partitarioPagamentiIncassi | PG + rollback UPDATE | P0 |
+| E02 | Partitario | Chiusura totale/parziale | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 pay 500->720 + overpay reject | `…000635-684.txt` | chiusura totale / L3 | P0 |
 | E03 | Partitario | Residui / abbuoni / compensazioni / NC | PARTIAL | L1 | PASS parziale | suite partitario | Insoluti MISSING | P1 |
 | E04 | Partitario | Rateizzate | PARTIAL | L1 | NOT_EXECUTED E2E | scadenze multi | UI scadenzario commerciale | P1 |
 | E05 | Partitario | Pagamento duplicato / > residuo | PARTIAL | L1 | PASS guard unit | applyPartitarioClosures | Concorrenza L2 | P0 |

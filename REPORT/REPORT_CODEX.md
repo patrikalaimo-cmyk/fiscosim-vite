@@ -798,3 +798,16 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Report: `REPORT/STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt` — PN `0afbcb06-18e5-49de-883a-38c6fcf89d8c`; partita residuo 1220; societa B PN=0; Stage3U OK.
 - **Non** e JWT firmato ne UI Manuale/Import. Path default `createPrimaNotaCompleta` invariato. Porte ancora `0.0.0.0`. Nessun LIVE.
 
+
+## 2026-10-11 — Stage3W synthetic persist MATRIX PASS (pay/NC/split/parcella/FP22)
+
+- Estensione L2 su LAB P0 dopo FA22: `sql/60` seed riusato; nuovo `sql/61` + `run-stage3w-fiscal-synthetic-persist-matrix.ps1`.
+- Esito report `STAGE3W_SYNTHETIC_PERSIST_MATRIX_20261011-000635-684.txt` @ SHA `9240b04`:
+  - FA22 residuo **720** dopo incasso 500
+  - NC attiva residuo **-1220**, IVA -220
+  - Split partita **1000**, `split_payment=true`
+  - Parcella residuo **1068.80**, ritenuta **200** codice **1040**
+  - FP22 fornitore residuo **1220**, registro acquisto
+  - PN societa A=6, B=0; Stage3U OK; overpay rifiutato
+- Non JWT/UI. Path default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+

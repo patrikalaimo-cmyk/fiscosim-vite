@@ -1,4 +1,4 @@
-# ROADMAP COMPLETAMENTO STUDIO GRADE — 2026-10-10
+﻿# ROADMAP COMPLETAMENTO STUDIO GRADE — 2026-10-10
 
 **Derivata da:** `REPORT/AUDIT_STUDIO_GRADE_20261010.md` + `REPORT/MATRICE_TEST_CONTABILI_E2E.md`  
 **Base codice:** `feat/studio-grade-accounting-e2e-20261010` ← `ceac722` (P0)  
@@ -161,12 +161,9 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione
 
-1. **Non** applicare SG-P0-00 senza approvazione.  
-2. ~~Preflight + rehearsal + install Stage3W~~ **FATTO**.  
-3. ~~Smoke HTTP LAB~~ **FATTO** (`…000132-906.txt`, HTTP 401).  
-4. ~~Persist sintetico FA22 via RPC service_role~~ **FATTO** (`…000427-220.txt`, PN `0afbcb06…`).  
-5. L3 JWT / UI Manuale-Import: richiede utenti Auth login-ready + (consigliato) SG-P0-00 porte.  
-6. Estendere persist L2 agli altri contract_kind (FP22, NC, pay, split, parcella) riusando script 60.  
-7. Default produttivo resta `createPrimaNotaCompleta` finché L3/L4 non certificati.
-
+1. **Non** applicare SG-P0-00 senza approvazione.
+2. ~~Stage3W install + smoke + FA22 persist + MATRIX persist~~ **FATTO** (`…000635-684.txt`).
+3. L3 JWT / UI Manuale-Import: Auth login-ready + (consigliato) porte loopback.
+4. Opzionale L2: liquidazione IVA da movimenti SG-E2E persistiti.
+5. Default produttivo resta `createPrimaNotaCompleta` finche L3/L4 non certificati.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
