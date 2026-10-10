@@ -1,15 +1,19 @@
 /**
- * Stage3V — READ-ONLY local infrastructure discovery, never an E2E PASS.
- * Inspects ONLY pinned local P0 Docker and http://127.0.0.1:54321.
- * No credentials, no token, no Supabase hosted contact, no DB writes.
+ * Stage3V READ-ONLY: inspect the REAL pinned P0 LAB on 127.0.0.1:55321.
+ * 127.0.0.1:54321 belongs to a different local Supabase project and MUST NOT
+ * be used as evidence for the isolated accounting laboratory.
+ * No credentials, signed login, SQL mutation, or Docker lifecycle operations.
  */
 import {execFileSync} from 'node:child_process'
 import {existsSync,writeFileSync} from 'node:fs'
 import {resolve,join,dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {
+ STAGE3V_LAB,STAGE3V_LAB_ORIGIN,STAGE3V_LAB_PORT,STAGE3V_LAB_NETWORK,
+ inspectStage3vLocalStack,
+} from './stage3v-local-stack.mjs'
 
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../..')
-const CONTAINER='supabase_db_FiscoSim-P0-LAB-20261008-164658'
 const SHA=/^[a-f0-9]{40}$/i
 const arg=process.argv
 const pos=arg.indexOf('--expected-commit')
@@ -18,69 +22,16 @@ if(!SHA.test(expected))throw Error('STAGE3V_REQUIRES_PINNED_SHA')
 const head=execFileSync('git',['rev-parse','HEAD'],{cwd:ROOT,encoding:'utf8'}).trim()
 if(head!==expected)throw Error('STAGE3V_GIT_COMMIT_MISMATCH')
 const home=process.env.USERPROFILE
-if(!home)throw Error('STAGE3V_WINDOWS_LAB_ONLY')
+if(process.platform!=='win32'||!home)throw Error('STAGE3V_WINDOWS_LAB_ONLY')
 const lab=join(home,'FiscoSim-P0-LAB-20261008-164658')
 if(!existsSync(lab))throw Error('STAGE3V_ISOLATED_LAB_PATH_MISSING')
-
-function docker(...params) {
- return execFileSync('docker',params,{encoding:'utf8',timeout:10000,windowsHide:true}).trim()
-}
-function networks(name) {
- const raw=docker('inspect','--format','{{json .NetworkSettings.Networks}}',name)
- return new Set(Object.keys(JSON.parse(raw||'{}')))
-}
-function linked(a,b){return [...a].some(n=>b.has(n))}
-function matchingContainer(names,pattern,dbNets){
- const matches=names.filter(name=>pattern.test(name))
- const connected=[]
- for(const name of matches){
-  try {
-   const state=docker('inspect','--format','{{.State.Running}}',name)
-   if(state==='true' && linked(networks(name),dbNets))connected.push(name)
-  }catch { /* Unknown names do not establish trust */ }
- }
- return connected.length
-}
-function inspectGatewayLoopbackBindings(names,dbNets){
- const bindings=[]
- for(const name of names){
-  try{
-   if(!linked(networks(name),dbNets))continue
-   const ports=JSON.parse(docker('inspect','--format','{{json .NetworkSettings.Ports}}',name)||'{}')
-   for(const [containerPort,published] of Object.entries(ports||{})){
-    for(const binding of published||[]){
-     if(String(binding.HostPort)!=='54321')continue
-     bindings.push({
-      container:name,containerPort,
-      hostIp:String(binding.HostIp),hostPort:String(binding.HostPort),
-     })
-    }
-   }
-  }catch{ /* Uninspectable container never establishes a safe binding */ }
- }
- const safe=bindings.length>0 &&
-  bindings.every(b=>['127.0.0.1','::1'].includes(b.hostIp))
- return {safe,details:bindings.length
-  ? bindings.map(b=>b.container+'@'+b.hostIp+':'+b.hostPort+'->'+b.containerPort).join(';')
-  : 'NONE_ON_PINNED_DB_NETWORK'}
-}
-async function ping(path){
- try{
-  const response=await fetch('http://127.0.0.1:54321'+path,{
-   method:'GET',redirect:'error',signal:AbortSignal.timeout(2500),
-  })
-  await response.body?.cancel()
-  return response.status
- }catch{return 'UNREACHABLE'}
-}
-if(docker('inspect','--format','{{.State.Running}}',CONTAINER)!=='true'){
+const run=(cmd,args,options={})=>execFileSync(cmd,args,{
+ encoding:'utf8',timeout:10000,windowsHide:true,...options,
+}).trim()
+if(run('docker',['inspect','--format','{{.State.Running}}',STAGE3V_LAB.db])!=='true')
  throw Error('STAGE3V_PINNED_DB_CONTAINER_NOT_RUNNING')
-}
-const dbNetworks=networks(CONTAINER)
-const names=docker('ps','--format','{{.Names}}').split(/\r?\n/).filter(Boolean)
-const authCount=matchingContainer(names,/(?:^|[-_])(?:auth|gotrue)(?:[-_]|$)/i,dbNetworks)
-const restCount=matchingContainer(names,/(?:^|[-_])(?:rest|postgrest)(?:[-_]|$)/i,dbNetworks)
 
+const stack=inspectStage3vLocalStack()
 const inspectionSQL=`
 BEGIN READ ONLY;
 SELECT 'STAGE3V_INSTALLED|'||
@@ -90,35 +41,51 @@ SELECT 'STAGE3V_INSTALLED|'||
  WHERE oid=to_regclass('public.fiscosim_general_journal_claim')),'false');
 ROLLBACK;
 `
-const output=execFileSync('docker',[
- 'exec','-i',CONTAINER,'psql','-X','-v','ON_ERROR_STOP=1',
+const output=run('docker',[
+ 'exec','-i',STAGE3V_LAB.db,'psql','-X','-v','ON_ERROR_STOP=1',
  '-U','postgres','-d','postgres','-A','-t','-F','|','-P','pager=off',
-],{input:inspectionSQL,encoding:'utf8',timeout:10000,windowsHide:true})
+],{input:inspectionSQL})
 const installed=output.includes('STAGE3V_INSTALLED|true|CLAIM_RLS|true')
+async function ping(path){
+ try{
+  const response=await fetch(STAGE3V_LAB_ORIGIN+path,{
+   method:'GET',redirect:'error',signal:AbortSignal.timeout(2500),
+  })
+  await response.body?.cancel()
+  return response.status
+ }catch{return 'UNREACHABLE'}
+}
 const [authHttp,restHttp]=await Promise.all([
  ping('/auth/v1/health'),ping('/rest/v1/'),
 ])
-const connected=authCount>0 && restCount>0
-const gateway=inspectGatewayLoopbackBindings(names,dbNetworks)
-const safeBinding=gateway.safe
-const endpoints=authHttp===200 && Number.isInteger(restHttp) && restHttp>=200 && restHttp<500
-const status=installed&&connected&&safeBinding&&endpoints
- ? 'STAGE3V_LOCAL_NETWORK_AND_HTTP_DISCOVERED_NOT_JWT_VERIFIED'
- : 'STAGE3V_LOCAL_AUTH_POSTGREST_PREREQUISITES_INCOMPLETE'
+const endpoints=authHttp===200&&Number.isInteger(restHttp)&&
+ restHttp>=200&&restHttp<500
+const status=installed&&stack.ready&&endpoints
+ ? 'STAGE3V_PINNED_LAB_NETWORK_HTTP_DISCOVERED_NOT_JWT_VERIFIED'
+ : 'STAGE3V_PINNED_LAB_PREREQUISITES_INCOMPLETE'
+const formatBinding=(b)=>b.name+'@'+b.hostIp+':'+b.hostPort+
+ '->'+b.containerPort
 const report=[
  'STAGE3V_READ_ONLY_INFRASTRUCTURE_DISCOVERY',
  'COMMIT='+head,
- 'LAB_ONLY='+CONTAINER,
+ 'LAB_ONLY='+STAGE3V_LAB.db,
+ 'LAB_DOCKER_NETWORK='+STAGE3V_LAB_NETWORK,
+ 'LAB_GATEWAY='+STAGE3V_LAB.kong,
+ 'LAB_GATEWAY_PORT='+STAGE3V_LAB_PORT,
+ 'OTHER_FISCOSIM_LOCAL_STACK_PRESENT='+stack.otherLocalStackPresent,
  'DB_RPC_INSTALLED='+installed,
- 'AUTH_CONTAINER_ON_DB_NETWORK='+(authCount>0),
- 'POSTGREST_CONTAINER_ON_DB_NETWORK='+(restCount>0),
- 'GATEWAY_54321_BOUND_ONLY_TO_LOOPBACK='+safeBinding,
- 'GATEWAY_54321_HOST_BINDINGS='+gateway.details,
- 'AUTH_LOCAL_HEALTH_HTTP='+authHttp,
- 'REST_LOCAL_GATEWAY_HTTP='+restHttp,
+ 'LAB_REQUIRED_SERVICES_PRESENT='+stack.mandatoryPresent,
+ 'LAB_SERVICES_ONLY_ON_PINNED_NETWORK='+stack.correctNetwork,
+ 'GATEWAY_55321_PUBLISHED='+stack.gatewayPublished,
+ 'LAB_ALL_PUBLISHED_PORTS_LOOPBACK='+stack.allLabPortsLoopback,
+ 'LAB_UNSAFE_HOST_BINDINGS='+(stack.unsafeBindings.map(formatBinding).join(';')||'NONE'),
+ 'LAB_HOST_BINDINGS='+(stack.portBindings.map(formatBinding).join(';')||'NONE'),
+ 'AUTH_PINNED_LAB_HEALTH_HTTP='+authHttp,
+ 'REST_PINNED_LAB_GATEWAY_HTTP='+restHttp,
  'REAL_SIGNED_JWT_E2E=false',
  'ACCOUNTING_HTTP_POST_E2E=false',
- 'NOTE=Container network and gateway status alone do NOT verify Auth/PostgREST are connected to the intended database.',
+ 'NOTE=Auth/PostgREST HTTP is from 55321 only; 54321 belongs to a separate stack.',
+ 'NOTE=Network and gateway status alone do NOT verify the database connection and signed JWT identity.',
  'NOTE=No credentials, tokens, account identities or production URLs queried.',
  'RESULT='+status,
 ]
