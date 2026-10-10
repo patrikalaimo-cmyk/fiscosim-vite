@@ -1,30 +1,25 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Studio Grade E2E — Audit/matrice/roadmap 2026-10-10 (documentazione + baseline).
+* **Fase corrente:** SG-P0-01 — contratto fiscale atomico + candidata Stage3W (codice/CI), LAB PostgreSQL non eseguito in Cloud.
 * **Branch lavoro:** `feat/studio-grade-accounting-e2e-20261010` (worktree isolato).
-* **Base P0:** `security/p0-isolated-hardening-20261008` @ `ceac722f9d8f100c6844c3f5e4ec655a064bf06e`.
+* **PR:** https://github.com/patrikalaimo-cmyk/fiscosim-vite/pull/3 (Draft → base P0).
+* **Base P0:** `security/p0-isolated-hardening-20261008` @ `ceac722…`.
 * **Branch ordinario:** `mio-branch` — non toccato.
-* **Ultimo checkpoint valido sessione:** audit + matrice + roadmap Studio Grade 20261010 + baseline `test:all` 1183 PASS.
+* **Checkpoint sessione precedente:** `f6c874a` (audit/matrice/roadmap).
 
 ## 2. Roadmap attiva immediata
-* **Completato questa sessione:** Fase 0 worktree/branch; audit codice; matrice E2E; roadmap P0–P4; harness Stage3V accettazione branch/worktree Studio Grade.
-* **Prossimo step codice:** **SG-P0-01** — RPC commit fiscale ACID (PN+IVA+partitario+ritenute+audit+idempotenza) in LAB, rehearsal ROLLBACK prima di install.
-* **Prerequisito infra (approvazione):** **SG-P0-00** — porte LAB solo loopback (Stage3V ancora BLOCKED_UNSAFE_PUBLISHED_PORTS).
-* **Non ripetere:** Stage 3S / Stage 3U (già PASS).
-* **Bank commit reale / RELEASE A100:** ancora BLOCCATI.
+* **Completato SG-P0-01 (codice):** contratto documentato, scenari numerici indipendenti, RPC `fiscosim_post_fiscal_journal` LAB-only, matrix SQL, preflight READ ONLY, API LAB non cablata a UI, CI estesa a branch Studio Grade/P0.
+* **Prossimo (approvazione):** rehearsal ROLLBACK Stage3W sul Docker P0 Windows; poi eventuale install persistente.
+* **Bloccato senza consenso:** SG-P0-00 porte LAB, scritture persistenti, wire Manuale/Import.
+* **Non ripetere:** Stage 3S / Stage 3U.
 
-## 3. Documenti ufficiali sessione
+## 3. Documenti chiave
+* `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`
 * `REPORT/AUDIT_STUDIO_GRADE_20261010.md`
 * `REPORT/MATRICE_TEST_CONTABILI_E2E.md`
 * `REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`
-* Append: `REPORT/REPORT_CODEX.md`
 
-## 4. Vincoli non negoziabili
-* Nessuna scrittura LIVE / merge `mio-branch` / deploy.
-* Nessuna recreate Docker LAB senza consenso.
-* Nessuna migrazione/RLS senza approvazione.
-* Staging git selettivo (`git add .` vietato).
-
-## 5. Nota storica
-* Checkpoint locali precedenti (es. TL-ACQ-02 / `eca9fc0`) restano storici e non certificano il ciclo E2E PostgreSQL attuale.
+## 4. Vincoli
+* Nessuna scrittura LIVE / merge `mio-branch` / deploy / recreate Docker.
+* Staging git selettivo.

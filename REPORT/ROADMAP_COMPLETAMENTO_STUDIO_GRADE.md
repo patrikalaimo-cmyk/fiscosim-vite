@@ -149,11 +149,17 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ---
 
-## Prossima sessione di sviluppo (blocco verticale #1)
+## Avanzamento SG-P0-01 (2026-10-10)
+
+- Contratto, scenari indipendenti, RPC candidata Stage3W, matrix SQL, API LAB e CI branch: **preparati in codice**.
+- Dettaglio: `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`.
+- PostgreSQL LAB: **non eseguito in Cloud**; prossima operazione richiedente consenso = rehearsal ROLLBACK Windows.
+
+## Prossima sessione
 
 1. **Non** applicare SG-P0-00 senza approvazione.  
-2. Avviare **SG-P0-01**: specifica SQL + matrice L2 ROLLBACK per commit fiscale completo, riusando Stage3U.  
-3. Aggiungere test che **falliscono oggi** sul path produttivo (mancanza transazione/idempotenza) come gate.  
-4. Solo dopo rehearsal PASS: proporre install LAB e Stage3V write.
+2. Su consenso: preflight READ ONLY Stage3W, poi rehearsal ROLLBACK Stage3W sul LAB P0.  
+3. Solo dopo rehearsal PASS: proporre install LAB persistente e L3 JWT; **non** collegare UI prima di L2/L3.  
+4. Path produttivo `createPrimaNotaCompleta` resta invariato fino al cut-over esplicito.
 
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.

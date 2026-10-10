@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - mio-branch
+      - security/p0-isolated-hardening-20261008
+      - feat/studio-grade-accounting-e2e-20261010
   pull_request:
     branches:
       - mio-branch
+      - security/p0-isolated-hardening-20261008
+      - feat/studio-grade-accounting-e2e-20261010
   workflow_dispatch:
 
 permissions:
@@ -81,7 +85,9 @@ jobs:
             'scripts/security_p0/run-stage3s-full-lab.ps1',
             'scripts/security_p0/run-stage3u-accounting-preflight.ps1',
             'scripts/security_p0/run-stage3u-persistent-lab-install.ps1',
-            'scripts/security_p0/run-stage3u-rehearsal-rollback.ps1'
+            'scripts/security_p0/run-stage3u-rehearsal-rollback.ps1',
+            'scripts/security_p0/run-stage3w-fiscal-preflight.ps1',
+            'scripts/security_p0/run-stage3w-fiscal-rehearsal-rollback.ps1'
           )
           foreach ($path in $paths) {
             $tokens = $null

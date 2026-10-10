@@ -663,3 +663,15 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Harness Stage3V (sicuro):** `scripts/security_p0/stage3v-lab-binding.mjs` accetta anche branch `feat/studio-grade-accounting-e2e-20261010` e worktree `FiscoSim-StudioGrade-E2E-20261010`, oltre al P0 storico; SHA pin, dirty tree, rete, host e stack 55321 restano fail-closed. Test `securityP0Stage3vBinding.test.js` 4/4 PASS.
 - **Test baseline sessione (no DB write, no 3S/3U):** `npm ci`; `npm run test:all` → **1183 pass / 0 fail**; `npm run build` → PASS. Non ripetuti Stage 3S/3U. Nessuna migration/RLS/env/LIVE.
 - **Prossimo intervento:** **SG-P0-01** RPC commit fiscale ACID completa in LAB (rehearsal ROLLBACK → install su approvazione). Prerequisito infra **SG-P0-00** (porte LAB loopback) richiede approvazione esplicita. Stage3V write solo dopo porte sicure + opt-in.
+
+
+## 2026-10-10 — SG-P0-01 Stage3W fiscal atomic commit candidate (no LAB PostgreSQL execution)
+
+- Continuazione da PR #3 / checkpoint `f6c874a` su `feat/studio-grade-accounting-e2e-20261010` (worktree Cloud `/home/ubuntu/FiscoSim-StudioGrade-E2E-20261010`). `mio-branch` non toccato. Stage 3S/3U non rieseguiti.
+- **Contratto:** `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md` — riconciliazione payload Manuale/Import → colonne PG; `contract_kind` distinti; claim `fiscosim_fiscal_journal_claim` separato da Stage3U; drift `prima_nota_righe.societa_id` e assenza `esercizio` in migration documentati.
+- **Scenari indipendenti:** `domain/fiscalAtomicCommit/independentExpectedScenarios.js` (FA22, FP22, NCA22, pagamento parziale 500/1220→720, parcella+ritenuta, split). Nessun import di mappers/servizi Manuale.
+- **Candidata SQL LAB-only:** `57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql` (`fiscosim_post_fiscal_journal`), matrix `58_…_TEST_ONLY.sql` (fattura+idempotenza+A/B+residuo+overpay+late audit ROLLBACK), preflight READ ONLY `59_…`. Runner Windows `run-stage3w-fiscal-preflight.ps1` / `run-stage3w-fiscal-rehearsal-rollback.ps1`. Stage3U RPC non DROP/REPLACE.
+- **API:** `api/studio/fiscal-journal-post.js` + `lib/fiscalJournalRequest.js`; route in `lib/devStudioHttp.js`; 503 salvo LAB flags. **Non collegata** a `persistPrimaNotaDraft` / Import.
+- **CI:** workflow `fiscosim-test-baseline.yml` ora include push/PR su `security/p0-isolated-hardening-20261008` e `feat/studio-grade-accounting-e2e-20261010` (prima solo `mio-branch` → PR #3 non partiva).
+- **Test Cloud (no DB):** `npm run test:all` → **1192/1192 PASS**; build PASS; Stage3W suite 9/9. **PostgreSQL LAB: NOT_EXECUTED** (ambiente Cloud senza Docker P0 Windows).
+- **Stop obbligatorio:** prima operazione che richiede LAB = rehearsal ROLLBACK Stage3W su container P0; proposta rischi/ripristino nel contratto §7. Nessuna install persistente/UI wire senza ulteriore consenso.
