@@ -158,8 +158,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 ## Prossima sessione
 
 1. **Non** applicare SG-P0-00 senza approvazione.  
-2. Su consenso: preflight READ ONLY Stage3W, poi rehearsal ROLLBACK Stage3W sul LAB P0.  
-3. Solo dopo rehearsal PASS: proporre install LAB persistente e L3 JWT; **non** collegare UI prima di L2/L3.  
+2. ~~Preflight + rehearsal ROLLBACK Stage3W sul LAB P0~~ **FATTO** (2026-10-10).  
+3. Solo su nuovo consenso esplicito: install LAB persistente; poi L3 JWT; **non** collegare UI prima di L2/L3.  
 4. Path produttivo `createPrimaNotaCompleta` resta invariato fino al cut-over esplicito.
 
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
