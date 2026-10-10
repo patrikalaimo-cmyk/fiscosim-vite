@@ -259,10 +259,13 @@ test('Stage3W LAB UI stack launcher and HTTP smoke scripts are pinned to P0 LAB'
     'http://127.0.0.1:55321',
     '.env.stage3w.lab.local',
     'Stop-Process',
+    'ServiceRoleKey',
+    'Import-DockerInspectEnv',
   ]) assert.ok(start.includes(marker), marker)
   assert.match(smoke, /fiscal-journal-post/)
   assert.match(smoke, /FISCAL_JOURNAL_LAB_ONLY_DISABLED/)
   assert.match(smoke, /401/)
+  assert.doesNotMatch(smoke, /\n\}\s*$/)
 })
 
 test('Stage3W persistent install script is gated and preserves Stage3U', () => {

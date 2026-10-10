@@ -7,6 +7,8 @@ param(
  [string]$Container='supabase_db_FiscoSim-P0-LAB-20261008-164658',
  [string]$KongContainer='supabase_kong_FiscoSim-P0-LAB-20261008-164658',
  [string]$AuthContainer='supabase_auth_FiscoSim-P0-LAB-20261008-164658',
+ [string]$ServiceRoleKey='',
+ [string]$AnonKey='',
  [switch]$SkipStart
 )
 Set-StrictMode -Version Latest
@@ -54,50 +56,92 @@ function Get-MapVal($map,[string]$key){
  return ([string]$map[$key]).Trim()
 }
 
-function Get-DockerEnv([string]$Name,[string]$Key){
- $out=(& docker exec $Name printenv $Key 2>&1)
- if($LASTEXITCODE -ne 0){ return '' }
- return (@($out) -join '').Trim()
-}
-
-$candidates=@(
- (Join-Path $Lab '.env'),
- (Join-Path $Lab 'supabase\.env'),
- (Join-Path $Lab 'supabase\docker\.env'),
- (Join-Path $Lab 'FiscoSim-P0-LAB.env'),
- (Join-Path $repo '.env'),
- (Join-Path $repo '.env.local'),
- (Join-Path $repo '.env.stage3w.lab.local')
-)
-$merged=@{}
-$found=@()
-foreach($c in $candidates){
- if(!(Test-Path -LiteralPath $c -PathType Leaf)){ continue }
- $found += $c
- $part=Read-EnvFile $c
- foreach($k in @($part.Keys)){
-  $cur=Get-MapVal $merged $k
-  if($cur.Length -eq 0){ $merged[$k]=$part[$k] }
+function Merge-Map($target,$source){
+ foreach($k in @($source.Keys)){
+  $cur=Get-MapVal $target $k
+  if($cur.Length -eq 0 -and $null -ne $source[$k] -and ([string]$source[$k]).Trim().Length -gt 0){
+   $target[$k]=([string]$source[$k]).Trim()
+  }
  }
 }
-Write-Host ('Env files found: '+($(if($found.Count){$found -join '; '}else{'(none)'})))
 
-$service=Get-MapVal $merged 'SUPABASE_SERVICE_ROLE_KEY'
-if($service.Length -eq 0){ $service=Get-MapVal $merged 'SERVICE_ROLE_KEY' }
-$anon=Get-MapVal $merged 'VITE_SUPABASE_ANON_KEY'
-if($anon.Length -eq 0){ $anon=Get-MapVal $merged 'SUPABASE_ANON_KEY' }
-if($anon.Length -eq 0){ $anon=Get-MapVal $merged 'ANON_KEY' }
-
-if($service.Length -eq 0){ $service=Get-DockerEnv $AuthContainer 'SERVICE_ROLE_KEY' }
-if($service.Length -eq 0){ $service=Get-DockerEnv $KongContainer 'SUPABASE_SERVICE_KEY' }
-if($anon.Length -eq 0){ $anon=Get-DockerEnv $AuthContainer 'ANON_KEY' }
-if($anon.Length -eq 0){ $anon=Get-DockerEnv $KongContainer 'SUPABASE_ANON_KEY' }
-
-if($service.Length -eq 0){
- throw 'Stage3W LAB UI: SERVICE_ROLE key missing (put SUPABASE_SERVICE_ROLE_KEY in LAB .env or ensure Auth container env)'
+function Import-DockerInspectEnv([string]$Name,$map){
+ $lines=@(& docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' $Name 2>&1)
+ if($LASTEXITCODE -ne 0){ return }
+ foreach($raw in $lines){
+  if($null -eq $raw){ continue }
+  $line=([string]$raw).Trim()
+  $i=$line.IndexOf('=')
+  if($i -lt 1){ continue }
+  $k=$line.Substring(0,$i).Trim()
+  $v=$line.Substring($i+1).Trim()
+  if($k.Length -eq 0 -or $v.Length -eq 0){ continue }
+  $cur=Get-MapVal $map $k
+  if($cur.Length -eq 0){ $map[$k]=$v }
+ }
 }
-if($anon.Length -eq 0){
- throw 'Stage3W LAB UI: ANON key missing (VITE_SUPABASE_ANON_KEY / ANON_KEY)'
+
+$merged=@{}
+$found=@()
+
+# 1) Explicit params
+if($ServiceRoleKey.Trim().Length -gt 0){ $merged['SUPABASE_SERVICE_ROLE_KEY']=$ServiceRoleKey.Trim() }
+if($AnonKey.Trim().Length -gt 0){ $merged['VITE_SUPABASE_ANON_KEY']=$AnonKey.Trim() }
+
+# 2) Recursive .env* under LAB folder + common repo files
+$envFiles=@()
+try{
+ $envFiles += @(Get-ChildItem -LiteralPath $Lab -Recurse -File -Force -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match '^\.env' -or $_.Name -match '\.env$' -or $_.Name -match 'FiscoSim-P0.*\.env' } |
+  Select-Object -First 40 -ExpandProperty FullName)
+}catch{}
+$envFiles += @(
+ (Join-Path $repo '.env'),
+ (Join-Path $repo '.env.local'),
+ (Join-Path $repo '.env.stage3w.lab.local'),
+ (Join-Path $env:USERPROFILE '.supabase\FiscoSim-P0-LAB.env')
+)
+foreach($c in ($envFiles | Select-Object -Unique)){
+ if(-not $c -or !(Test-Path -LiteralPath $c -PathType Leaf)){ continue }
+ $found += $c
+ Merge-Map $merged (Read-EnvFile $c)
+}
+Write-Host ('Env files found: '+($(if($found.Count){($found | Select-Object -First 8) -join '; '}else{'(none)'})))
+
+# 3) Docker inspect env from all P0 LAB containers
+$p0Names=@(& docker ps --format '{{.Names}}' 2>&1 | Where-Object { $_ -match 'FiscoSim-P0-LAB-20261008-164658' })
+foreach($n in $p0Names){ Import-DockerInspectEnv $n $merged }
+Write-Host ('P0 containers inspected for keys: '+($(if($p0Names){$p0Names -join ', '}else{'(none)'})))
+
+# Resolve with many aliases used by Supabase compose / GoTrue / Kong
+function First-Key($map,[string[]]$names){
+ foreach($n in $names){
+  $v=Get-MapVal $map $n
+  if($v.Length -gt 0){ return $v }
+ }
+ return ''
+}
+$service=First-Key $merged @(
+ 'SUPABASE_SERVICE_ROLE_KEY','SERVICE_ROLE_KEY','SUPABASE_SERVICE_KEY',
+ 'JWT_SERVICE_ROLE_KEY','SERVICE_KEY'
+)
+$anon=First-Key $merged @(
+ 'VITE_SUPABASE_ANON_KEY','SUPABASE_ANON_KEY','ANON_KEY',
+ 'SUPABASE_ANON_KEY_JWT','PUBLISHABLE_KEY','VITE_SUPABASE_PUBLISHABLE_KEY'
+)
+
+if($service.Length -eq 0 -or $anon.Length -eq 0){
+ Write-Host '--- KEY DISCOVERY FAILED ---' -ForegroundColor Yellow
+ Write-Host 'Run this and paste ONLY the variable NAMES (not values) if still stuck:' -ForegroundColor Yellow
+ Write-Host ("docker inspect $AuthContainer --format '{{range .Config.Env}}{{println .}}{{end}}' | findstr /i KEY")
+ Write-Host 'Or pass keys explicitly:' -ForegroundColor Yellow
+ Write-Host '.\scripts\security_p0\start-stage3w-lab-ui-stack.ps1 -ExpectedCommit $sha -ServiceRoleKey "..." -AnonKey "..."'
+ $have=@(
+  ($merged.Keys | Where-Object { $_ -match 'KEY|ANON|SERVICE|JWT|SECRET' } | Sort-Object)
+ ) -join ', '
+ Write-Host ('Key-like names currently seen (no values): '+$(if($have){$have}else{'(none)'}))
+ if($service.Length -eq 0){ throw 'Stage3W LAB UI: SERVICE_ROLE key missing' }
+ if($anon.Length -eq 0){ throw 'Stage3W LAB UI: ANON key missing' }
 }
 
 $origin='http://127.0.0.1:55321'
@@ -125,7 +169,8 @@ $report=Join-Path $Lab ('STAGE3W_LAB_UI_STACK_'+(Get-Date).ToString('yyyyMMdd-HH
  ('AUTH='+$AuthContainer),
  ('SUPABASE_URL='+$origin),
  ('ENV_FILE='+$envFile),
- ('ENV_SOURCES='+($found -join '|')),
+ ('ENV_SOURCES_COUNT='+$found.Count),
+ 'KEYS_RESOLVED=true',
  'FISCAL_PERSIST_LAB=true',
  'LIVE_SUPABASE=false'
 ) | Set-Content -LiteralPath $report -Encoding UTF8
@@ -138,7 +183,6 @@ if($SkipStart){
  return
 }
 
-# Free stale :3001 / :5173 listeners so smoke does not hit the wrong process.
 foreach($port in 3001,5173){
  try{
   $pids=@(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
@@ -165,14 +209,10 @@ Get-Content -LiteralPath '$envFile' | ForEach-Object {
 }
 Write-Host 'Stage3W LAB env loaded. Starting...' -ForegroundColor Cyan
 "@
-
 $apiCmd=$boot + "node scripts/dev-api.mjs"
 $viteCmd=$boot + "npx vite --port 5173 --strictPort"
-
 Start-Process powershell -ArgumentList @('-NoExit','-Command',$apiCmd) | Out-Null
 Start-Sleep -Seconds 3
 Start-Process powershell -ArgumentList @('-NoExit','-Command',$viteCmd) | Out-Null
-
 Write-Host 'Started windows: dev-api :3001 and Vite :5173' -ForegroundColor Green
 Write-Host 'Next: .\scripts\security_p0\smoke-stage3w-fiscal-lab-http.ps1 -ExpectedCommit' $sha
-Write-Host 'Then open http://127.0.0.1:5173 — login owner/admin — save one fattura attiva.'

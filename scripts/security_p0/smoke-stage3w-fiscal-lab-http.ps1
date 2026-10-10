@@ -1,4 +1,4 @@
-# Stage3W: smoke that LAB fiscal HTTP facade is enabled (expect 401/403, not 503/404/405-from-wrong-process).
+# Stage3W: smoke that LAB fiscal HTTP facade is enabled (expect 401/403/400).
 [CmdletBinding()]
 param(
  [Parameter(Mandatory=$true)][string]$ExpectedCommit,
@@ -18,7 +18,7 @@ if(!(Test-Path -LiteralPath $Lab -PathType Container)){
 }
 $envFile=Join-Path $repo '.env.stage3w.lab.local'
 if(!(Test-Path -LiteralPath $envFile -PathType Leaf)){
- throw 'Stage3W smoke: missing .env.stage3w.lab.local — run start-stage3w-lab-ui-stack.ps1 first (it must succeed)'
+ throw 'Stage3W smoke: missing .env.stage3w.lab.local — run start-stage3w-lab-ui-stack.ps1 first'
 }
 
 $uri=$Api.TrimEnd('/')+'/api/studio/fiscal-journal-post'
@@ -33,7 +33,7 @@ try{
  $ex=$_.Exception
  if($ex.Response){
   $code=[int]$ex.Response.StatusCode.value__
-  if(-not $code){ $code=[int]$ex.Response.StatusCode }
+  if(-not $code){ try{ $code=[int]$ex.Response.StatusCode }catch{ $code=0 } }
   try{
    $reader=New-Object System.IO.StreamReader($ex.Response.GetResponseStream())
    $body=$reader.ReadToEnd()
@@ -60,9 +60,8 @@ if($code -eq 404){
  throw 'Stage3W smoke BLOCKED: route missing (wrong server on :3001?)'
 }
 if($code -eq 405){
- throw ('Stage3W smoke BLOCKED: HTTP 405 on :3001 — stale/wrong process. Re-run start script (it kills :3001). Report: '+$report)
+ throw ('Stage3W smoke BLOCKED: HTTP 405 on :3001 — stale/wrong process. Re-run start script. Report: '+$report)
 }
-# Enabled + auth required (or invalid JSON payload before auth completes).
 if($code -eq 401 -or $code -eq 403 -or $code -eq 400){
  Write-Host 'STAGE3W LAB HTTP SMOKE PASS (endpoint enabled)' -ForegroundColor Green
  Write-Host ('Report: '+$report)
@@ -72,4 +71,3 @@ if($code -eq 401 -or $code -eq 403 -or $code -eq 400){
 Write-Host ('Unexpected HTTP '+$code) -ForegroundColor Yellow
 Write-Host ('Report: '+$report)
 throw ('Stage3W smoke unexpected HTTP '+$code)
-}
