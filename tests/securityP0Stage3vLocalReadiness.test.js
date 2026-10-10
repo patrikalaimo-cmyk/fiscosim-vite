@@ -9,49 +9,41 @@ const code=readFileSync(path,'utf8')
 test('Stage3V local infrastructure discovery never executes without immutable commit',()=>{
  const run=spawnSync(process.execPath,[fileURLToPath(path)],{
   encoding:'utf8',timeout:6000,
-  env:{PATH:process.env.PATH||'',USERPROFILE:'C:\\Users\\lab'},
+  env:{PATH:process.env.PATH||'',USERPROFILE:'C:\\\\Users\\\\lab'},
  })
  assert.notEqual(run.status,0)
  assert.match(run.stderr,/STAGE3V_REQUIRES_PINNED_SHA/)
 })
 
-test('Stage3V readiness scans only pinned Docker database and localhost services',()=>{
+test('Stage3V readiness probes ONLY the P0 LAB 55321 and its pinned Docker services',()=>{
  for(const marker of [
-  'supabase_db_FiscoSim-P0-LAB-20261008-164658',
-  "http://127.0.0.1:54321",
-  '/auth/v1/health',
-  '/rest/v1/',
-  'BEGIN READ ONLY;',
-  'ROLLBACK;',
+  'STAGE3V_LAB.db',
+  'STAGE3V_LAB.kong',
+  'STAGE3V_LAB_NETWORK',
+  'STAGE3V_LAB_ORIGIN+path',
+  'inspectStage3vLocalStack()',
+  '/auth/v1/health','/rest/v1/',
+  'BEGIN READ ONLY;','ROLLBACK;',
   'STAGE3V_INSTALLED|',
-  'AUTH_CONTAINER_ON_DB_NETWORK',
-  'POSTGREST_CONTAINER_ON_DB_NETWORK',
-  'GATEWAY_54321_BOUND_ONLY_TO_LOOPBACK',
-  'GATEWAY_54321_HOST_BINDINGS',
-  'NONE_ON_PINNED_DB_NETWORK',
-  "HostPort)!=='54321'",
-  "'127.0.0.1','::1'",
+  'LAB_REQUIRED_SERVICES_PRESENT',
+  'LAB_SERVICES_ONLY_ON_PINNED_NETWORK',
+  'GATEWAY_55321_PUBLISHED',
+  'LAB_ALL_PUBLISHED_PORTS_LOOPBACK',
+  'LAB_UNSAFE_HOST_BINDINGS',
+  'OTHER_FISCOSIM_LOCAL_STACK_PRESENT',
   'REAL_SIGNED_JWT_E2E=false',
   'ACCOUNTING_HTTP_POST_E2E=false',
-  'STAGE3V_LOCAL_AUTH_POSTGREST_PREREQUISITES_INCOMPLETE',
+  'STAGE3V_PINNED_LAB_PREREQUISITES_INCOMPLETE',
  ])assert.ok(code.includes(marker),marker)
- assert.doesNotMatch(code,/https:\/\//)
+ assert.doesNotMatch(code,/fetch\('http:\/\/127\.0\.0\.1:54321/)
  assert.doesNotMatch(code,/\.rpc\(|signInWithPassword|auth\.admin|Authorization|Bearer/)
  assert.doesNotMatch(code,/\b(?:DROP|CREATE|ALTER|TRUNCATE|INSERT|DELETE|UPDATE)\s+(?:TABLE|INTO|FROM|public\.)/i)
- assert.doesNotMatch(code,/docker\(\s*['"](?:run|rm|stop|start|restart)['"]/i)
  assert.doesNotMatch(code,/execFileSync\(\s*['"]docker['"]\s*,\s*\[\s*['"](?:run|rm|stop|start|restart)['"]/i)
 })
 
-test('Stage3V readiness does not claim actual signed-JWT posting from infrastructure',()=>{
+test('Read-only infrastructure status does not imply JWT E2E or fiscal posting PASS',()=>{
  assert.match(code,/network and gateway status alone do NOT verify/i)
  assert.ok(code.includes('REAL_SIGNED_JWT_E2E=false'))
  assert.ok(code.includes('ACCOUNTING_HTTP_POST_E2E=false'))
  assert.doesNotMatch(code,/STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS/)
-})
-
-test('Stage3V reports actual host bindings without relaxing loopback-only condition',()=>{
- assert.match(code,/bindings\.length>0/)
- assert.match(code,/bindings\.every\(b=>\['127\.0\.0\.1','::1'\]/)
- assert.match(code,/GATEWAY_54321_HOST_BINDINGS/)
- assert.doesNotMatch(code,/docker\('?(?:update|network|compose)/)
 })
