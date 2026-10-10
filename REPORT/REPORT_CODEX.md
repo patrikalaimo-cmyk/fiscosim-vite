@@ -743,3 +743,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 
 - Operatore: `Stage3W unreviewed SQL content detected: 58_…`. Pin install aveva OID stale `f74d5136…`; blob commitato reale `59b9b746…`.
 - Fix: pin corretto + check via `git rev-parse HEAD:path` (blob commitato, immune ad autocrlf Windows). Nessuna DDL eseguita nel tentativo fallito.
+
+
+## 2026-10-10 — Stage3W persistent LAB install PASS
+
+- Report: `STAGE3W_PERSISTENT_LAB_INSTALL_20261010-231404-750.txt` su container `supabase_db_FiscoSim-P0-LAB-20261008-164658`, commit `fe21da0`.
+- Esito: `STAGE3W_PERSISTENT_LAB_INSTALL_PASS` — DDL 57 COMMIT; matrix 58 PASS + fixture ROLLBACK; postflight `SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK`.
+- RPC `fiscosim_post_fiscal_journal` presente in LAB; claim table vuota; Stage3U preservato; no LIVE; no UI wire.
+- SG-P0-01 L2 LAB schema: **GREEN**. Prossimi solo su nuovo consenso: wire Manuale/Import (cut-over), L3 JWT (bloccato porte), o altri item roadmap.

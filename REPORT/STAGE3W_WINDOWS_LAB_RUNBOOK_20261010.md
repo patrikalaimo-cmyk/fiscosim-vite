@@ -1,7 +1,7 @@
 # Stage3W — Runbook LAB Windows (operatore)
 
 **Approvazione ricevuta in chat:** procedere con prove LAB Stage3W.  
-**Esito 2026-10-10:** preflight PASS + rehearsal ROLLBACK PASS su container `supabase_db_FiscoSim-P0-LAB-20261008-164658` (report `…230343-598.txt` / `…230345-944.txt`). Install persistente ancora **non** eseguita.  
+**Esito 2026-10-10:** preflight PASS + rehearsal ROLLBACK PASS + **install persistente PASS** su `supabase_db_FiscoSim-P0-LAB-20261008-164658` (report `…230343-598` / `…230345-944` / `…231404-750`). RPC Stage3W installata; fixture rolled back; Stage3U OK.  
 **Cloud Agent:** nessun Docker P0 disponibile → queste prove vanno eseguite sul PC Windows con lo stack `FiscoSim-P0-LAB-20261008-164658`.
 
 ## Vincoli

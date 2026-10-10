@@ -153,14 +153,14 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 - Contratto, scenari indipendenti, RPC candidata Stage3W, matrix SQL, API LAB e CI branch: **preparati in codice**.
 - Dettaglio: `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`.
-- Windows P0 LAB: preflight READ-ONLY **PASS** + rehearsal ROLLBACK **PASS** (report `…230343-598` / `…230345-944`). Schema Stage3W non persistito.
-- Prossima operazione richiedente consenso esplicito: install LAB persistente (`-ApproveLabSchemaInstall`).
+- Windows P0 LAB: preflight READ-ONLY **PASS** + rehearsal ROLLBACK **PASS** + install persistente **PASS** (`…231404-750.txt`, commit `fe21da0`). RPC Stage3W presente; fixture rolled back; Stage3U OK.
+- Prossimi solo su nuovo consenso: cut-over UI Manuale/Import e/o L3 JWT (porte LAB ancora da sanare).
 
 ## Prossima sessione
 
 1. **Non** applicare SG-P0-00 senza approvazione.  
 2. ~~Preflight + rehearsal ROLLBACK Stage3W sul LAB P0~~ **FATTO** (2026-10-10).  
-3. Solo su nuovo consenso esplicito: install LAB persistente; poi L3 JWT; **non** collegare UI prima di L2/L3.  
-4. Path produttivo `createPrimaNotaCompleta` resta invariato fino al cut-over esplicito.
+3. ~~Install LAB persistente~~ **FATTO** (`…231404-750.txt`).  
+4. Solo su nuovo consenso: L3 JWT (dopo porte loopback) e/o cut-over UI; path `createPrimaNotaCompleta` resta invariato fino ad allora.
 
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
