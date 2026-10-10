@@ -211,6 +211,8 @@ test('Stage3W matrix covers fattura, payment, NC, split, parcella, overpay, late
     'parcella withholding row missing',
     'parcella partita residual expected 1068.80',
     'REVOKE INSERT ON public.audit_contabile FROM service_role',
+    'SET LOCAL ROLE service_role;',
+    '$audit_failure$',
     'failed audit left fiscal idempotency claim',
     'failed audit left a posted fiscal PN',
     'failed audit left VAT rows',
@@ -219,6 +221,8 @@ test('Stage3W matrix covers fattura, payment, NC, split, parcella, overpay, late
     'STAGE3W_LAB_MATRIX|PASS|FIXTURE_ROLLBACK',
     'ROLLBACK;',
   ]) assert.ok(matrix.includes(marker), marker)
+  // Late-audit REVOKE must run after RESET ROLE (postgres), not inside service_role DO.
+  assert.match(matrix, /END \$test\$;\s*RESET ROLE;\s*[\s\S]*REVOKE INSERT ON public\.audit_contabile FROM service_role/)
   assert.doesNotMatch(matrix, /\bCOMMIT\s*;/)
 })
 
@@ -252,7 +256,7 @@ test('Stage3W persistent install script is gated and preserves Stage3U', () => {
     '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql',
     '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql',
     '4d4a765eb6b146fdf3343706b54330cb51ba7783',
-    '988e3396d2477d65140e70f6635cab2c5dfe560a',
+    'f74d51369aab9a1d2bfc883a920b771fbf0b16d4',
     'STAGE3U_MUST_REMAIN_UNTOUCHED=true',
     'DO NOT rerun automatically',
     '3W_PERSISTENT_INSTALL|SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK',

@@ -81,7 +81,6 @@ DECLARE
  ub constant uuid:='71000000-0000-4000-8000-000000000004';
  key_fa constant uuid:='71000000-0000-4000-8000-000000000099';
  key_pay constant uuid:='71000000-0000-4000-8000-000000000098';
- key_fail constant uuid:='71000000-0000-4000-8000-000000000097';
  header jsonb:='{"data_registrazione":"2026-03-15","data_documento":"2026-03-15","numero_documento":"FT-A-001","descrizione":"Fattura attiva ordinaria 22 percento"}';
  rows_fa jsonb:='[
   {"conto_id":"71000000-0000-4000-8000-000000000010","dare":1220,"avere":0},
@@ -254,8 +253,21 @@ BEGIN
   RAISE EXCEPTION 'Stage3W parcella partita residual expected 1068.80';
  END IF;
 
- -- Late audit failure after PN/VAT/partite inserts must leave zero residual for the failed key
- REVOKE INSERT ON public.audit_contabile FROM service_role;
+ RAISE NOTICE 'Stage3W fiscal journal balance / ownership / idempotency / residual matrix PASS';
+END $test$;
+RESET ROLE;
+
+-- Late audit failure MUST revoke as postgres (session role), not under
+-- SET ROLE service_role. Otherwise REVOKE is a no-op (PG warning) and the
+-- post still succeeds — same ordering as Stage3U matrix 55.
+REVOKE INSERT ON public.audit_contabile FROM service_role;
+SET LOCAL ROLE service_role;
+DO $audit_failure$
+DECLARE
+ a constant uuid:='71000000-0000-4000-8000-000000000001';
+ ua constant uuid:='71000000-0000-4000-8000-000000000003';
+ key_fail constant uuid:='71000000-0000-4000-8000-000000000097';
+BEGIN
  BEGIN
   PERFORM public.fiscosim_post_fiscal_journal(
    a,ua,key_fail,'fattura_passiva','registrazione_manual',
@@ -267,13 +279,11 @@ BEGIN
    ]'::jsonb,
    '{"rows":[{"tipo":"acquisto","imponibile":1000,"iva":220,"aliquota":22,"documento_id":"FT-P-001","riga_idx":0}]}'::jsonb,
    '{"mode":"open","openings":[{"tipo":"fornitore","conto_id":"71000000-0000-4000-8000-000000000016","numero_documento":"FT-P-001","importo_originale":1220}],"closures":[]}'::jsonb,
-   wh_none,
+   '{"eventType":"none","inserts":[],"updates":[]}'::jsonb,
    'Forced late audit failure for fiscal rollback proof');
   RAISE EXCEPTION 'SECURITY FAILURE: fiscal post succeeded without audit privilege';
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
- GRANT INSERT ON public.audit_contabile TO service_role;
-
  IF EXISTS(SELECT 1 FROM public.fiscosim_fiscal_journal_claim WHERE request_id=key_fail) THEN
   RAISE EXCEPTION 'failed audit left fiscal idempotency claim';
  END IF;
@@ -286,10 +296,8 @@ BEGIN
  IF EXISTS(SELECT 1 FROM public.partitario WHERE numero_documento='FT-P-001') THEN
   RAISE EXCEPTION 'failed audit left partita rows';
  END IF;
-
- RAISE NOTICE 'Stage3W fiscal journal balance / ownership / idempotency / residual matrix PASS';
-END $test$;
-
+END $audit_failure$;
 RESET ROLE;
+GRANT INSERT ON public.audit_contabile TO service_role;
 SELECT 'STAGE3W_LAB_MATRIX|PASS|FIXTURE_ROLLBACK' AS result;
 ROLLBACK;
