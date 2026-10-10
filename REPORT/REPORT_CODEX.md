@@ -737,3 +737,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Operatore: «approvo» = consenso esplicito a `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` sul solo container P0 LAB.
 - Cloud Agent non esegue Docker: install a carico operatore Windows. Se matrix 58 fallisce dopo COMMIT di 57: **non rieseguire** automaticamente; allegare report.
 - Fuori scope: UI Manuale/Import, LIVE Supabase, Stage3V JWT.
+
+
+## 2026-10-10 — Fix pin blob Stage3W 58 per install persistente
+
+- Operatore: `Stage3W unreviewed SQL content detected: 58_…`. Pin install aveva OID stale `f74d5136…`; blob commitato reale `59b9b746…`.
+- Fix: pin corretto + check via `git rev-parse HEAD:path` (blob commitato, immune ad autocrlf Windows). Nessuna DDL eseguita nel tentativo fallito.
