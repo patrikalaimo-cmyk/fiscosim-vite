@@ -722,3 +722,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Preflight READ-ONLY **PASS** su `c1c373f`. Rehearsal BLOCKED: `SECURITY FAILURE: fiscal post succeeded without audit privilege`.
 - Root cause: matrix 58 eseguiva `REVOKE INSERT … FROM service_role` dentro `SET LOCAL ROLE service_role` → PG warning `no privileges could be revoked` → post audit ancora permesso.
 - Fix: allineato a Stage3U 55 — `RESET ROLE` → `REVOKE` come postgres → `SET LOCAL ROLE service_role` → `$audit_failure$` → `RESET ROLE` → `GRANT`. Blob 58 → `f74d51369aab9a1d2bfc883a920b771fbf0b16d4`.
+
+
+## 2026-10-10 — Stage3W LAB Windows: preflight + rehearsal ROLLBACK PASS
+
+- Container: `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
+- Preflight: `STAGE3W_FISCAL_PREFLIGHT_20261010-230343-598.txt` — **READ-ONLY PASS**.
+- Rehearsal: `STAGE3W_FISCAL_REHEARSAL_20261010-230345-944.txt` — **ROLLBACK PASS** (matrix + schema Stage3W non persistiti; Stage3U untouched; no LIVE).
+- Gate SG-P0-01 reversible: **GREEN**. Prossimo solo su approvazione esplicita: install persistente LAB (`run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall`). Nessun wire UI/Manuale/Import.
