@@ -730,3 +730,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Preflight: `STAGE3W_FISCAL_PREFLIGHT_20261010-230343-598.txt` — **READ-ONLY PASS**.
 - Rehearsal: `STAGE3W_FISCAL_REHEARSAL_20261010-230345-944.txt` — **ROLLBACK PASS** (matrix + schema Stage3W non persistiti; Stage3U untouched; no LIVE).
 - Gate SG-P0-01 reversible: **GREEN**. Prossimo solo su approvazione esplicita: install persistente LAB (`run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall`). Nessun wire UI/Manuale/Import.
+
+
+## 2026-10-10 — Approvazione install persistente Stage3W LAB
+
+- Operatore: «approvo» = consenso esplicito a `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` sul solo container P0 LAB.
+- Cloud Agent non esegue Docker: install a carico operatore Windows. Se matrix 58 fallisce dopo COMMIT di 57: **non rieseguire** automaticamente; allegare report.
+- Fuori scope: UI Manuale/Import, LIVE Supabase, Stage3V JWT.
