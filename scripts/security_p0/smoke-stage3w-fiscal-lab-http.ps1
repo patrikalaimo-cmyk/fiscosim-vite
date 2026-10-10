@@ -18,7 +18,7 @@ if(!(Test-Path -LiteralPath $Lab -PathType Container)){
 }
 $envFile=Join-Path $repo '.env.stage3w.lab.local'
 if(!(Test-Path -LiteralPath $envFile -PathType Leaf)){
- throw 'Stage3W smoke: missing .env.stage3w.lab.local — run start-stage3w-lab-ui-stack.ps1 first'
+ throw 'Stage3W smoke: missing .env.stage3w.lab.local - run start-stage3w-lab-ui-stack.ps1 first'
 }
 
 $uri=$Api.TrimEnd('/')+'/api/studio/fiscal-journal-post'
@@ -39,7 +39,7 @@ try{
    $body=$reader.ReadToEnd()
   }catch{ $body=[string]$ex.Message }
  }else{
-  throw ('Stage3W smoke: API unreachable at '+$uri+' — wait for the dev-api window, then retry')
+  throw ('Stage3W smoke: API unreachable at '+$uri+' - wait for the dev-api window, then retry')
  }
 }
 $report=Join-Path $Lab ('STAGE3W_LAB_HTTP_SMOKE_'+(Get-Date).ToString('yyyyMMdd-HHmmss-fff')+'.txt')
@@ -60,12 +60,12 @@ if($code -eq 404){
  throw 'Stage3W smoke BLOCKED: route missing (wrong server on :3001?)'
 }
 if($code -eq 405){
- throw ('Stage3W smoke BLOCKED: HTTP 405 on :3001 — stale/wrong process. Re-run start script. Report: '+$report)
+ throw ('Stage3W smoke BLOCKED: HTTP 405 on :3001 - stale/wrong process. Re-run start script. Report: '+$report)
 }
 if($code -eq 401 -or $code -eq 403 -or $code -eq 400){
  Write-Host 'STAGE3W LAB HTTP SMOKE PASS (endpoint enabled)' -ForegroundColor Green
  Write-Host ('Report: '+$report)
- Write-Host 'Open http://127.0.0.1:5173 — login — save one fattura attiva.'
+ Write-Host 'Open http://127.0.0.1:5173 - login - save one fattura attiva.'
  return
 }
 Write-Host ('Unexpected HTTP '+$code) -ForegroundColor Yellow

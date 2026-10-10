@@ -779,3 +779,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Test baseline sicuri:** `npm ci`; `npm run test:all` → **1199 pass / 0 fail**; `npm run build` → PASS. Nessuna migration/RLS/env/LIVE/scrittura fiscale.
 - **Prossimo intervento concreto:** avviare Docker Desktop → verifica READ-ONLY container/volume Stage3W → `smoke-stage3w-fiscal-lab-http.ps1`. Scritture fiscali flag ON e SG-P0-00 porte solo con nuovo consenso. Default produttivo resta `createPrimaNotaCompleta`.
 
+
+## 2026-10-11 — Push + Docker LAB + Stage3W HTTP smoke PASS
+
+- Push: `3433ead` → `origin/feat/studio-grade-accounting-e2e-20261010`.
+- Docker Desktop avviato; stack P0 LAB presente (DB/Kong/Auth healthy). Porte ancora `0.0.0.0:55321/55322/...` (SG-P0-00 non applicato).
+- READ-ONLY PG: `fiscosim_post_fiscal_journal` + `fiscosim_post_general_journal` presenti; `fiscosim_fiscal_journal_claim` rows=0; `ROLLBACK`.
+- Fix encoding Windows: em-dash Unicode in `start-stage3w-lab-ui-stack.ps1` / `smoke-stage3w-fiscal-lab-http.ps1` → ASCII `-` (PowerShell parse fail senza BOM UTF-8).
+- Avvio stack UI LAB + smoke: report `STAGE3W_LAB_HTTP_SMOKE_20261011-000132-906.txt` → **HTTP 401 PASS** (endpoint fiscale LAB abilitato). Nessuna scrittura fiscale.
+- Fuori scope senza nuovo consenso: flag persist write Manuale/Import, SG-P0-00 recreate porte, Stage3V JWT.
+

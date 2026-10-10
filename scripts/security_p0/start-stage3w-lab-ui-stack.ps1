@@ -36,7 +36,7 @@ function Assert-DockerDaemon(){
 }
 function Assert-ContainerRunning([string]$Name,[string]$Label){
  $running=(& docker inspect --format '{{.State.Running}}' $Name 2>&1)
- if($LASTEXITCODE -ne 0){ throw ("Stage3W LAB UI: missing container "+$Name+" ("+$Label+") — start the P0 LAB stack first") }
+ if($LASTEXITCODE -ne 0){ throw ("Stage3W LAB UI: missing container "+$Name+" ("+$Label+") - start the P0 LAB stack first") }
  if((@($running) -join '').Trim() -ne 'true'){ throw ("Stage3W LAB UI: container not running "+$Name) }
 }
 Assert-DockerDaemon
@@ -158,7 +158,7 @@ if($service.Length -eq 0 -or $anon.Length -eq 0){
 $origin='http://127.0.0.1:55321'
 $envFile=Join-Path $repo '.env.stage3w.lab.local'
 @(
- '# AUTO-GENERATED for Stage3W LAB UI — do not commit secrets',
+ '# AUTO-GENERATED for Stage3W LAB UI - do not commit secrets',
  'FISCOSIM_ISOLATED_LAB_API=true',
  'FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED=true',
  'FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true',
@@ -190,7 +190,7 @@ Write-Host ('Stage3W LAB env written: '+$envFile) -ForegroundColor Green
 Write-Host ('Report: '+$report)
 
 if($SkipStart){
- Write-Host 'SkipStart set — not launching processes'
+ Write-Host 'SkipStart set - not launching processes'
  return
 }
 
