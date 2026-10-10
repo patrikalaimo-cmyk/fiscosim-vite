@@ -715,3 +715,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - CI marker-fix: Actions push/PR su `3315094` **PASS** (es. `38085572534` / `38085575040`).
 - Operatore: rehearsal ancora BLOCKED (`STAGE3W_FISCAL_REHEARSAL_20261010-225457-529.txt`) senza testo ERROR incollato.
 - Mitigazioni: (1) PS1 includono diagnostica PostgreSQL nel `throw`; (2) preflight 59 elenca colonne usate da RPC; (3) SQL 57 eccezione empty-ledger con conteggi `pn/lines/vat/part/wh`; (4) insert partitario tollera assenza `iva_per_cassa`. Blob pin 57 → `4d4a765eb6b146fdf3343706b54330cb51ba7783`.
+
+
+## 2026-10-10 — Stage3W late-audit REVOKE sotto service_role (no-op)
+
+- Preflight READ-ONLY **PASS** su `c1c373f`. Rehearsal BLOCKED: `SECURITY FAILURE: fiscal post succeeded without audit privilege`.
+- Root cause: matrix 58 eseguiva `REVOKE INSERT … FROM service_role` dentro `SET LOCAL ROLE service_role` → PG warning `no privileges could be revoked` → post audit ancora permesso.
+- Fix: allineato a Stage3U 55 — `RESET ROLE` → `REVOKE` come postgres → `SET LOCAL ROLE service_role` → `$audit_failure$` → `RESET ROLE` → `GRANT`. Blob 58 → `f74d51369aab9a1d2bfc883a920b771fbf0b16d4`.
