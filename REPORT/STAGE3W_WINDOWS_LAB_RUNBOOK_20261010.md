@@ -57,14 +57,19 @@ Usa l’output di `git rev-parse HEAD` come `-ExpectedCommit` nei passi seguenti
 
 **Ripristino se rehearsal FAIL:** non rieseguire alla cieca; conservare report; non installare; non `docker rm` / volume wipe senza nuova approvazione.
 
-## 3. NON eseguire ancora (richiede nuova approvazione esplicita)
+## 3. Install persistente — **ESEGUITA PASS** (`…231404-750`)
 
-Install persistente LAB:
+## 4. Wire Manuale/Import LAB (flag, default OFF)
 
-```powershell
-# NON ESEGUIRE finché non richiesto esplicitamente dopo rehearsal PASS
-.\scripts\security_p0\run-stage3w-fiscal-persistent-lab-install.ps1 `
-  -ExpectedCommit <SHA_HEAD> -ApproveLabSchemaInstall
+Codice presente su branch: `persistPrimaNotaDraft` può POST-are a `/api/studio/fiscal-journal-post` solo se:
+
+```text
+FISCOSIM_ISOLATED_LAB_API=true
+FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED=true
+FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true
+VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true
 ```
 
-Wire UI Manuale/Import e JWT write: fuori perimetro di questa prova.
++ `dev-api` su loopback + sessione Auth owner/admin. Senza flag: resta `createPrimaNotaCompleta`.
+
+JWT L3 write: ancora fuori perimetro (porte pubblicate).
