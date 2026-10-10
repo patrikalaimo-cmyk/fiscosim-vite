@@ -9,10 +9,11 @@ import {execFileSync} from 'node:child_process'
 import {existsSync,readdirSync,readFileSync} from 'node:fs'
 import {resolve,join,dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
+import { STAGE3V_LAB,assertStage3vLocalStackIsolated } from './stage3v-local-stack.mjs'
 
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../..')
 const BRANCH='security/p0-isolated-hardening-20261008'
-const CONTAINER='supabase_db_FiscoSim-P0-LAB-20261008-164658'
+const CONTAINER=STAGE3V_LAB.db
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const SHA=/^[0-9a-f]{40}$/i
 const FIELDS=new Set(['RPC','COMPANY','ACCOUNT','AUTH','MEMBERSHIP'])
@@ -96,6 +97,9 @@ export async function assertStage3vPinnedLab({expectedCommit,fixture,admin,authI
  }))throw Error('STAGE3V_PRIOR_STAGE3U_LAB_PROOF_MISSING')
  if(run('docker',['inspect','--format','{{.State.Running}}',CONTAINER])!=='true')
   throw Error('STAGE3V_PINNED_DB_NOT_RUNNING')
+ // Reject a wrongly-targeted 54321 stack and any wildcard-published LAB port.
+ // Runs BEFORE service-role queries, authentication, or persistent HTTP POST.
+ assertStage3vLocalStackIsolated()
 
  const companies=Object.values(fixture).map(f=>asUUID(f.company))
  const accounts=Object.values(fixture).flatMap(f=>[asUUID(f.debit),asUUID(f.credit)])
