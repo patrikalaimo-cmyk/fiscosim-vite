@@ -1,13 +1,37 @@
 /**
  * Browser/Node client for LAB Stage3W HTTP facade.
- * Does not embed the PostgreSQL RPC name (keeps persistPrimaNotaDraft CI clean).
+ * Avoids importing src/lib/auth.js (Node ESM cannot resolve its extensionless
+ * supabase import when Import suite loads persistPrimaNotaDraft).
  */
-import { apiFetch } from '../../../../lib/auth.js'
 
-export async function postFiscalJournalAtomicViaStudioApi(body) {
-  const response = await apiFetch('/api/studio/fiscal-journal-post', {
+async function resolveAccessToken(getAccessToken, db) {
+  if (typeof getAccessToken === 'function') {
+    return String((await getAccessToken()) || '')
+  }
+  if (db?.auth?.getSession) {
+    const { data } = await db.auth.getSession()
+    return String(data?.session?.access_token || '')
+  }
+  return ''
+}
+
+export async function postFiscalJournalAtomicViaStudioApi(body, {
+  db = null,
+  getAccessToken = null,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    const err = new Error('FISCAL_LAB_FETCH_UNAVAILABLE')
+    err.code = 'FISCAL_LAB_FETCH_UNAVAILABLE'
+    throw err
+  }
+  const token = await resolveAccessToken(getAccessToken, db)
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const response = await fetchImpl('/api/studio/fiscal-journal-post', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
   let json = null

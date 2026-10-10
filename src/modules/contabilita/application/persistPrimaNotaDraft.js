@@ -797,7 +797,7 @@ export async function persistPrimaNotaDraft({
       }
     }
     try {
-      const posted = await postFiscalJournalAtomicViaStudioApi(mapped.request)
+      const posted = await postFiscalJournalAtomicViaStudioApi(mapped.request, { db })
       const primaNotaId = posted.id
       return {
         data: { primaNotaId, id: primaNotaId },
