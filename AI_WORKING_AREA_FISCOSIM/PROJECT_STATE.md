@@ -1,25 +1,22 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** SG-P0-01 — contratto fiscale atomico + candidata Stage3W (codice/CI), LAB PostgreSQL non eseguito in Cloud.
-* **Branch lavoro:** `feat/studio-grade-accounting-e2e-20261010` (worktree isolato).
-* **PR:** https://github.com/patrikalaimo-cmyk/fiscosim-vite/pull/3 (Draft → base P0).
-* **Base P0:** `security/p0-isolated-hardening-20261008` @ `ceac722…`.
-* **Branch ordinario:** `mio-branch` — non toccato.
-* **Checkpoint sessione precedente:** `f6c874a` (audit/matrice/roadmap).
+* **Fase corrente:** SG-P0-01 Stage3W — codice/CI pronti; **rehearsal LAB Windows approvata**, in attesa esecuzione operatore (Cloud senza Docker).
+* **Branch:** `feat/studio-grade-accounting-e2e-20261010` · PR #3 Draft
+* **mio-branch:** non toccato
+* **Non ripetere:** Stage 3S / 3U
 
-## 2. Roadmap attiva immediata
-* **Completato SG-P0-01 (codice):** contratto documentato, scenari numerici indipendenti, RPC `fiscosim_post_fiscal_journal` LAB-only, matrix SQL, preflight READ ONLY, API LAB non cablata a UI, CI estesa a branch Studio Grade/P0.
-* **Prossimo (approvazione):** rehearsal ROLLBACK Stage3W sul Docker P0 Windows; poi eventuale install persistente.
-* **Bloccato senza consenso:** SG-P0-00 porte LAB, scritture persistenti, wire Manuale/Import.
-* **Non ripetere:** Stage 3S / Stage 3U.
+## 2. Prossimo passo operativo (PC Windows)
+1. Allineare worktree Studio Grade all’HEAD del branch
+2. Preflight READ ONLY Stage3W
+3. Rehearsal ROLLBACK Stage3W (approvata)
+4. Allegare report in chat
+5. **Non** eseguire install persistente senza nuova approvazione
 
-## 3. Documenti chiave
-* `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`
-* `REPORT/AUDIT_STUDIO_GRADE_20261010.md`
-* `REPORT/MATRICE_TEST_CONTABILI_E2E.md`
-* `REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`
+Runbook: `REPORT/STAGE3W_WINDOWS_LAB_RUNBOOK_20261010.md`
 
-## 4. Vincoli
-* Nessuna scrittura LIVE / merge `mio-branch` / deploy / recreate Docker.
-* Staging git selettivo.
+## 3. Artefatti Stage3W
+* Contratto: `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`
+* SQL 57/58/59 · API LAB · scenari indipendenti
+* Matrix: FA22, pay 720, NC −1220, split 1000, parcella+rit.200, late-audit
+* Install persistente gated: `run-stage3w-fiscal-persistent-lab-install.ps1` (**non eseguito**)

@@ -683,3 +683,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Fix verificato: push `d6b1c0d` e pull_request su `feat/studio-grade-accounting-e2e-20261010` (base P0) hanno eseguito **FiscoSim Test Baseline**.
 - Evidenza: Actions `38084334961` (push) e `38084339341` (PR) — **Ubuntu PASS + Windows PASS**. Nessuna scrittura LAB/DB.
 - Stato invariato: Stage3W candidata codice-only; rehearsal PostgreSQL Windows ancora in attesa di approvazione.
+
+
+## 2026-10-10 — SG-P0-01: approvazione rehearsal + runbook Windows + matrix ampliata
+
+- Operatore: «ok procedi» = approvazione prove LAB Stage3W. Cloud Agent **senza Docker**: impossibile eseguire preflight/rehearsal qui.
+- Preparato `REPORT/STAGE3W_WINDOWS_LAB_RUNBOOK_20261010.md` con comandi pin SHA/container e criteri PASS.
+- Matrix SQL 58 ampliata: nota credito attiva (−1220), split (partita 1000 + flag), parcella (netto 1068.80, ritenuta 200/1040), oltre FA22/pagamento/overpay/late-audit.
+- Script install persistente `run-stage3w-fiscal-persistent-lab-install.ps1` gated da `-ApproveLabSchemaInstall` + prova rehearsal + blob hash SQL; **non eseguito**. Stage3U preservato nel postcheck.
+- Test Cloud: `test:all` **1193/1193 PASS**, build PASS. PostgreSQL LAB ancora NOT_EXECUTED in Cloud.
+- Prossimo: operatore esegue preflight + rehearsal sul PC e allega report; install persistente richiede nuova approvazione esplicita.

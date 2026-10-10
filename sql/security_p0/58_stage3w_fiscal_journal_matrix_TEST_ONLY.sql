@@ -37,6 +37,9 @@ INSERT INTO public.piano_conti(id,societa_id,codice,descrizione,tipo,attivo) VAL
  ('71000000-0000-4000-8000-000000000014','71000000-0000-4000-8000-000000000001','5.01','Costi A','economico',true),
  ('71000000-0000-4000-8000-000000000015','71000000-0000-4000-8000-000000000001','2.02','IVA credito A','patrimoniale',true),
  ('71000000-0000-4000-8000-000000000016','71000000-0000-4000-8000-000000000001','2.10','Fornitore A','patrimoniale',true),
+ ('71000000-0000-4000-8000-000000000017','71000000-0000-4000-8000-000000000001','2.03','IVA split tecnico A','patrimoniale',true),
+ ('71000000-0000-4000-8000-000000000018','71000000-0000-4000-8000-000000000001','2.20','Erario ritenute A','patrimoniale',true),
+ ('71000000-0000-4000-8000-000000000019','71000000-0000-4000-8000-000000000001','4.02','Cassa previdenziale A','economico',true),
  ('71000000-0000-4000-8000-000000000020','71000000-0000-4000-8000-000000000002','1.01','Cliente B','patrimoniale',true);
 
 SET LOCAL ROLE anon;
@@ -184,6 +187,72 @@ BEGIN
  EXCEPTION WHEN OTHERS THEN
   IF SQLERRM NOT LIKE 'Stage3W closure exceeds residual%' THEN RAISE; END IF;
  END;
+
+ -- Nota credito attiva 22%: IVA/partita negative (imponibile 1000 -> IVA -220, partita -1220)
+ PERFORM public.fiscosim_post_fiscal_journal(
+  a,ua,'71000000-0000-4000-8000-000000000094','nota_credito_attiva','registrazione_manual',
+  '{"data_registrazione":"2026-03-18","numero_documento":"NC-A-001","descrizione":"Nota credito attiva ordinaria 22 percento"}'::jsonb,
+  '[
+    {"conto_id":"71000000-0000-4000-8000-000000000011","dare":1000,"avere":0},
+    {"conto_id":"71000000-0000-4000-8000-000000000012","dare":220,"avere":0},
+    {"conto_id":"71000000-0000-4000-8000-000000000010","dare":0,"avere":1220}
+  ]'::jsonb,
+  '{"rows":[{"tipo":"vendita","imponibile":-1000,"iva":-220,"aliquota":22,"documento_id":"NC-A-001","riga_idx":0}]}'::jsonb,
+  '{"mode":"open","openings":[{"tipo":"cliente","conto_id":"71000000-0000-4000-8000-000000000010","numero_documento":"NC-A-001","importo_originale":-1220}],"closures":[]}'::jsonb,
+  wh_none,
+  'Verified active credit note twenty two percent lab case');
+ SELECT count(*) INTO n FROM public.registri_iva
+  WHERE documento_id='NC-A-001' AND iva=-220 AND imponibile=-1000;
+ IF n<>1 THEN RAISE EXCEPTION 'Stage3W NC attiva VAT signs mismatch'; END IF;
+ SELECT importo_residuo INTO residuo FROM public.partitario WHERE numero_documento='NC-A-001';
+ IF residuo IS DISTINCT FROM -1220 THEN
+  RAISE EXCEPTION 'Stage3W NC attiva partita residual expected -1220';
+ END IF;
+
+ -- Split payment attiva: partita = imponibile 1000; VAT split_payment true
+ PERFORM public.fiscosim_post_fiscal_journal(
+  a,ua,'71000000-0000-4000-8000-000000000093','split_attiva','registrazione_manual',
+  '{"data_registrazione":"2026-03-19","numero_documento":"FT-SPLIT-001","descrizione":"Fattura attiva split payment 22 percento"}'::jsonb,
+  '[
+    {"conto_id":"71000000-0000-4000-8000-000000000010","dare":1000,"avere":0},
+    {"conto_id":"71000000-0000-4000-8000-000000000011","dare":0,"avere":1000},
+    {"conto_id":"71000000-0000-4000-8000-000000000012","dare":220,"avere":0},
+    {"conto_id":"71000000-0000-4000-8000-000000000017","dare":0,"avere":220}
+  ]'::jsonb,
+  '{"rows":[{"tipo":"vendita","imponibile":1000,"iva":220,"aliquota":22,"split_payment":true,"documento_id":"FT-SPLIT-001","riga_idx":0}]}'::jsonb,
+  '{"mode":"open","openings":[{"tipo":"cliente","conto_id":"71000000-0000-4000-8000-000000000010","numero_documento":"FT-SPLIT-001","importo_originale":1000}],"closures":[]}'::jsonb,
+  wh_none,
+  'Verified split payment active invoice twenty two percent');
+ SELECT importo_residuo INTO residuo FROM public.partitario WHERE numero_documento='FT-SPLIT-001';
+ IF residuo IS DISTINCT FROM 1000 THEN
+  RAISE EXCEPTION 'Stage3W split partita residual expected 1000';
+ END IF;
+ SELECT count(*) INTO n FROM public.registri_iva
+  WHERE documento_id='FT-SPLIT-001' AND split_payment IS TRUE AND iva=220;
+ IF n<>1 THEN RAISE EXCEPTION 'Stage3W split VAT flag missing'; END IF;
+
+ -- Parcella documento: netto 1068.80, ritenuta 200, IVA 228.80, cassa 40
+ PERFORM public.fiscosim_post_fiscal_journal(
+  a,ua,'71000000-0000-4000-8000-000000000092','parcella_documento','registrazione_manual',
+  '{"data_registrazione":"2026-03-21","numero_documento":"PARC-001","descrizione":"Parcella professionale con ritenuta d acconto"}'::jsonb,
+  '[
+    {"conto_id":"71000000-0000-4000-8000-000000000010","dare":1068.80,"avere":0},
+    {"conto_id":"71000000-0000-4000-8000-000000000018","dare":200,"avere":0},
+    {"conto_id":"71000000-0000-4000-8000-000000000011","dare":0,"avere":1000},
+    {"conto_id":"71000000-0000-4000-8000-000000000019","dare":0,"avere":40},
+    {"conto_id":"71000000-0000-4000-8000-000000000012","dare":0,"avere":228.80}
+  ]'::jsonb,
+  '{"rows":[{"tipo":"vendita","imponibile":1040,"iva":228.80,"aliquota":22,"documento_id":"PARC-001","riga_idx":0}]}'::jsonb,
+  '{"mode":"open","openings":[{"tipo":"cliente","conto_id":"71000000-0000-4000-8000-000000000010","numero_documento":"PARC-001","importo_originale":1068.80}],"closures":[]}'::jsonb,
+  '{"eventType":"documento","inserts":[{"percipiente_denominazione":"Professionista Test","compenso_lordo":1000,"imponibile_ritenuta":1000,"aliquota_ritenuta":20,"importo_ritenuta":200,"compenso_netto":1068.80,"contributo_cassa_prev":40,"codice_tributo":"1040","stato":"aperta"}],"updates":[]}'::jsonb,
+  'Verified professional invoice with withholding tax one zero four zero');
+ SELECT count(*) INTO n FROM public.ritenute_dacconto
+  WHERE numero_documento='PARC-001' AND importo_ritenuta=200 AND codice_tributo='1040';
+ IF n<>1 THEN RAISE EXCEPTION 'Stage3W parcella withholding row missing'; END IF;
+ SELECT importo_residuo INTO residuo FROM public.partitario WHERE numero_documento='PARC-001';
+ IF residuo IS DISTINCT FROM 1068.80 THEN
+  RAISE EXCEPTION 'Stage3W parcella partita residual expected 1068.80';
+ END IF;
 
  -- Late audit failure after PN/VAT/partite inserts must leave zero residual for the failed key
  REVOKE INSERT ON public.audit_contabile FROM service_role;

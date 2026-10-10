@@ -192,7 +192,7 @@ test('Stage3W SQL ensures separate claim table, ACID inserts, FOR UPDATE closure
   assert.match(sql, /SECURITY INVOKER/)
 })
 
-test('Stage3W matrix covers fattura, partial payment residual, overpay, late audit rollback', () => {
+test('Stage3W matrix covers fattura, payment, NC, split, parcella, overpay, late audit rollback', () => {
   for (const marker of [
     'local-fiscal-journal-matrix-rollback-only',
     'SET LOCAL ROLE service_role;',
@@ -201,6 +201,13 @@ test('Stage3W matrix covers fattura, partial payment residual, overpay, late aud
     'fattura partita residual expected 1220',
     'partial payment residual expected 720',
     'Overpay closure must be rejected by residual lock',
+    'nota_credito_attiva',
+    'NC attiva partita residual expected -1220',
+    'split_attiva',
+    'split partita residual expected 1000',
+    'parcella_documento',
+    'parcella withholding row missing',
+    'parcella partita residual expected 1068.80',
     'REVOKE INSERT ON public.audit_contabile FROM service_role',
     'failed audit left fiscal idempotency claim',
     'failed audit left a posted fiscal PN',
@@ -224,6 +231,23 @@ test('Stage3W preflight is READ ONLY and does not install', () => {
   assert.doesNotMatch(preflight, /^COMMIT;/m)
   assert.doesNotMatch(preflight, /^INSERT INTO /m)
   assert.doesNotMatch(preflight, /^CREATE (?:TABLE|FUNCTION)/m)
+})
+
+test('Stage3W persistent install script is gated and preserves Stage3U', () => {
+  const ps = source('scripts/security_p0/run-stage3w-fiscal-persistent-lab-install.ps1')
+  for (const marker of [
+    'ApproveLabSchemaInstall',
+    'STAGE3W_FISCAL_REHEARSAL_',
+    'STAGE3W_ROLLBACK_VERIFIED|NO_FISCAL_SCHEMA_PERSISTED',
+    '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql',
+    '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql',
+    '1e920b0f2aeda5cd40106395b64d41947ab013d3',
+    'e3ce10b8466b80a6bc9542b23ba6e04e0f71206f',
+    'STAGE3U_MUST_REMAIN_UNTOUCHED=true',
+    'DO NOT rerun automatically',
+    '3W_PERSISTENT_INSTALL|SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK',
+  ]) assert.ok(ps.includes(marker), marker)
+  assert.match(ps, /fiscosim_post_general_journal/)
 })
 
 test('Stage3W is not wired into Manuale or Import productive persist paths', () => {

@@ -117,22 +117,27 @@ Modulo: `domain/fiscalAtomicCommit/independentExpectedScenarios.js`
 
 ---
 
-## 7. Prove da eseguire sul worktree Windows (non Cloud)
+## 7. Prove LAB Windows (approvate in chat; eseguibili solo sul PC)
 
-1. **Preflight READ ONLY** (nessuna scrittura):  
-   `.\scripts\security_p0\run-stage3w-fiscal-preflight.ps1 -ExpectedCommit <SHA>`
-2. **Su approvazione esplicita — rehearsal ROLLBACK** (schema temporaneo, poi assente):  
-   `.\scripts\security_p0\run-stage3w-fiscal-rehearsal-rollback.ps1 -ExpectedCommit <SHA>`
-3. Install persistente LAB e JWT Stage3V/L3: **fuori da questo blocco**, richiedono consenso separato (porte loopback SG-P0-00).
+Runbook operativo: `REPORT/STAGE3W_WINDOWS_LAB_RUNBOOK_20261010.md`.
 
-### Proposta unica per la prima operazione LAB (ferma qui)
+| Passo | Comando | Stato |
+|---|---|---|
+| 1 Preflight READ ONLY | `run-stage3w-fiscal-preflight.ps1 -ExpectedCommit <HEAD>` | Da eseguire sul PC |
+| 2 Rehearsal ROLLBACK | `run-stage3w-fiscal-rehearsal-rollback.ps1 -ExpectedCommit <HEAD>` | **Approvato** — da eseguire sul PC |
+| 3 Install persistente | `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` | Script pronto; **NUOVA** approvazione richiesta |
+| 4 JWT / UI wire | — | Non autorizzato |
+
+Cloud Agent: Docker assente → impossibile eseguire i passi 1–3 qui.
+
+### Rischi rehearsal / ripristino
 
 | Voce | Dettaglio |
 |---|---|
-| Operazione | Rehearsal Stage3W ROLLBACK sul container `supabase_db_FiscoSim-P0-LAB-20261008-164658` |
-| Rischi | Avanzamento sequenze PostgreSQL nonostante ROLLBACK; errore a metà lascia DDL Stage3W solo se wrapper fallisce fuori dal txn unico (lo script usa un solo `BEGIN`/`ROLLBACK`) |
-| Ripristino | Verifica postflight `STAGE3W_ROLLBACK_VERIFIED\|NO_FISCAL_SCHEMA_PERSISTED`; Stage3U non toccato; nessun volume recreate |
-| Non incluso | Install persistente, JWT write, binding UI, porte Docker |
+| Operazione | Rehearsal Stage3W ROLLBACK su `supabase_db_FiscoSim-P0-LAB-20261008-164658` |
+| Rischi | Avanzamento sequenze PG; fallimento a metà |
+| Ripristino | `STAGE3W_ROLLBACK_VERIFIED\|NO_FISCAL_SCHEMA_PERSISTED`; nessun volume recreate |
+| Matrix ampliata | FA22, pagamento 720, NC −1220, split 1000, parcella 1068.80+rit.200, late-audit |
 
 ---
 
@@ -140,8 +145,9 @@ Modulo: `domain/fiscalAtomicCommit/independentExpectedScenarios.js`
 
 - [x] Contratto documentato e mappato allo schema
 - [x] Matrice numerica indipendente + test Node
-- [x] RPC candidata + matrix SQL + preflight
+- [x] RPC candidata + matrix SQL (FA/pay/NC/split/parcella) + preflight
 - [x] API LAB non collegata a UI produttiva
 - [x] CI estesa al branch Studio Grade / base P0
-- [ ] Rehearsal PostgreSQL Windows (approvazione operatore)
+- [x] Runbook Windows + install script gated (non eseguito)
+- [ ] Rehearsal PostgreSQL Windows (in attesa esecuzione operatore)
 - [ ] Install persistente / L3 JWT / wire Manuale (blocchi successivi)
