@@ -1,12 +1,14 @@
 # MATRICE TEST CONTABILI E2E — 2026-10-10
 
-**Branch/SHA base audit:** `feat/studio-grade-accounting-e2e-20261010` (da `ceac722`)  
+**Branch/SHA base audit:** `feat/studio-grade-accounting-e2e-20261010` @ `53e1f8e` (da `ceac722`)  
+**Refresh Windows:** 2026-10-10 — `test:all` 1199/1199; Docker Desktop spento; Stage3W install storico PASS non rieseguito  
 **Regola stati esito:** `PASS` | `FAIL` | `BLOCKED` | `NOT_IMPLEMENTED` | `NOT_EXECUTED`  
 **Regola codice:** `IMPLEMENTED` | `PARTIAL` | `MISSING` | `BROKEN` | `LEGACY` | `BLOCKED`  
 **Livelli prova:** L1 Unit · L2 PG Integration · L3 HTTP JWT · L4 Browser · L5 Ciclo integrato · L6 Regressione
 
 > `UNIT_PASS` della baseline Node **non** promuove un rigo a `PASS` E2E.  
-> Fixture obbligatorie: prefisso sintetico dedicato, società A/B, nessun dato cliente reale.
+> Fixture obbligatorie: prefisso sintetico dedicato, società A/B, nessun dato cliente reale.  
+> Stage3W L2 (RPC fiscale LAB) = PASS storico install/matrix; **non** certifica path default UI né JWT.
 
 ---
 
@@ -20,9 +22,10 @@
 | A04 | PN generale | Storno / rettifica / annullamento | PARTIAL | L1 | PASS (unit path) | RPC Fase3C + UI Manuale | E2E + policy graduata completa | P1 |
 | A05 | PN generale | Conti inesistenti / disattivi / altra società | PARTIAL | L1+L2(Stage3U) | PASS Stage3U LAB (solo RPC gen.) | Stage3U matrix | Path produttivo senza stessi guard ACID | P0 |
 | A06 | PN generale | Periodo chiuso / permessi insufficienti | PARTIAL | L1 | PASS (unit guards) | closed-period tests | JWT+PG | P0 |
-| A07 | PN generale | Replay stessa richiesta (idempotenza) | BROKEN (prod) / IMPLEMENTED (3U) | L2 | PASS solo Stage3U | claim table Stage3U | Prod `createPrimaNotaCompleta` senza idempotenza | P0 |
-| A08 | PN generale | Quadratura per scrittura e società | IMPLEMENTED | L1+L2(3U) | PASS unit / PASS 3U | Stage3U + Manuale | Full fiscal path | P0 |
-| A09 | PN generale | Rollback mid-transaction | BROKEN (prod) / IMPLEMENTED (3U) | L2 | PASS Stage3U late-fail | Stage3U rehearsal/install | Cleanup best-effort non ripristina UPDATE | P0 |
+| A07 | PN generale | Replay stessa richiesta (idempotenza) | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W LAB | claim 3U/3W | Default `createPrimaNotaCompleta` senza idempotenza | P0 |
+| A08 | PN generale | Quadratura per scrittura e società | IMPLEMENTED | L1+L2(3U/3W) | PASS unit / PASS 3U/3W | Stage3U/3W + Manuale | Path default non ACID | P0 |
+| A09 | PN generale | Rollback mid-transaction | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W late-fail | rehearsal/install 3U/3W | Cleanup best-effort non ripristina UPDATE | P0 |
+| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2 | PASS Stage3W matrix+install | `…231404-750.txt` | L3 JWT / UI flag ON NOT_EXECUTED | P0 |
 
 ---
 
@@ -169,9 +172,9 @@
 
 | Livello | Stato infrastruttura | Prossimo passo |
 |---|---|---|
-| L1 | Operativo (`test:*` CI) | Mantenere regressione; 1183 PASS @ sessione |
-| L2 | Stage3U generale PASS; fiscale completo MISSING | SG-P0-01 RPC fiscale |
-| L3 | Harness Stage3V pronto; porte BLOCKED | SG-P0-00 approvazione porte + JWT |
+| L1 | Operativo (`test:*` CI) | Mantenere regressione; **1199 PASS** @ sessione Windows |
+| L2 | Stage3U generale PASS; Stage3W fiscale PASS (install LAB) | Smoke HTTP + prova flag ON |
+| L3 | Harness Stage3V pronto; porte BLOCKED; Docker spento in sessione | SG-P0-00 approvazione porte + JWT |
 | L4 | Playwright/browser fiscali assenti | Dopo L3; debito manuale esistente |
 | L5 | Dataset multi-periodo assente | Dopo L2–L4 verticali |
 | L6 | CI Node only | Estendere a LAB isolato ripetibile |

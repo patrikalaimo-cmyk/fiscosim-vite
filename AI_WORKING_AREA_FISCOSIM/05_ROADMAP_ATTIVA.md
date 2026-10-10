@@ -4,7 +4,8 @@
 
 La sequenza operativa corrente per lo sblocco Studio Grade è in  
 `REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md` (P0→P4).  
-Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`.  
+Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` (`53e1f8e`, worktree Windows).  
+Stage3W LAB install PASS + wire flag OFF; prossimo = Docker ON → smoke → (consenso) prova flag ON.  
 Le sezioni storiche sotto restano traccia A100/P0; dove contrastano con la roadmap 20261010, **prevale quest’ultima**.
 
 L'attività storica ha completato con successo il modulo **Liquidazione IVA Definitiva / Chiusura UX / Export** ed ha avviato la preparazione per la fase successiva.

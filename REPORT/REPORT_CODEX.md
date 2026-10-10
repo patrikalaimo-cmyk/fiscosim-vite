@@ -766,3 +766,16 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Operatore: procedere in autonomia, meno micro-gate.
 - Script: `start-stage3w-lab-ui-stack.ps1` (env da cartella P0 LAB → `.env.stage3w.lab.local`, avvio API+Vite) e `smoke-stage3w-fiscal-lab-http.ps1` (atteso 401/403).
 - Fix CI precedente `333ca03`: client LAB senza import `auth.js`.
+
+## 2026-10-10 — Refresh Windows: worktree Studio Grade, audit, baseline 1199
+
+- **Ambiente:** PC Windows. Repo storico C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity su mio-branch @ `3af07b4` (working tree con untracked; **non modificato**). Worktree isolato gia presente `C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010`.
+- **Git:** `git fetch` P0 + Studio Grade. P0 tip = `ceac722` (checkpoint storico). Fast-forward worktree `2e1a2bd` → `53e1f8e` (`origin/feat/studio-grade-accounting-e2e-20261010`). Merge-base con P0 = `ceac722`; branch Studio Grade 26 commit ahead. Nessun merge, reset, force-push, touch `mio-branch`.
+- **Agent root:** spostato sul worktree Studio Grade.
+- **Documentazione riletta:** `AI_WORKING_AREA_FISCOSIM/00–08`, roadmap/audit/matrice 20261010, gate ciclo reale 20261009, contratto Stage3W, coda `REPORT_CODEX`, install report `…231404-750.txt`.
+- **Audit codice riconfermato:** `createPrimaNotaCompleta` multi-step + `cleanupPrimaNotaCompleta` best-effort (UPDATE partite/ritenute non ripristinate). Path LAB opzionale in `persistPrimaNotaDraft` dietro flag (default OFF) → `fiscosim_post_fiscal_journal`. Bank `allowRealCommit:false`. Import `Cronologia import` ancora placeholder.
+- **Documenti aggiornati (append/refresh, no riscrittura cieca):** `REPORT/AUDIT_STUDIO_GRADE_20261010.md`, `MATRICE_TEST_CONTABILI_E2E.md` (riga A10 Stage3W), `ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`, `FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md` (checklist allineata a PASS install), `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `02_STATO_ATTUALE.md`, `05_ROADMAP_ATTIVA.md`.
+- **Infrastruttura:** Docker Desktop **non in esecuzione** → topologia porte LAB e smoke Stage3W **NOT_EXECUTED** in questa sessione. Stage 3S/3U/3W-install **non rieseguiti**.
+- **Test baseline sicuri:** `npm ci`; `npm run test:all` → **1199 pass / 0 fail**; `npm run build` → PASS. Nessuna migration/RLS/env/LIVE/scrittura fiscale.
+- **Prossimo intervento concreto:** avviare Docker Desktop → verifica READ-ONLY container/volume Stage3W → `smoke-stage3w-fiscal-lab-http.ps1`. Scritture fiscali flag ON e SG-P0-00 porte solo con nuovo consenso. Default produttivo resta `createPrimaNotaCompleta`.
+

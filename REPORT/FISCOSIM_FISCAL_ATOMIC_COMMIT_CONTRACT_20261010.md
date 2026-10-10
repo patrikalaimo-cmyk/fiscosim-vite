@@ -1,7 +1,7 @@
 # Contratto salvataggio fiscale atomico — SG-P0-01 (2026-10-10)
 
-**Branch:** `feat/studio-grade-accounting-e2e-20261010`  
-**Stato:** SQL LAB installata (persistente PASS). Wire Manuale/Import **opzionale LAB** via flag (default OFF).  
+**Branch:** `feat/studio-grade-accounting-e2e-20261010` @ `53e1f8e`  
+**Stato:** SQL LAB installata (persistente PASS `…231404-750.txt`). Wire Manuale/Import **opzionale LAB** via flag (default OFF).  
 **Flag persist:** `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true` + `VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true` e endpoint `FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED=true` su stack isolato.
 
 ---
@@ -123,12 +123,12 @@ Runbook operativo: `REPORT/STAGE3W_WINDOWS_LAB_RUNBOOK_20261010.md`.
 
 | Passo | Comando | Stato |
 |---|---|---|
-| 1 Preflight READ ONLY | `run-stage3w-fiscal-preflight.ps1 -ExpectedCommit <HEAD>` | Da eseguire sul PC |
-| 2 Rehearsal ROLLBACK | `run-stage3w-fiscal-rehearsal-rollback.ps1 -ExpectedCommit <HEAD>` | **Approvato** — da eseguire sul PC |
-| 3 Install persistente | `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` | Script pronto; **NUOVA** approvazione richiesta |
-| 4 JWT / UI wire | — | Non autorizzato |
-
-Cloud Agent: Docker assente → impossibile eseguire i passi 1–3 qui.
+| 1 Preflight READ ONLY | `run-stage3w-fiscal-preflight.ps1 -ExpectedCommit <HEAD>` | **PASS** (`…230343-598.txt`) |
+| 2 Rehearsal ROLLBACK | `run-stage3w-fiscal-rehearsal-rollback.ps1 -ExpectedCommit <HEAD>` | **PASS** (`…230345-944.txt`) |
+| 3 Install persistente | `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` | **PASS** (`…231404-750.txt` @ `fe21da0`) |
+| 4 Wire Manuale/Import | flag LAB in `persistPrimaNotaDraft` | **Codice pronto, default OFF** |
+| 5 Smoke HTTP LAB | `smoke-stage3w-fiscal-lab-http.ps1` | Script pronto; sessione Windows: Docker spento → **NOT_EXECUTED** |
+| 6 JWT Stage3V / write UI | — | **BLOCKED** porte non-loopback + consenso |
 
 ### Rischi rehearsal / ripristino
 
@@ -146,8 +146,11 @@ Cloud Agent: Docker assente → impossibile eseguire i passi 1–3 qui.
 - [x] Contratto documentato e mappato allo schema
 - [x] Matrice numerica indipendente + test Node
 - [x] RPC candidata + matrix SQL (FA/pay/NC/split/parcella) + preflight
-- [x] API LAB non collegata a UI produttiva
+- [x] API LAB non collegata a UI produttiva di default
 - [x] CI estesa al branch Studio Grade / base P0
-- [x] Runbook Windows + install script gated (non eseguito)
-- [ ] Rehearsal PostgreSQL Windows (in attesa esecuzione operatore)
-- [ ] Install persistente / L3 JWT / wire Manuale (blocchi successivi)
+- [x] Runbook Windows + install script gated
+- [x] Rehearsal PostgreSQL Windows PASS
+- [x] Install persistente LAB PASS
+- [x] Wire Manuale/Import dietro flag LAB (default OFF)
+- [ ] Smoke HTTP + prova persistente sintetica con flag ON
+- [ ] L3 JWT Stage3V (dopo SG-P0-00 porte)

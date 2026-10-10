@@ -155,14 +155,18 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 - Dettaglio: `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`.
 - Windows P0 LAB: preflight READ-ONLY **PASS** + rehearsal ROLLBACK **PASS** + install persistente **PASS** (`…231404-750.txt`, commit `fe21da0`). RPC Stage3W presente; fixture rolled back; Stage3U OK.
 - Wire Manuale/Import → Stage3W: **implementato dietro flag LAB (default OFF)**. Attivazione runtime richiede env LAB + `dev-api` + sessione owner/admin.
+- Launcher UI LAB + smoke HTTP: script pronti (`start-stage3w-lab-ui-stack.ps1`, `smoke-stage3w-fiscal-lab-http.ps1`); hardening launch fino a `53e1f8e`.
 - L3 JWT ancora bloccato da porte non-loopback.
+- Sessione Windows refresh: worktree allineato a `53e1f8e`; `test:all` 1199/1199; Docker Desktop **spento** → smoke LAB non rieseguibile qui.
 
 ## Prossima sessione
 
 1. **Non** applicare SG-P0-00 senza approvazione.  
 2. ~~Preflight + rehearsal ROLLBACK Stage3W sul LAB P0~~ **FATTO** (2026-10-10).  
 3. ~~Install LAB persistente~~ **FATTO** (`…231404-750.txt`).  
-4. Cut-over UI: codice pronto **flag OFF**; per prove LAB impostare flag persist+endpoint (vedi contratto). Default produttivo resta `createPrimaNotaCompleta`.  
-5. L3 JWT solo dopo porte loopback + nuovo consenso.
+4. **Avviare Docker Desktop** → verifica READ-ONLY presenza container/volume Stage3W → `smoke-stage3w-fiscal-lab-http.ps1`.  
+5. Su consenso: prova persistente sintetica con flag LAB ON (verticale fattura passiva / Manuale) + query post-commit.  
+6. L3 JWT solo dopo porte loopback (SG-P0-00) + nuovo consenso.  
+7. Default produttivo resta `createPrimaNotaCompleta` finché L3/L4 Stage3W non certificati.
 
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
