@@ -13,6 +13,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { assertStage3vPinnedLab } from './stage3v-lab-binding.mjs'
+import { STAGE3V_LAB_ORIGIN } from './stage3v-local-stack.mjs'
 
 const env=process.env
 const commitIndex=process.argv.indexOf('--expected-commit')
@@ -45,6 +46,7 @@ const authUrl=loopbackUrl(required('SUPABASE_URL'),'SUPABASE_URL')
 const frontendUrl=loopbackUrl(required('VITE_SUPABASE_URL'),'VITE_SUPABASE_URL')
 const apiUrl=loopbackUrl(required('FISCOSIM_E2E_API_URL'),'FISCOSIM_E2E_API_URL')
 if(authUrl!==frontendUrl)throw Error('STAGE3V_FRONTEND_AUTH_MISMATCH')
+if(authUrl!==STAGE3V_LAB_ORIGIN)throw Error('STAGE3V_WRONG_LOCAL_SUPABASE_STACK_54321_IS_NOT_P0_LAB')
 if(env.FISCOSIM_GENERAL_JOURNAL_POST_LAB_ENABLED!=='true'){
  throw Error('STAGE3V_JOURNAL_API_NOT_ENABLED')
 }
