@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { analyzeWithClaude } from '../../shared/utils/parseDoc'
 import { sb } from '../../lib/supabase'
+import { fetchScopedFiscalData } from '../../lib/fiscalApi'
+import { apiFetch } from '../../lib/auth'
 import { ModuleHeader } from '../../shared/components'
 
 // ─── COSTANTI ────────────────────────────────────────────────
@@ -57,7 +59,7 @@ const ESITO_COLORS = {
 
 
 // ─── MODAL IMPORT PDF AVVISO ─────────────────────────────────
-function ModalImportPDFAvviso({ clienti, utenti, onSave, onClose }) {
+function ModalImportPDFAvviso({ clienti, utenti, societaChoices, onSave, onClose }) {
   const [file, setFile]       = useState(null)
   const [parsing, setParsing] = useState(false)
   const [parsed, setParsed]   = useState(null)  // dati estratti
@@ -123,6 +125,8 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
         responsabile_id:          '',
         note:                     estratto.note_estratte         || '',
         cliente_id:               '',
+        societa_id:              '',
+        motivazione:             '',
         cliente_nome:             estratto.destinatario          || '',
         _cf_estratto:             estratto.codice_fiscale        || '',
         _warnings:                [],
@@ -150,8 +154,9 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
           cl.codice_fiscale === cf || cl.partita_iva === cf
         )
         if (match) {
-          preform.cliente_id   = match.id
-          preform.cliente_nome = match.ragione_sociale || `${match.nome} ${match.cognome||''}`.trim()
+          // CF/PIVA is an operator suggestion only: NEVER silently assign a
+          // fiscal notice to a CRM customer based on heuristic matching.
+          preform._warnings = ['Possibile cliente con CF/PIVA corrispondente: selezionalo esplicitamente']
         } else {
           preform._warnings = [`CF/PIVA ${cf} non trovato tra i clienti — seleziona manualmente`]
         }
@@ -167,10 +172,10 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
 
 
   const handleSave = async () => {
-    if (!form.tipo_avviso) return alert('Tipo avviso obbligatorio')
+    if (!form.tipo_avviso || !form.cliente_id || !form.societa_id) return alert('Seleziona società, cliente e tipo avviso')
+    if(String(form.motivazione||'').trim().length<12)return alert('Motivazione obbligatoria (almeno 12 caratteri)')
     setSaving(true)
-    await onSave(form)
-    setSaving(false)
+    try{await onSave(form)}finally{setSaving(false)}
   }
 
   return (
@@ -243,6 +248,16 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
 
               {/* Form dati estratti */}
               <div className="form-grid">
+                <div className="fg full"><label>Società contabile proprietaria *</label>
+                  <select value={form.societa_id||''} onChange={e=>setForm(p=>({...p,societa_id:e.target.value,cliente_id:''}))}>
+                    <option value="">— Seleziona società —</option>
+                    {societaChoices.map(x=><option key={x.id} value={x.id}>{x.denominazione}</option>)}
+                  </select>
+                </div>
+                <div className="fg full"><label>Motivazione associazione *</label>
+                  <textarea rows={2} value={form.motivazione||''}
+                    onChange={e=>up('motivazione',e.target.value)}/>
+                </div>
                 <div className="fg full">
                   <label>Cliente *</label>
                   <select value={form.cliente_id} onChange={e=>{
@@ -251,7 +266,7 @@ Rispondi SOLO con JSON valido, null per campi non trovati:
                     up('cliente_nome',c?(c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()):'')
                   }}>
                     <option value="">— Seleziona cliente —</option>
-                    {clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()}</option>)}
+                    {clienti.filter(c=>(c.societa_assegnate||[]).includes(form.societa_id)).map(c=><option key={c.id} value={c.id}>{c.ragione_sociale||`${c.nome} ${c.cognome||''}`.trim()}</option>)}
                   </select>
                 </div>
                 <div className="fg">
@@ -530,10 +545,10 @@ Sii specifico e pratico, non generico.`
 }
 
 // ─── MODAL AVVISO (nuovo / modifica) ─────────────────────────
-function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
+function ModalAvviso({ avviso, clienti, utenti, societaChoices, onSave, onClose }) {
   const isNew = !avviso?.id
   const [form, setForm] = useState({
-    cliente_id: '', cliente_nome: '',
+    cliente_id: '', cliente_nome: '', societa_id:'', motivazione:'',
     tipo_avviso: TIPI_AVVISO[0],
     modello: MODELLI[0],
     importo: '',
@@ -551,7 +566,8 @@ function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
   const up = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   const handleSave = async () => {
-    if (!form.cliente_id && !form.cliente_nome) return alert('Seleziona o inserisci il cliente')
+    if (!form.cliente_id || !form.societa_id) return alert('Seleziona società e cliente autorizzato')
+    if(String(form.motivazione||'').trim().length<12)return alert('Indica una motivazione di almeno 12 caratteri')
     if (!form.tipo_avviso) return alert('Tipo avviso obbligatorio')
     setSaving(true)
     await onSave(form)
@@ -568,23 +584,34 @@ function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
         </div>
         <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
           <div className="form-grid">
+            <div className="fg full"><label>Società contabile proprietaria *</label>
+              <select disabled={!isNew} value={form.societa_id||''}
+                onChange={e=>setForm(p=>({...p,societa_id:e.target.value,cliente_id:'',cliente_nome:''}))}>
+                <option value="">— Seleziona società —</option>
+                {societaChoices.map(c=><option key={c.id} value={c.id}>{c.denominazione}</option>)}
+              </select>
+            </div>
+            <div className="fg full"><label>Motivazione operazione *</label>
+              <textarea rows={2} value={form.motivazione||''}
+                onChange={e=>up('motivazione',e.target.value)}/>
+            </div>
             {/* Cliente */}
             <div className="fg full">
               <label>Cliente *</label>
-              <select value={form.cliente_id} onChange={e => {
+              <select disabled={!isNew} value={form.cliente_id} onChange={e => {
                 const c = clienti.find(x => x.id === e.target.value)
                 up('cliente_id', e.target.value)
                 up('cliente_nome', c ? (c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()) : '')
               }}>
                 <option value="">— Seleziona cliente —</option>
-                {clienti.map(c => <option key={c.id} value={c.id}>{c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}</option>)}
+                {clienti.filter(c=>(c.societa_assegnate||[]).includes(form.societa_id)).map(c => <option key={c.id} value={c.id}>{c.ragione_sociale || `${c.nome} ${c.cognome || ''}`.trim()}</option>)}
               </select>
             </div>
 
             {/* Tipo avviso e modello */}
             <div className="fg">
               <label>Tipo avviso *</label>
-              <select value={form.tipo_avviso} onChange={e => up('tipo_avviso', e.target.value)}>
+              <select disabled={!isNew} value={form.tipo_avviso} onChange={e => up('tipo_avviso', e.target.value)}>
                 {TIPI_AVVISO.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
@@ -662,6 +689,20 @@ function ModalAvviso({ avviso, clienti, utenti, onSave, onClose }) {
 
 // ─── MODULO PRINCIPALE ────────────────────────────────────────
 export function ModuloAgeCon({ utente, ruolo }) {
+  const [societaChoices,setSocietaChoices]=useState([])
+  useEffect(()=>{
+    let active=true
+    const ids=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[]
+    if(!ids.length){setSocietaChoices([]);return}
+    sb.from('societa').select('id,denominazione').in('id',ids).order('denominazione')
+      .then(({data,error})=>{
+        if(!active)return
+        if(error){setSocietaChoices([]);return}
+        setSocietaChoices(Array.isArray(data)?data:[])
+      })
+    return ()=>{active=false}
+  },[utente])
+
   const [avvisi, setAvvisi]         = useState([])
   const [clienti, setClienti]       = useState([])
   const [utenti, setUtenti]         = useState([])
@@ -676,15 +717,23 @@ export function ModuloAgeCon({ utente, ruolo }) {
 
   const carica = useCallback(async () => {
     setLoading(true)
-    const [{ data: av }, { data: cl }, { data: ut }] = await Promise.all([
-      sb.from('avvisi_ade').select('*').order('data_scadenza', { ascending: true }),
-      sb.from('clienti').select('id,nome,cognome,ragione_sociale,codice_fiscale').eq('attivo', true).order('nome'),
-      sb.from('utenti_studio').select('id,nome,cognome,ruolo').eq('attivo', true),
-    ])
-    setAvvisi(av || [])
-    setClienti(cl || [])
-    setUtenti(ut || [])
-    setLoading(false)
+    try {
+      const [av,cl,ut]=await Promise.all([
+        fetchScopedFiscalData('avvisi_ade'),
+        fetchScopedFiscalData('clienti'),
+        fetchScopedFiscalData('utenti'),
+      ])
+      setAvvisi(av.sort((a,b)=>String(a.data_scadenza||'').localeCompare(String(b.data_scadenza||''))))
+      setClienti(cl)
+      setUtenti(ut)
+    } catch(error) {
+      setAvvisi([])
+      setClienti([])
+      setUtenti([])
+      alert(error.message||'Lettura protetta AgeCon non disponibile')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { carica() }, [carica])
@@ -697,40 +746,52 @@ export function ModuloAgeCon({ utente, ruolo }) {
   }
 
   const salvaAvviso = async (form) => {
-    // Rimuovi campi interni (prefisso _) che non sono colonne DB
-    const { _cf_estratto, _warnings, ...formClean } = form
-    const nullDate = v => { if(!v) return null; const s=String(v).trim(); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null; }
-    const { _extra, ...formNoExtra } = formClean
-    const rec = {
-      ...formNoExtra,
-      importo:               parseFloat(formNoExtra.importo) || null,
-      codice_studio:         formNoExtra.codice_studio || nextCodice(),
-      cliente_id:            formNoExtra.cliente_id || null,
-      responsabile_id:       formNoExtra.responsabile_id || null,
-      data_scadenza:         nullDate(formNoExtra.data_scadenza),
-      data_ricezione_cliente:nullDate(formNoExtra.data_ricezione_cliente),
-      data_ricezione_studio: nullDate(formNoExtra.data_ricezione_studio),
-      modello:               formNoExtra.modello || null,
-      esito:                 formNoExtra.esito || null,
-      attivita:              formNoExtra.attivita || null,
-      note:                  formNoExtra.note || null,
-      dati_estratti:         _extra ? JSON.stringify(_extra) : null,
+    const action=form.id?'update':'create'
+    const societa_id=String(form.societa_id||'')
+    const motivazione=String(form.motivazione||'').trim()
+    if(!societaChoices.some(x=>x.id===societa_id)){
+      alert('Seleziona una società autorizzata');return false
     }
-    if (form.id) {
-      const {error:ue} = await sb.from('avvisi_ade').update(rec).eq('id', form.id)
-      if(ue) { alert('Errore update: '+ue.message+' | '+ue.details); return; }
-    } else {
-      const {error:ie} = await sb.from('avvisi_ade').insert([rec])
-      if(ie) { alert('Errore insert: '+ie.message+' | '+ie.details+' | hint: '+ie.hint); return; }
+    if(motivazione.length<12){alert('Motivazione obbligatoria (minimo 12 caratteri)');return false}
+    const fields=action==='create'
+      ? ['cliente_id','tipo_avviso','modello','importo','contenuto','data_ricezione_cliente','data_scadenza',
+          'data_ricezione_studio','attivita','esito','responsabile_id','note']
+      : ['modello','importo','contenuto','data_ricezione_cliente','data_scadenza',
+          'data_ricezione_studio','attivita','esito','responsabile_id','note']
+    const data=Object.fromEntries(fields.filter(k=>Object.hasOwn(form,k)).map(k=>[k,form[k]??'']))
+    if(Object.hasOwn(form,'_extra'))data.dati_estratti=form._extra
+    try{
+      const response=await apiFetch('/api/studio/agecon-write',{
+        method:action==='create'?'POST':'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action,id:form.id||null,societa_id,motivazione,data}),
+      })
+      const payload=await response.json().catch(()=>({}))
+      if(!response.ok)throw new Error(payload.error||'Salvataggio AgeCon rifiutato')
+      setModalAvviso(null)
+      await carica()
+      return true
+    }catch(error){
+      alert(error.message||'Avviso non salvato')
+      return false
     }
-    setModalAvviso(null)
-    carica()
   }
 
   const eliminaAvviso = async (id) => {
-    if (!confirm('Eliminare questo avviso?')) return
-    await sb.from('avvisi_ade').delete().eq('id', id)
-    carica()
+    const avviso=avvisi.find(x=>x.id===id)
+    if(!avviso)return
+    const motivazione=prompt('Motivazione della chiusura avviso (non verrà cancellato):')
+    if(motivazione===null)return
+    try{
+      const response=await apiFetch('/api/studio/agecon-write',{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'close',id,societa_id:avviso.societa_id,
+          motivazione,data:{}}),
+      })
+      const payload=await response.json().catch(()=>({}))
+      if(!response.ok)throw new Error(payload.error||'Chiusura avviso non riuscita')
+      await carica()
+    }catch(error){alert(error.message)}
   }
 
   // Filtri
@@ -773,12 +834,13 @@ export function ModuloAgeCon({ utente, ruolo }) {
           avviso={modalAvviso}
           clienti={clienti}
           utenti={utenti}
+          societaChoices={societaChoices}
           onSave={salvaAvviso}
           onClose={() => setModalAvviso(null)}
         />
       )}
       {modalCivis && <ModalCivisAI avviso={modalCivis} onClose={() => setModalCivis(null)} />}
-      {modalImportPDF && <ModalImportPDFAvviso clienti={clienti} utenti={utenti} onSave={async(form)=>{await salvaAvviso(form);setModalImportPDF(false);}} onClose={()=>setModalImportPDF(false)}/>}
+      {modalImportPDF && <ModalImportPDFAvviso clienti={clienti} utenti={utenti} societaChoices={societaChoices} onSave={async(form)=>{const ok=await salvaAvviso(form);if(ok)setModalImportPDF(false);return ok}} onClose={()=>setModalImportPDF(false)}/>}
       {modalAnalisi && <ModalAnalisiAI avviso={modalAnalisi} onClose={() => setModalAnalisi(null)} />}
 
       {/* Header */}
@@ -922,7 +984,7 @@ export function ModuloAgeCon({ utente, ruolo }) {
                       <td>
                         <div className="tbl-actions">
                           <button className="btn-icon" title="Modifica" onClick={() => setModalAvviso(a)}>✏️</button>
-                          <button className="btn-icon" title="Elimina" style={{ borderColor: 'rgba(224,82,82,.3)', color: '#ff8585' }} onClick={() => eliminaAvviso(a.id)}>🗑</button>
+                          <button className="btn-icon" title="Chiudi senza cancellare" style={{ borderColor: 'rgba(224,82,82,.3)', color: '#ff8585' }} onClick={() => eliminaAvviso(a.id)}>🗑</button>
                         </div>
                       </td>
                     </tr>

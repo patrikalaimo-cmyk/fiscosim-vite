@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
+import { fetchScopedFiscalData } from '../../lib/fiscalApi'
+import { apiFetch } from '../../lib/auth'
 import { TIPO_LABEL, TIPO_COLOR, MODULI_DEFAULT, MODULI_DISPONIBILI, TIPO_CLIENTE } from '../../shared/constants'
 import { ModuleHeader } from '../../shared/components'
 
@@ -10,7 +12,7 @@ const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 const todayStr = () => new Date().toISOString().split('T')[0]
 const tomorrowStr = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0] }
 
-export function ModuloClienti(){
+export function ModuloClienti({ utente }){
   const [clienti,setClienti]=useState([]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState("");
@@ -22,12 +24,31 @@ export function ModuloClienti(){
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState(null);
   const [selected,setSelected]=useState(new Set());
-  const EMPTY={nome:"",cognome:"",ragione_sociale:"",tipo_cliente:"forfettario",email:"",email_cc:[],codice_fiscale:"",partita_iva:"",note:"",moduli_attivi:MODULI_DEFAULT};
+  const [societaOptions,setSocietaOptions]=useState([]);
+  const EMPTY={nome:"",cognome:"",ragione_sociale:"",tipo_cliente:"forfettario",email:"",email_cc:[],codice_fiscale:"",partita_iva:"",note:"",moduli_attivi:MODULI_DEFAULT,societa_id:"",motivazione:""};
+  useEffect(()=>{
+    let active=true;
+    const assigned=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[];
+    if(!assigned.length){setSocietaOptions([]);return;}
+    sb.from('societa').select('id,denominazione').in('id',assigned).order('denominazione')
+      .then(({data,error})=>{
+        if(!active)return;
+        if(error){setErr(error.message);setSocietaOptions([]);return;}
+        setSocietaOptions(Array.isArray(data)?data:[]);
+      });
+    return ()=>{active=false};
+  },[utente]);
 
   const carica=useCallback(async()=>{
     setLoading(true);
-    const{data}=await sb.from("clienti").select("*").eq("attivo",true).order("nome");
-    setClienti(data||[]);setLoading(false);
+    try{
+      const rows=await fetchScopedFiscalData('clienti');
+      setClienti(rows);
+      setErr(null);
+    }catch(e){
+      setClienti([]);
+      setErr(e.message||'Elenco clienti non disponibile');
+    }finally{setLoading(false);}
   },[]);
   useEffect(()=>{carica();},[carica]);
 
@@ -38,12 +59,67 @@ export function ModuloClienti(){
     return mQ&&mT;
   });
 
-  const salva=async(data)=>{setSaving(true);setErr(null);try{if(modal.mode==="new"){const{error}=await sb.from("clienti").insert([data]);if(error)throw error;}else{const{error}=await sb.from("clienti").update(data).eq("id",modal.data.id);if(error)throw error;}await carica();setModal(null);}catch(e){setErr(e.message);}finally{setSaving(false);}};
-  const elimina=async(id)=>{if(!confirm("Eliminare questo cliente?"))return;await sb.from("clienti").update({attivo:false}).eq("id",id);carica();};
+  const salva=async(data)=>{
+    setSaving(true);setErr(null);
+    try{
+      if(modal.mode==='new'){
+        if(!societaOptions.some(s=>s.id===data.societa_id)){
+          throw new Error('Seleziona una società autorizzata')
+        }
+        if(String(data.motivazione||'').trim().length<12){
+          throw new Error('Specifica la motivazione dell’assegnazione (almeno 12 caratteri)')
+        }
+        const {societa_id,motivazione,...newCustomer}=data;
+        const response=await apiFetch('/api/studio/client-create',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({societa_id,motivazione,data:newCustomer}),
+        });
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(payload.error||'Creazione cliente non riuscita');
+      }else{
+        const allowedFields=['nome','cognome','ragione_sociale','tipo_cliente','email',
+          'email_cc','codice_fiscale','partita_iva','note','codice_cliente','telefono','indirizzo'];
+        const patch=Object.fromEntries(allowedFields
+          .filter(key=>Object.hasOwn(data,key))
+          .map(key=>[key,data[key]]));
+        const response=await apiFetch('/api/studio/client-update',{
+          method:'PATCH',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:modal.data.id,action:'edit',data:patch,
+            motivazione:String(data.motivazione||'').trim()}),
+        });
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(payload.error||'Modifica cliente non riuscita');
+      }
+      await carica();setModal(null);
+    }catch(e){setErr(e.message||'Salvataggio non riuscito');}
+    finally{setSaving(false);}
+  };
+  const elimina=async(id)=>{
+    const reason=prompt('Motivazione della disattivazione cliente (minimo 12 caratteri):');
+    if(reason===null)return;
+    try{
+      const response=await apiFetch('/api/studio/client-update',{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id,action:'deactivate',data:{},motivazione:reason}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||'Disattivazione cliente non riuscita');
+      await carica();
+    }catch(e){setErr(e.message);}
+  };
 
-  const salvaModuli=async(clienteId,moduli)=>{
-    await sb.from("clienti").update({moduli_attivi:moduli}).eq("id",clienteId);
-    await carica();
+  const salvaModuli=async(clienteId,moduli,motivazione)=>{
+    try{
+      const response=await apiFetch('/api/studio/client-update',{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:clienteId,action:'modules',
+          data:{moduli_attivi:moduli},motivazione}),
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||'Aggiornamento moduli non riuscito');
+      await carica();
+      return true;
+    }catch(e){setErr(e.message);return false;}
   };
 
   const toggleSel=id=>setSelected(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
@@ -53,7 +129,7 @@ export function ModuloClienti(){
 
   return(
     <div className="page">
-      {modal&&<ClienteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err}/>}
+      {modal&&<ClienteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err} societaOptions={societaOptions}/>} 
       {mailModal&&<SendMailModal cliente={mailModal} onClose={()=>setMailModal(null)}/>}
       {moduliModal&&<ModuliModal cliente={moduliModal} onSave={salvaModuli} onClose={()=>setModuliModal(null)}/>}
       {bulkModal&&<ModuliBulkModal clienti={selClienti} onSave={salvaModuli} onClose={()=>{setBulkModal(false);setSelected(new Set());}}/>}
@@ -75,11 +151,12 @@ export function ModuloClienti(){
       {selected.size>0&&(
         <div style={{background:"rgba(200,164,94,.08)",border:"1px solid rgba(200,164,94,.3)",borderRadius:10,padding:".65rem 1rem",marginBottom:".75rem",display:"flex",alignItems:"center",gap:".75rem",flexWrap:"wrap"}}>
           <span style={{fontSize:".8rem",fontWeight:600,color:"var(--gld2)"}}>{selected.size} selezionati</span>
-          <button className="btn btn-sm" onClick={()=>setBulkModal(true)}>⚙️ Gestisci moduli</button>
+          <button className="btn btn-sm" onClick={()=>setErr('Aggiornamento moduli multiplo sospeso: è necessaria una transazione unica per tutti i clienti.')}>⚙️ Gestisci moduli</button>
           <button className="btn-sec btn-sm" onClick={()=>setSelected(new Set())}>Deseleziona tutti</button>
         </div>
       )}
 
+      {err&&!modal&&<div className="alert alert-error">{err}</div>}
       {loading?<div className="loading">⏳ Caricamento...</div>:filtered.length===0?(
         <div className="empty"><div className="empty-ico">👥</div><div className="empty-t">{clienti.length===0?"Nessun cliente":"Nessun risultato"}</div><div className="empty-s">{clienti.length===0?"Aggiungi il primo cliente o importa da Excel":"Cambia la ricerca o il filtro"}</div></div>
       ):(
@@ -119,7 +196,7 @@ export function ModuloClienti(){
                     <td><div className="tbl-actions">
                       <button className="btn-icon" title="Moduli" onClick={()=>setModuliModal(c)}>⚙️</button>
                       <button className="btn-icon" onClick={()=>setModal({mode:"edit",data:c})}>✏️</button>
-                      {c.email&&<button className="btn-icon" onClick={()=>setMailModal(c)}>📧</button>}
+                      {c.email&&<button className="btn-icon" title="Invio email non ancora disponibile" onClick={()=>setErr('Invio email disabilitato: tabella notifiche e autorizzazioni da completare.')}>📧</button>}
                       <button className="btn-icon" style={{borderColor:"rgba(224,82,82,.3)",color:"#ff8585"}} onClick={()=>elimina(c.id)}>🗑</button>
                     </div></td>
                   </tr>
@@ -135,7 +212,7 @@ export function ModuloClienti(){
 
 
 // ─── MODAL NUOVO/MODIFICA CLIENTE ────────────────────────────
-function ClienteModal({mode, data, onSave, onClose, saving, err}){
+function ClienteModal({mode, data, onSave, onClose, saving, err, societaOptions}){
   const [form,setForm]=useState({...data});
   const up=(k,v)=>setForm(p=>({...p,[k]:v}));
   const isNew=mode==='new';
@@ -156,6 +233,18 @@ function ClienteModal({mode, data, onSave, onClose, saving, err}){
         <div className="modal-body">
           {err&&<div className="alert alert-error" style={{marginBottom:'1rem'}}>{err}</div>}
           <div className="form-grid">
+            {isNew&&<>
+              <div className="fg full"><label>Società contabile proprietaria *</label>
+                <select value={form.societa_id||''} onChange={e=>up('societa_id',e.target.value)}>
+                  <option value="">— Seleziona esplicitamente la società —</option>
+                  {societaOptions.map(item=><option key={item.id} value={item.id}>{item.denominazione}</option>)}
+                </select>
+              </div>
+            </>}
+            <div className="fg full"><label>{isNew?'Motivazione dell’assegnazione *':'Motivazione della modifica *'}</label>
+              <textarea value={form.motivazione||''} onChange={e=>up('motivazione',e.target.value)}
+                placeholder="Motivo verificato dell’operazione" rows={2}/>
+            </div>
             <div className="fg"><label>Nome</label><input value={form.nome||''} onChange={e=>up('nome',e.target.value)} placeholder="Nome"/></div>
             <div className="fg"><label>Cognome</label><input value={form.cognome||''} onChange={e=>up('cognome',e.target.value)} placeholder="Cognome"/></div>
             <div className="fg full"><label>Ragione Sociale</label><input value={form.ragione_sociale||''} onChange={e=>up('ragione_sociale',e.target.value)} placeholder="Per società e ditte"/></div>
@@ -215,9 +304,16 @@ function SendMailModal({cliente, onClose}){
 // ─── MODAL GESTIONE MODULI SINGOLO CLIENTE ────────────────────
 function ModuliModal({cliente, onSave, onClose}){
   const [moduli,setModuli]=useState(cliente.moduli_attivi||MODULI_DEFAULT);
+  const [motivazione,setMotivazione]=useState('');
   const [saving,setSaving]=useState(false);
   const toggle=id=>setModuli(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const save=async()=>{setSaving(true);await onSave(cliente.id,moduli);setSaving(false);onClose();};
+  const save=async()=>{
+    if(motivazione.trim().length<12){alert('Indica la motivazione di almeno 12 caratteri');return;}
+    setSaving(true);
+    const ok=await onSave(cliente.id,moduli,motivazione.trim());
+    setSaving(false);
+    if(ok)onClose();
+  };
   return(
     <div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400}}>
@@ -232,6 +328,11 @@ function ModuliModal({cliente, onSave, onClose}){
               </div>
             ))}
           </div>
+        </div>
+        <div className="modal-body">
+          <label>Motivazione modifica moduli *</label>
+          <textarea rows={2} value={motivazione} onChange={e=>setMotivazione(e.target.value)}
+            placeholder="Motivo verificato della variazione" />
         </div>
         <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={saving} onClick={save}>{saving?'⏳...':'💾 Salva'}</button></div>
       </div>

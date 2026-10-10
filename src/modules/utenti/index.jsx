@@ -1,52 +1,82 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
+import { apiFetch } from '../../lib/auth'
 import { RUOLO_LABEL, RUOLO_COLOR, PERMESSI_MODULI, PERMESSI_DEFAULT } from '../../shared/constants'
-import { getPermessi, puoGestireUtenti } from '../../shared/utils'
 import { ModuleHeader } from '../../shared/components'
 
-const fmtDate = d => d ? new Date(d).toLocaleDateString('it-IT') : '—'
-
-export function ModuloUtenti(){
+export function ModuloUtenti({ utente, ruolo }){
   const [utenti,setUtenti]=useState([]);
   const [loading,setLoading]=useState(true);
   const [modal,setModal]=useState(null);
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState(null);
-  const EMPTY={nome:"",cognome:"",email:"",ruolo:"collaboratore",password_hash:""};
-  const carica=useCallback(async()=>{setLoading(true);const{data}=await sb.from("utenti_studio").select("*").eq("attivo",true).order("nome");setUtenti(data||[]);setLoading(false);},[]);
+  const [societaOptions,setSocietaOptions]=useState([]);
+  const allowedSocietaIds=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[];
+  // New access grants require an explicit checkbox selection, no preassignment.
+  const EMPTY={nome:"",cognome:"",email:"",ruolo:"collaboratore",password:"",societa_assegnate:[]};
+  const carica=useCallback(async()=>{
+    setLoading(true);
+    try {
+      const res=await apiFetch('/api/auth/users',{method:'GET'});
+      const json=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(json.error||'Impossibile leggere gli utenti dello studio');
+      setUtenti(Array.isArray(json.users)?json.users:[]);
+      const allowed=Array.isArray(utente?.societa_assegnate)?utente.societa_assegnate:[];
+      if(!allowed.length){setSocietaOptions([]);return;}
+      const {data,error}=await sb.from('societa').select('id,denominazione').in('id',allowed).order('denominazione');
+      if(error)throw error;
+      setSocietaOptions(Array.isArray(data)?data:[]);
+      setErr(null);
+    }catch(e){setErr(e.message||'Impossibile caricare gli utenti');}
+    finally{setLoading(false);}
+  },[utente]);
   useEffect(()=>{carica();},[carica]);
   const salva=async(data)=>{
     setSaving(true);setErr(null);
-    try{
-      // Per nuovo utente, password è obbligatoria
-      if(modal.mode==="new"&&!data.password_hash){throw new Error("La password è obbligatoria per i nuovi utenti");}
-      // Per modifica, se password vuota non la aggiorniamo
-      const saveData={...data};
-      if(modal.mode==="edit"&&!saveData.password_hash){
-        delete saveData.password_hash;
+    try {
+      if(modal.mode==='new'&&!data.password) throw new Error('Password obbligatoria per il nuovo utente');
+      if(!Array.isArray(data.societa_assegnate)||!data.societa_assegnate.length) {
+        throw new Error('Seleziona almeno una società da assegnare');
       }
-      if(modal.mode==="new"){
-        const{error}=await sb.from("utenti_studio").insert([saveData]);
-        if(error)throw error;
-      }else{
-        const{error}=await sb.from("utenti_studio").update(saveData).eq("id",modal.data.id);
-        if(error)throw error;
-      }
+      const payload={...data};
+      if(!payload.password) delete payload.password;
+      if(modal.mode==='edit') payload.id=modal.data.id;
+      const res=await apiFetch('/api/auth/users',{
+        method:modal.mode==='new'?'POST':'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      const result=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(result.error||'Salvataggio utente non riuscito');
       await carica();
       setModal(null);
-    }catch(e){setErr(e.message);}
+    }catch(e){setErr(e.message||'Errore nel salvataggio');}
     finally{setSaving(false);}
   };
-  const elimina=async(id)=>{if(!confirm("Eliminare questo utente?"))return;await sb.from("utenti_studio").update({attivo:false}).eq("id",id);carica();};
+  const elimina=async(id)=>{
+    if(!confirm('Disattivare questo utente?'))return;
+    setErr(null);
+    try {
+      const res=await apiFetch('/api/auth/users',{
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id}),
+      });
+      const result=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(result.error||'Disattivazione utente non riuscita');
+      await carica();
+    }catch(e){setErr(e.message||'Errore nella disattivazione');}
+  };
   return(
     <div className="page">
-      {modal&&<UtenteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err}/>}
+      {modal&&<UtenteModal mode={modal.mode} data={modal.data||EMPTY} onSave={salva} onClose={()=>setModal(null)} saving={saving} err={err} societaOptions={societaOptions} allowedSocietaIds={allowedSocietaIds} ruoloGestore={ruolo}/>}
       <ModuleHeader
         sectionLabel="Impostazioni"
         title="👤 Utenti Studio"
         context="Gestione accessi e collaboratori"
         primaryAction={<button className="btn" onClick={()=>setModal({mode:"new",data:EMPTY})}>+ Nuovo Utente</button>}
       />
+      {err&&!modal&&<div className="err-box">⚠️ {err}</div>}
       {loading?<div className="loading">⏳</div>:(
         <div className="card" style={{padding:0,overflow:"hidden"}}>
           <table className="tbl">
@@ -66,7 +96,7 @@ export function ModuloUtenti(){
                       })}
                       {u.permessi?.clienti?.solo_assegnati&&<span title="Solo clienti assegnati" style={{fontSize:".62rem",background:"rgba(34,211,238,.1)",border:"1px solid rgba(34,211,238,.3)",borderRadius:4,padding:".05rem .3rem",color:"var(--cy)"}}>👤</span>}
                     </div>
-                  ):<span style={{fontSize:".72rem",color:"var(--mu)"}}>Accesso totale</span>}
+                  ): <span style={{fontSize:".72rem",color:"var(--mu)"}}>Accesso per società assegnate</span>}
                 </td>
                 <td><div className="tbl-actions">
                   <button className="btn-icon" onClick={()=>setModal({mode:"edit",data:u})}>✏️</button>
@@ -81,8 +111,8 @@ export function ModuloUtenti(){
   );
 }
 
-function UtenteModal({mode,data,onSave,onClose,saving,err}){
-  const [f,setF]=useState({...data,permessi:{...PERMESSI_DEFAULT,...(data.permessi||{})},clienti_assegnati:data.clienti_assegnati||[]});
+function UtenteModal({mode,data,onSave,onClose,saving,err,societaOptions,allowedSocietaIds,ruoloGestore}){
+  const [f,setF]=useState({...data,password:"",permessi:{...PERMESSI_DEFAULT,...(data.permessi||{})},clienti_assegnati:data.clienti_assegnati||[],societa_assegnate:(data.societa_assegnate||[]).filter(id=>allowedSocietaIds.includes(id))});
   const [tuttiClienti,setTuttiClienti]=useState([]);
   const [searchCl,setSearchCl]=useState("");
   const up=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -127,7 +157,7 @@ function UtenteModal({mode,data,onSave,onClose,saving,err}){
             <div className="fg full"><label>Email *</label><input type="email" value={f.email} onChange={e=>up("email",e.target.value)}/></div>
             <div className="fg full">
               <label>{mode==="new"?"Password *":"Nuova Password (lascia vuoto per non modificare)"}</label>
-              <input type="password" value={f.password_hash||""} onChange={e=>up("password_hash",e.target.value)} placeholder={mode==="new"?"Inserisci password":"••••••••"}/>
+              <input type="password" autoComplete="new-password" value={f.password||""} onChange={e=>up("password",e.target.value)} placeholder={mode==="new"?"Inserisci password":"••••••••"}/>
               <div className="hint">La password deve essere comunicata all'utente in modo sicuro</div>
             </div>
             <div className="fg full">
@@ -135,12 +165,25 @@ function UtenteModal({mode,data,onSave,onClose,saving,err}){
               <select value={f.ruolo} onChange={e=>up("ruolo",e.target.value)}>
                 <option value="collaboratore">Collaboratore</option>
                 <option value="admin">Admin</option>
-                <option value="owner">Owner</option>
+                {ruoloGestore==='owner'&&<option value="owner">Owner</option>}
               </select>
               <div style={{marginTop:".35rem",background:"var(--s2)",border:"1px solid var(--bd)",borderRadius:7,padding:".45rem .65rem",fontSize:".7rem",color:"var(--mu)"}}>
-                {f.ruolo==="owner"&&"🔑 Accesso totale a tutto · Unico che gestisce utenti e ruoli"}
-                {f.ruolo==="admin"&&"⚙️ Accesso totale a tutti i moduli · Non può gestire utenti studio"}
+                {f.ruolo==="owner"&&"🔑 Gestione utenti e ruoli limitata alle società assegnate"}
+                {f.ruolo==="admin"&&"⚙️ Gestione utenti nelle società assegnate · Non può creare Owner"}
                 {f.ruolo==="collaboratore"&&"👤 Permessi configurabili modulo per modulo (vedi sotto)"}
+              </div>
+            </div>
+            <div className="fg full">
+              <label>Società assegnate *</label>
+              {societaOptions.length===0&&<div className="hint">Nessuna società assegnabile: verifica i permessi del responsabile.</div>}
+              <div style={{display:'flex',flexDirection:'column',gap:'.4rem'}}>
+                {societaOptions.filter(s=>allowedSocietaIds.includes(s.id)).map(s=>(
+                  <label key={s.id} style={{display:'flex',alignItems:'center',gap:'.5rem',fontSize:'.8rem'}}>
+                    <input type="checkbox" checked={f.societa_assegnate.includes(s.id)}
+                      onChange={e=>setF(p=>({...p,societa_assegnate:e.target.checked?[...new Set([...p.societa_assegnate,s.id])]:p.societa_assegnate.filter(x=>x!==s.id)}))}/>
+                    {s.denominazione}
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -253,7 +296,7 @@ function UtenteModal({mode,data,onSave,onClose,saving,err}){
 
           {err&&<div className="err-box" style={{marginTop:".75rem"}}>⚠️ {err}</div>}
         </div>
-        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={!f.nome||!f.email||saving} onClick={()=>onSave(f)}>{saving?"Salvo...":"💾 Salva"}</button></div>
+        <div className="modal-foot"><button className="btn-sec" onClick={onClose}>Annulla</button><button className="btn" disabled={!f.nome||!f.email||!f.societa_assegnate.length||saving} onClick={()=>onSave(f)}>{saving?"Salvo...":"💾 Salva"}</button></div>
       </div>
     </div>
   );

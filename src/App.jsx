@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sb } from './lib/supabase'
+import { signOutSession } from './lib/auth'
 
 // Context
 import { AIStatusProvider, AIBadge } from './context/AIStatusContext'
@@ -243,7 +244,17 @@ function App() {
     setDeferredPrompt(null)
     setShowInstall(false)
   }
-  const logout = () => { setUtente(null); setTab('dashboard'); setShowLogoutConfirm(false) }
+  const logout = async () => {
+    try {
+      const { error } = await signOutSession()
+      if (error) throw error
+      setUtente(null)
+      setTab('dashboard')
+      setShowLogoutConfirm(false)
+    } catch {
+      window.alert('Disconnessione Supabase non riuscita. Riprova.')
+    }
+  }
   const navigateTo = (nextTab) => {
     if (nextTab === 'import_nuovo') {
       setTab('import_contabilita')
@@ -480,9 +491,9 @@ function App() {
             </div>
           )}
           {tab === 'dashboard'    && <Dashboard onNavigate={navigateTo} />}
-          {tab === 'clienti'      && (canLeggi(perm, 'clienti')   ? <ModuloClienti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}
+          {tab === 'clienti'      && (canLeggi(perm, 'clienti')   ? <ModuloClienti ruolo={ruolo} perm={perm} utente={utente} /> : <AccessDenied />)}
           {tab === 'import'       && (canModifica(perm, 'import')  ? <ModuloImportExcel />                       : <AccessDenied />)}
-          {tab === 'utenti'       && puoGestireUtenti(ruolo)       && <ModuloUtenti ruolo={ruolo} />}
+          {tab === 'utenti'       && puoGestireUtenti(ruolo)       && <ModuloUtenti ruolo={ruolo} utente={utente} />}
           {tab === 'impostazioni' && (
             <ModuloImpostazioni
               ruolo={ruolo}
@@ -520,7 +531,7 @@ function App() {
           {tab === 'ai_agent'     && <ModuloAIAgent utente={utente} />}
           {tab === 'cu'           && <ModuloCU />}
           {tab === 'revisione_dich' && <ModuloRevisioneDich utente={utente} />}
-          {tab === 'agecon'         && <ModuloAgeCon ruolo={ruolo} />}
+          {tab === 'agecon'         && <ModuloAgeCon ruolo={ruolo} utente={utente} />}
 
           {/* COMUNICAZIONI */}
           {tab === 'adempimenti' && (canLeggi(perm, 'adempimenti') ? <ModuloAdempimenti ruolo={ruolo} perm={perm} /> : <AccessDenied />)}

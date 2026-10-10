@@ -10,10 +10,20 @@ import {
   normalizeSocietaIds,
   readStudioUserByEmail,
   replaceUserMemberships,
-  resolveProvisionedSocietaIds,
   syncAuthUserMetadata,
 } from '../../lib/authMembership.js'
 import { sanitizeUtenteProfile } from '../../src/shared/utils/userProfile.js'
+import {
+  loadClientCompanyLinks,
+  scopedClienteIds,
+  areClienteAssignmentsWithinScope,
+} from '../../lib/tenantClientAssignments.js'
+import {
+  authorizedManagerSocietaIds,
+  areRequestedSocietaIdsAllowed,
+  areTargetMembershipsFullyAllowed,
+  visibleMembershipsForManager,
+} from '../../lib/tenantUserManagement.js'
 
 export const config = {
   api: { bodyParser: true },
@@ -170,6 +180,13 @@ export default async function handler(req, res) {
     if (!assertServiceRoleForUserProvisioning(res)) return
   }
 
+  // The service_role bypasses RLS. Validate the caller's verified company
+  // memberships before any admin-client read or write.
+  const managedSocietaIds = authorizedManagerSocietaIds(ctx)
+  if (!managedSocietaIds.length) {
+    return res.status(403).json({ error: 'Nessuna assegnazione di società verificata per il responsabile' })
+  }
+
   const admin = await getSupabaseAdmin()
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
 
@@ -191,18 +208,27 @@ export default async function handler(req, res) {
         list.push(row)
         membershipsByUtenteId.set(key, list)
       }
-      return res.status(200).json({
-        ok: true,
-        users: studioUsers.map((row) => sanitizeUtenteProfile(
-          buildUserProfileSnapshot({
-            profileRow: {
-              ...row,
-              ruolo: normalizeRole(row?.ruolo),
-            },
-            membershipRows: membershipsByUtenteId.get(String(row.id || '').trim()) || [],
-          })
-        )),
+      const visibleUsers = studioUsers.flatMap((row) => {
+        const linkedMemberships = membershipsByUtenteId.get(String(row.id || '').trim()) || []
+        // Do not return partially owned profiles: a user shared with another
+        // company must not expose global profile fields to this manager.
+        if (!row.auth_user_id || !areTargetMembershipsFullyAllowed(linkedMemberships, managedSocietaIds, row.auth_user_id)) return []
+        const visible = visibleMembershipsForManager(linkedMemberships, managedSocietaIds)
+        return [sanitizeUtenteProfile(buildUserProfileSnapshot({
+          profileRow: { ...row, ruolo: normalizeRole(row?.ruolo) },
+          membershipRows: visible,
+        }))]
       })
+      // Users' global stored client arrays are untrusted: a manager may
+      // receive only clients explicitly linked to each target user's own
+      // assigned companies, never all clients present in service-role rows.
+      const links = await loadClientCompanyLinks(admin,
+        visibleUsers.flatMap((user) => user.clienti_assegnati || []))
+      const safeUsers = visibleUsers.map((user) => ({
+        ...user,
+        clienti_assegnati: scopedClienteIds(user.clienti_assegnati, links, user.societa_assegnate),
+      }))
+      return res.status(200).json({ ok: true, users: safeUsers })
     }
 
     if (req.method === 'POST') {
@@ -216,25 +242,34 @@ export default async function handler(req, res) {
           error: 'Con "Clienti solo assegnati" attivo seleziona almeno un cliente',
         })
       }
-      const provisionedSocietaIds = await resolveProvisionedSocietaIds(admin, {
-        requestedIds: payload.societa_assegnate,
-        ruolo: payload.ruolo,
-      })
-      if (!provisionedSocietaIds.length) {
-        return res.status(400).json({ error: 'Nessuna società attiva nello studio: crea almeno una società prima di aggiungere utenti' })
+      if (!payload.societa_assegnate.length) {
+        return res.status(400).json({ error: 'Assegna esplicitamente almeno una società' })
+      }
+      if (!areRequestedSocietaIdsAllowed(payload.societa_assegnate, managedSocietaIds)) {
+        return res.status(403).json({ error: 'Società richiesta fuori dall’ambito autorizzato' })
+      }
+      const provisionedSocietaIds = normalizeSocietaIds(payload.societa_assegnate)
+      const requestedClientLinks = await loadClientCompanyLinks(admin, payload.clienti_assegnati)
+      if (!areClienteAssignmentsWithinScope(
+        payload.clienti_assegnati,
+        requestedClientLinks,
+        provisionedSocietaIds,
+      )) {
+        return res.status(403).json({ error: 'Cliente assegnato fuori dalle società autorizzate' })
+      }
+      // Do not overwrite a pre-existing Auth identity belonging to another tenant.
+      const existingAuth = await findAuthUserByEmail(admin, payload.email)
+      const existingProfile = await getUtenteByEmail(admin, payload.email)
+      if (existingAuth || existingProfile) {
+        return res.status(409).json({ error: 'Indirizzo email già associato a un utente' })
       }
 
-      let authUser = await findAuthUserByEmail(admin, payload.email)
+      let authUser = null
       let createdAuthUserId = ''
-      if (authUser) {
-        authUser = await updateAuthUser(admin, authUser.id, payload, true)
-      } else {
-        authUser = await createAuthUser(admin, payload)
-        createdAuthUserId = authUser?.id || ''
-      }
+      authUser = await createAuthUser(admin, payload)
+      createdAuthUserId = authUser?.id || ''
 
       try {
-        const existing = await getUtenteByEmail(admin, payload.email)
         const upsertRow = {
           auth_user_id: authUser.id,
           nome: payload.nome,
@@ -246,18 +281,7 @@ export default async function handler(req, res) {
           attivo: payload.attivo,
           password_hash: null,
         }
-        let data
-        let error
-        if (existing?.id) {
-          ({ data, error } = await admin
-            .from('utenti_studio')
-            .update(upsertRow)
-            .eq('id', existing.id)
-            .select('*')
-            .single())
-        } else {
-          ({ data, error } = await admin.from('utenti_studio').insert([upsertRow]).select('*').single())
-        }
+        const { data, error } = await admin.from('utenti_studio').insert([upsertRow]).select('*').single()
         if (error) throw error
 
         await syncUserSocietaMembership(admin, {
@@ -267,7 +291,7 @@ export default async function handler(req, res) {
           ruolo: payload.ruolo,
         })
         const user = await buildResponseUser(admin, data, authUser, provisionedSocietaIds)
-        return res.status(existing?.id ? 200 : 201).json({ ok: true, user })
+        return res.status(201).json({ ok: true, user })
       } catch (writeError) {
         if (createdAuthUserId) {
           await admin.auth.admin.deleteUser(createdAuthUserId).catch(() => null)
@@ -282,23 +306,35 @@ export default async function handler(req, res) {
       const payload = normalizeUserPayload(body)
       const { data: existing, error: existingError } = await admin
         .from('utenti_studio')
-        .select('id, auth_user_id, email, ruolo')
+        .select('id, auth_user_id, email, ruolo, attivo')
         .eq('id', userId)
         .maybeSingle()
       if (existingError) throw existingError
       if (!existing) return res.status(404).json({ error: 'Utente non trovato' })
+      const targetMemberships = await listMembershipRowsForUtenteIds(admin, [userId])
+      if (!existing.auth_user_id || !areTargetMembershipsFullyAllowed(targetMemberships, managedSocietaIds, existing.auth_user_id)) {
+        return res.status(403).json({ error: 'Utente fuori dall’ambito delle società gestite' })
+      }
       if (!assertAdminStudioUserGuards(res, ctx, { existingRow: existing, requestedRole: payload.ruolo })) return
       if (collaboratorSoloClientiSenzaSelezione(payload)) {
         return res.status(400).json({
           error: 'Con "Clienti solo assegnati" attivo seleziona almeno un cliente',
         })
       }
-      const provisionedSocietaIds = await resolveProvisionedSocietaIds(admin, {
-        requestedIds: payload.societa_assegnate,
-        ruolo: payload.ruolo,
-      })
-      if (!provisionedSocietaIds.length) {
-        return res.status(400).json({ error: 'Nessuna società attiva nello studio: crea almeno una società prima di aggiungere utenti' })
+      if (!payload.societa_assegnate.length) {
+        return res.status(400).json({ error: 'Assegna esplicitamente almeno una società' })
+      }
+      if (!areRequestedSocietaIdsAllowed(payload.societa_assegnate, managedSocietaIds)) {
+        return res.status(403).json({ error: 'Società richiesta fuori dall’ambito autorizzato' })
+      }
+      const provisionedSocietaIds = normalizeSocietaIds(payload.societa_assegnate)
+      const requestedClientLinks = await loadClientCompanyLinks(admin, payload.clienti_assegnati)
+      if (!areClienteAssignmentsWithinScope(
+        payload.clienti_assegnati,
+        requestedClientLinks,
+        provisionedSocietaIds,
+      )) {
+        return res.status(403).json({ error: 'Cliente assegnato fuori dalle società autorizzate' })
       }
       let authUser = null
       if (existing.auth_user_id) {
@@ -356,6 +392,10 @@ export default async function handler(req, res) {
         .maybeSingle()
       if (existingError) throw existingError
       if (!existing) return res.status(404).json({ error: 'Utente non trovato' })
+      const targetMemberships = await listMembershipRowsForUtenteIds(admin, [userId])
+      if (!existing.auth_user_id || !areTargetMembershipsFullyAllowed(targetMemberships, managedSocietaIds, existing.auth_user_id)) {
+        return res.status(403).json({ error: 'Utente fuori dall’ambito delle società gestite' })
+      }
       if (normalizeRole(existing.ruolo) === 'owner') {
         return res.status(403).json({ error: 'Owner non eliminabile' })
       }
