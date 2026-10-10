@@ -789,3 +789,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Avvio stack UI LAB + smoke: report `STAGE3W_LAB_HTTP_SMOKE_20261011-000132-906.txt` → **HTTP 401 PASS** (endpoint fiscale LAB abilitato). Nessuna scrittura fiscale.
 - Fuori scope senza nuovo consenso: flag persist write Manuale/Import, SG-P0-00 recreate porte, Stage3V JWT.
 
+
+## 2026-10-11 — Stage3W synthetic persist FA22 PASS (LAB L2, no JWT/UI)
+
+- Blocco: LAB P0 era **vuoto** (0 societa/auth/conti). UI login impossibile senza seed Auth.
+- Aggiunti `sql/security_p0/60_stage3w_fiscal_synthetic_persist_FA22_LAB_ONLY.sql` + `scripts/security_p0/run-stage3w-fiscal-synthetic-persist.ps1` (`-ApproveSyntheticPersist`).
+- Eseguito su `supabase_db_FiscoSim-P0-LAB-20261008-164658` @ SHA `53b6a77`: seed `SG-E2E-A/B` + RPC `fiscosim_post_fiscal_journal` FA22 (imponibile 1000 / IVA 220 / totale 1220) + replay idempotente + rifiuto cross-company.
+- Report: `REPORT/STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt` — PN `0afbcb06-18e5-49de-883a-38c6fcf89d8c`; partita residuo 1220; societa B PN=0; Stage3U OK.
+- **Non** e JWT firmato ne UI Manuale/Import. Path default `createPrimaNotaCompleta` invariato. Porte ancora `0.0.0.0`. Nessun LIVE.
+

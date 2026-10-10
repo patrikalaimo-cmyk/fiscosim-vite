@@ -162,11 +162,11 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 ## Prossima sessione
 
 1. **Non** applicare SG-P0-00 senza approvazione.  
-2. ~~Preflight + rehearsal ROLLBACK Stage3W sul LAB P0~~ **FATTO** (2026-10-10).  
-3. ~~Install LAB persistente~~ **FATTO** (`…231404-750.txt`).  
-4. **Avviare Docker Desktop** → verifica READ-ONLY presenza container/volume Stage3W → `smoke-stage3w-fiscal-lab-http.ps1`.  
-5. Su consenso: prova persistente sintetica con flag LAB ON (verticale fattura passiva / Manuale) + query post-commit.  
-6. L3 JWT solo dopo porte loopback (SG-P0-00) + nuovo consenso.  
-7. Default produttivo resta `createPrimaNotaCompleta` finché L3/L4 Stage3W non certificati.
+2. ~~Preflight + rehearsal + install Stage3W~~ **FATTO**.  
+3. ~~Smoke HTTP LAB~~ **FATTO** (`…000132-906.txt`, HTTP 401).  
+4. ~~Persist sintetico FA22 via RPC service_role~~ **FATTO** (`…000427-220.txt`, PN `0afbcb06…`).  
+5. L3 JWT / UI Manuale-Import: richiede utenti Auth login-ready + (consigliato) SG-P0-00 porte.  
+6. Estendere persist L2 agli altri contract_kind (FP22, NC, pay, split, parcella) riusando script 60.  
+7. Default produttivo resta `createPrimaNotaCompleta` finché L3/L4 non certificati.
 
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.

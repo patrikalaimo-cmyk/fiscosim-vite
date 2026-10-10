@@ -25,7 +25,7 @@
 | A07 | PN generale | Replay stessa richiesta (idempotenza) | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W LAB | claim 3U/3W | Default `createPrimaNotaCompleta` senza idempotenza | P0 |
 | A08 | PN generale | Quadratura per scrittura e società | IMPLEMENTED | L1+L2(3U/3W) | PASS unit / PASS 3U/3W | Stage3U/3W + Manuale | Path default non ACID | P0 |
 | A09 | PN generale | Rollback mid-transaction | BROKEN (prod) / IMPLEMENTED (3U/3W) | L2 | PASS Stage3U + Stage3W late-fail | rehearsal/install 3U/3W | Cleanup best-effort non ripristina UPDATE | P0 |
-| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2 | PASS Stage3W matrix+install | `…231404-750.txt` | L3 JWT / UI flag ON NOT_EXECUTED | P0 |
+| A10 | PN fiscale | Commit atomico FA22/pay/NC/split/parcella | IMPLEMENTED (3W LAB) | L2 | PASS Stage3W matrix+install; **FA22 persist PASS** | `…231404-750.txt` + `STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt` | L3 JWT / UI flag ON NOT_EXECUTED | P0 |
 
 ---
 
@@ -33,7 +33,7 @@
 
 | ID | Modulo | Scenario | Stato codice | Livello test | Esito reale | Evidenza | Gap | Priorità |
 |---|---|---|---|---|---|---|---|---|
-| B01 | Fatture | Vendita ordinaria | IMPLEMENTED | L1 | PASS (unit) | `manualeIvaOrdinaria` | L2–L5 | P1 |
+| B01 | Fatture | Vendita ordinaria | IMPLEMENTED | L1+L2 | PASS unit; **PASS L2 persist FA22 LAB** | `…000427-220.txt` PN 0afbcb06… | L3–L5 JWT/UI | P1 |
 | B02 | Fatture | Acquisto ordinario | IMPLEMENTED | L1 | PASS (unit) | idem | L2–L5 | P1 |
 | B03 | Fatture | IVA 22/10/5/4 e nature supportate | PARTIAL | L1 | PASS casi coperto | Manuale/Import | Elenco aliquote ufficiali vs supportate da chiudere | P1 |
 | B04 | Fatture | Multi-aliquota + multi-riga | IMPLEMENTED | L1 | PASS (unit) | Manuale/Import 25A | E2E persistito | P1 |
