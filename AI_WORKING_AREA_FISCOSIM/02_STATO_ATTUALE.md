@@ -1,6 +1,16 @@
 # STATO ATTUALE DEGLI ADEMPIMENTI E MODULI
 
-Il punto nave sulle funzionalità contabili e fiscali implementate in FiscoSim, aggiornato con le ultime decisioni di limitazione perimetro:
+## Aggiornamento 2026-10-10 — Audit Studio Grade E2E (prevalente)
+
+* Branch isolato: `feat/studio-grade-accounting-e2e-20261010` @ `53e1f8e` da P0 `ceac722`.
+* Worktree Windows: `C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010` (BACKUPAntigravity/`mio-branch` non toccati).
+* Audit/matrice/roadmap: `REPORT/AUDIT_STUDIO_GRADE_20261010.md`, `REPORT/MATRICE_TEST_CONTABILI_E2E.md`, `REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`.
+* Stage3W: install LAB PASS + wire flag OFF; path default ancora `createPrimaNotaCompleta`.
+* I freeze A100 “AUTOMATICO VERDE” restano validi come L1; **non** certificano ciclo PostgreSQL/HTTP/UI.
+* Gap P0 residui: default non-ACID; Stage3V porte LAB non-loopback; Docker spento in sessione refresh.
+* Prossimo: Docker ON → smoke Stage3W → (consenso) prova flag LAB ON. Stage 3S/3U/3W-install non rieseguire.
+
+Il punto nave storico sulle funzionalità contabili e fiscali implementate in FiscoSim (sezioni sotto = contesto precedente, subordinato all’audit 20261010):
 
 ## 1. Moduli Core Completati (Studio-Grade)
 * **Registrazione Manuale Avanzata**: Supporto completo a contabilità ordinaria, ritenute, split payment e IVA per cassa.

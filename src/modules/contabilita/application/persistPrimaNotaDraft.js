@@ -7,6 +7,9 @@ import { handleIvaPerCassaRelease } from './registrazioneOperations/ivaPerCassaR
 import { buildRitenutaPersistencePayload } from './ritenute/buildRitenutaPersistencePayload.js'
 import { buildRitenutaMaturazionePayload } from './ritenute/buildRitenutaMaturazionePayload.js'
 import { buildVatRegisterEntriesFromCanonicalPayload } from './iva/buildVatRegisterEntriesFromCanonicalPayload.js'
+import { isFiscalJournalPersistLabEnabled } from './fiscalJournal/isFiscalJournalPersistLabEnabled.js'
+import { mapPersistencePlanToFiscalJournalRequest } from './fiscalJournal/mapPersistencePlanToFiscalJournalRequest.js'
+import { postFiscalJournalAtomicViaStudioApi } from './fiscalJournal/postFiscalJournalAtomicViaStudioApi.js'
 
 
 function normalizeDbText(value) {
@@ -502,6 +505,8 @@ export async function persistPrimaNotaDraft({
   draft = {},
   headerSelect = 'id',
   righeSelect = '*',
+  /** Test/LAB override; production must leave unset (default OFF). */
+  fiscalPersistLab,
 } = {}) {
   const resolved = resolveDraftBundle(draft)
 
@@ -757,6 +762,75 @@ export async function persistPrimaNotaDraft({
       societaCodice,
       docNum
     })
+  }
+
+  // LAB-only Stage3W atomic path (default OFF). Production stays on createPrimaNotaCompleta.
+  if (isFiscalJournalPersistLabEnabled(fiscalPersistLab)) {
+    const sourceModule = pnPayloadForDb.documento_import_id
+      ? 'import_contabilita'
+      : 'registrazione_manual'
+    const mapped = mapPersistencePlanToFiscalJournalRequest({
+      policy,
+      pnPayload: pnPayloadForDb,
+      righePayload: righePayloadForDb,
+      vatEntries: vatEntriesForDb,
+      partEntries: partEntriesForDb,
+      ritenutaEntries: ritenutaEntriesForDb,
+      ritenutaUpdates: ritenutaUpdatesForDb,
+      sourceModule,
+    })
+    if (!mapped.ok) {
+      const error = new Error(mapped.reason || 'FISCAL_LAB_MAP_FAILED')
+      error.code = mapped.reason || 'FISCAL_LAB_MAP_FAILED'
+      return {
+        data: null,
+        error,
+        validation,
+        draft: resolved.innerDraft,
+        pn: null,
+        righeIns: null,
+        vatIns: null,
+        partIns: null,
+        ritenuteIns: null,
+        rollback: null,
+        fiscalLab: true,
+      }
+    }
+    try {
+      const posted = await postFiscalJournalAtomicViaStudioApi(mapped.request, { db })
+      const primaNotaId = posted.id
+      return {
+        data: { primaNotaId, id: primaNotaId },
+        error: null,
+        validation,
+        draft: resolved.innerDraft,
+        pn: { id: primaNotaId },
+        righeIns: { data: righePayloadForDb },
+        vatIns: { data: vatEntriesForDb },
+        partIns: { data: partEntriesForDb },
+        ritenuteIns: { data: ritenutaEntriesForDb },
+        rollback: null,
+        fiscalLab: true,
+        contract_kind: posted.contract_kind,
+        request_id: posted.request_id,
+      }
+    } catch (labError) {
+      const error = labError instanceof Error ? labError : new Error(String(labError))
+      if (!error.code) error.code = 'FISCAL_LAB_POST_FAILED'
+      return {
+        data: null,
+        error,
+        validation,
+        draft: resolved.innerDraft,
+        pn: null,
+        righeIns: null,
+        vatIns: null,
+        partIns: null,
+        ritenuteIns: null,
+        rollback: null,
+        fiscalLab: true,
+      }
+    }
   }
 
   const complete = await createPrimaNotaCompleta({

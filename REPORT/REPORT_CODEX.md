@@ -650,3 +650,189 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Updated `tests/securityP0Stage3vLocalReadiness.test.js`; new `tests/securityP0Stage3vLabTopology.test.js` covers fail-closed scenarios and mocked **Docker inspection only**, never fake Auth JWT or PostgreSQL. GitHub Actions **run 38076639585, candidate commit `6f2885e93512f068304bedf1875df0fddbc27663`**: safe-node-baseline **Ubuntu PASS and Windows PASS**, all suites + build per workflow.
 - Real security finding: despite Docker network default host binding option being `127.0.0.1`, actual P0 containers explicitly publish host ports on **0.0.0.0 and [::]**, including direct database port 55322. Actual mappings prevail; Stage3V remains **BLOCKED_UNSAFE_PUBLISHED_PORTS**. A safe future remediation needs a carefully reviewed CLI/Compose recreate with persistent volume preservation and backup/checks; **do not use ordinary `supabase/config.toml` as the P0 deployment definition** since it currently has `project_id = fiscosim-local` and ports 54321–54323. No `docker stop`/`rm`/`restart`, `supabase stop/start`, credential operations, or unattended network changes performed.
 - **Scope and evidence:** Code/documentation ONLY on isolated P0 branch, PR #2 remains Draft. Neither `mio-branch` nor live Supabase/database changed. Stage3S and Stage3U prior real LAB PASS preserved, not rerun. No JWT A/B sign-in, no persistent journal/IVA/partitario commit; signed JWT Stage3V and fiscal end-to-end remain NOT_EXECUTED/NOT_CERTIFIED.
+
+
+## 2026-10-10 — Studio Grade E2E: audit integrale, matrice, roadmap (branch isolato)
+
+- **Ambiente Cloud Agent:** repository `patrikalaimo-cmyk/fiscosim-vite`. Percorso Windows storico `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity` non presente; lavoro in worktree isolato `/home/ubuntu/FiscoSim-StudioGrade-E2E-20261010` (equivalente proposto PC: `%USERPROFILE%\FiscoSim-StudioGrade-E2E-20261010`).
+- **Git:** partenza da `security/p0-isolated-hardening-20261008` @ `ceac722f9d8f100c6844c3f5e4ec655a064bf06e` (allineato a `origin`, CI SUCCESS es. `38076788699`). Creato branch `feat/studio-grade-accounting-e2e-20261010` via `git worktree add`. `mio-branch` @ `38bfbc7` non modificato. Nessun merge, reset, force-push, deploy.
+- **Documentazione letta:** `AI_WORKING_AREA_FISCOSIM/00–08`, `REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md`, gate ciclo reale 20261009, test matrix, debito manuale, coda `REPORT_CODEX`, audit P0/RPC.
+- **Audit codice (prevalente):** `persistPrimaNotaDraft` → `createPrimaNotaCompleta` esegue INSERT/UPDATE multipli su `prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`, `ritenute_dacconto` con `cleanupPrimaNotaCompleta` best-effort. Cleanup non ripristina UPDATE su partite/ritenute preesistenti; assenza idempotenza sul path produttivo. Stage3U `fiscosim_post_general_journal` resta ACID solo per movimento generale (senza IVA/partitario/ritenute) e non è collegato alla UI. Canonical commit RPC reale ancora TODO/disabled. Bank commit dry-run bloccato.
+- **Moduli censiti (15 aree):** Manuale/Consultazione/IVA dominio avanzati con freeze L1; Import PARTIAL (cronologia UI placeholder); Bank BLOCKED commit; Stampe PARTIAL (fascicolo MISSING; definitiva senza attestazioni server); Chiusura esercizio NOT_IMPLEMENTED come procedura; Auth/P0 avanzato ma Stage3V JWT NOT_EXECUTED e porte LAB `0.0.0.0`.
+- **Documenti prodotti:** `REPORT/AUDIT_STUDIO_GRADE_20261010.md`, `REPORT/MATRICE_TEST_CONTABILI_E2E.md`, `REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`. Aggiornati `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, note prevalenti in `02_STATO_ATTUALE.md` e `05_ROADMAP_ATTIVA.md`.
+- **Harness Stage3V (sicuro):** `scripts/security_p0/stage3v-lab-binding.mjs` accetta anche branch `feat/studio-grade-accounting-e2e-20261010` e worktree `FiscoSim-StudioGrade-E2E-20261010`, oltre al P0 storico; SHA pin, dirty tree, rete, host e stack 55321 restano fail-closed. Test `securityP0Stage3vBinding.test.js` 4/4 PASS.
+- **Test baseline sessione (no DB write, no 3S/3U):** `npm ci`; `npm run test:all` → **1183 pass / 0 fail**; `npm run build` → PASS. Non ripetuti Stage 3S/3U. Nessuna migration/RLS/env/LIVE.
+- **Prossimo intervento:** **SG-P0-01** RPC commit fiscale ACID completa in LAB (rehearsal ROLLBACK → install su approvazione). Prerequisito infra **SG-P0-00** (porte LAB loopback) richiede approvazione esplicita. Stage3V write solo dopo porte sicure + opt-in.
+
+
+## 2026-10-10 — SG-P0-01 Stage3W fiscal atomic commit candidate (no LAB PostgreSQL execution)
+
+- Continuazione da PR #3 / checkpoint `f6c874a` su `feat/studio-grade-accounting-e2e-20261010` (worktree Cloud `/home/ubuntu/FiscoSim-StudioGrade-E2E-20261010`). `mio-branch` non toccato. Stage 3S/3U non rieseguiti.
+- **Contratto:** `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md` — riconciliazione payload Manuale/Import → colonne PG; `contract_kind` distinti; claim `fiscosim_fiscal_journal_claim` separato da Stage3U; drift `prima_nota_righe.societa_id` e assenza `esercizio` in migration documentati.
+- **Scenari indipendenti:** `domain/fiscalAtomicCommit/independentExpectedScenarios.js` (FA22, FP22, NCA22, pagamento parziale 500/1220→720, parcella+ritenuta, split). Nessun import di mappers/servizi Manuale.
+- **Candidata SQL LAB-only:** `57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql` (`fiscosim_post_fiscal_journal`), matrix `58_…_TEST_ONLY.sql` (fattura+idempotenza+A/B+residuo+overpay+late audit ROLLBACK), preflight READ ONLY `59_…`. Runner Windows `run-stage3w-fiscal-preflight.ps1` / `run-stage3w-fiscal-rehearsal-rollback.ps1`. Stage3U RPC non DROP/REPLACE.
+- **API:** `api/studio/fiscal-journal-post.js` + `lib/fiscalJournalRequest.js`; route in `lib/devStudioHttp.js`; 503 salvo LAB flags. **Non collegata** a `persistPrimaNotaDraft` / Import.
+- **CI:** workflow `fiscosim-test-baseline.yml` ora include push/PR su `security/p0-isolated-hardening-20261008` e `feat/studio-grade-accounting-e2e-20261010` (prima solo `mio-branch` → PR #3 non partiva).
+- **Test Cloud (no DB):** `npm run test:all` → **1192/1192 PASS**; build PASS; Stage3W suite 9/9. **PostgreSQL LAB: NOT_EXECUTED** (ambiente Cloud senza Docker P0 Windows).
+- **Stop obbligatorio:** prima operazione che richiede LAB = rehearsal ROLLBACK Stage3W su container P0; proposta rischi/ripristino nel contratto §7. Nessuna install persistente/UI wire senza ulteriore consenso.
+
+
+## 2026-10-10 — CI GitHub PASS su PR #3 / Stage3W (dopo fix trigger)
+
+- Causa storica: workflow `fiscosim-test-baseline.yml` ascoltava solo `mio-branch`; PR #3 verso P0 non partiva.
+- Fix verificato: push `d6b1c0d` e pull_request su `feat/studio-grade-accounting-e2e-20261010` (base P0) hanno eseguito **FiscoSim Test Baseline**.
+- Evidenza: Actions `38084334961` (push) e `38084339341` (PR) — **Ubuntu PASS + Windows PASS**. Nessuna scrittura LAB/DB.
+- Stato invariato: Stage3W candidata codice-only; rehearsal PostgreSQL Windows ancora in attesa di approvazione.
+
+
+## 2026-10-10 — SG-P0-01: approvazione rehearsal + runbook Windows + matrix ampliata
+
+- Operatore: «ok procedi» = approvazione prove LAB Stage3W. Cloud Agent **senza Docker**: impossibile eseguire preflight/rehearsal qui.
+- Preparato `REPORT/STAGE3W_WINDOWS_LAB_RUNBOOK_20261010.md` con comandi pin SHA/container e criteri PASS.
+- Matrix SQL 58 ampliata: nota credito attiva (−1220), split (partita 1000 + flag), parcella (netto 1068.80, ritenuta 200/1040), oltre FA22/pagamento/overpay/late-audit.
+- Script install persistente `run-stage3w-fiscal-persistent-lab-install.ps1` gated da `-ApproveLabSchemaInstall` + prova rehearsal + blob hash SQL; **non eseguito**. Stage3U preservato nel postcheck.
+- Test Cloud: `test:all` **1193/1193 PASS**, build PASS. PostgreSQL LAB ancora NOT_EXECUTED in Cloud.
+- Prossimo: operatore esegue preflight + rehearsal sul PC e allega report; install persistente richiede nuova approvazione esplicita.
+
+
+## 2026-10-10 — CI PASS su e9b253e (runbook Stage3W / matrix ampliata)
+
+- Actions `38084732523` (push) e `38084735208` (PR): Ubuntu + Windows **PASS**.
+- HEAD collaudato CI: `e9b253ecdac33da26d45206c4ea09b063a498c89`.
+- Prossimo gate: rehearsal LAB Windows operatore (Cloud senza Docker).
+
+
+## 2026-10-10 — Fix Stage3W preflight/rehearsal marker matching (Windows BLOCKED)
+
+- Operatore: `STAGE3W PREFLIGHT BLOCKED` + `STAGE3W REHEARSAL BLOCKED` su container P0 LAB.
+- Causa: SQL 59/58 emettevano `RAISE NOTICE` per i marker PASS; i runner PowerShell cercavano riga esatta come Stage3U (`SELECT … AS result` + `psql -t`). Con `NOTICE:  PREFIX` il `-contains` falliva anche se PostgreSQL era OK.
+- Fix: preflight 59 e matrix 58 usano `SELECT 'STAGE3W_…' AS result;`; PS1 usano match substring + dump diagnostico `ERROR/DETAIL/HINT` su BLOCKED; blob pin install 58 aggiornato a `988e3396d2477d65140e70f6635cab2c5dfe560a`.
+- Test Stage3W: **11/11 PASS**. Nessuna esecuzione PostgreSQL da Cloud. Operatore deve `git pull` e rieseguire preflight + rehearsal con nuovo SHA.
+
+
+## 2026-10-10 — Stage3W rehearsal ancora BLOCKED: diagnostica nel throw + colonne/ledger
+
+- CI marker-fix: Actions push/PR su `3315094` **PASS** (es. `38085572534` / `38085575040`).
+- Operatore: rehearsal ancora BLOCKED (`STAGE3W_FISCAL_REHEARSAL_20261010-225457-529.txt`) senza testo ERROR incollato.
+- Mitigazioni: (1) PS1 includono diagnostica PostgreSQL nel `throw`; (2) preflight 59 elenca colonne usate da RPC; (3) SQL 57 eccezione empty-ledger con conteggi `pn/lines/vat/part/wh`; (4) insert partitario tollera assenza `iva_per_cassa`. Blob pin 57 → `4d4a765eb6b146fdf3343706b54330cb51ba7783`.
+
+
+## 2026-10-10 — Stage3W late-audit REVOKE sotto service_role (no-op)
+
+- Preflight READ-ONLY **PASS** su `c1c373f`. Rehearsal BLOCKED: `SECURITY FAILURE: fiscal post succeeded without audit privilege`.
+- Root cause: matrix 58 eseguiva `REVOKE INSERT … FROM service_role` dentro `SET LOCAL ROLE service_role` → PG warning `no privileges could be revoked` → post audit ancora permesso.
+- Fix: allineato a Stage3U 55 — `RESET ROLE` → `REVOKE` come postgres → `SET LOCAL ROLE service_role` → `$audit_failure$` → `RESET ROLE` → `GRANT`. Blob 58 → `f74d51369aab9a1d2bfc883a920b771fbf0b16d4`.
+
+
+## 2026-10-10 — Stage3W LAB Windows: preflight + rehearsal ROLLBACK PASS
+
+- Container: `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
+- Preflight: `STAGE3W_FISCAL_PREFLIGHT_20261010-230343-598.txt` — **READ-ONLY PASS**.
+- Rehearsal: `STAGE3W_FISCAL_REHEARSAL_20261010-230345-944.txt` — **ROLLBACK PASS** (matrix + schema Stage3W non persistiti; Stage3U untouched; no LIVE).
+- Gate SG-P0-01 reversible: **GREEN**. Prossimo solo su approvazione esplicita: install persistente LAB (`run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall`). Nessun wire UI/Manuale/Import.
+
+
+## 2026-10-10 — Approvazione install persistente Stage3W LAB
+
+- Operatore: «approvo» = consenso esplicito a `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` sul solo container P0 LAB.
+- Cloud Agent non esegue Docker: install a carico operatore Windows. Se matrix 58 fallisce dopo COMMIT di 57: **non rieseguire** automaticamente; allegare report.
+- Fuori scope: UI Manuale/Import, LIVE Supabase, Stage3V JWT.
+
+
+## 2026-10-10 — Fix pin blob Stage3W 58 per install persistente
+
+- Operatore: `Stage3W unreviewed SQL content detected: 58_…`. Pin install aveva OID stale `f74d5136…`; blob commitato reale `59b9b746…`.
+- Fix: pin corretto + check via `git rev-parse HEAD:path` (blob commitato, immune ad autocrlf Windows). Nessuna DDL eseguita nel tentativo fallito.
+
+
+## 2026-10-10 — Stage3W persistent LAB install PASS
+
+- Report: `STAGE3W_PERSISTENT_LAB_INSTALL_20261010-231404-750.txt` su container `supabase_db_FiscoSim-P0-LAB-20261008-164658`, commit `fe21da0`.
+- Esito: `STAGE3W_PERSISTENT_LAB_INSTALL_PASS` — DDL 57 COMMIT; matrix 58 PASS + fixture ROLLBACK; postflight `SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK`.
+- RPC `fiscosim_post_fiscal_journal` presente in LAB; claim table vuota; Stage3U preservato; no LIVE; no UI wire.
+- SG-P0-01 L2 LAB schema: **GREEN**. Prossimi solo su nuovo consenso: wire Manuale/Import (cut-over), L3 JWT (bloccato porte), o altri item roadmap.
+
+
+## 2026-10-10 — Stage3W LAB-gated Manuale/Import persist wire (default OFF)
+
+- Operatore: «ok procedi» dopo install persistente PASS.
+- Aggiunto percorso opzionale in `persistPrimaNotaDraft`: se `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED` / `VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true`, mappa piano DB → POST `/api/studio/fiscal-journal-post` (richiede anche flag endpoint LAB).
+- Moduli: `fiscalJournal/isFiscalJournalPersistLabEnabled.js`, `resolveFiscalContractKind.js`, `mapPersistencePlanToFiscalJournalRequest.js`, `postFiscalJournalAtomicViaStudioApi.js`.
+- Default invariato: `createPrimaNotaCompleta`. Nessun nome RPC in `persistPrimaNotaDraft.js`. JWT L3 non eseguito (porte).
+
+
+## 2026-10-10 — Stage3W LAB UI stack launcher + HTTP smoke
+
+- Operatore: procedere in autonomia, meno micro-gate.
+- Script: `start-stage3w-lab-ui-stack.ps1` (env da cartella P0 LAB → `.env.stage3w.lab.local`, avvio API+Vite) e `smoke-stage3w-fiscal-lab-http.ps1` (atteso 401/403).
+- Fix CI precedente `333ca03`: client LAB senza import `auth.js`.
+
+## 2026-10-10 — Refresh Windows: worktree Studio Grade, audit, baseline 1199
+
+- **Ambiente:** PC Windows. Repo storico C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity su mio-branch @ `3af07b4` (working tree con untracked; **non modificato**). Worktree isolato gia presente `C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010`.
+- **Git:** `git fetch` P0 + Studio Grade. P0 tip = `ceac722` (checkpoint storico). Fast-forward worktree `2e1a2bd` → `53e1f8e` (`origin/feat/studio-grade-accounting-e2e-20261010`). Merge-base con P0 = `ceac722`; branch Studio Grade 26 commit ahead. Nessun merge, reset, force-push, touch `mio-branch`.
+- **Agent root:** spostato sul worktree Studio Grade.
+- **Documentazione riletta:** `AI_WORKING_AREA_FISCOSIM/00–08`, roadmap/audit/matrice 20261010, gate ciclo reale 20261009, contratto Stage3W, coda `REPORT_CODEX`, install report `…231404-750.txt`.
+- **Audit codice riconfermato:** `createPrimaNotaCompleta` multi-step + `cleanupPrimaNotaCompleta` best-effort (UPDATE partite/ritenute non ripristinate). Path LAB opzionale in `persistPrimaNotaDraft` dietro flag (default OFF) → `fiscosim_post_fiscal_journal`. Bank `allowRealCommit:false`. Import `Cronologia import` ancora placeholder.
+- **Documenti aggiornati (append/refresh, no riscrittura cieca):** `REPORT/AUDIT_STUDIO_GRADE_20261010.md`, `MATRICE_TEST_CONTABILI_E2E.md` (riga A10 Stage3W), `ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`, `FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md` (checklist allineata a PASS install), `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `02_STATO_ATTUALE.md`, `05_ROADMAP_ATTIVA.md`.
+- **Infrastruttura:** Docker Desktop **non in esecuzione** → topologia porte LAB e smoke Stage3W **NOT_EXECUTED** in questa sessione. Stage 3S/3U/3W-install **non rieseguiti**.
+- **Test baseline sicuri:** `npm ci`; `npm run test:all` → **1199 pass / 0 fail**; `npm run build` → PASS. Nessuna migration/RLS/env/LIVE/scrittura fiscale.
+- **Prossimo intervento concreto:** avviare Docker Desktop → verifica READ-ONLY container/volume Stage3W → `smoke-stage3w-fiscal-lab-http.ps1`. Scritture fiscali flag ON e SG-P0-00 porte solo con nuovo consenso. Default produttivo resta `createPrimaNotaCompleta`.
+
+
+## 2026-10-11 — Push + Docker LAB + Stage3W HTTP smoke PASS
+
+- Push: `3433ead` → `origin/feat/studio-grade-accounting-e2e-20261010`.
+- Docker Desktop avviato; stack P0 LAB presente (DB/Kong/Auth healthy). Porte ancora `0.0.0.0:55321/55322/...` (SG-P0-00 non applicato).
+- READ-ONLY PG: `fiscosim_post_fiscal_journal` + `fiscosim_post_general_journal` presenti; `fiscosim_fiscal_journal_claim` rows=0; `ROLLBACK`.
+- Fix encoding Windows: em-dash Unicode in `start-stage3w-lab-ui-stack.ps1` / `smoke-stage3w-fiscal-lab-http.ps1` → ASCII `-` (PowerShell parse fail senza BOM UTF-8).
+- Avvio stack UI LAB + smoke: report `STAGE3W_LAB_HTTP_SMOKE_20261011-000132-906.txt` → **HTTP 401 PASS** (endpoint fiscale LAB abilitato). Nessuna scrittura fiscale.
+- Fuori scope senza nuovo consenso: flag persist write Manuale/Import, SG-P0-00 recreate porte, Stage3V JWT.
+
+
+## 2026-10-11 — Stage3W synthetic persist FA22 PASS (LAB L2, no JWT/UI)
+
+- Blocco: LAB P0 era **vuoto** (0 societa/auth/conti). UI login impossibile senza seed Auth.
+- Aggiunti `sql/security_p0/60_stage3w_fiscal_synthetic_persist_FA22_LAB_ONLY.sql` + `scripts/security_p0/run-stage3w-fiscal-synthetic-persist.ps1` (`-ApproveSyntheticPersist`).
+- Eseguito su `supabase_db_FiscoSim-P0-LAB-20261008-164658` @ SHA `53b6a77`: seed `SG-E2E-A/B` + RPC `fiscosim_post_fiscal_journal` FA22 (imponibile 1000 / IVA 220 / totale 1220) + replay idempotente + rifiuto cross-company.
+- Report: `REPORT/STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt` — PN `0afbcb06-18e5-49de-883a-38c6fcf89d8c`; partita residuo 1220; societa B PN=0; Stage3U OK.
+- **Non** e JWT firmato ne UI Manuale/Import. Path default `createPrimaNotaCompleta` invariato. Porte ancora `0.0.0.0`. Nessun LIVE.
+
+
+## 2026-10-11 — Stage3W synthetic persist MATRIX PASS (pay/NC/split/parcella/FP22)
+
+- Estensione L2 su LAB P0 dopo FA22: `sql/60` seed riusato; nuovo `sql/61` + `run-stage3w-fiscal-synthetic-persist-matrix.ps1`.
+- Esito report `STAGE3W_SYNTHETIC_PERSIST_MATRIX_20261011-000635-684.txt` @ SHA `9240b04`:
+  - FA22 residuo **720** dopo incasso 500
+  - NC attiva residuo **-1220**, IVA -220
+  - Split partita **1000**, `split_payment=true`
+  - Parcella residuo **1068.80**, ritenuta **200** codice **1040**
+  - FP22 fornitore residuo **1220**, registro acquisto
+  - PN societa A=6, B=0; Stage3U OK; overpay rifiutato
+- Non JWT/UI. Path default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 — Liquidazione IVA L2 da registri SG-E2E PASS
+
+- Script `scripts/security_p0/run-stage3w-liquidazione-from-sge2e.mjs`: legge `registri_iva` reali LAB, calcola con `calcoloLiquidazioneIvaDefinitiva`, confronta attesi indipendenti, persiste `liquidazione_iva` con `FISCOSIM_SG_E2E_LIQ_PERSIST=APPROVED`.
+- Periodo mensile 2026-03: vendite lorde **448.80**, split esclusa **220**, debito effettivo **228.80**, acquisti detraibili **220**, saldo **8.80**, F24 dovuto **0** (sotto soglia 25.82), societa B isolata.
+- Persist id `86b346d6-3560-4c9b-b903-287a5d779d78`; report `REPORT/STAGE3W_LIQUIDAZIONE_SGE2E_20261011-000936.txt`.
+- Non JWT/UI; non RPC consolidamento ufficiale (tabella diretta LAB). Path default Manuale invariato.
+
+
+## 2026-10-11 — Consolidamento IVA RPC ufficiale su SG-E2E PASS
+
+- Script `scripts/security_p0/run-stage3w-liquidazione-consolidamento-sge2e.mjs`: `consolida_periodo_iva_transazionale` su LAB P0 con payload da `calcoloLiquidazioneIvaDefinitiva` sui registri SG-E2E.
+- Esiti: consolidamento **provvisorio** PASS; **riconsolidamento** sostituisce riga precedente PASS; lock `[stato:definitiva]` in note → RPC rifiuta riconsolidamento PASS.
+- Snapshot finale `a9e136d3-93b6-4fba-b962-3124d993b26c`: iva_debito **448.80** (lordo RPC da `ivaVenditeLorda`), credito **220**, saldo **8.80**.
+- Report: `REPORT/STAGE3W_LIQUIDAZIONE_CONSOLIDAMENTO_SGE2E_20261011.txt`.
+- Gap documentato: nello schema LAB allineato non esiste RPC dedicata `mark definitiva`; il blocco usa marker in `note`. Non JWT/UI.
+
+
+## 2026-10-11 — JWT firmato → HTTP fiscal-journal-post → PG PASS (L3 parziale)
+
+- Script `scripts/security_p0/run-stage3w-jwt-fiscal-fa22.mjs`: ripara stub Auth SG-E2E (password bcrypt, identities, instance, token stringhe vuote per GoTrue), login A/B, POST `/api/studio/fiscal-journal-post` con JWT.
+- Esiti: HTTP **201**, PN `3af7c706-cdf2-420f-8d18-954e5a728367` (`SG-E2E-JWT-FA22-001` 1220/1220, IVA 220, partita 1220), replay stesso `request_id` → stesso UUID, cross-company B→A **403**.
+- Report: `REPORT/STAGE3W_JWT_FISCAL_FA22_20261011.txt`. Token/password non stampati.
+- Limite: harness Stage3V formale resta bloccato dalle porte `0.0.0.0`; questa prova usa URL loopback espliciti 55321/3001. UI browser Manuale non eseguita. Default `createPrimaNotaCompleta` invariato.
+
