@@ -1,6 +1,13 @@
 # ROADMAP ATTIVA — SVILUPPO LIQUIDAZIONE IVA DEFINITIVA E REGISTRI IVA
 
-L'attività corrente ha completato con successo il modulo **Liquidazione IVA Definitiva / Chiusura UX / Export** ed ha avviato la preparazione per la fase successiva.
+## Roadmap prevalente 2026-10-10
+
+La sequenza operativa corrente per lo sblocco Studio Grade è in  
+`REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md` (P0→P4).  
+Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`.  
+Le sezioni storiche sotto restano traccia A100/P0; dove contrastano con la roadmap 20261010, **prevale quest’ultima**.
+
+L'attività storica ha completato con successo il modulo **Liquidazione IVA Definitiva / Chiusura UX / Export** ed ha avviato la preparazione per la fase successiva.
 
 ## Stato dei Lavori
 
