@@ -759,3 +759,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Aggiunto percorso opzionale in `persistPrimaNotaDraft`: se `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED` / `VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true`, mappa piano DB → POST `/api/studio/fiscal-journal-post` (richiede anche flag endpoint LAB).
 - Moduli: `fiscalJournal/isFiscalJournalPersistLabEnabled.js`, `resolveFiscalContractKind.js`, `mapPersistencePlanToFiscalJournalRequest.js`, `postFiscalJournalAtomicViaStudioApi.js`.
 - Default invariato: `createPrimaNotaCompleta`. Nessun nome RPC in `persistPrimaNotaDraft.js`. JWT L3 non eseguito (porte).
+
+
+## 2026-10-10 — Stage3W LAB UI stack launcher + HTTP smoke
+
+- Operatore: procedere in autonomia, meno micro-gate.
+- Script: `start-stage3w-lab-ui-stack.ps1` (env da cartella P0 LAB → `.env.stage3w.lab.local`, avvio API+Vite) e `smoke-stage3w-fiscal-lab-http.ps1` (atteso 401/403).
+- Fix CI precedente `333ca03`: client LAB senza import `auth.js`.

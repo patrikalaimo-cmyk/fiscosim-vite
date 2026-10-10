@@ -59,17 +59,20 @@ Usa l’output di `git rev-parse HEAD` come `-ExpectedCommit` nei passi seguenti
 
 ## 3. Install persistente — **ESEGUITA PASS** (`…231404-750`)
 
-## 4. Wire Manuale/Import LAB (flag, default OFF)
+## 4. Wire Manuale/Import LAB — avvio stack (un solo blocco)
 
-Codice presente su branch: `persistPrimaNotaDraft` può POST-are a `/api/studio/fiscal-journal-post` solo se:
-
-```text
-FISCOSIM_ISOLATED_LAB_API=true
-FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED=true
-FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true
-VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true
+```powershell
+cd $env:USERPROFILE\FiscoSim-StudioGrade-E2E-20261010
+git pull origin feat/studio-grade-accounting-e2e-20261010
+$sha = (git rev-parse HEAD).Trim()
+.\scripts\security_p0\start-stage3w-lab-ui-stack.ps1 -ExpectedCommit $sha
+# aspetta ~5s che partano le due finestre, poi:
+.\scripts\security_p0\smoke-stage3w-fiscal-lab-http.ps1 -ExpectedCommit $sha
 ```
 
-+ `dev-api` su loopback + sessione Auth owner/admin. Senza flag: resta `createPrimaNotaCompleta`.
+Lo script scrive `.env.stage3w.lab.local` (chiavi da `%USERPROFILE%\FiscoSim-P0-LAB-20261008-164658\.env` o `supabase\.env`), avvia `dev-api :3001` e Vite `:5173` puntati a `http://127.0.0.1:55321`.
 
-JWT L3 write: ancora fuori perimetro (porte pubblicate).
+Smoke PASS = HTTP 401/403 (endpoint acceso), non 503.  
+Poi: apri `http://127.0.0.1:5173`, login owner/admin LAB, salva **una** fattura attiva. Incolla solo esito / errori.
+
+JWT L3 E2E formale: ancora fuori (porte `0.0.0.0`).

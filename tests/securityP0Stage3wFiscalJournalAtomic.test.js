@@ -247,6 +247,22 @@ test('Stage3W matrix PASS marker is SELECT for PowerShell -t matching', () => {
   assert.doesNotMatch(matrix, /RAISE NOTICE 'STAGE3W_LAB_MATRIX/)
 })
 
+test('Stage3W LAB UI stack launcher and HTTP smoke scripts are pinned to P0 LAB', () => {
+  const start = source('scripts/security_p0/start-stage3w-lab-ui-stack.ps1')
+  const smoke = source('scripts/security_p0/smoke-stage3w-fiscal-lab-http.ps1')
+  for (const marker of [
+    'supabase_db_FiscoSim-P0-LAB-20261008-164658',
+    'supabase_kong_FiscoSim-P0-LAB-20261008-164658',
+    'FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED',
+    'VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB',
+    'http://127.0.0.1:55321',
+    '.env.stage3w.lab.local',
+  ]) assert.ok(start.includes(marker), marker)
+  assert.match(smoke, /fiscal-journal-post/)
+  assert.match(smoke, /FISCAL_JOURNAL_LAB_ONLY_DISABLED/)
+  assert.match(smoke, /401/)
+})
+
 test('Stage3W persistent install script is gated and preserves Stage3U', () => {
   const ps = source('scripts/security_p0/run-stage3w-fiscal-persistent-lab-install.ps1')
   for (const marker of [
