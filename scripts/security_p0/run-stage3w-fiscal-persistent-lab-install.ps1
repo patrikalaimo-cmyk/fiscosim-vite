@@ -21,7 +21,7 @@ if($LASTEXITCODE -ne 0 -or $sha.Trim() -ne $ExpectedCommit){
  throw 'Stage3W persistent install refused: pinned commit mismatch'
 }
 $expectedBlobs=@{
- '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql'='1e920b0f2aeda5cd40106395b64d41947ab013d3'
+ '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql'='4d4a765eb6b146fdf3343706b54330cb51ba7783'
  '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql'='988e3396d2477d65140e70f6635cab2c5dfe560a'
 }
 foreach($name in $expectedBlobs.Keys){

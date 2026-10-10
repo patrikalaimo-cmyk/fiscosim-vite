@@ -708,3 +708,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Causa: SQL 59/58 emettevano `RAISE NOTICE` per i marker PASS; i runner PowerShell cercavano riga esatta come Stage3U (`SELECT … AS result` + `psql -t`). Con `NOTICE:  PREFIX` il `-contains` falliva anche se PostgreSQL era OK.
 - Fix: preflight 59 e matrix 58 usano `SELECT 'STAGE3W_…' AS result;`; PS1 usano match substring + dump diagnostico `ERROR/DETAIL/HINT` su BLOCKED; blob pin install 58 aggiornato a `988e3396d2477d65140e70f6635cab2c5dfe560a`.
 - Test Stage3W: **11/11 PASS**. Nessuna esecuzione PostgreSQL da Cloud. Operatore deve `git pull` e rieseguire preflight + rehearsal con nuovo SHA.
+
+
+## 2026-10-10 — Stage3W rehearsal ancora BLOCKED: diagnostica nel throw + colonne/ledger
+
+- CI marker-fix: Actions push/PR su `3315094` **PASS** (es. `38085572534` / `38085575040`).
+- Operatore: rehearsal ancora BLOCKED (`STAGE3W_FISCAL_REHEARSAL_20261010-225457-529.txt`) senza testo ERROR incollato.
+- Mitigazioni: (1) PS1 includono diagnostica PostgreSQL nel `throw`; (2) preflight 59 elenca colonne usate da RPC; (3) SQL 57 eccezione empty-ledger con conteggi `pn/lines/vat/part/wh`; (4) insert partitario tollera assenza `iva_per_cassa`. Blob pin 57 → `4d4a765eb6b146fdf3343706b54330cb51ba7783`.

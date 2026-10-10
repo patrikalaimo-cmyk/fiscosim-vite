@@ -85,13 +85,16 @@ $logLines=@(
 $logLines | Out-File -LiteralPath $report -Encoding UTF8
 if($exitCode -ne 0 -or -not (Test-LogHas $log 'STAGE3W_LAB_MATRIX|PASS|FIXTURE_ROLLBACK') -or
  -not (Test-LogHas $log 'STAGE3W_ROLLBACK_VERIFIED|NO_FISCAL_SCHEMA_PERSISTED')){
+ $all=@($log | ForEach-Object {[string]$_})
+ $diag=@($all | Where-Object {
+  $_ -match '(?i)(ERROR:|FATAL:|DETAIL:|HINT:|Stage3W|SECURITY FAILURE|ROLLBACK_FAILED|empty fiscal|MISSING|incomplete|already present)'
+ })
+ if($diag.Count -eq 0){ $diag=@($all | Select-Object -Last 40) }
  Write-Host 'STAGE3W REHEARSAL BLOCKED' -ForegroundColor Yellow
  Write-Host 'PostgreSQL diagnostics:' -ForegroundColor Yellow
- @($log | ForEach-Object {[string]$_} |
-  Where-Object { $_ -match '(?i)(ERROR:|FATAL:|DETAIL:|HINT:|Stage3W|SECURITY FAILURE|ROLLBACK_FAILED)' }) |
-  ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+ $diag | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
  Write-Host ('Preserved report: '+$report)
- throw ('Stage3W rehearsal BLOCKED; see report: '+$report)
+ throw (('Stage3W rehearsal BLOCKED; diagnostics:'+"`n"+(($diag | Select-Object -First 25) -join "`n")+"`n"+'see report: '+$report))
 }
 Write-Host 'STAGE3W FISCAL REHEARSAL ROLLBACK PASS' -ForegroundColor Green
 Write-Host ('Report: '+$report)

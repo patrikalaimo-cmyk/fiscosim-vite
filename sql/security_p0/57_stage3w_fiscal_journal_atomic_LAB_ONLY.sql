@@ -32,12 +32,20 @@ BEGIN
   ) IS NOT NULL
  THEN RAISE EXCEPTION 'Stage3W already present: never rerun without a fresh audit'; END IF;
  -- Refuse install on a non-empty fiscal ledger (preserve Stage3U / prior fixtures).
+ -- Exception text includes counts so Windows reports are actionable without guessing.
  IF (SELECT count(*) FROM public.prima_nota)<>0
   OR (SELECT count(*) FROM public.prima_nota_righe)<>0
   OR (SELECT count(*) FROM public.registri_iva)<>0
   OR (SELECT count(*) FROM public.partitario)<>0
   OR (SELECT count(*) FROM public.ritenute_dacconto)<>0
- THEN RAISE EXCEPTION 'Stage3W candidate restricted to an empty fiscal LAB ledger'; END IF;
+ THEN RAISE EXCEPTION
+  'Stage3W candidate restricted to an empty fiscal LAB ledger (pn=% lines=% vat=% part=% wh=%)',
+  (SELECT count(*) FROM public.prima_nota),
+  (SELECT count(*) FROM public.prima_nota_righe),
+  (SELECT count(*) FROM public.registri_iva),
+  (SELECT count(*) FROM public.partitario),
+  (SELECT count(*) FROM public.ritenute_dacconto);
+ END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public'
    AND tablename='clienti' AND policyname='clienti_company_boundary'
    AND permissive='RESTRICTIVE') THEN
@@ -325,17 +333,39 @@ BEGIN
       WHERE pc.id=(v_open->>'conto_id')::uuid
        AND pc.societa_id=p_societa_id AND pc.attivo IS TRUE
      ) THEN RAISE EXCEPTION 'Stage3W partita account out of company'; END IF;
-    INSERT INTO public.partitario(
-     societa_id,tipo,conto_id,prima_nota_id,numero_documento,data_documento,data_scadenza,
-     importo_originale,importo_pagato,importo_residuo,stato,iva_per_cassa
-    ) VALUES (
-     p_societa_id,v_open->>'tipo',nullif(v_open->>'conto_id','')::uuid,v_pn_id,
-     coalesce(nullif(v_open->>'numero_documento',''),nullif(p_header->>'numero_documento','')),
-     coalesce(nullif(v_open->>'data_documento','')::date,v_doc_date),
-     nullif(v_open->>'data_scadenza','')::date,
-     (v_open->>'importo_originale')::numeric,0,(v_open->>'importo_originale')::numeric,
-     'aperta',coalesce((v_open->>'iva_per_cassa')::boolean,false)
-    ) RETURNING id INTO v_opened_partita_id;
+    IF EXISTS(
+     SELECT 1 FROM pg_catalog.pg_attribute
+     WHERE attrelid='public.partitario'::regclass
+      AND attname='iva_per_cassa' AND attnum>0 AND NOT attisdropped
+    ) THEN
+     EXECUTE $part_cash$
+      INSERT INTO public.partitario(
+       societa_id,tipo,conto_id,prima_nota_id,numero_documento,data_documento,data_scadenza,
+       importo_originale,importo_pagato,importo_residuo,stato,iva_per_cassa
+      ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,0,$8,'aperta',$9
+      ) RETURNING id
+     $part_cash$
+     INTO v_opened_partita_id
+     USING p_societa_id,v_open->>'tipo',nullif(v_open->>'conto_id','')::uuid,v_pn_id,
+      coalesce(nullif(v_open->>'numero_documento',''),nullif(p_header->>'numero_documento','')),
+      coalesce(nullif(v_open->>'data_documento','')::date,v_doc_date),
+      nullif(v_open->>'data_scadenza','')::date,
+      (v_open->>'importo_originale')::numeric,
+      coalesce((v_open->>'iva_per_cassa')::boolean,false);
+    ELSE
+     INSERT INTO public.partitario(
+      societa_id,tipo,conto_id,prima_nota_id,numero_documento,data_documento,data_scadenza,
+      importo_originale,importo_pagato,importo_residuo,stato
+     ) VALUES (
+      p_societa_id,v_open->>'tipo',nullif(v_open->>'conto_id','')::uuid,v_pn_id,
+      coalesce(nullif(v_open->>'numero_documento',''),nullif(p_header->>'numero_documento','')),
+      coalesce(nullif(v_open->>'data_documento','')::date,v_doc_date),
+      nullif(v_open->>'data_scadenza','')::date,
+      (v_open->>'importo_originale')::numeric,0,(v_open->>'importo_originale')::numeric,
+      'aperta'
+     ) RETURNING id INTO v_opened_partita_id;
+    END IF;
    END LOOP;
   END IF;
 

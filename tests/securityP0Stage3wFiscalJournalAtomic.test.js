@@ -174,10 +174,12 @@ test('Stage3W SQL ensures separate claim table, ACID inserts, FOR UPDATE closure
     'FROM PUBLIC,anon,authenticated',
     'TO service_role',
     'Stage3W closure exceeds residual',
+    'empty fiscal LAB ledger (pn=% lines=% vat=% part=% wh=%)',
     'INSERT INTO public.registri_iva(',
     'INSERT INTO public.partitario(',
     'INSERT INTO public.ritenute_dacconto(',
     'INSERT INTO public.audit_contabile(',
+    "attname='iva_per_cassa'",
     'fiscosim_post_general_journal',
     'Stage3W must not alter Stage3U',
     'local-fiscal-journal-atomic-candidate-only',
@@ -227,6 +229,8 @@ test('Stage3W preflight is READ ONLY and does not install', () => {
     'local-fiscal-journal-readonly-preflight',
     "SELECT 'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST' AS result;",
     'Stage3W fiscal tables MISSING',
+    'STAGE3W_WH_COUNT|',
+    'Stage3W accounting columns MISSING',
   ]) assert.ok(preflight.includes(x), x)
   assert.doesNotMatch(preflight, /RAISE NOTICE 'STAGE3W_PREFLIGHT/)
   assert.doesNotMatch(preflight, /^COMMIT;/m)
@@ -247,7 +251,7 @@ test('Stage3W persistent install script is gated and preserves Stage3U', () => {
     'STAGE3W_ROLLBACK_VERIFIED|NO_FISCAL_SCHEMA_PERSISTED',
     '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql',
     '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql',
-    '1e920b0f2aeda5cd40106395b64d41947ab013d3',
+    '4d4a765eb6b146fdf3343706b54330cb51ba7783',
     '988e3396d2477d65140e70f6635cab2c5dfe560a',
     'STAGE3U_MUST_REMAIN_UNTOUCHED=true',
     'DO NOT rerun automatically',
