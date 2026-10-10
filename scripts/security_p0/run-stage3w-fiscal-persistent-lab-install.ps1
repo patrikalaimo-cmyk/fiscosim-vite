@@ -22,13 +22,15 @@ if($LASTEXITCODE -ne 0 -or $sha.Trim() -ne $ExpectedCommit){
 }
 $expectedBlobs=@{
  '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql'='4d4a765eb6b146fdf3343706b54330cb51ba7783'
- '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql'='f74d51369aab9a1d2bfc883a920b771fbf0b16d4'
+ # Committed blob OID at the review commit (not working-tree hash-object;
+ # Windows autocrlf would otherwise false-fail the pin check).
+ '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql'='59b9b746391a3a05ffe95cea9b773253f1f9af94'
 }
 foreach($name in $expectedBlobs.Keys){
  $relative='sql/security_p0/'+$name
- $actual=(& git -C $repo hash-object -- $relative)
+ $actual=(& git -C $repo rev-parse --verify ($sha.Trim()+':'+$relative))
  if($LASTEXITCODE -ne 0 -or $actual.Trim() -ne $expectedBlobs[$name]){
-  throw ('Stage3W unreviewed SQL content detected: '+$name)
+  throw ('Stage3W unreviewed SQL content detected: '+$name+' actual='+$actual.Trim())
  }
 }
 $running=(& docker inspect --format '{{.State.Running}}' $Container 2>&1)
