@@ -153,7 +153,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 - Contratto, scenari indipendenti, RPC candidata Stage3W, matrix SQL, API LAB e CI branch: **preparati in codice**.
 - Dettaglio: `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md`.
-- PostgreSQL LAB: **non eseguito in Cloud**; prossima operazione richiedente consenso = rehearsal ROLLBACK Windows.
+- Windows P0 LAB: preflight READ-ONLY **PASS** + rehearsal ROLLBACK **PASS** (report `…230343-598` / `…230345-944`). Schema Stage3W non persistito.
+- Prossima operazione richiedente consenso esplicito: install LAB persistente (`-ApproveLabSchemaInstall`).
 
 ## Prossima sessione
 
