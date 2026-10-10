@@ -261,7 +261,11 @@ test('Stage3W LAB UI stack launcher and HTTP smoke scripts are pinned to P0 LAB'
     'Stop-Process',
     'ServiceRoleKey',
     'Import-DockerInspectEnv',
+    '`nnode scripts/dev-api.mjs',
+    '`nnpx vite --port 5173 --strictPort',
   ]) assert.ok(start.includes(marker), marker)
+  assert.doesNotMatch(start, /\+ "node scripts\/dev-api\.mjs"/)
+  assert.doesNotMatch(start, /\+ "npx vite/)
   assert.match(smoke, /fiscal-journal-post/)
   assert.match(smoke, /FISCAL_JOURNAL_LAB_ONLY_DISABLED/)
   assert.match(smoke, /401/)
