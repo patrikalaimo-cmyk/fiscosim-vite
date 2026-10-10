@@ -253,10 +253,12 @@ test('Stage3W LAB UI stack launcher and HTTP smoke scripts are pinned to P0 LAB'
   for (const marker of [
     'supabase_db_FiscoSim-P0-LAB-20261008-164658',
     'supabase_kong_FiscoSim-P0-LAB-20261008-164658',
+    'supabase_auth_FiscoSim-P0-LAB-20261008-164658',
     'FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED',
     'VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB',
     'http://127.0.0.1:55321',
     '.env.stage3w.lab.local',
+    'Stop-Process',
   ]) assert.ok(start.includes(marker), marker)
   assert.match(smoke, /fiscal-journal-post/)
   assert.match(smoke, /FISCAL_JOURNAL_LAB_ONLY_DISABLED/)
