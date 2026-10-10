@@ -32,7 +32,7 @@ Usa l’output di `git rev-parse HEAD` come `-ExpectedCommit` nei passi seguenti
 .\scripts\security_p0\run-stage3w-fiscal-preflight.ps1 -ExpectedCommit <SHA_HEAD>
 ```
 
-**PASS atteso nel report:** `STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST`
+**PASS atteso nel report:** riga `SELECT` `STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST` (non `NOTICE:`)
 
 ## 2. Rehearsal ROLLBACK (approvata) — schema temporaneo, poi assente
 

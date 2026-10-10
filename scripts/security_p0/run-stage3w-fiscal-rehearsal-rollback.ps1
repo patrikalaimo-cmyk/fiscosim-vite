@@ -71,6 +71,9 @@ try{
 }finally{
  $ErrorActionPreference=$oldPreference
 }
+function Test-LogHas([object[]]$Log,[string]$Needle){
+ return [bool](@($Log | ForEach-Object {[string]$_}) | Where-Object { $_ -like ('*'+$Needle+'*') })
+}
 $logLines=@(
  'STAGE3W_FISCAL_REHEARSAL',
  "COMMIT=$($sha.Trim())",
@@ -80,9 +83,13 @@ $logLines=@(
  'STAGE3U_RPC_NOT_MODIFIED=true'
 ) + @($log | ForEach-Object {[string]$_})
 $logLines | Out-File -LiteralPath $report -Encoding UTF8
-if($exitCode -ne 0 -or -not ($log -contains 'STAGE3W_LAB_MATRIX|PASS|FIXTURE_ROLLBACK') -or
- -not ($log -contains 'STAGE3W_ROLLBACK_VERIFIED|NO_FISCAL_SCHEMA_PERSISTED')){
+if($exitCode -ne 0 -or -not (Test-LogHas $log 'STAGE3W_LAB_MATRIX|PASS|FIXTURE_ROLLBACK') -or
+ -not (Test-LogHas $log 'STAGE3W_ROLLBACK_VERIFIED|NO_FISCAL_SCHEMA_PERSISTED')){
  Write-Host 'STAGE3W REHEARSAL BLOCKED' -ForegroundColor Yellow
+ Write-Host 'PostgreSQL diagnostics:' -ForegroundColor Yellow
+ @($log | ForEach-Object {[string]$_} |
+  Where-Object { $_ -match '(?i)(ERROR:|FATAL:|DETAIL:|HINT:|Stage3W|SECURITY FAILURE|ROLLBACK_FAILED)' }) |
+  ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
  Write-Host ('Preserved report: '+$report)
  throw ('Stage3W rehearsal BLOCKED; see report: '+$report)
 }

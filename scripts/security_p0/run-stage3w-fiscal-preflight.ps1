@@ -23,6 +23,9 @@ $path=Join-Path $repo 'sql\security_p0\59_stage3w_fiscal_preflight_READ_ONLY.sql
 if(!(Test-Path -LiteralPath $path -PathType Leaf)){
  throw 'Stage3W preflight SQL file missing'
 }
+function Test-LogHas([object[]]$Log,[string]$Needle){
+ return [bool](@($Log | ForEach-Object {[string]$_}) | Where-Object { $_ -like ('*'+$Needle+'*') })
+}
 $report=Join-Path $Lab ('STAGE3W_FISCAL_PREFLIGHT_'+(Get-Date).ToString('yyyyMMdd-HHmmss-fff')+'.txt')
 if(Test-Path -LiteralPath $report){throw 'Stage3W report collision'}
 $payload="SET fiscosim.p0_stage3w_readonly_preflight='local-fiscal-journal-readonly-preflight';`n"+
@@ -46,9 +49,13 @@ $logLines=@(
  'POSTGRESQL_EXECUTED_IN_CLOUD=false'
 ) + @($log | ForEach-Object {[string]$_})
 $logLines | Out-File -LiteralPath $report -Encoding UTF8
-if($code -ne 0 -or -not ($log -contains 'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST') -or
- -not ($log -contains 'ROLLBACK')){
+if($code -ne 0 -or -not (Test-LogHas $log 'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST') -or
+ -not (Test-LogHas $log 'ROLLBACK')){
  Write-Host 'STAGE3W PREFLIGHT BLOCKED' -ForegroundColor Yellow
+ Write-Host 'PostgreSQL diagnostics:' -ForegroundColor Yellow
+ @($log | ForEach-Object {[string]$_} |
+  Where-Object { $_ -match '(?i)(ERROR:|FATAL:|DETAIL:|HINT:|Stage3W|MISSING|incomplete)' }) |
+  ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
  Write-Host ('Preserved report: '+$report)
  throw ('Stage3W preflight BLOCKED; see report: '+$report)
 }

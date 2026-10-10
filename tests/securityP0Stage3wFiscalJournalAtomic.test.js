@@ -225,12 +225,18 @@ test('Stage3W preflight is READ ONLY and does not install', () => {
     'BEGIN READ ONLY;',
     'ROLLBACK;',
     'local-fiscal-journal-readonly-preflight',
-    'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST',
+    "SELECT 'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST' AS result;",
     'Stage3W fiscal tables MISSING',
   ]) assert.ok(preflight.includes(x), x)
+  assert.doesNotMatch(preflight, /RAISE NOTICE 'STAGE3W_PREFLIGHT/)
   assert.doesNotMatch(preflight, /^COMMIT;/m)
   assert.doesNotMatch(preflight, /^INSERT INTO /m)
   assert.doesNotMatch(preflight, /^CREATE (?:TABLE|FUNCTION)/m)
+})
+
+test('Stage3W matrix PASS marker is SELECT for PowerShell -t matching', () => {
+  assert.ok(matrix.includes("SELECT 'STAGE3W_LAB_MATRIX|PASS|FIXTURE_ROLLBACK' AS result;"))
+  assert.doesNotMatch(matrix, /RAISE NOTICE 'STAGE3W_LAB_MATRIX/)
 })
 
 test('Stage3W persistent install script is gated and preserves Stage3U', () => {
@@ -242,7 +248,7 @@ test('Stage3W persistent install script is gated and preserves Stage3U', () => {
     '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql',
     '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql',
     '1e920b0f2aeda5cd40106395b64d41947ab013d3',
-    'e3ce10b8466b80a6bc9542b23ba6e04e0f71206f',
+    '988e3396d2477d65140e70f6635cab2c5dfe560a',
     'STAGE3U_MUST_REMAIN_UNTOUCHED=true',
     'DO NOT rerun automatically',
     '3W_PERSISTENT_INSTALL|SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK',

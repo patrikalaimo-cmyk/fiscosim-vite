@@ -1,5 +1,5 @@
 -- Stage3W fiscal atomic commit preflight — READ ONLY, no DDL/DML.
--- Does not install Stage3W and does not post accounting rows.
+-- Markers use SELECT (not RAISE NOTICE) so PowerShell -t matching works like Stage3U.
 BEGIN READ ONLY;
 SET LOCAL statement_timeout='30s';
 DO $pre$
@@ -57,18 +57,17 @@ BEGIN
   OR NOT has_table_privilege('service_role','public.ritenute_dacconto','INSERT')
   OR NOT has_table_privilege('service_role','public.audit_contabile','INSERT')
  THEN RAISE EXCEPTION 'Stage3W service-role accounting table grants incomplete'; END IF;
-
- RAISE NOTICE 'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST';
- RAISE NOTICE 'STAGE3W_PN_COUNT|%',(SELECT count(*) FROM public.prima_nota);
- RAISE NOTICE 'STAGE3W_VAT_COUNT|%',(SELECT count(*) FROM public.registri_iva);
- RAISE NOTICE 'STAGE3W_PARTITA_COUNT|%',(SELECT count(*) FROM public.partitario);
- RAISE NOTICE 'STAGE3W_RPC_PRESENT|%',(
+END $pre$;
+SELECT 'STAGE3W_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST' AS result;
+SELECT 'STAGE3W_PN_COUNT|'||(SELECT count(*) FROM public.prima_nota)::text AS result;
+SELECT 'STAGE3W_VAT_COUNT|'||(SELECT count(*) FROM public.registri_iva)::text AS result;
+SELECT 'STAGE3W_PARTITA_COUNT|'||(SELECT count(*) FROM public.partitario)::text AS result;
+SELECT 'STAGE3W_RPC_PRESENT|'||(
   to_regprocedure(
    'public.fiscosim_post_fiscal_journal(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,text)'
   ) IS NOT NULL
- );
- RAISE NOTICE 'STAGE3U_RPC_PRESERVED|%',(
+ )::text AS result;
+SELECT 'STAGE3U_RPC_PRESERVED|'||(
   to_regprocedure('public.fiscosim_post_general_journal(uuid,uuid,uuid,jsonb,jsonb,text)') IS NOT NULL
- );
-END $pre$;
+ )::text AS result;
 ROLLBACK;

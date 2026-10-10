@@ -22,7 +22,7 @@ if($LASTEXITCODE -ne 0 -or $sha.Trim() -ne $ExpectedCommit){
 }
 $expectedBlobs=@{
  '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql'='1e920b0f2aeda5cd40106395b64d41947ab013d3'
- '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql'='e3ce10b8466b80a6bc9542b23ba6e04e0f71206f'
+ '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql'='988e3396d2477d65140e70f6635cab2c5dfe560a'
 }
 foreach($name in $expectedBlobs.Keys){
  $relative='sql/security_p0/'+$name
