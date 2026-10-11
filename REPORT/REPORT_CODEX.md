@@ -867,3 +867,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - IVA vendita **-1000/-220**; partita cliente residuo **-1220**
   - claim `source_module=import_contabilita`, `contract_kind=nota_credito_attiva`; staging `processed`; societa B isolata
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-03 Import Contabilita multi-aliquota 22+10 PASS
+
+- Script `scripts/security_p0/run-stage3w-import-multi2210-commit.mjs`: prune placeholder IVA 0/0 via `normalizeImportVatRows`, poi `runCommitWorkflow` fiscal LAB.
+- Evidence `REPORT/STAGE3W_IMPORT_MULTI2210_COMMIT_20261011200447.txt`:
+  - PN `dd01bdca-db42-4830-85e3-a9cf4599252c` (`SG-E2E-IMP-M2210-11200447`) 1770/1770
+  - `registri_iva` count=2 (22%: 1000/220; 10%: 500/50); zero-rows=0; partita fornitore 1770
+  - claim `import_contabilita` / `fattura_passiva` con 2 vat rows; staging `processed`
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
