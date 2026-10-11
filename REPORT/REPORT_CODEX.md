@@ -836,3 +836,14 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Report: `REPORT/STAGE3W_JWT_FISCAL_FA22_20261011.txt`. Token/password non stampati.
 - Limite: harness Stage3V formale resta bloccato dalle porte `0.0.0.0`; questa prova usa URL loopback espliciti 55321/3001. UI browser Manuale non eseguita. Default `createPrimaNotaCompleta` invariato.
 
+
+## 2026-10-11 - L4 browser Puppeteer Manuale + fiscal post PASS
+
+- Blocco Cursor browser MCP (`Aborted`) aggirato con Puppeteer headless: `scripts/security_p0/run-stage3w-l4-browser-manuale.mjs`.
+- Fix sbloccanti stack UI: route `/api/auth/session` in `lib/devStudioHttp.js`; Vite proxy `127.0.0.1:3001` (conflitto `open-webui` su `:3001`).
+- Esito evidence `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-11T1939.txt`:
+  - LOGIN_UI=PASS (`sg-e2e-a@example.invalid`)
+  - NAV CONTABILITA -> Prima Nota -> Registrazione manuale = PASS
+  - same-origin POST `/api/studio/fiscal-journal-post` via Vite proxy **201**
+  - PN `d24cbc82-adc3-4ad8-900f-fe3bdb8617fb` presente in DB (count=1)
+- Nota: post fiscal eseguito con JWT sessione browser sulla superficie Manuale (non fill completo form F10). Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
