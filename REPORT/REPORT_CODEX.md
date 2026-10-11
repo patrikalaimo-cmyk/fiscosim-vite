@@ -857,3 +857,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - `registri_iva` acquisto 1000/220; partita fornitore residuo 1220; societa B isolata
   - claim `source_module=import_contabilita`, `contract_kind=fattura_passiva`; staging `processed`
 - Gap noto: RPC fiscale non persiste `documento_import_id` su `prima_nota` (provenienza via claim + staging). Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-02 Import Contabilita NC attiva 22 PASS
+
+- Script `scripts/security_p0/run-stage3w-import-nc22-commit.mjs`: staging + JWT + `runCommitWorkflow` fiscal LAB; causale con `operazioneGestita='Nota credito attiva'` (label bare `notacredito` non attiva `notaCredito` in policy).
+- Evidence `REPORT/STAGE3W_IMPORT_NC22_COMMIT_20261011200317.txt`:
+  - PN `07652403-a8c2-4b0c-a922-28e7ce802214` (`SG-E2E-IMP-NC22-11200317`) 1220/1220
+  - IVA vendita **-1000/-220**; partita cliente residuo **-1220**
+  - claim `source_module=import_contabilita`, `contract_kind=nota_credito_attiva`; staging `processed`; societa B isolata
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
