@@ -887,3 +887,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Open PN `59b4b052-?`, partita `d120dd17-?` 1220 -> after pay PN `4aecae78-?` residuo **720**
   - claim pay `import_contabilita` / `pagamento`; overpay `success=false` residuo invariato 720
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P1-05 Equivalenza Import vs Manuale PASS
+
+- Script `scripts/security_p0/run-stage3w-import-vs-manuale-equiv.mjs`: stesso draft FP22 via Import Contabilita e via Manuale (fiscal LAB), fingerprint SHA256 effetti PG (dare/avere, VAT, partita, rows, contract_kind; **esclude** `source_module`).
+- Evidence `REPORT/STAGE3W_IMPORT_VS_MANUALE_EQUIV_20261011210322.txt`:
+  - Import PN `180491a6-b632-41da-b4e8-b16776013565` source `import_contabilita`
+  - Manuale PN `f301965b-cfbc-4a4e-93f7-2b43cc182158` source `registrazione_manual`
+  - Kind entrambi `fattura_passiva`; hash identico `a6a392c3b58a892278564d6f63919090df5601e09e83e4173d8c597ed2c36d14`
+  - Effetti: dare/avere 1220, VAT acquisto 22/1000/220, partita fornitore 1220, stesse 3 righe conti
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
