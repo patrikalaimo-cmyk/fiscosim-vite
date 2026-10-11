@@ -1,19 +1,19 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** L2/L3/L4 + P1-01..04 + **SG-P1-05 Import vs Manuale equiv PASS**.
+* **Fase corrente:** L2/L3/L4 + P1-01..05 + **SG-P1-06 Consultazione L4 read-only PASS**.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **PN P1-05 Import:** `180491a6-b632-41da-b4e8-b16776013565` (source `import_contabilita`)
-* **PN P1-05 Manuale:** `f301965b-cfbc-4a4e-93f7-2b43cc182158` (source `registrazione_manual`)
-* **Hash effetti:** `a6a392c3b58a892278564d6f63919090df5601e09e83e4173d8c597ed2c36d14` (identico)
+* **PN P1-06 seed:** `c7a18d0f-cee2-4281-848c-1745ad16496e` (doc `SG-E2E-P106-1T2110`)
+* **P1 chiuso:** 01 FP22, 02 NC, 03 multi, 04 pay partial, 05 Import≡Manuale, 06 Consultazione RO
 * **Limite:** Stage3V port gate BLOCKED; RPC non scrive `documento_import_id` su PN; default prod multi-step
 
 ## 2. Prossimo passo operativo
-1. SG-P1-06 consultazione, oppure SG-P0-00 porte (approvazione)
+1. P2 casi fiscali speciali, oppure SG-P0-00 porte (approvazione)
 2. Non cleanup silente fixture SG-E2E-*
 3. Cutover default `createPrimaNotaCompleta` solo con consenso esplicito
 
 ## 3. Evidenze
+* `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-11T2110.txt`
 * `REPORT/STAGE3W_IMPORT_VS_MANUALE_EQUIV_20261011210322.txt`
 * `REPORT/STAGE3W_IMPORT_PAY_PARTIAL_COMMIT_20261011210147.txt`
 * `REPORT/STAGE3W_IMPORT_MULTI2210_COMMIT_20261011200447.txt`

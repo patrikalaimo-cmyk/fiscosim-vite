@@ -1,0 +1,26 @@
+P1_06_START puppeteer Consultazione L4 read-only
+UI=http://127.0.0.1:5173
+LOGIN_UI=PASS
+SEED_DOC=SG-E2E-P106-1T2110
+SEED_STATUS=201
+SEED_OK=true
+SEED_PN_ID=c7a18d0f-cee2-4281-848c-1745ad16496e
+SEED_PN_DB=SG-E2E-P106-1T2110|1220.00|1220.00|2026-10-11 21:10:31.857889+00
+NAV_SECTION=CONTABILITÀ
+NAV_PRIMA={"ok":true,"label":"Prima Nota"}
+NAV_CONSULT={"ok":true,"label":"Consultazione"}
+CONSULT_UI=PASS
+DEMO_OFF={"ok":true,"after":"Mostra demo"}
+SOCIETA_UI={"ok":true,"value":"72000000-0000-4000-8000-000000000001","label":"SG E2E synthetic company A","options":[{"value":"72000000-0000-4000-8000-000000000001","label":"SG E2E synthetic company A"}]}
+FILTER_HIT_SET=PASS
+FILTER_DIAG={"inputValue":"SG-E2E-P106-1T2110","hasDoc":true,"hasEmpty":false,"hasError":true,"loading":false,"snippet":"⚪ AI standby 📋 Log pipeline (156) FiscoSim V6 Professional AI AGENT STUDIO Dashboard Clienti Import Excel Utenti Studio Impostazioni Studio Impostazioni Procedure Deleghe Uniche DOCUMENT HUB Import Contabilità Import Documenti Export Dati Fatture Massive ADE Lettura Mail Richieste Fatture ADE CONTABILITÀ Prima Nota Partitario Bilancio STRUMENTI Gestione F24 Simulatore Fiscale Ammortamenti Certificazioni Uniche Revisione Dichiarativi AgeCon — Avvisi ADE COMUNICAZIONI Adempimenti Agenda Invii ENGINE STATUS AI non disponibile 23:10 Test local AI Avvia local AI Test online AI Riprova tutto IA locale TIMEOUT / ERRORE La IA locale non ha risposto in tempo. Motivo: Timeout durante la chiamata locale. Prossimo passo: Riprova oppure avvia Ollama e controlla il carico del sistema. Test local AI Avvia local AI IA online NON CONFIGURATA IA online non configurata. Motivo: Manca ANTHROPIC_API_KEY. Pr"}
+REST_PROBE={"status":200,"body":"[{\"id\":\"81e47831-e105-464b-9344-ed53cdda79cf\",\"prima_nota\":{\"id\": \"c7a18d0f-cee2-4281-848c-1745ad16496e\", \"stato\": \"confermata\", \"societa_id\": \"72000000-0000-4000-8000-000000000001\", \"numero_documento\": \"SG-E2E-P106-1T2110\"}}, \n {\"id\":\"eabd8d72-fee8-4ca9-9656-2f0d36330f4f\",\"prima_nota\":{\"id\": \"c7a18d0f-cee2-4281-848c-1745ad16496e\", \"stato\": \"confermata\", \"societa_id\": \"72000000-0000-4000-8000-000000000001\", \"numero_documento\": \"SG-E2E-P106-1T2110\"}}, \n {\"id\":\"09ceb82d-dbdc-450f-9583-e089511a508f"}
+FILTER_HIT_VISIBLE=true
+DETAIL={"hasReadOnlyBanner":true,"hasReadOnlyMsg":true,"modificaCount":1,"modificaDisabled":true,"hasStornoAction":false,"docInSidebar":true}
+FILTER_MISS_EMPTY=true
+CONSULT_WRITE_COUNT=0
+CONSULT_FISCAL_POST_COUNT=0
+CONSULT_MUTATING_API_COUNT=0
+PN_AFTER=SG-E2E-P106-1T2110|1220.00|1220.00|2026-10-11 21:10:31.857889+00
+FISCAL_HTTP_ALL=[{"status":201,"url":"http://127.0.0.1:5173/api/studio/fiscal-journal-post","phase":"seed"}]
+P1_06_RESULT=PASS
