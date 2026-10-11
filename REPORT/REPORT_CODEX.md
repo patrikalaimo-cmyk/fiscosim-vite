@@ -847,3 +847,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - same-origin POST `/api/studio/fiscal-journal-post` via Vite proxy **201**
   - PN `d24cbc82-adc3-4ad8-900f-fe3bdb8617fb` presente in DB (count=1)
 - Nota: post fiscal eseguito con JWT sessione browser sulla superficie Manuale (non fill completo form F10). Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-01 Import Contabilita FP22 commit LAB PASS
+
+- Script `scripts/security_p0/run-stage3w-import-fp22-commit.mjs`: staging `documenti_import` + JWT SG-E2E-A + `runCommitWorkflow` con `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true` (fetch `/api` riscritto su `127.0.0.1:3001`).
+- Evidence `REPORT/STAGE3W_IMPORT_FP22_COMMIT_20261011195558.txt`:
+  - PN `aa84ee9b-52fd-4647-a74f-5d5223815360` (`SG-E2E-IMP-FP22-11195558`) 1220/1220
+  - `registri_iva` acquisto 1000/220; partita fornitore residuo 1220; societa B isolata
+  - claim `source_module=import_contabilita`, `contract_kind=fattura_passiva`; staging `processed`
+- Gap noto: RPC fiscale non persiste `documento_import_id` su `prima_nota` (provenienza via claim + staging). Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
