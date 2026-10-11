@@ -916,3 +916,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Claim `split_attiva` / `import_contabilita`
   - Liquidazione doc: lorda 220, split esclusa 220, debito effettivo **0**
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P2-02 Import IVA per cassa + rilascio su incasso PASS
+
+- Script `scripts/security_p0/run-stage3w-import-iva-cassa-commit.mjs`: open FA vendita `docivaesigdifferita` (giu) + incasso parziale 500 (lug) via fiscal LAB; liquidazione domain per periodo.
+- Evidence `REPORT/STAGE3W_IMPORT_IVA_CASSA_COMMIT_20261011215836.txt`:
+  - Open PN `f380df58-d953-4e47-8026-a7505867200a`: VAT `differita` 220, partita `iva_per_cassa=true` residuo 1220
+  - Giugno: debito effettivo **0**, differita vendite 220 (esclusa)
+  - Pay PN `a743eac2-7a28-474a-bbcd-ca04db4392cf`: rilascio IVA **90.16** / imponibile 409.84; partita residuo 720
+  - Luglio: debito effettivo **90.16** (= quota rilasciata); claim `pagamento` / `import_contabilita`
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
