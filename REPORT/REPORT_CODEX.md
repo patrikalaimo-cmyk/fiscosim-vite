@@ -906,3 +906,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Filter hit visible; miss ? `Nessun movimento trovato`
   - Detail: banner read-only, Modifica disabled, zero mutating HTTP in fase consult; `updated_at` invariato
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P2-01 Import split payment + liquidazione exclude PASS
+
+- Script `scripts/security_p0/run-stage3w-import-split-commit.mjs`: Import Contabilita vendita split con `conto_iva_split_payment` tecnico ? fiscal LAB ? assert PG + `calcoloLiquidazioneIvaDefinitiva` (periodo 2026-05 isolato).
+- Evidence `REPORT/STAGE3W_IMPORT_SPLIT_COMMIT_20261011214946.txt`:
+  - PN `654c7b14-0044-4a6b-a8e8-9fe5f1867e88` bilanciata 1220; partita residuo **1000** (imponibile)
+  - Cliente dare 1000; righe tecniche split 2×220; VAT `split_payment=true` vendita 220
+  - Claim `split_attiva` / `import_contabilita`
+  - Liquidazione doc: lorda 220, split esclusa 220, debito effettivo **0**
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
