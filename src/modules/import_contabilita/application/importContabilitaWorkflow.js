@@ -977,6 +977,10 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         const finalAmount = (isSplit && !isAcquisti) || (isReverse && isAcquisti)
           ? imponibileTotal
           : r.amount
+        const isCloseRow =
+          canonicalPayload.ledger?.mode === 'close' ||
+          String(r.action || '').toLowerCase() === 'close'
+        const openItemId = String(r.openItemId || r.partitaId || r.id || '').trim()
         return {
           riga: r.rowNumber || index + 1,
           soggettoId: canonicalPayload.ledger?.subjectId || primarySubject.anagraficaId || canonicalPayload.ledger?.accountId || '',
@@ -988,6 +992,14 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
           dataScadenza: r.dueDate,
           dataDocumento: canonicalPayload.document?.dataDocumento || dataRegistrazione,
           numeroDocumento: r.documentRef || canonicalPayload.document?.numeroDocumento || '',
+          // Closure path: persistPrimaNotaDraft requires selected + importoChiusura + id (partita UUID).
+          ...(isCloseRow && openItemId
+            ? {
+                id: openItemId,
+                selected: true,
+                importoChiusura: Math.abs(Number(finalAmount) || 0),
+              }
+            : {}),
         }
       })
     },

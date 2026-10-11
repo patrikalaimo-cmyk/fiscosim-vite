@@ -877,3 +877,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - `registri_iva` count=2 (22%: 1000/220; 10%: 500/50); zero-rows=0; partita fornitore 1770
   - claim `import_contabilita` / `fattura_passiva` con 2 vat rows; staging `processed`
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-04 Import Contabilita incasso parziale PASS
+
+- Fix: `importContabilitaWorkflow` mappa `ledger.rows[].openItemId` in chiusura su `id`/`selected`/`importoChiusura` (prima le chiusure Import non arrivavano a persist).
+- Script `scripts/security_p0/run-stage3w-import-pay-partial-commit.mjs`: open FA Import 1220 + pay 500 + overpay rejected.
+- Evidence `REPORT/STAGE3W_IMPORT_PAY_PARTIAL_COMMIT_20261011210147.txt`:
+  - Open PN `59b4b052-?`, partita `d120dd17-?` 1220 -> after pay PN `4aecae78-?` residuo **720**
+  - claim pay `import_contabilita` / `pagamento`; overpay `success=false` residuo invariato 720
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
