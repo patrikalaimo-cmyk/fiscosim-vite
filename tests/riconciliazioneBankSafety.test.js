@@ -154,6 +154,13 @@ test('Bank matcher applica memoria DecisionFeedback LAB', async () => {
   assert.match(working, /buildBankDecisionFeedbackEvents/)
 })
 
+test('Bank mass-confirm gated high-confidence (source markers)', async () => {
+  const view = await readFile(new URL('../src/modules/contabilita/views/RiconciliazioneBancariaView.jsx', import.meta.url), 'utf8')
+  assert.match(view, /partitionMassConfirmCandidates/)
+  assert.match(view, /evaluateMassConfirmEligibility/)
+  assert.match(view, /high-confidence/)
+})
+
 test('commit Bank non accetta una riga PN con sezione ignota', async () => {
   const { validateReconciliationCommitPayload } = await import('../src/modules/contabilita/components/riconciliazione/validateReconciliationCommitPayload.js')
   const payload = {

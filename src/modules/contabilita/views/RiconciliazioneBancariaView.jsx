@@ -31,6 +31,12 @@ import {
   buildMatcherMovementFromWorkingRow,
   mapPartitarioRowsToMatchCandidates,
 } from '../application/riconciliazione/mapPartitarioRowToMatchCandidate.js'
+import {
+  evaluateMassConfirmEligibility,
+  partitionMassConfirmCandidates,
+} from '../application/riconciliazione/massConfirmEligibility.js'
+import { buildBankDecisionFeedbackEvents } from '../application/learning/buildBankDecisionFeedbackEvents.js'
+import { appendDecisionFeedbackEvents } from '../application/learning/decisionFeedbackLabStore.js'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { applyBankMovementCorrection } from '../components/riconciliazione/applyBankMovementCorrection.js'
 import { buildReconciliationStorageKey } from '../components/riconciliazione/buildReconciliationStorageKey.js'
@@ -347,7 +353,32 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
     () => sourceMovements.filter((movement) => selectedIds.includes(movement.id)),
     [selectedIds, sourceMovements]
   )
-  const confirmableSelectedCount = selectedMovements.filter(isMovementSelectableForMassActions).length
+  const massConfirmPartition = useMemo(() => {
+    return partitionMassConfirmCandidates(selectedMovements, {
+      evaluate: (movement) => {
+        if (hasImportedStatement && livePartiteCandidates.length > 0) {
+          const proposal = runRiconciliazioneMatchForMovement({
+            movement: buildMatcherMovementFromWorkingRow(movement, bankStatement),
+            partiteAperte: livePartiteCandidates,
+            options: { societaId },
+          })
+          return evaluateMassConfirmEligibility(movement, {
+            confidence: proposal?.selectedCandidate?.confidence,
+            matchType: proposal?.selectedCandidate?.matchType || '',
+          })
+        }
+        return evaluateMassConfirmEligibility(movement)
+      },
+    })
+  }, [
+    selectedMovements,
+    hasImportedStatement,
+    livePartiteCandidates,
+    bankStatement,
+    societaId,
+  ])
+  const confirmableSelectedCount = massConfirmPartition.eligible.length
+  const massConfirmSkippedCount = massConfirmPartition.skipped.length
   const effectiveDetailCollapsed = detailCollapsed || filteredMovements.length === 0
   const activeSourceFileName = bankStatement?.sourceFileName || ''
   const activeSourceFileType = bankStatement?.sourceFileType || ''
@@ -836,12 +867,55 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
   }
 
   const confirmSelected = () => {
-    if (!confirmableSelectedCount) return
+    if (!confirmableSelectedCount) {
+      setActionNote(
+        massConfirmSkippedCount
+          ? `Conferma massiva bloccata: ${massConfirmSkippedCount} selezionati sotto soglia high-confidence / ambigui`
+          : 'Nessun movimento high-confidence selezionato',
+      )
+      return
+    }
     if (!statementAllowsConfirm) {
       setActionNote(bankStatement?.confirmationBlockedReason || 'Audit non quadrato: conferma bloccata')
       return
     }
-    setActionNote(`Mock: conferma simulata su ${confirmableSelectedCount} movimenti pronti`)
+    if (societaId) {
+      try {
+        for (const row of massConfirmPartition.eligible) {
+          const movement = row.movement
+          const matcherMovement = hasImportedStatement
+            ? buildMatcherMovementFromWorkingRow(movement, bankStatement)
+            : null
+          const proposal = matcherMovement && livePartiteCandidates.length
+            ? runRiconciliazioneMatchForMovement({
+              movement: matcherMovement,
+              partiteAperte: livePartiteCandidates,
+              options: { societaId },
+            })
+            : null
+          const events = buildBankDecisionFeedbackEvents({
+            societaId,
+            decision: {
+              selectedPartitaId: proposal?.selectedCandidate?.partitaId || '',
+            },
+            movement: matcherMovement || {
+              movementId: movement.id,
+              amount: Math.abs(Number(movement.entrata || movement.uscita || 0)),
+              counterpartyName: movement.counterparty || '',
+              direction: Number(movement.entrata || 0) > 0 ? 'in' : 'out',
+            },
+            decisionProposal: proposal,
+          })
+          appendDecisionFeedbackEvents(societaId, events)
+        }
+      } catch {
+        /* feedback LAB best-effort */
+      }
+    }
+    setActionNote(
+      `Conferma massiva LAB: ${confirmableSelectedCount} high-confidence`
+      + (massConfirmSkippedCount ? `, ${massConfirmSkippedCount} esclusi` : ''),
+    )
   }
 
   const handleStatementFile = async (event) => {

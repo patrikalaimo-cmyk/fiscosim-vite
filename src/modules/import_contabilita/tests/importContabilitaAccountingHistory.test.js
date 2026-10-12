@@ -239,3 +239,73 @@ test('IMPORT-25A-HISTORY-2 — data source storico è read-only su documenti con
   assert.doesNotMatch(block, /\.update\(/)
   assert.doesNotMatch(block, /\.delete\(/)
 })
+
+test('SG-L3 — storico nativo distingue prodotto A/B sullo stesso fornitore', () => {
+  const documents = [
+    {
+      id: 'doc-caffe',
+      tipo_documento: 'Fattura passiva',
+      soggetto_piva: '99999999999',
+      soggetto_denominazione: 'Fornitore Mix Srl',
+      descrizione: 'Caffe macinato specialty',
+      prima_nota_id: 'pn-caffe',
+      registered_at: '2026-08-01T10:00:00Z',
+    },
+    {
+      id: 'doc-toner',
+      tipo_documento: 'Fattura passiva',
+      soggetto_piva: '99999999999',
+      soggetto_denominazione: 'Fornitore Mix Srl',
+      descrizione: 'Toner stampante laser nero',
+      prima_nota_id: 'pn-toner',
+      registered_at: '2026-08-15T10:00:00Z',
+    },
+  ]
+  const headers = [
+    { id: 'pn-caffe', causale_id: 'ff', causale_codice: 'FF', cliente_fornitore_id: 'fornitore-1' },
+    { id: 'pn-toner', causale_id: 'ff', causale_codice: 'FF', cliente_fornitore_id: 'fornitore-1' },
+  ]
+  const rows = [
+    { prima_nota_id: 'pn-caffe', riga_numero: 1, conto_id: 'costo-caffe', importo_dare: 100, importo_avere: 0 },
+    { prima_nota_id: 'pn-caffe', riga_numero: 2, conto_id: 'iva-acquisti', importo_dare: 22, importo_avere: 0 },
+    { prima_nota_id: 'pn-caffe', riga_numero: 3, conto_id: 'fornitore-1', importo_dare: 0, importo_avere: 122 },
+    { prima_nota_id: 'pn-toner', riga_numero: 1, conto_id: 'costo-generico', importo_dare: 80, importo_avere: 0 },
+    { prima_nota_id: 'pn-toner', riga_numero: 2, conto_id: 'iva-acquisti', importo_dare: 17.6, importo_avere: 0 },
+    { prima_nota_id: 'pn-toner', riga_numero: 3, conto_id: 'fornitore-1', importo_dare: 0, importo_avere: 97.6 },
+  ]
+  const index = buildImportContabilitaAccountingHistoryIndex({
+    documents,
+    headers,
+    rows,
+    pianoConti: PIANO_CONTI,
+    causaliContabili: CAUSALI,
+  })
+  const pianoContiById = new Map(PIANO_CONTI.map((row) => [row.id, row]))
+  const causaliContabiliById = new Map(CAUSALI.map((row) => [row.id, row]))
+
+  const caffe = resolveImportContabilitaAccountingHistorySuggestion({
+    historyIndex: index,
+    parsedDocument: {
+      fornitore: { partitaIva: '99999999999', denominazione: 'Fornitore Mix Srl' },
+      descrizione: 'Caffe macinato specialty',
+    },
+    direction: 'acquisto',
+    pianoContiById,
+    causaliContabiliById,
+  })
+  const toner = resolveImportContabilitaAccountingHistorySuggestion({
+    historyIndex: index,
+    parsedDocument: {
+      fornitore: { partitaIva: '99999999999', denominazione: 'Fornitore Mix Srl' },
+      descrizione: 'Toner stampante laser nero',
+    },
+    direction: 'acquisto',
+    pianoContiById,
+    causaliContabiliById,
+  })
+
+  assert.equal(caffe?.costRevenueAccount?.id, 'costo-caffe')
+  assert.equal(toner?.costRevenueAccount?.id, 'costo-generico')
+  assert.match(String(caffe?.matchType || ''), /desc/)
+  assert.match(String(toner?.matchType || ''), /desc/)
+})

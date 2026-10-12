@@ -178,6 +178,21 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
     }
 
     if (!historyValue) return null
+    const historyConflicts = [
+      ...conflicts,
+      ...((Array.isArray(suggestion?.conflicts) ? suggestion.conflicts : [])
+        .filter((row) => !row?.field || row.field === kind)),
+    ]
+    const historyLines = [
+      suggestion?.matchType?.includes('desc')
+        ? 'Proposta da storico contestuale (controparte+descrizione).'
+        : kind === 'account'
+          ? 'Proposta da storico contabile società (conto costo/ricavo).'
+          : 'Proposta da storico contabile società (causale).',
+    ]
+    if (historyConflicts.some((row) => row.kind === 'history_ambiguous')) {
+      historyLines.push('Storico ambiguo: conferma operatore consigliata.')
+    }
     return {
       value: historyValue,
       explanation: createImportSuggestionExplanation({
@@ -187,12 +202,8 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
         sampleCount: historyTotal || 0,
         fieldSampleCount: historySampleCount || 0,
         lastSeenAt: historyLastSeen || '',
-        conflicts,
-        explanation: [
-          kind === 'account'
-            ? 'Proposta da storico contabile società (conto costo/ricavo).'
-            : 'Proposta da storico contabile società (causale).',
-        ],
+        conflicts: historyConflicts,
+        explanation: historyLines,
       }),
       decorateParams: {
         kind,
@@ -200,7 +211,7 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
         totalSamples: historyTotal || 0,
         lastSeenAt: historyLastSeen || '',
       },
-      requiresConfirmation: false,
+      requiresConfirmation: Boolean(suggestion?.requiresConfirmation || historyConflicts.length),
     }
   }
 

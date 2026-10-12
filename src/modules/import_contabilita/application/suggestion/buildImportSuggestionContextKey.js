@@ -2,6 +2,11 @@
  * SG-L3 — contextual suggestion keys (controparte + direzione + descrizione/prodotto).
  */
 
+import {
+  extractImportDescriptionToken,
+  tokenizeImportDescription,
+} from '../../domain/importContabilitaDescriptionToken.js'
+
 function text(value) {
   return String(value ?? '').trim()
 }
@@ -16,42 +21,7 @@ function normalizeToken(value) {
     .trim()
 }
 
-const STOPWORDS = new Set([
-  'di', 'da', 'del', 'della', 'delle', 'dei', 'degli', 'lo', 'la', 'le', 'il', 'un', 'una',
-  'e', 'ed', 'per', 'con', 'su', 'nel', 'nella', 'ft', 'fattura', 'n', 'nr', 'num',
-  'euro', 'iva', 'tot', 'totale', 'imponibile', 'srl', 'spa', 'snc', 'sas',
-])
-
-/**
- * Extract a stable product/description token from invoice text lines.
- */
-export function extractImportDescriptionToken(parsedDocument = null) {
-  const lines = []
-  const doc = parsedDocument || {}
-  const push = (value) => {
-    const t = text(value)
-    if (t) lines.push(t)
-  }
-  push(doc.descrizione)
-  push(doc.oggetto)
-  push(doc.causale)
-  push(doc.note)
-  const articoli = doc.righe || doc.linee || doc.lines || doc.dettaglioLinee || []
-  ;(Array.isArray(articoli) ? articoli : []).slice(0, 8).forEach((row) => {
-    push(row?.descrizione || row?.description || row?.nome || row?.name)
-  })
-
-  const joined = normalizeToken(lines.join(' '))
-  if (!joined) return ''
-
-  const tokens = joined
-    .split(' ')
-    .filter((token) => token.length >= 3 && !STOPWORDS.has(token) && !/^\d+$/.test(token))
-
-  if (!tokens.length) return ''
-  // Prefer first two informative tokens as product/category fingerprint.
-  return tokens.slice(0, 2).join('_')
-}
+export { extractImportDescriptionToken, tokenizeImportDescription }
 
 export function buildImportSuggestionContextKey({
   counterpartyPiva = '',
@@ -65,7 +35,7 @@ export function buildImportSuggestionContextKey({
   const dir = text(direction).toLowerCase() || 'unknown'
   const desc = descriptionToken == null
     ? extractImportDescriptionToken(parsedDocument)
-    : normalizeToken(descriptionToken).replace(/\s+/g, '_')
+    : tokenizeImportDescription(descriptionToken)
 
   const identity = piva ? `piva:${piva}` : name ? `name:${name}` : 'unknown'
   const base = `${identity}|${dir}`

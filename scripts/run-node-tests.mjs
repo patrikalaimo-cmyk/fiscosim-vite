@@ -20,6 +20,7 @@ const BANK_ROOT_TESTS = new Set([
 
 const BANK_APPLICATION_TESTS = new Set([
   'riconciliazione/mapPartitarioRowToMatchCandidate.test.js',
+  'riconciliazione/massConfirmEligibility.test.js',
   'learning/decisionFeedbackLab.test.js',
 ])
 

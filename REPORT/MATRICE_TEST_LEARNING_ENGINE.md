@@ -11,14 +11,14 @@
 
 | ID | Scenario | Oracle atteso | Livello | Stato oggi |
 |---|---|---|---|---|
-| LE-I01 | Stesso fornitore, prodotto A → conto X; prodotto B → conto Y | Due proposte diverse per categoria/descrizione | UNIT→PG | **PARTIAL** 20261012 UNIT via feedback contestuale LAB; history mode ancora unico |
+| LE-I01 | Stesso fornitore, prodotto A → conto X; prodotto B → conto Y | Due proposte diverse per categoria/descrizione | UNIT→PG | **PASS** UNIT 20261012 (history nativo desc + feedback); PG browser ancora debito |
 | LE-I02 | Stesso fornitore, società A regime ordinario vs B forfettario/altro | Nessun leak A→B; detraibilità/regime coerenti | PG+HTTP | PARTIAL isolation load; regime **MISSING** |
 | LE-I03 | Regola studio vs storico divergente (IVA) | Standard Studio vince + warning | UNIT | **PASS** `IMPORT-25A-HISTORY-1` |
 | LE-I04 | Aliquota 22 vs 10 stessa controparte | Causali IVA distinte per aliquota | UNIT | **PASS** vat history index |
 | LE-I05 | Override manuale su conto già scelto | Storico non sovrascrive | UNIT | **PASS** accounting history contract |
 | LE-I06 | Correzione operatore poi nuovo XML stesso contesto | Secondo doc propone scelta corretta | PG+INTEGRATED | **PARTIAL** 20261012: feedback LAB local scritto post-commit; consume→proposal ancora via history adapters |
 | LE-I07 | Storia scarsa (1 campione) | requiresConfirmation=true / bassa affidabilità | UNIT | PARTIAL (sampleCount esposto) |
-| LE-I08 | Storia ambigua (50/50 due conti) | Conflitto esposto; no silent pick senza conferma | UNIT | **PARTIAL** 20261012: feedback_vs_history/ambiguous in DTO+UI; history mode ancora silent |
+| LE-I08 | Storia ambigua (50/50 due conti) | Conflitto esposto; no silent pick senza conferma | UNIT | **PARTIAL** 20261012: `history_ambiguous` in DTO + requiresConfirmation; UI warning; auto-pick mode resta |
 | LE-I09 | Storia superata (conto dismesso) | Pattern invalidato; fallback standard | UNIT+PG | **MISSING** |
 | LE-I10 | Import duplicato / retry idempotente | Un solo feedback; una sola PN | PG+HTTP | Claim PN OK; feedback N/A |
 | LE-I11 | Storno/annullamento documento storico | Escluso da indice; pattern declassato | PG | **MISSING** |
@@ -44,7 +44,7 @@
 | LE-B07 | F24 non dettagliato | requiresReview; no auto-commit | UNIT | PARTIAL classify `f24` |
 | LE-B08 | Commissione bancaria | Spesa bancaria senza partita cliente | UNIT | PARTIAL |
 | LE-B09 | Conferma match poi stesso pattern | Suggestion da precedenti società | PG | **PARTIAL** 20261012: localStorage LAB boost; DB gated |
-| LE-B10 | Mass confirm solo high-confidence | Commit solo gated; altri restano aperti | UI_E2E | **MISSING** |
+| LE-B10 | Mass confirm solo high-confidence | Commit solo gated; altri restano aperti | UI_E2E | **PARTIAL** 20261012: gate ≥0.85 + no ambiguous; commit ancora LAB/mock note |
 | LE-B11 | Isolamento A/B partite | Zero candidati cross-società | PG+HTTP | TBD |
 | LE-B12 | Dry-run / fail commit | Nessun apprendimento | UNIT+PG | OK oggi (no learn); preservare |
 

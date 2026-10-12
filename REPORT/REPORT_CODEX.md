@@ -1153,3 +1153,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - L4 browser Import re-smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2108.txt`).
 - Evidence: `REPORT/STAGE3W_SG_L3_L6_CONTEXT_FEEDBACK_20261012230832.txt`; UNIT L3 3/3 + L1 3/3.
 - Residuo: history adapter multi-prodotto nativo; mass-confirm Bank; schema DB; browser A100 dettagliato.
+
+## 2026-10-12 - SG-L3 history nativo + SG-L6 mass-confirm gate
+
+- Accounting history: bucket `piva|dir|desc:*` preferiti; fallback generico; `history_ambiguous` su mode pari.
+- Bank: `massConfirmEligibility` (?0.85, no ambiguous/review); `confirmSelected` conferma solo eligible + feedback LAB.
+- Evidence: `REPORT/STAGE3W_SG_L3_HISTORY_L6_MASS_CONFIRM_20261012232650.txt`; bank 26/26 PASS.
+- Residuo A100: browser upload/commit Import+IVA+Bank; schema DB; LIVE/cutover.
