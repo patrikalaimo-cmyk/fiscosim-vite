@@ -1,0 +1,20 @@
+P3_01_START Bank RPC atomica via Stage3W + storico claim
+LOGIN_JWT=PASS
+FA_STATUS=201
+FA_PN=878c852d-04e3-4998-afc2-783ec9667d1c
+PARTITA_ID=f5b15514-7398-4e45-817d-a109e3d9e983
+PARTITA_OPEN=1220
+BANK_STATUS=committed
+BANK_COMMITTED=true
+BANK_PN=cddeef4e-847d-450d-bfb9-057dcb446148
+BANK_REQUEST=b30a1665-fca1-4d98-b1a7-01e6aa7f35e5
+CLAIM=riconciliazione_bancaria|pagamento|cddeef4e-847d-450d-bfb9-057dcb446148
+PARTITA_AFTER=0
+HISTORY_COUNT=8
+HISTORY_HIT={"societaId":"72000000-0000-4000-8000-000000000001","sourceFileName":"SG-E2E-BANK-20261012204552.csv","sourceHash":"a1b2c3d4e5f60708","esito":"committed","primaNotaId":"cddeef4e-847d-450d-bfb9-057dcb446148","requestId":"b30a1665-fca1-4d98-b1a7-01e6aa7f35e5","numeroDocumento":"BANK-bm-p301-204552","dataRegistrazione":"2026-04-18","createdAt":"2026-10-12 20:45:53.078438+00","contractKind":"pagamento","descrizione":"Riconciliazione bancaria bm-p301-204552","movementId":"","interrogabile":true}
+HISTORY_API_STATUS=200
+HISTORY_API_COUNT=8
+HISTORY_API=PASS
+REPLAY_STATUS=201
+REPLAY_PN=cddeef4e-847d-450d-bfb9-057dcb446148
+P3_01_RESULT=PASS

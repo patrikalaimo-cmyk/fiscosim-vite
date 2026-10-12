@@ -53,11 +53,43 @@ test('normalizeBankFiscalCommitHistoryRows keeps server history shape', () => {
     created_at: '2026-04-15T10:00:00Z',
     source_module: 'riconciliazione_bancaria',
     contract_kind: 'pagamento',
+    motivazione: 'Commit bank LAB fileHash=aabbccdd file=estratto.csv',
     descrizione: 'Incasso',
     numero_documento: 'BANK-mov-1',
     data_registrazione: '2026-04-15',
-  }])
+  }], { societaId: '72000000-0000-4000-8000-000000000001' })
   assert.equal(rows.length, 1)
-  assert.equal(rows[0].sourceModule, 'riconciliazione_bancaria')
   assert.equal(rows[0].primaNotaId, 'pn1')
+  assert.equal(rows[0].contractKind, 'pagamento')
+  assert.equal(rows[0].sourceHash, 'aabbccdd')
+  assert.equal(rows[0].sourceFileName, 'estratto.csv')
+  assert.equal(rows[0].interrogabile, true)
+})
+
+test('mapBankPayload embeds fileHash marker in motivazione when provided', () => {
+  const mapped = mapBankPayloadToFiscalJournalRequest({
+    requestId: '72000000-0000-4000-8000-000000000099',
+    context: {
+      societaId: '72000000-0000-4000-8000-000000000001',
+      registrationDate: '2026-04-15',
+      movementId: 'mov-1',
+      sourceFileHash: 'deadbeefcafebabe',
+      sourceFileName: 'estratto-lab.csv',
+    },
+    payload: {
+      movementId: 'mov-1',
+      primaNotaRighe: [
+        { conto_id: '72000000-0000-4000-8000-000000000013', dare: 1220, avere: 0 },
+        { conto_id: '72000000-0000-4000-8000-000000000010', dare: 0, avere: 1220 },
+      ],
+      partitarioMovements: [{
+        action: 'chiusura_totale',
+        partitaId: '72000000-0000-4000-8000-000000000050',
+        importoChiusura: 1220,
+      }],
+    },
+  })
+  assert.equal(mapped.ok, true, JSON.stringify(mapped))
+  assert.match(mapped.request.motivazione, /fileHash=deadbeefcafebabe/)
+  assert.match(mapped.request.motivazione, /file=estratto-lab\.csv/)
 })

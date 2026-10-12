@@ -40,6 +40,31 @@ export function saveImportCronologiaEntries(societaId, entries, storage = global
   }
 }
 
+function sameCronologiaKey(a, b) {
+  if (a.requestId && b.requestId && a.requestId === b.requestId) return true
+  if (a.primaNotaId && b.primaNotaId && a.primaNotaId === b.primaNotaId) {
+    if (!a.sourceHash || !b.sourceHash || a.sourceHash === b.sourceHash) return true
+  }
+  return false
+}
+
+/**
+ * Merge server claim history with localStorage (server wins on conflict).
+ */
+export function mergeImportCronologiaEntries(serverEntries = [], localEntries = [], { societaId = '' } = {}) {
+  const merged = []
+  const push = (raw) => {
+    const row = buildImportCronologiaEntry({ ...raw, societaId: societaId || raw.societaId })
+    if (!row.interrogabile) return
+    if (merged.some((existing) => sameCronologiaKey(existing, row))) return
+    merged.push(row)
+  }
+  for (const row of Array.isArray(serverEntries) ? serverEntries : []) push(row)
+  for (const row of Array.isArray(localEntries) ? localEntries : []) push(row)
+  merged.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  return merged.slice(0, MAX_ENTRIES)
+}
+
 /**
  * Prepend a successful import commit to local cronologia (UI interrogabile).
  */
@@ -47,11 +72,7 @@ export function appendImportCronologiaEntry(societaId, entry, storage = globalTh
   const next = buildImportCronologiaEntry({ ...entry, societaId })
   if (!next.interrogabile) return loadImportCronologiaEntries(societaId, storage)
   const prev = loadImportCronologiaEntries(societaId, storage)
-  const deduped = prev.filter((row) => !(
-    (next.requestId && row.requestId === next.requestId)
-    || (next.primaNotaId && row.primaNotaId === next.primaNotaId && row.sourceHash === next.sourceHash)
-  ))
-  const merged = [next, ...deduped].slice(0, MAX_ENTRIES)
+  const merged = mergeImportCronologiaEntries([next], prev, { societaId })
   saveImportCronologiaEntries(societaId, merged, storage)
   return merged
 }

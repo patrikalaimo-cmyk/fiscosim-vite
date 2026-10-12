@@ -1,9 +1,13 @@
 /**
  * Cronologia Import — interrogabile (file / hash / esito / PN).
+ * Server claim history ∪ localStorage (LAB).
  */
 export function ImportCronologiaPanel({
   open = false,
   entries = [],
+  loading = false,
+  error = '',
+  sourceNote = '',
   onClose,
 }) {
   if (!open) return null
@@ -45,6 +49,9 @@ export function ImportCronologiaPanel({
               Import Contabilità
             </div>
             <h2 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--tx)' }}>Cronologia import</h2>
+            {sourceNote ? (
+              <div style={{ marginTop: '.2rem', fontSize: '.68rem', color: 'var(--mu)' }}>{sourceNote}</div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -62,11 +69,22 @@ export function ImportCronologiaPanel({
           </button>
         </header>
 
-        {rows.length === 0 ? (
+        {loading ? (
+          <p style={{ margin: 0, color: 'var(--mu)', fontSize: '.85rem' }}>
+            Caricamento cronologia server…
+          </p>
+        ) : null}
+        {error ? (
+          <p style={{ margin: 0, color: '#fca5a5', fontSize: '.8rem' }} role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        {!loading && rows.length === 0 ? (
           <p style={{ margin: 0, color: 'var(--mu)', fontSize: '.85rem' }}>
             Nessun commit import in cronologia per questa società.
           </p>
-        ) : (
+        ) : !loading && rows.length > 0 ? (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.78rem' }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--mu)' }}>
@@ -103,7 +121,7 @@ export function ImportCronologiaPanel({
               ))}
             </tbody>
           </table>
-        )}
+        ) : null}
       </section>
     </div>
   )

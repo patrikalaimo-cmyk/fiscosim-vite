@@ -202,9 +202,13 @@ LIMIT 1
       registrationDate: PAY_DATE,
       movementId,
       motivazione: 'SG-E2E P3-01 bank atomic commit LAB',
+      sourceFileHash: 'a1b2c3d4e5f60708',
+      sourceFileName: `SG-E2E-BANK-${stamp}.csv`,
     },
     payload: {
       movementId,
+      sourceFileHash: 'a1b2c3d4e5f60708',
+      sourceFileName: `SG-E2E-BANK-${stamp}.csv`,
       primaNotaRighe: [
         { conto_id: CONTO_BANCA, dare: GROSS, avere: 0, descrizione: 'Incasso bancario' },
         { conto_id: CONTO_CLIENTE, dare: 0, avere: GROSS, descrizione: 'Chiusura cliente' },
@@ -241,12 +245,25 @@ LIMIT 1
   if (residuoAfter !== 0) throw new Error('PARTITA_NOT_CLOSED')
 
   const historyRaw = psqlJson(buildBankFiscalCommitHistoryQuery({ societaId: SOCIETA_A, limit: 20 }))
-  const history = normalizeBankFiscalCommitHistoryRows(historyRaw)
+  const history = normalizeBankFiscalCommitHistoryRows(historyRaw, { societaId: SOCIETA_A })
   log(`HISTORY_COUNT=${history.length}`)
   const hit = history.find((row) => row.requestId === bankResult.requestId)
   log(`HISTORY_HIT=${JSON.stringify(hit || null)}`)
   if (!hit || hit.primaNotaId !== bankResult.primaNotaId) throw new Error('HISTORY_MISSING')
-  if (hit.sourceModule !== 'riconciliazione_bancaria') throw new Error('HISTORY_SOURCE')
+  if (hit.contractKind !== 'pagamento') throw new Error('HISTORY_SOURCE')
+  if (hit.sourceHash !== 'a1b2c3d4e5f60708') throw new Error('HISTORY_HASH_MISSING')
+
+  const historyApi = await fetch(
+    `${API_ORIGIN}/api/studio/fiscal-journal-history?societa_id=${SOCIETA_A}&source_module=riconciliazione_bancaria&limit=30`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  const historyApiJson = await historyApi.json().catch(() => null)
+  log(`HISTORY_API_STATUS=${historyApi.status}`)
+  log(`HISTORY_API_COUNT=${historyApiJson?.count ?? 'n/a'}`)
+  if (historyApi.status !== 200 || !historyApiJson?.ok) throw new Error('HISTORY_API_FAILED')
+  const apiHit = (historyApiJson.rows || []).find((row) => row.request_id === bankResult.requestId)
+  if (!apiHit || apiHit.prima_nota_id !== bankResult.primaNotaId) throw new Error('HISTORY_API_HIT_MISSING')
+  log('HISTORY_API=PASS')
 
   // Replay exact same fiscal body → same PN (Stage3W claim idempotency)
   if (!bankResult.fiscalRequest) throw new Error('FISCAL_REQUEST_MISSING')

@@ -248,6 +248,7 @@ I collaudi **browser** restano pendenti. Sul LAB Stage3W (JWT + RPC, società `SG
 
 ### Cross-ref LAB (2026-10-12 sera)
 
-- Import Contabilità **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2011.txt`) ? **non** chiude i punti upload/ZIP/working-table/commit browser.
-- Import commit path LAB (FP22 / equiv / cronologia) coperto in L6 v3.
+- Import Contabilità **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2045.txt`) ? Cronologia import panel open OK; **non** chiude i punti upload/ZIP/working-table/commit browser.
+- Import commit path LAB (FP22 / equiv / cronologia) coperto in L6 v3; **storico server** via `/api/studio/fiscal-journal-history` + merge UI (`STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012204548.txt` HISTORY_API=PASS).
+- Bank **storico commit** API + UI panel + fileHash marker (`STAGE3W_BANK_COMMIT_LAB_20261012204552.txt` HISTORY_API=PASS) ? **non** chiude QA browser riconciliazione end-to-end.
 - Liquidazioni IVA / Adempimenti **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IVA_2026-10-12T2025.txt`) ? anteprima/KPI/azioni visibili; **non** chiude consolidamento definitiva, LIPE, né collaudo periodo.

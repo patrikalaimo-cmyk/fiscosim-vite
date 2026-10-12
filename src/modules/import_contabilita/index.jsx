@@ -46,7 +46,11 @@ import { ImportCronologiaPanel } from './components/ImportCronologiaPanel.jsx'
 import {
   appendImportCronologiaEntry,
   loadImportCronologiaEntries,
+  mergeImportCronologiaEntries,
+  saveImportCronologiaEntries,
 } from './application/cronologia/importCronologiaStore.js'
+import { normalizeImportFiscalCommitHistoryRows } from './application/cronologia/listImportFiscalCommitHistory.js'
+import { fetchFiscalJournalCommitHistory } from '../contabilita/application/fiscalJournal/fetchFiscalJournalCommitHistory.js'
 import { ImportContabilitaOverviewCards } from './components/ImportContabilitaOverviewCards.jsx'
 import { ImportContabilitaReportDetail } from './components/ImportContabilitaReportDetail.jsx'
 import { ImportContabilitaPreviewDrawer } from './components/ImportContabilitaPreviewDrawer.jsx'
@@ -2665,6 +2669,9 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [showToolsMenu, setShowToolsMenu] = useState(false)
   const [cronologiaOpen, setCronologiaOpen] = useState(false)
   const [cronologiaEntries, setCronologiaEntries] = useState([])
+  const [cronologiaLoading, setCronologiaLoading] = useState(false)
+  const [cronologiaError, setCronologiaError] = useState('')
+  const [cronologiaSourceNote, setCronologiaSourceNote] = useState('')
   const columnFilterMenuRef = useRef(null)
 
   const filesLabel = useMemo(() => {
@@ -5084,6 +5091,25 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
           contractKind: commitResult.contract_kind || '',
         })
         setCronologiaEntries(nextCronologia)
+        // Best-effort sync from server claim history (LAB).
+        void fetchFiscalJournalCommitHistory({
+          societaId: cronologiaSocietaId,
+          sourceModule: 'import_contabilita',
+          limit: 100,
+          db: sb,
+        }).then((remote) => {
+          if (!remote.ok) return
+          const serverRows = normalizeImportFiscalCommitHistoryRows(remote.rows, {
+            societaId: cronologiaSocietaId,
+          })
+          const merged = mergeImportCronologiaEntries(
+            serverRows,
+            loadImportCronologiaEntries(cronologiaSocietaId),
+            { societaId: cronologiaSocietaId },
+          )
+          saveImportCronologiaEntries(cronologiaSocietaId, merged)
+          setCronologiaEntries(merged)
+        }).catch(() => null)
       }
 
       const reportText = formatDemoWorkingViewCommitReport(commitResult, {
@@ -5252,10 +5278,43 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     showActionBanner('neutral', `${label} non ancora disponibile in questa fase.`)
   }
 
-  const openCronologiaImport = () => {
+  const openCronologiaImport = async () => {
     const societaId = selectedSocietaId || ''
-    setCronologiaEntries(loadImportCronologiaEntries(societaId))
+    const local = loadImportCronologiaEntries(societaId)
+    setCronologiaEntries(local)
+    setCronologiaError('')
+    setCronologiaSourceNote(local.length ? 'Cache locale' : '')
     setCronologiaOpen(true)
+    if (!societaId) return
+    setCronologiaLoading(true)
+    try {
+      const remote = await fetchFiscalJournalCommitHistory({
+        societaId,
+        sourceModule: 'import_contabilita',
+        limit: 100,
+        db: sb,
+      })
+      if (!remote.ok) {
+        setCronologiaSourceNote(local.length
+          ? 'Cache locale (server non disponibile)'
+          : 'Solo locale')
+        setCronologiaError(remote.error === 'FISCAL_JOURNAL_LAB_ONLY_DISABLED'
+          || remote.status === 503
+          ? 'Storico server disponibile solo in LAB fiscal.'
+          : `Storico server non caricato (${remote.error}).`)
+        return
+      }
+      const serverRows = normalizeImportFiscalCommitHistoryRows(remote.rows, { societaId })
+      const merged = mergeImportCronologiaEntries(serverRows, local, { societaId })
+      saveImportCronologiaEntries(societaId, merged)
+      setCronologiaEntries(merged)
+      setCronologiaSourceNote(`Server LAB ∪ locale · ${merged.length} voci`)
+      setCronologiaError('')
+    } catch (err) {
+      setCronologiaError(err?.message || 'Errore caricamento cronologia')
+    } finally {
+      setCronologiaLoading(false)
+    }
   }
 
   const handleGoToSelection = (target) => {
@@ -5894,6 +5953,9 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       <ImportCronologiaPanel
         open={cronologiaOpen}
         entries={cronologiaEntries}
+        loading={cronologiaLoading}
+        error={cronologiaError}
+        sourceNote={cronologiaSourceNote}
         onClose={() => setCronologiaOpen(false)}
       />
 

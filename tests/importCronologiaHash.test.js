@@ -7,6 +7,7 @@ import {
 import {
   appendImportCronologiaEntry,
   loadImportCronologiaEntries,
+  mergeImportCronologiaEntries,
 } from '../src/modules/import_contabilita/application/cronologia/importCronologiaStore.js'
 import {
   buildImportFiscalCommitHistoryQuery,
@@ -48,6 +49,37 @@ test('import cronologia local store is interrogabile by societa', () => {
   assert.equal(rows.length, 1)
   assert.equal(rows[0].interrogabile, true)
   assert.equal(loadImportCronologiaEntries(SOCIETA, storage)[0].sourceHash, 'abc12345')
+})
+
+test('mergeImportCronologiaEntries prefers server and dedupes by requestId', () => {
+  const server = [{
+    societaId: SOCIETA,
+    requestId: 'req-1',
+    primaNotaId: 'pn-server',
+    sourceHash: 'aabbccdd',
+    sourceFileName: 'server.xml',
+    createdAt: '2026-10-12T12:00:00Z',
+  }]
+  const local = [{
+    societaId: SOCIETA,
+    requestId: 'req-1',
+    primaNotaId: 'pn-local',
+    sourceHash: '11223344',
+    sourceFileName: 'local.xml',
+    createdAt: '2026-10-12T11:00:00Z',
+  }, {
+    societaId: SOCIETA,
+    requestId: 'req-2',
+    primaNotaId: 'pn-only-local',
+    sourceHash: '55667788',
+    sourceFileName: 'local2.xml',
+    createdAt: '2026-10-12T10:00:00Z',
+  }]
+  const merged = mergeImportCronologiaEntries(server, local, { societaId: SOCIETA })
+  assert.equal(merged.length, 2)
+  assert.equal(merged[0].primaNotaId, 'pn-server')
+  assert.equal(merged[0].sourceHash, 'aabbccdd')
+  assert.equal(merged[1].requestId, 'req-2')
 })
 
 test('import claim history query filters import_contabilita and exposes hash', () => {

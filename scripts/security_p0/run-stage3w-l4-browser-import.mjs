@@ -134,6 +134,39 @@ async function main() {
     if (!ui.hasImportTitle && !ui.hasUpload) throw new Error('IMPORT_UI_NOT_VISIBLE')
     if (ui.hasErrorCrash) throw new Error('IMPORT_UI_CRASH')
 
+    const cronologia = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('button, a, [role="button"]')]
+      const hit = btns.find((b) => /Cronologia import/i.test((b.textContent || '').trim()))
+      if (!hit) {
+        return {
+          ok: false,
+          labels: btns.map((b) => (b.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 30),
+        }
+      }
+      hit.click()
+      return { ok: true }
+    })
+    log(`CRONOLOGIA_CLICK=${JSON.stringify(cronologia)}`)
+    if (!cronologia.ok) throw new Error('CRONOLOGIA_BUTTON_MISSING')
+    await new Promise((r) => setTimeout(r, 1200))
+    const panel = await page.evaluate(() => {
+      const dlg = document.querySelector('[role="dialog"][aria-label="Cronologia import"]')
+      const t = document.body.innerText.replace(/\s+/g, ' ')
+      return {
+        hasDialog: !!dlg,
+        hasTitle: /Cronologia import/i.test(t),
+        hasCrash: /Something went wrong|TypeError|Cannot read/i.test(t),
+      }
+    })
+    log(`CRONOLOGIA_PANEL=${JSON.stringify(panel)}`)
+    if (!panel.hasDialog && !panel.hasTitle) throw new Error('CRONOLOGIA_PANEL_NOT_VISIBLE')
+    if (panel.hasCrash) throw new Error('CRONOLOGIA_PANEL_CRASH')
+    await page.evaluate(() => {
+      const dlg = document.querySelector('[role="dialog"][aria-label="Cronologia import"]')
+      const close = dlg && [...dlg.querySelectorAll('button')].find((b) => /^Chiudi$/i.test((b.textContent || '').trim()))
+      if (close) close.click()
+    })
+
     // Prefer not to upload real files in smoke — assert shell only
     const writeDuringSmoke = mutating.filter((m) => !/\/auth\/v1\//.test(m.url))
     log(`MUTATING_API_COUNT=${writeDuringSmoke.length}`)

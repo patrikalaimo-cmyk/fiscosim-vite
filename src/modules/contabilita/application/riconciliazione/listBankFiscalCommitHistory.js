@@ -2,6 +2,9 @@
  * Server-side history of bank reconciliation commits from Stage3W claim table.
  * LAB/read helper — no secrets.
  */
+import { parseImportFileHashMarker } from '../../../import_contabilita/application/cronologia/importFileHashMarker.js'
+import { buildBankCronologiaEntry } from './buildBankCronologiaEntry.js'
+
 function text(value) {
   return String(value ?? '').trim()
 }
@@ -22,6 +25,7 @@ FROM (
     created_at::text AS created_at,
     request_payload->>'source_module' AS source_module,
     request_payload->>'contract_kind' AS contract_kind,
+    coalesce(request_payload->>'reason', request_payload->>'motivazione', '') AS motivazione,
     request_payload->'header'->>'descrizione' AS descrizione,
     request_payload->'header'->>'numero_documento' AS numero_documento,
     request_payload->'header'->>'data_registrazione' AS data_registrazione
@@ -34,15 +38,21 @@ FROM (
 `
 }
 
-export function normalizeBankFiscalCommitHistoryRows(rows = []) {
-  return (Array.isArray(rows) ? rows : []).map((row) => ({
-    requestId: text(row.request_id),
-    primaNotaId: text(row.prima_nota_id),
-    createdAt: text(row.created_at),
-    sourceModule: text(row.source_module) || 'riconciliazione_bancaria',
-    contractKind: text(row.contract_kind),
-    descrizione: text(row.descrizione),
-    numeroDocumento: text(row.numero_documento),
-    dataRegistrazione: text(row.data_registrazione),
-  }))
+export function normalizeBankFiscalCommitHistoryRows(rows = [], { societaId = '' } = {}) {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const marker = parseImportFileHashMarker(row.motivazione || '')
+    return buildBankCronologiaEntry({
+      societaId,
+      sourceFileName: marker.sourceFileName,
+      sourceHash: marker.sourceHash,
+      esito: text(row.prima_nota_id) ? 'committed' : 'incomplete',
+      primaNotaId: row.prima_nota_id,
+      requestId: row.request_id,
+      numeroDocumento: row.numero_documento,
+      dataRegistrazione: row.data_registrazione,
+      createdAt: row.created_at,
+      contractKind: row.contract_kind || 'pagamento',
+      descrizione: row.descrizione,
+    })
+  })
 }

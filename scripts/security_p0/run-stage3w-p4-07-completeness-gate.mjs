@@ -19,6 +19,7 @@ const MANDATORY = [
   { id: 'SG-P4-02', prefix: 'STAGE3W_L6_REGRESSIONE_P4_02_', result: 'P4_02_RESULT=PASS' },
   { id: 'SG-P4-03', prefix: 'STAGE3W_P4_03_LEGACY_ISOLATION_', result: 'P4_03_RESULT=PASS' },
   { id: 'SG-P3-01', prefix: 'STAGE3W_BANK_COMMIT_LAB_', result: 'P3_01_RESULT=PASS' },
+  { id: 'SG-P3-02', prefix: 'STAGE3W_IMPORT_CRONOLOGIA_HASH_', result: 'P3_02_RESULT=PASS' },
   { id: 'SG-P3-03', prefix: 'STAGE3W_STAMPE_P3_03_', result: 'P3_03_RESULT=PASS' },
   { id: 'SG-P3-07', prefix: 'STAGE3W_AGING_INSOLUTI_P3_07_', result: 'P3_07_RESULT=PASS' },
   { id: 'SG-P2-07', prefix: 'STAGE3W_P2_07_LIQUIDAZIONE_DEFINITIVA_', result: 'P2_07_RESULT=PASS' },

@@ -3,6 +3,7 @@
  * Supports partita chiusura (totale/parziale) without Manuale multi-step path.
  */
 import { validateFiscalJournalRequest } from '../../../../../lib/fiscalJournalRequest.js'
+import { appendImportFileHashMarker } from '../../../import_contabilita/application/cronologia/importFileHashMarker.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -92,6 +93,23 @@ export function mapBankPayloadToFiscalJournalRequest({
   ).slice(0, 500)
   if (descrizione.length < 5) return { ok: false, reason: 'BANK_LAB_DESCRIZIONE_SHORT' }
 
+  const sourceHash = text(
+    context.sourceFileHash
+      || context.sourceHash
+      || payload.sourceFileHash
+      || payload.sourceHash
+  )
+  const sourceFileName = text(
+    context.sourceFileName
+      || payload.sourceFileName
+      || context.bankStatementFileName
+  )
+
+  const baseMotivazione = text(
+    context.motivazione
+      || `Commit riconciliazione bancaria LAB movement=${movementId || request_id}`
+  ) || 'Commit riconciliazione bancaria LAB atomico Stage3W'
+
   const candidate = {
     societa_id,
     request_id,
@@ -109,10 +127,10 @@ export function mapBankPayloadToFiscalJournalRequest({
       openings: [],
       closures,
     },
-    motivazione: text(
-      context.motivazione
-        || `Commit riconciliazione bancaria LAB movement=${movementId || request_id}`
-    ).slice(0, 500),
+    motivazione: appendImportFileHashMarker(baseMotivazione, {
+      sourceHash,
+      sourceFileName,
+    }),
   }
 
   if (candidate.motivazione.length < 12) {

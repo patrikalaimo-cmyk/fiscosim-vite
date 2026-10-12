@@ -1113,3 +1113,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - L6 pack `l6_lab_core_v3`: aggiunti P1_01 FP22, P1_05 Import?Manuale, P3_02 cronologia hash. Fingerprint `L6CORE3|…all PASS`. Evidence `STAGE3W_L6_REGRESSIONE_P4_02_20261012201141.txt`.
 - L4 browser Import Contabilità smoke (nav + shell upload, 0 fiscal write): `L4_IMPORT_RESULT=PASS` ? `STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2011.txt`.
 - Debito A100: upload/commit XML in UI e Tax Compliance browser restano aperti.
+
+## 2026-10-12 - Storico automatismo Import + Bank (verso A100)
+
+- API LAB GET `/api/studio/fiscal-journal-history` (claim Stage3W, scoped, flag fiscal LAB).
+- Import Cronologia: merge server U+222A localStorage; L4 panel smoke PASS.
+- Bank: fileHash marker in motivazione, bankCronologiaStore + BankCronologiaPanel, HISTORY_API=PASS.
+- Evidence: `STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012204548.txt`, `STAGE3W_BANK_COMMIT_LAB_20261012204552.txt`, `STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2045.txt`; P4-07 include SG-P3-02.
+- Unit 13/13 (history API + cronologia merge + bank hash). No LIVE / no prod cutover.

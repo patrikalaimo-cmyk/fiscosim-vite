@@ -4,6 +4,7 @@ import { buildReconciliationCommitPreview } from './buildReconciliationCommitPre
 import { validateReconciliationCommitPayload } from './validateReconciliationCommitPayload.js'
 import { isBankFiscalCommitLabEnabled } from '../../application/riconciliazione/isBankFiscalCommitLabEnabled.js'
 import { commitBankReconciliationFiscalLab } from '../../application/riconciliazione/commitBankReconciliationFiscalLab.js'
+import { appendBankCronologiaEntry } from '../../application/riconciliazione/bankCronologiaStore.js'
 
 function uniqueList(value) {
   return Array.from(new Set((Array.isArray(value) ? value : []).filter((item) => item != null)))
@@ -90,7 +91,27 @@ export async function commitReconciliationCanonicalPayload(payload = {}, context
       context,
       accessToken,
     })
-    return normalizeResult(labResult)
+    const normalized = normalizeResult(labResult)
+    if (normalized.committed && context.societaId) {
+      try {
+        appendBankCronologiaEntry(context.societaId, {
+          sourceFileName: context.sourceFileName || payload.sourceFileName || '',
+          sourceHash: context.sourceFileHash || context.sourceHash || payload.sourceFileHash || '',
+          esito: 'committed',
+          primaNotaId: normalized.primaNotaId || normalized.createdIds?.primaNotaId || '',
+          requestId: normalized.requestId || normalized.audit?.requestId || '',
+          numeroDocumento: payload.primaNota?.numeroDocumento || '',
+          dataRegistrazione: context.registrationDate || '',
+          createdAt: new Date().toISOString(),
+          contractKind: 'pagamento',
+          descrizione: payload.primaNota?.descrizione || payload.description || '',
+          movementId: payload.movementId || context.movementId || '',
+        })
+      } catch {
+        /* cronologia locale best-effort */
+      }
+    }
+    return normalized
   }
 
   const commitInput = buildReconciliationCommitInput({ canonicalPayload: payload, context })

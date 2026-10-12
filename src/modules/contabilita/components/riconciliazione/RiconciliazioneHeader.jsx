@@ -52,6 +52,7 @@ export default function RiconciliazioneHeader({
   onRestoreDemo,
   onCancelImport,
   onClearStaging,
+  onCronologiaBank,
   actionNote,
   stagingBadge = '',
   stagingSavedAt = '',
@@ -82,6 +83,17 @@ export default function RiconciliazioneHeader({
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '.2rem', alignItems: 'center' }}>
           <button className="btn-sec" onClick={onLoadStatement} style={{ minHeight: 24, padding: '0 .42rem', fontSize: '.64rem' }}>Carica estratto</button>
+          {typeof onCronologiaBank === 'function' ? (
+            <button
+              type="button"
+              className="btn-sec"
+              onClick={onCronologiaBank}
+              style={{ minHeight: 24, padding: '0 .42rem', fontSize: '.64rem' }}
+              aria-label="Cronologia commit bancari"
+            >
+              Cronologia commit
+            </button>
+          ) : null}
           <button className="btn-sec" onClick={onAutoMatch} style={{ minHeight: 24, padding: '0 .42rem', fontSize: '.64rem' }}>Abbina automaticamente</button>
           <button className="btn-sec" onClick={onRianalizzaSelected} style={{ minHeight: 24, padding: '0 .42rem', fontSize: '.64rem' }}>Rianalizza selezionati</button>
           <button className="btn" onClick={onConfirmSelected} disabled={!canConfirm} title={canConfirm ? '' : confirmBlockReason || 'Conferma bloccata dall audit'} style={{ minHeight: 24, padding: '0 .42rem', fontSize: '.64rem' }}>

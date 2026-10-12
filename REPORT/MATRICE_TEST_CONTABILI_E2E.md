@@ -110,7 +110,7 @@
 | G04 | Import | Causali IVA standard→storico→AI | IMPLEMENTED | L1 | PASS (unit) | warning discrepanza | AI opt-in | P1 |
 | G05 | Import | Placeholder IVA 0/0 non bloccante | IMPLEMENTED | L1 | PASS (unit) | pruning | — | P1 |
 | G06 | Import | Dedup / anti doppio commit | IMPLEMENTED | L1 | PASS (unit) | freeze audit | PG UUID staging | P1 |
-| G07 | Import | Storico completo file/hash/esito | PARTIAL | L1 | NOT_IMPLEMENTED UI | placeholder Cronologia | Persistenza storico UI | P3 |
+| G07 | Import | Storico completo file/hash/esito | IMPLEMENTED (LAB) | L3/L4 | PASS claim+API+UI | Cronologia server∪local; flag LAB | Browser upload/commit ancora debito | P3 |
 | G08 | Import | Equivalenza Import=Manuale | PARTIAL | L1 | PASS contract unit | payload canonico | PG confronto | P1 |
 
 ---

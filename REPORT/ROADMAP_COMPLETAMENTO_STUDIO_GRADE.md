@@ -116,8 +116,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 | ID | Intervento | Note | Accettazione |
 |---|---|---|---|
-| SG-P3-01 | Bank RPC atomica + storico server | PASS 20261012 (Stage3W bank close + claim history + replay) | Commit solo via canonico; no bypass Manuale |
-| SG-P3-02 | Cronologia Import UI + hash file | PASS 20261012 (claim fileHash + UI panel + history) | Storico interrogabile |
+| SG-P3-01 | Bank RPC atomica + storico server | PASS 20261012 (+ 20261012 sera: history API + UI Cronologia commit + fileHash marker) | Commit solo via canonico; no bypass Manuale |
+| SG-P3-02 | Cronologia Import UI + hash file | PASS 20261012 (+ 20261012 sera: history API merge server∪local + L4 panel) | Storico interrogabile |
 | SG-P3-03 | Stampe Partitari/Mastrini/Bilancio da PN (no mock) | PASS 20261012 (modelli da PN/partitario; no mock KPI) | UI `isOperativo` su modelli canonici |
 | SG-P3-04 | Fascicolo cliente PDF | PASS 20261012 (HTML unico + hash da modelli PN; print-to-PDF) | Un file fine periodo |
 | SG-P3-05 | Cespiti operativi + quote | PASS 20261012 (bridge link PN + quote; no 2nd PN) | Bridge non duplica PN |
@@ -162,8 +162,9 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 ## Prossima sessione
 
 1. ~~SG-P0-00~~ / ~~SG-P0-02~~ **FATTO** (general-journal Stage3V A/B PASS).
-2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v3 include Import + P4-03.
-3. L4 browser shell: Consultazione + Manuale + Import + Liquidazioni IVA **PASS** (smoke; non chiude debito A100 dettagliato).
-4. Residuo: upload/commit Import UI, consolidamento IVA/LIPE UI, Bank UI; P0-03/P0-04; cutover prod solo con consenso.
-5. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
+2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v3 include Import + P4-03; P4-07 include SG-P3-02.
+3. ~~Storico automatismo Import+Bank~~ **FATTO** (`/api/studio/fiscal-journal-history` + UI merge; evidence HISTORY_API=PASS).
+4. L4 browser shell: Consultazione + Manuale + Import (cronologia) + Liquidazioni IVA **PASS** (smoke; non chiude debito A100 dettagliato).
+5. Residuo A100: upload/commit Import UI, consolidamento IVA/LIPE UI, Bank UI E2E; P0-03/P0-04; cutover prod solo con consenso.
+6. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.

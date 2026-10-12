@@ -470,6 +470,23 @@ LIMIT 1
   log(`HISTORY_HIT=${JSON.stringify(hit || null)}`)
   if (!hit || hit.sourceHash !== FILE_HASH) throw new Error('HISTORY_HASH_MISSING')
 
+  const historyApi = await fetch(
+    `${API_ORIGIN}/api/studio/fiscal-journal-history?societa_id=${SOCIETA_A}&source_module=import_contabilita&limit=30`,
+    { headers: { Authorization: `Bearer ${authData.session.access_token}` } },
+  )
+  const historyApiJson = await historyApi.json().catch(() => null)
+  log(`HISTORY_API_STATUS=${historyApi.status}`)
+  log(`HISTORY_API_COUNT=${historyApiJson?.count ?? 'n/a'}`)
+  if (historyApi.status !== 200 || !historyApiJson?.ok) throw new Error('HISTORY_API_FAILED')
+  const apiHit = (historyApiJson.rows || []).find(
+    (row) => row.prima_nota_id === pnId || row.request_id === claimRequestId,
+  )
+  if (!apiHit) throw new Error('HISTORY_API_HIT_MISSING')
+  const apiMarker = parseImportFileHashMarker(apiHit.motivazione || '')
+  log(`HISTORY_API_HASH=${apiMarker.sourceHash}`)
+  if (apiMarker.sourceHash !== FILE_HASH) throw new Error('HISTORY_API_HASH_MISMATCH')
+  log('HISTORY_API=PASS')
+
   const memory = new Map()
   const storage = {
     getItem: (k) => (memory.has(k) ? memory.get(k) : null),

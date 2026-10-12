@@ -2,6 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtCurrency } from '../ui/formatters.js'
 import { RICONCILIAZIONE_MOCK_DATA } from '../components/riconciliazione/mockRiconciliazioneData.js'
 import RiconciliazioneHeader from '../components/riconciliazione/RiconciliazioneHeader.jsx'
+import { BankCronologiaPanel } from '../components/riconciliazione/BankCronologiaPanel.jsx'
+import {
+  loadBankCronologiaEntries,
+  mergeBankCronologiaEntries,
+  saveBankCronologiaEntries,
+} from '../application/riconciliazione/bankCronologiaStore.js'
+import { normalizeBankFiscalCommitHistoryRows } from '../application/riconciliazione/listBankFiscalCommitHistory.js'
+import { fetchFiscalJournalCommitHistory } from '../application/fiscalJournal/fetchFiscalJournalCommitHistory.js'
+import { sb } from '../../../lib/supabase.js'
 import RiconciliazioneKpiStrip from '../components/riconciliazione/RiconciliazioneKpiStrip.jsx'
 import RiconciliazioneSummaryCards from '../components/riconciliazione/RiconciliazioneSummaryCards.jsx'
 import RiconciliazioneFilters from '../components/riconciliazione/RiconciliazioneFilters.jsx'
@@ -115,6 +124,11 @@ export default function RiconciliazioneBancariaView() {
     const [guidedFlowOpen, setGuidedFlowOpen] = useState(false)
   const [guidedFlowTemplateMatch, setGuidedFlowTemplateMatch] = useState(null)
   const [reconciliationContext, setReconciliationContext] = useState(MOCK_STORAGE_CONTEXT)
+  const [bankCronologiaOpen, setBankCronologiaOpen] = useState(false)
+  const [bankCronologiaEntries, setBankCronologiaEntries] = useState([])
+  const [bankCronologiaLoading, setBankCronologiaLoading] = useState(false)
+  const [bankCronologiaError, setBankCronologiaError] = useState('')
+  const [bankCronologiaSourceNote, setBankCronologiaSourceNote] = useState('')
   const [lastTableScrollPosition, setLastTableScrollPosition] = useState(null)
   const fileInputRef = useRef(null)
   const tableViewportRef = useRef(null)
@@ -959,6 +973,49 @@ export default function RiconciliazioneBancariaView() {
     summaryCollapsed,
   ])
 
+  const openCronologiaBank = async () => {
+    const societaId = String(reconciliationContext?.societaId || '').trim()
+    const local = societaId && societaId !== 'societa-demo'
+      ? loadBankCronologiaEntries(societaId)
+      : []
+    setBankCronologiaEntries(local)
+    setBankCronologiaError('')
+    setBankCronologiaSourceNote(local.length ? 'Cache locale' : '')
+    setBankCronologiaOpen(true)
+    if (!societaId || societaId === 'societa-demo') {
+      setBankCronologiaSourceNote('Demo — seleziona società LAB per storico server')
+      return
+    }
+    setBankCronologiaLoading(true)
+    try {
+      const remote = await fetchFiscalJournalCommitHistory({
+        societaId,
+        sourceModule: 'riconciliazione_bancaria',
+        limit: 100,
+        db: sb,
+      })
+      if (!remote.ok) {
+        setBankCronologiaSourceNote(local.length
+          ? 'Cache locale (server non disponibile)'
+          : 'Solo locale')
+        setBankCronologiaError(remote.status === 503
+          ? 'Storico server disponibile solo in LAB fiscal.'
+          : `Storico server non caricato (${remote.error}).`)
+        return
+      }
+      const serverRows = normalizeBankFiscalCommitHistoryRows(remote.rows, { societaId })
+      const merged = mergeBankCronologiaEntries(serverRows, local, { societaId })
+      saveBankCronologiaEntries(societaId, merged)
+      setBankCronologiaEntries(merged)
+      setBankCronologiaSourceNote(`Server LAB ∪ locale · ${merged.length} voci`)
+      setBankCronologiaError('')
+    } catch (err) {
+      setBankCronologiaError(err?.message || 'Errore caricamento cronologia')
+    } finally {
+      setBankCronologiaLoading(false)
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: '.28rem', color: '#eef6ff' }}>
       <RiconciliazioneHeader
@@ -977,10 +1034,19 @@ export default function RiconciliazioneBancariaView() {
         onRestoreDemo={restoreDemoData}
         onCancelImport={cancelImport}
         onClearStaging={handleClearStaging}
+        onCronologiaBank={openCronologiaBank}
         stagingBadge={bankStatement ? 'Staging salvato' : stagingStatus.hasStoredDraft ? 'Staging locale presente' : ''}
         stagingSavedAt={stagingStatus.lastSavedAt}
         stagingNotice={stagingStatus.notice}
         stagingWarning={stagingStatus.warning}
+      />
+      <BankCronologiaPanel
+        open={bankCronologiaOpen}
+        entries={bankCronologiaEntries}
+        loading={bankCronologiaLoading}
+        error={bankCronologiaError}
+        sourceNote={bankCronologiaSourceNote}
+        onClose={() => setBankCronologiaOpen(false)}
       />
 
       <RiconciliazioneKpiStrip kpis={filteredKpis} />
