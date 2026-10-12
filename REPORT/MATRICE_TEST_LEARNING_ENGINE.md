@@ -33,7 +33,9 @@
 
 | ID | Scenario | Oracle | Livello | Stato oggi |
 |---|---|---|---|---|
-| LE-B01 | Partita esatta importo+doc in descrizione | Match partita corretta | UNIT | PARTIAL fixture matching |
+| LE-B01 | Partita esatta importo+doc in descrizione | Match partita corretta | UNIT | PARTIAL: engine+fixture PASS; UI solo su id fixture |
+| LE-B00 | Import CSV/PDF esegue matcher su partitario live società | Proposte non “Nessun match” finto | UI_E2E+PG | **MISSING** (oggi mapBank… forza no-match) |
+| LE-B0X | Id demo `bm-*` ≠ fixture economics | Nessuna collisioni id | UNIT | **BROKEN** oggi |
 | LE-B02 | Pagamento parziale | Chiusura parziale; residuo corretto | UNIT+PG | PARTIAL planning |
 | LE-B03 | Un movimento → N partite | Split proposal; no silent single | UNIT | **MISSING**/LIMITED |
 | LE-B04 | N movimenti → 1 partita | Aggregate o review | UNIT | **MISSING** |

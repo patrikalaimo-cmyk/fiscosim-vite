@@ -161,7 +161,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | SG-L2 | DecisionFeedback append-only post-commit (LAB flag) Import/Manuale | L1 + **approvazione schema** | LE-I06/I10/I15; no learn su dry-run/fail |
 | SG-L3 | Chiavi contestuali controparte+categoria/descrizione (multi-prodotto) | L2 | LE-I01/I08 verdi |
 | SG-L4 | Regole studio Livello B (no UUID conti alieni) | L1 | LE-S02; IVA standard>storico preservato |
-| SG-L5 | Bank: memoria match confermati + wire partitario | L2 | LE-B01/B09; no IVA ordinaria spuriosa |
+| SG-L5 | Bank: wire partitario live + matcher su import; poi memoria match confermati; fix id `bm-*` | L2 | LE-B00/B01/B09; no IVA ordinaria spuriosa |
 | SG-L6 | UI spiegazione proposte + mass-confirm gated | L3/L5 | LE-B10; zero commit silenzioso |
 | SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | LE-S01/P02–P05; L6CORE* PASS |
 

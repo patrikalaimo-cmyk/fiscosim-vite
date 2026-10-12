@@ -2,8 +2,9 @@
 
 **Data:** 2026-10-12  
 **Branch:** `feat/studio-grade-accounting-e2e-20261010`  
-**HEAD locale/remoto:** `46c60abe4101e6d4a8b77f6e65b329e4297c3348` (oltre checkpoint citato `54e883a` — L4 IVA; non ripetere Stage 3S/3U)  
-**Ambito:** Fase A — sola lettura codice esecutivo; nessuna migration.
+**HEAD docs Fase A:** `f56cac4` (audit iniziale su base `46c60ab`; oltre checkpoint `54e883a` — non ripetere Stage 3S/3U)  
+**Ambito:** Fase A — sola lettura codice esecutivo; nessuna migration.  
+**Follow-up:** sezione §7 arricchita da audit codice approfondito Import/Bank.
 
 ---
 
@@ -33,12 +34,19 @@ Working View / draft (solo campi vuoti; override manuale protetto)
 [GAP] nessun feedback strutturato → ri-indicizzazione solo alla prossima load
 ```
 
-Bank:
+Bank (stato UI reale):
 
 ```
-movimento (+ classify) → score vs partiteAperte → proposal
-        ↓ confirm (spesso dry-run; LAB fiscal close)
-[GAP] nessuna memoria decisioni match; template import solo localStorage
+partiteAperte = SOLO ricondiliazioneMatchingFixtures (non partitario live)
+        ↓
+UI: matcher solo se movementId ∈ bm-001..bm-016 fixture
+import CSV/PDF → mapBankStatementMovementToWorkingRow → "Nessun match contabile reale"
+        ↓
+proposal / accept locale (non in staging draft; non commit da UI bulk)
+autoMatch / confirmSelected = placeholder mock
+        ↓
+commit: dry-run default; LAB fiscal + JWT → claim cronologia (≠ learning match)
+guided templates layout: localStorage globale (non per società)
 ```
 
 ---
@@ -56,9 +64,10 @@ movimento (+ classify) → score vs partiteAperte → proposal
 
 ### 2) Isolamento società
 - Import history loaders: **IMPLEMENTED** — filtro `.eq('societa_id', sid)` / `fetchPagedRows` con `societaColumn`.
+- `prima_nota_righe`: filtro per `prima_nota_id` del chunk (isolamento indiretto via PN già scoped) — **PARTIAL** hardening.
 - Indici costruiti solo sul bundle della società selezionata in [`index.jsx`](src/modules/import_contabilita/index.jsx).
 - `ai_learning`: query per `societa_id` — **IMPLEMENTED** a livello fetch.
-- Bank UI demo: contesto mock `societa-demo` — **PARTIAL** per produzione (match usa partite passate dal caller).
+- Bank: matcher **senza** parametro società; isolation = lista partite passata (oggi bag fixture globale). Staging draft keyed per società; template guided **non** per società.
 - Cross-studio: **non** esiste modello studio condiviso autorizzato per Import Contabilità canonico.
 
 ### 3) Decisioni apprese
@@ -127,11 +136,13 @@ movimento (+ classify) → score vs partiteAperte → proposal
 | L-A10 | Conoscenza generale versionata (Livello C) | **PARTIAL** | classificatori/heuristics hardcoded; no tassonomia versionata |
 | L-A11 | Spiegazione proposta (fonte, N, recenza, conflitti) | **PARTIAL** | badge sampleCount/lastSeen; no conflict board completo |
 | L-A12 | Unificazione con `ai_learning` | **BROKEN/scollegato** | path parallelo Manuale/Archivio |
-| L-B01 | Match bank vs partite (1:1 score) | **PARTIAL** | unit fixture matching; UI spesso mock |
-| L-B02 | 1-N / N-1 / parziali / F24 / giroconto / POS | **PARTIAL** | classificazione diretta; planning commit casi limitati |
-| L-B03 | Apprendimento da conferme bank | **MISSING** | claim history ≠ learning |
-| L-B04 | Template layout estratto | **PARTIAL** | localStorage guided templates |
-| L-B05 | Mass confirm proposte sicure con gate | **MISSING** | — |
+| L-B01 | Match bank vs partite (1:1 score) | **PARTIAL** | engine + 16 fixture PASS; UI solo se `movementId` fixture |
+| L-B02 | 1-N / N-1 / parziali / F24 / giroconto / POS | **PARTIAL** | subset 1-N in engine; R9A blocca multi-chiusura; F24/giroconto proposal-only |
+| L-B03 | Apprendimento da conferme bank | **MISSING** | accept locale; claim cronologia ≠ match memory |
+| L-B04 | Template layout estratto | **PARTIAL** | localStorage globale (non scoped società) |
+| L-B05 | Mass confirm proposte sicure con gate | **MISSING** | `autoMatch`/`confirmSelected` mock in view |
+| L-B06 | Partitario/PN live nel matcher | **MISSING** | nessun import `contabilitaRepo` partitario in `riconciliazione/**` |
+| L-B07 | Demo id collision `bm-*` mock vs fixture | **BROKEN** UX | stessi id, importi/descrizioni diversi |
 | L-C01 | Cronologia commit Import/Bank interrogabile | **IMPLEMENTED** (LAB) | P3-01/02 HISTORY_API PASS `46c60ab` |
 
 ---
@@ -161,3 +172,30 @@ movimento (+ classify) → score vs partiteAperte → proposal
 - Nessuna modifica richiesta ai gate P0–P4 già PASS per questa Fase A.
 - L’implementazione (Fase B) deve restare dietro flag LAB / fail-closed e non toccare default prod `createPrimaNotaCompleta` senza consenso.
 - Non applicare migration senza approvazione esplicita.
+
+---
+
+## 7. Follow-up audit approfondito (2026-10-12 sera)
+
+Sintesi aggiuntiva (codice esecutivo), allineata agli audit Import/Bank:
+
+### Import Contabilità
+- Due pipeline read-only distinte: `registri_iva` → IVA/detraibilità; `documenti_contabilita`+`prima_nota*` → conto/causale; indici modali in memoria.
+- Priorità Working View IVA: manuale > standard Studio > storico (test `IMPORT-25A-HISTORY-1`).
+- Prefill conto/causale solo se chiave assente in mappe manuali (`index.jsx` ~3641+).
+- `registri_iva` senza filtro storno/annullamento; `Math.abs` può far entrare NC nello storico — gap LE-I11.
+- `automationMetaByRowId` = traccia batch-apply, **non** ML feedback.
+- Doc operativo `AI_WORKING_AREA_FISCOSIM/10_IMPORT_CONTABILITA_OPERATIVO.md` può risultare stale su “residuo” conto/causale (già implementati).
+
+### Bank
+- Pipeline reale e testata: `classifyBankMovement` → `buildRiconciliazioneMatchCandidates` → `scoreRiconciliazioneMatch` → `buildRiconciliazioneDecisionProposal`.
+- **Partite:** solo `riconciliazioneMatchingFixtures.js`; nessun fetch partitario live.
+- **UI:** matcher attivo solo su collisioni id fixture; import mappati a “nessun match”; bulk actions mock.
+- **Learning:** solo template layout guided import (localStorage); nessun learn da accept match.
+- **Persistenza server:** solo claim fiscal LAB (cronologia commit), non audit proposte match.
+- **BROKEN UX:** id `bm-*` condivisi tra `mockRiconciliazioneData` e fixture con economics diverse.
+
+### Implicazioni roadmap SG-L*
+- SG-L5 deve includere **wire partitario live + run matcher su ogni movimento importato** prima del solo “feedback memory”.
+- SG-L1/L2 restano prioritarie su Import (feedback + contesto multi-prodotto).
+- Fix L-B07 (id collision) è quick-win UI senza migration.
