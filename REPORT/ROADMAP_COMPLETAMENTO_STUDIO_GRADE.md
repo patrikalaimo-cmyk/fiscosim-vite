@@ -118,7 +118,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 |---|---|---|---|
 | SG-P3-01 | Bank RPC atomica + storico server | PASS 20261012 (Stage3W bank close + claim history + replay) | Commit solo via canonico; no bypass Manuale |
 | SG-P3-02 | Cronologia Import UI + hash file | PASS 20261012 (claim fileHash + UI panel + history) | Storico interrogabile |
-| SG-P3-03 | Stampe Partitari/Mastrini/Bilancio da PN (no mock) | | UI `isOperativo` su modelli canonici |
+| SG-P3-03 | Stampe Partitari/Mastrini/Bilancio da PN (no mock) | PASS 20261012 (modelli da PN/partitario; no mock KPI) | UI `isOperativo` su modelli canonici |
 | SG-P3-04 | Fascicolo cliente PDF | | Un file fine periodo |
 | SG-P3-05 | Cespiti operativi + quote | | Bridge non duplica PN |
 | SG-P3-06 | Chiusura/riapertura esercizio | | Continuity saldi; lock; audit |

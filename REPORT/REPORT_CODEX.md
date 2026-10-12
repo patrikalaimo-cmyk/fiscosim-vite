@@ -997,3 +997,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - PN `2d8ea84a-...`; claim `import_contabilita` + `fileHash=ae60dcd63843e01a` + file XML
   - History query hit; UI store 1 riga stesso hash
 - Unit `importCronologiaHash` 4/4. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-03 Stampe Partitari/Mastrini/Bilancio da PN PASS
+
+- UI `StampeView`: `isOperativo` include `partitari` / `mastrini` / `bilancio`; rimossa gate fac-simile; `generaStampa` carica partitario + PN + piano conti.
+- Modelli: `buildPartitariStampaModel` (nuovo); mastrini = `buildMovimentiPerContoModel`; bilancio verifica = `buildSaldiPerContoEsercizioModel`.
+- Anteprima da dati reali; empty state se nessun risultato (no importi mock tipo 235870/Alfa S.r.l.).
+- Script `scripts/security_p0/run-stage3w-stampe-partitari-mastrini-bilancio.mjs`. Evidence `REPORT/STAGE3W_STAMPE_P3_03_20261012092814.txt`:
+  - FA PN `17263f40-...` + partita; PARTITARI/MASTRINI/BILANCIO `valid=true` da PN LAB
+  - `P3_03_RESULT=PASS`
+- Unit `stampePartitariMastriniBilancio` 4/4. Nessun LIVE / SG-P0-00.
