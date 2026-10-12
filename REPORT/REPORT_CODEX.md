@@ -1121,3 +1121,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Bank: fileHash marker in motivazione, bankCronologiaStore + BankCronologiaPanel, HISTORY_API=PASS.
 - Evidence: `STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012204548.txt`, `STAGE3W_BANK_COMMIT_LAB_20261012204552.txt`, `STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2045.txt`; P4-07 include SG-P3-02.
 - Unit 13/13 (history API + cronologia merge + bank hash). No LIVE / no prod cutover.
+
+## 2026-10-12 - Fase A Learning Engine (audit only)
+
+- HEAD `46c60ab` = origin `feat/studio-grade-accounting-e2e-20261010` (oltre `54e883a`).
+- Prodotti: `REPORT/AUDIT_LEARNING_ENGINE.md`, `ARCHITETTURA_LEARNING_ENGINE.md`, `MATRICE_TEST_LEARNING_ENGINE.md`; roadmap P5 SG-L0..L7.
+- Esito audit: Import Contabilita ha storico proposte mode (conto/causale/IVA) societa-scoped + priorita IVA standard>storico; manca feedback conferma e contesto multi-prodotto; `ai_learning` e path parallelo scollegato; Bank match euristico senza memoria decisioni; cronologia commit LAB distinta dal learning.
+- Nessuna migration / nessun intervento persistenza. Stop per revisione architetturale.

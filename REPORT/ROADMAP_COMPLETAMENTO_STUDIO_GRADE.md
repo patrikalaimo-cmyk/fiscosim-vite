@@ -149,6 +149,26 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ---
 
+## P5 — Motore apprendimento contabile (verso gestionale evoluto / A100)
+
+**Documenti Fase A (2026-10-12):** `REPORT/AUDIT_LEARNING_ENGINE.md`, `REPORT/ARCHITETTURA_LEARNING_ENGINE.md`, `REPORT/MATRICE_TEST_LEARNING_ENGINE.md`.  
+**Stop:** revisione architetturale obbligatoria prima di migration/persistenza nuove.
+
+| ID | Intervento | Dipende | Accettazione |
+|---|---|---|---|
+| SG-L0 | Audit + architettura + matrice (Fase A) | — | **PASS** 20261012 docs; HEAD `46c60ab` |
+| SG-L1 | Consolida SuggestionResolver su history Import esistenti; de-dup path `ai_learning` | L0 + approvazione | Un solo resolver spiegabile; L6 invariato |
+| SG-L2 | DecisionFeedback append-only post-commit (LAB flag) Import/Manuale | L1 + **approvazione schema** | LE-I06/I10/I15; no learn su dry-run/fail |
+| SG-L3 | Chiavi contestuali controparte+categoria/descrizione (multi-prodotto) | L2 | LE-I01/I08 verdi |
+| SG-L4 | Regole studio Livello B (no UUID conti alieni) | L1 | LE-S02; IVA standard>storico preservato |
+| SG-L5 | Bank: memoria match confermati + wire partitario | L2 | LE-B01/B09; no IVA ordinaria spuriosa |
+| SG-L6 | UI spiegazione proposte + mass-confirm gated | L3/L5 | LE-B10; zero commit silenzioso |
+| SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | LE-S01/P02–P05; L6CORE* PASS |
+
+**Non negoziabile:** nessuna migration senza consenso; nessun cutover prod; non rompere P0–P4 PASS.
+
+---
+
 ## Avanzamento SG-P0-01 (2026-10-10)
 
 - Contratto, scenari indipendenti, RPC candidata Stage3W, matrix SQL, API LAB e CI branch: **preparati in codice**.
@@ -161,10 +181,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione
 
-1. ~~SG-P0-00~~ / ~~SG-P0-02~~ **FATTO** (general-journal Stage3V A/B PASS).
-2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v3 include Import + P4-03; P4-07 include SG-P3-02.
-3. ~~Storico automatismo Import+Bank~~ **FATTO** (`/api/studio/fiscal-journal-history` + UI merge; evidence HISTORY_API=PASS).
-4. L4 browser shell: Consultazione + Manuale + Import (cronologia) + Liquidazioni IVA **PASS** (smoke; non chiude debito A100 dettagliato).
-5. Residuo A100: upload/commit Import UI, consolidamento IVA/LIPE UI, Bank UI E2E; P0-03/P0-04; cutover prod solo con consenso.
-6. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
-Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
+1. **Revisione architetturale** learning engine (`AUDIT` / `ARCHITETTURA` / `MATRICE_TEST_LEARNING_*`) — stop prima di SG-L1/L2.
+2. Dopo approvazione: SG-L1 → L2 (feedback) senza migration LIVE.
+3. In parallelo residuo A100 UI: upload/commit Import, IVA consolidamento, Bank E2E; P0-03/P0-04; cutover prod solo con consenso.
+4. Default produttivo resta `createPrimaNotaCompleta` finché UI non certificata.
+Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `REPORT/REPORT_CODEX.md`.
