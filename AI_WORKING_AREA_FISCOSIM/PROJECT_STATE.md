@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-L2 DecisionFeedback **LAB localStorage** (no migration) + Bank match memory boost. A100 completo ancora gated (manuale browser, schema DB learning, LIVE, cutover).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit)
+* **HEAD:** `207fb07` (locale = origin)
 * **Limite:** no migration learning DB senza approvazione; no LIVE; default prod multi-step; debito A100 browser
 
 ## 2. Prossimo passo operativo
