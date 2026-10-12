@@ -166,6 +166,21 @@ test('25A-FIX-4 — popup e guardia distinguono flusso reale vs Test Lab', () =>
   const stagingGuard = evaluateRealImportStagingIdGuard({ societa: REAL_SOCIETA, documentId: 'ic-123' })
   assert.equal(stagingGuard.allowed, false)
   assert.equal(stagingGuard.blockingIssue, REAL_IMPORT_STAGING_ID_BLOCKER)
+
+  const sgLabBypass = evaluateRealImportStagingIdGuard({
+    societa: { id: 'sg', codice: 'SG-E2E-A' },
+    documentId: 'ic-123',
+    labPersistOverride: true,
+  })
+  assert.equal(sgLabBypass.allowed, true)
+  assert.equal(sgLabBypass.labStagingBypass, true)
+
+  const sgLabOff = evaluateRealImportStagingIdGuard({
+    societa: { id: 'sg', codice: 'SG-E2E-A' },
+    documentId: 'ic-123',
+    labPersistOverride: false,
+  })
+  assert.equal(sgLabOff.allowed, false)
 })
 
 test('25A-FIX-4 — regressione 25A-FIX-3: causale IVA reale mancante blocca ancora', () => {

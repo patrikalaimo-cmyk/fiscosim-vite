@@ -1167,3 +1167,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - L4 IVA re-smoke PASS; nuovo `run-stage3w-l4-browser-bank.mjs` PASS (shell riconciliazione, 0 fiscal write).
 - Evidence: `REPORT/STAGE3W_SG_L4_BROWSER_BANK_IVA_20261012234942.txt`, `STAGE3W_L4_BROWSER_IVA_2026-10-12T2148.txt`, `STAGE3W_L4_BROWSER_BANK_2026-10-12T2149.txt`; bank UNIT 29/29.
 - Residuo A100: Import upload/commit XML browser; schema DB; LIVE/cutover.
+
+## 2026-10-12 - L4 Import upload/commit XML browser LAB
+
+- Nuovo `scripts/security_p0/run-stage3w-l4-browser-import-upload.mjs`: login ? upload `qa/fixtures/IT01378570350.xml` ? staging ? conto/causale ? WV ? fix IVA 2.02 ? Contabilizza.
+- Seed LAB: P.IVA fornitore su 2.10, causale IVA `SG-IVA22`, SG-ORD `docivanormale`/`fattura_fornitore`.
+- Bypass staging UUID ephemeral (`ic-*`) solo SG-E2E + flag persist LAB (`isLabEphemeralImportStagingBypassEnabled`).
+- Evidence: `REPORT/STAGE3W_L4_BROWSER_IMPORT_UPLOAD_2026-10-12T2210.txt` ? `FISCAL_WRITE_COUNT=1`, PN `fe421feb-e3bf-43e0-9135-d17c3b3aa5d8` (3 righe).
+- Stop operatore: schema DecisionFeedback DB; P0-03/04 LIVE; cutover prod; debito manuale A100.

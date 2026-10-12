@@ -610,6 +610,7 @@ import { persistPrimaNotaDraft, sanitizeUuidOrNull } from '../../contabilita/app
 import { sb } from '../../../lib/supabase.js'
 import { buildCausaleContabilePolicy } from '../../contabilita/domain/causali/buildCausaleContabilePolicy.js'
 import {
+  evaluateRealImportStagingIdGuard,
   getImportCommitLogTag,
   isDocumentiImportStagingUuid,
   REAL_IMPORT_STAGING_ID_BLOCKER,
@@ -656,7 +657,13 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   const commitLogTag = getImportCommitLogTag(flowKind)
 
   if (flowKind === 'real_import' && documentId && !isDocumentiImportStagingUuid(documentId)) {
-    return { success: false, blockingReasons: [REAL_IMPORT_STAGING_ID_BLOCKER] }
+    const stagingGuard = evaluateRealImportStagingIdGuard({ societa, documentId })
+    if (!stagingGuard.allowed) {
+      return { success: false, blockingReasons: [REAL_IMPORT_STAGING_ID_BLOCKER] }
+    }
+    if (stagingGuard.labStagingBypass) {
+      console.log(`[${commitLogTag}_STAGING_UUID_BYPASS_LAB] documentId=${documentId} societa=${societa?.codice || ''}`)
+    }
   }
 
   if (documentId) {
@@ -1106,10 +1113,18 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     if (!isDocumentIdUuid && flowKind === 'test_lab') {
       console.log('motivo=documento Test Lab senza ID staging reale (non UUID)')
     }
+    const labStagingBypass = flowKind === 'real_import'
+      && !isDocumentIdUuid
+      && evaluateRealImportStagingIdGuard({ societa, documentId }).labStagingBypass
+    if (labStagingBypass) {
+      console.log('motivo=SG-E2E LAB ephemeral staging id (documenti_import update skipped)')
+    }
 
     if (!isDocumentIdUuid) {
-      if (flowKind === 'test_lab') {
-        stagingUpdateWarning = 'Commit Test Lab riuscito. Aggiornamento staging import saltato: documento demo senza ID staging reale.'
+      if (flowKind === 'test_lab' || labStagingBypass) {
+        stagingUpdateWarning = labStagingBypass
+          ? 'Commit LAB SG-E2E riuscito. Aggiornamento staging import saltato: id ephemeral senza documenti_import.'
+          : 'Commit Test Lab riuscito. Aggiornamento staging import saltato: documento demo senza ID staging reale.'
         console.log(`[${commitLogTag}_STAGING_UPDATE_RESULT]`)
         console.log('esito=skipped')
         console.log('contabile_mantenuto=true')

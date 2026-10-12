@@ -1,0 +1,35 @@
+STAGE3W_L4_IMPORT_UPLOAD_COMMIT_LAB
+timestamp=202610122210
+branch=feat/studio-grade-accounting-e2e-20261010
+scope=L4 browser Import Contabilità upload XML + Working View + fiscal commit LAB
+
+SMOKE=scripts/security_p0/run-stage3w-l4-browser-import-upload.mjs
+EVIDENCE_RAW=REPORT/STAGE3W_L4_BROWSER_IMPORT_UPLOAD_2026-10-12T2210.txt
+FIXTURE=qa/fixtures/IT01378570350.xml
+SOCIETA=72000000-0000-4000-8000-000000000001 (SG-E2E-A)
+
+RESULT=PASS
+UPLOAD=PASS
+STAGING=PASS (1 row)
+WORKING_VIEW=PASS
+COMMIT_UI=PASS (dialog confirm + alert contabilizzato)
+FISCAL_WRITE=PASS POST /api/studio/fiscal-journal-post
+PRIMA_NOTA_ID=fe421feb-e3bf-43e0-9135-d17c3b3aa5d8
+PRIMA_NOTA_RIGHE=3
+DOC=QA-2026-001
+
+LAB_SEED=
+- piano_conti 2.10 partita_iva=01378570350 is_fornitore
+- causali_iva SG-IVA22 22% default
+- causali_contabili SG-ORD tipo_causale=docivanormale tipo=fattura_fornitore richiede_iva
+
+CODE=
+- isLabEphemeralImportStagingBypassEnabled (SG-E2E + VITE/ persist LAB flag)
+- evaluateRealImportStagingIdGuard labStagingBypass
+- runCommitWorkflow skips documenti_import update on ephemeral ic-* under bypass
+
+A100_STOP_OPERATOR=
+- DecisionFeedback DB schema approval
+- P0-03/P0-04 LIVE
+- cutover createPrimaNotaCompleta
+- full manual debt checklist
