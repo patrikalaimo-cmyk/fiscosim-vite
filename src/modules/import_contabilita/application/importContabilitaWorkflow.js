@@ -914,6 +914,19 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
       scope: {
         source_row_key: documentId || null,
         documento: canonicalPayload.document?.numeroDocumento || 'TL-ACQ-01',
+        source_file_name: normalizeText(
+          canonicalPayload.attachments?.sourceFile
+            || commitPayload?.payload?.handoff?.sourceFileName
+            || commitPayload?.handoff?.sourceFileName
+            || ''
+        ) || null,
+        source_file_hash: normalizeText(
+          canonicalPayload.attachments?.hash
+            || commitPayload?.payload?.handoff?.sourceHash
+            || commitPayload?.handoff?.sourceHash
+            || commitPayload?.sourceHash
+            || ''
+        ) || null,
       },
     },
     righePayload: finalRows,
@@ -1240,6 +1253,10 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     totaleDare: persistResult.data?.totale_dare || 0,
     totaleAvere: persistResult.data?.totale_avere || 0,
     isBalanced: persistResult.data?.isBalanced || false,
+    request_id: persistResult.request_id || null,
+    contract_kind: persistResult.contract_kind || null,
+    sourceFileName: draftBundle.pnPayload?.scope?.source_file_name || null,
+    sourceHash: draftBundle.pnPayload?.scope?.source_file_hash || null,
   }
 }
 

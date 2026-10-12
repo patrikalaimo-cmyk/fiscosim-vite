@@ -3,6 +3,7 @@
  * Does not call PostgREST. Returns null when unsupported / incomplete.
  */
 import { validateFiscalJournalRequest } from '../../../../../lib/fiscalJournalRequest.js'
+import { appendImportFileHashMarker } from '../../../import_contabilita/application/cronologia/importFileHashMarker.js'
 import { resolveFiscalContractKind } from './resolveFiscalContractKind.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -240,13 +241,21 @@ export function mapPersistencePlanToFiscalJournalRequest({
     header.cliente_fornitore_nome = String(pnPayload.cliente_fornitore_nome).slice(0, 200)
   }
 
-  const reason = String(motivazione || '').trim()
+  let reason = String(motivazione || '').trim()
     || `LAB Stage3W atomic fiscal post (${contract_kind})`
   const source_module = sourceModule === 'import_contabilita'
     ? 'import_contabilita'
     : sourceModule === 'riconciliazione_bancaria'
       ? 'riconciliazione_bancaria'
       : 'registrazione_manual'
+
+  if (source_module === 'import_contabilita') {
+    const scope = pnPayload.scope && typeof pnPayload.scope === 'object' ? pnPayload.scope : {}
+    reason = appendImportFileHashMarker(reason, {
+      sourceHash: scope.source_file_hash || scope.sourceFileHash || '',
+      sourceFileName: scope.source_file_name || scope.sourceFileName || '',
+    })
+  }
 
   const candidate = {
     societa_id,

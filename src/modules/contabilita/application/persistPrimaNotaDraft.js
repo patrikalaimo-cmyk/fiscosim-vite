@@ -779,9 +779,15 @@ export async function persistPrimaNotaDraft({
     const sourceModule = pnPayloadForDb.documento_import_id
       ? 'import_contabilita'
       : 'registrazione_manual'
+    const scopeFromDraft = resolved?.pnPayload?.scope
+      || resolved?.innerDraft?.pnPayload?.scope
+      || null
+    const pnPayloadForFiscalLab = scopeFromDraft && typeof scopeFromDraft === 'object'
+      ? { ...pnPayloadForDb, scope: scopeFromDraft }
+      : pnPayloadForDb
     const mapped = mapPersistencePlanToFiscalJournalRequest({
       policy,
-      pnPayload: pnPayloadForDb,
+      pnPayload: pnPayloadForFiscalLab,
       righePayload: righePayloadForDb,
       vatEntries: vatEntriesForDb,
       partEntries: partEntriesForDb,

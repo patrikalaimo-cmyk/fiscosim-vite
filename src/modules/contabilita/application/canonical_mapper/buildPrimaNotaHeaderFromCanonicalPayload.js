@@ -31,6 +31,7 @@ export function buildPrimaNotaHeaderFromCanonicalPayload(normalized = {}, classi
       source_batch_id: handoff.sourceBatchId || null,
       source_row_key: handoff.sourceRowKey || null,
       source_file_name: handoff.sourceFileName || null,
+      source_file_hash: handoff.sourceHash || handoff.sourceFileHash || null,
       classification_code: cls.code || 'ordinario',
       classification_label: cls.label || 'Ordinario',
     },

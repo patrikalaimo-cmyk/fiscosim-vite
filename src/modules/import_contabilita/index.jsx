@@ -42,6 +42,11 @@ import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/can
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
 import { ImportContabilitaAnagraficheDetail } from './components/ImportContabilitaAnagraficheDetail.jsx'
 import { ImportContabilitaKpiBar } from './components/ImportContabilitaKpiBar.jsx'
+import { ImportCronologiaPanel } from './components/ImportCronologiaPanel.jsx'
+import {
+  appendImportCronologiaEntry,
+  loadImportCronologiaEntries,
+} from './application/cronologia/importCronologiaStore.js'
 import { ImportContabilitaOverviewCards } from './components/ImportContabilitaOverviewCards.jsx'
 import { ImportContabilitaReportDetail } from './components/ImportContabilitaReportDetail.jsx'
 import { ImportContabilitaPreviewDrawer } from './components/ImportContabilitaPreviewDrawer.jsx'
@@ -2658,6 +2663,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [demoCommitBusy, setDemoCommitBusy] = useState(false)
   const [demoCommitReport, setDemoCommitReport] = useState(null)
   const [showToolsMenu, setShowToolsMenu] = useState(false)
+  const [cronologiaOpen, setCronologiaOpen] = useState(false)
+  const [cronologiaEntries, setCronologiaEntries] = useState([])
   const columnFilterMenuRef = useRef(null)
 
   const filesLabel = useMemo(() => {
@@ -5059,6 +5066,26 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       })
       persistRowsChange(nextRows, selectedRowIds)
 
+      const cronologiaSocietaId = selectedSocietaId || selectedSocietaForDemo?.id || ''
+      if (cronologiaSocietaId && commitResult.primaNotaId) {
+        const nextCronologia = appendImportCronologiaEntry(cronologiaSocietaId, {
+          sourceFileName: activeWorkingViewModel?.parsedDocument?.filename
+            || activeWorkingViewModel?.sourceFileName
+            || '',
+          sourceHash: activeWorkingViewModel?.sourceHash
+            || activeWorkingViewModel?.parsedDocument?.sourceHash
+            || '',
+          esito: 'committed',
+          primaNotaId: commitResult.primaNotaId,
+          requestId: commitResult.requestId || commitResult.request_id || '',
+          numeroDocumento: activeWorkingViewModel?.parsedDocument?.numeroDocumento || '',
+          dataRegistrazione: activeWorkingViewModel?.registrationDate || '',
+          createdAt: new Date().toISOString(),
+          contractKind: commitResult.contract_kind || '',
+        })
+        setCronologiaEntries(nextCronologia)
+      }
+
       const reportText = formatDemoWorkingViewCommitReport(commitResult, {
         numeroDocumento: activeWorkingViewModel?.parsedDocument?.numeroDocumento,
         unselectedCount: Math.max(0, stagingRows.length - 1),
@@ -5223,6 +5250,12 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
 
   const onPlaceholderAction = (label = 'Azione') => {
     showActionBanner('neutral', `${label} non ancora disponibile in questa fase.`)
+  }
+
+  const openCronologiaImport = () => {
+    const societaId = selectedSocietaId || ''
+    setCronologiaEntries(loadImportCronologiaEntries(societaId))
+    setCronologiaOpen(true)
   }
 
   const handleGoToSelection = (target) => {
@@ -5856,7 +5889,12 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         complete={headerMetrics.complete}
         incomplete={headerMetrics.incomplete}
         ultimoImport={headerMetrics.ultimoImport}
-        onCronologiaImport={() => onPlaceholderAction('Cronologia import')}
+        onCronologiaImport={openCronologiaImport}
+      />
+      <ImportCronologiaPanel
+        open={cronologiaOpen}
+        entries={cronologiaEntries}
+        onClose={() => setCronologiaOpen(false)}
       />
 
       <section
