@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-L1 SuggestionResolver Import **PASS** (no migration) + Bank wire partitario live + fix id `demo-bm-*`. A100 completo ancora gated (manuale browser, LIVE, cutover, SG-L2+ schema).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (vedi git log) — slice L1/Bank in corso di commit.
+* **HEAD:** `be8438a` (locale = origin).
 * **Limite:** no migration learning senza approvazione; no LIVE; default prod multi-step; debito A100 browser dettagliato
 
 ## 2. Prossimo passo operativo
