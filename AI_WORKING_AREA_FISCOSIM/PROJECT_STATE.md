@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-L4 regole studio **PASS** (UNIT) + L4 browser IVA/Bank **PASS**. A100 completo ancora gated (upload/commit Import dettagliato, schema DB, LIVE, cutover).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit)
+* **HEAD:** `4b5548d` (locale = origin)
 * **Limite:** no migration learning DB; no LIVE; debito browser Import upload/commit XML
 
 ## 2. Prossimo passo operativo
