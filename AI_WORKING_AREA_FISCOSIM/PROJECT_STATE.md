@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** LIVE P0-04 tranche 1+2 **APPLICATE** su `mlydfspmrkaedsocubku` (anon DML/SELECT public=0; SECURITY DEFINER anon EXECUTE=0). Residuo sicurezza: 31 policy broad authenticated/public (richiede redesign RLS tenant). A100 non dichiarabile senza deploy nuovo + collaudi manuali.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (pin)
+* **HEAD:** `396608d`
 * **Limite:** policy allow_all; deploy produzione; Import #11 e form Manuale/IVA/Consultazione
 
 ## 2. Prossimo passo operativo (verso A100)
