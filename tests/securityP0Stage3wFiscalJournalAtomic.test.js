@@ -192,6 +192,12 @@ test('Stage3W SQL ensures separate claim table, ACID inserts, FOR UPDATE closure
   assert.doesNotMatch(sql, /CREATE OR REPLACE FUNCTION public\.fiscosim_post_general_journal/)
   assert.doesNotMatch(sql, /DROP FUNCTION public\.fiscosim_post_general_journal/)
   assert.match(sql, /SECURITY INVOKER/)
+  // LAB schema: ritenute_dacconto has no updated_at (unlike partitario).
+  assert.match(sql, /ritenute_dacconto has no updated_at/)
+  assert.doesNotMatch(
+    sql,
+    /UPDATE public\.ritenute_dacconto r SET[\s\S]*?updated_at=transaction_timestamp\(\)/,
+  )
 })
 
 test('Stage3W matrix covers fattura, payment, NC, split, parcella, overpay, late audit rollback', () => {

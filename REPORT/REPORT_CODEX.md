@@ -936,3 +936,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Liquidazione: debito 220, credito 220, saldo **0** (neutralità)
   - Claim source `import_contabilita` (contract_kind inferito `fattura_attiva` per dual VAT — gap documentato, effetti PG OK)
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-04 Import parcella + ritenuta 1040 + scadenzario/CU PASS
+
+- Script `scripts/security_p0/run-stage3w-import-parcella-ritenuta-commit.mjs`: Import open `parcella_documento` (compenso 1000 + cassa 40 + IVA 228.80 + rit 200) ? JWT `pagamento` matura ritenuta `da_versare` ? scadenzario + CU readiness.
+- Fix LAB RPC: `57` withholding UPDATE non deve settare `ritenute_dacconto.updated_at` (colonna assente ? PG `42703`). Hotfix già-installati: `57a_stage3w_fiscal_journal_ritenute_update_fix_LAB_ONLY.sql`.
+- Evidence `REPORT/STAGE3W_IMPORT_PARCELLA_RITENUTA_COMMIT_20261012083354.txt`:
+  - Open PN `4a9165fc-0c7a-4680-ad98-726962975827` 1268.80/1268.80; partita cliente residuo **1068.80**; rit `404c34a2-…` 200/1040/`aperta`; claim `parcella_documento|import_contabilita`; VAT vendita 1040/228.80
+  - Pay PN `8690fa36-e639-4cd6-9923-33521d649ce0`: rit `da_versare` + `prima_nota_pagamento_id`; partita residuo **0**
+  - Scadenzario 1 riga tributo 1040 importo 200; **CU_READY=true**
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.

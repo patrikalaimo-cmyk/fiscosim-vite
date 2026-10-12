@@ -1,0 +1,22 @@
+P2_04_START Import parcella + ritenuta 1040 + scadenzario CU
+PERCIPIENTE_ID=e717b71a-4822-438d-8f33-dc5254f4d37c
+LOGIN_JWT=PASS
+OPEN_DOC=SG-E2E-P204-PARC-083354
+OPEN_SUCCESS=true
+OPEN_PN_ID=4a9165fc-0c7a-4680-ad98-726962975827
+PN_TOTALS=1268.80|1268.80
+PARTITA=1999cb38-79fa-42c2-82f5-55466d15f46a|1068.80|cliente
+RITENUTA={"id":"404c34a2-7893-4d0e-b20e-31cef076d44d","percipiente_id":"e717b71a-4822-438d-8f33-dc5254f4d37c","percipiente_cf":"RSSMRA80A01H501U","percipiente_denominazione":"Professionista SG-E2E","importo_ritenuta":200,"imponibile_ritenuta":1000,"aliquota_ritenuta":20,"codice_tributo":"1040","stato":"aperta","causale_prestazione":"A","contributo_cassa_prev":0}
+CLAIM_OPEN=parcella_documento|import_contabilita
+VAT=vendita|1040.00|228.80
+PAY_STATUS=201
+PAY_OK=true
+PAY_PN_ID=8690fa36-e639-4cd6-9923-33521d649ce0
+RITENUTA_AFTER={"id":"404c34a2-7893-4d0e-b20e-31cef076d44d","stato":"da_versare","data_pagamento":"2026-09-20","data_scadenza":"2026-10-16","codice_tributo":"1040","prima_nota_pagamento_id":"8690fa36-e639-4cd6-9923-33521d649ce0","importo_ritenuta":200,"imponibile_ritenuta":1000,"percipiente_id":"e717b71a-4822-438d-8f33-dc5254f4d37c","percipiente_cf":"RSSMRA80A01H501U","percipiente_denominazione":"Professionista SG-E2E","periodo_riferimento":"09/2026","anno_riferimento":2026,"prima_nota_id":"4a9165fc-0c7a-4680-ad98-726962975827"}
+PARTITA_AFTER=0
+SCADENZARIO_COUNT=1
+SCADENZARIO_STATO=da_versare
+SCADENZARIO_TRIBUTO=1040
+SCADENZARIO_IMPORTO=200
+CU_READY=true
+P2_04_RESULT=PASS

@@ -455,6 +455,7 @@ BEGIN
    FOR v_wh IN SELECT value FROM jsonb_array_elements(p_withholding->'updates') LOOP
     v_wh_id:=nullif(v_wh->>'id','')::uuid;
     IF v_wh_id IS NULL THEN RAISE EXCEPTION 'Stage3W withholding update missing id'; END IF;
+    -- Note: public.ritenute_dacconto has no updated_at column in LAB schema.
     UPDATE public.ritenute_dacconto r SET
      data_pagamento=coalesce(nullif(v_wh->>'data_pagamento','')::date,v_date),
      data_scadenza=nullif(v_wh->>'data_scadenza','')::date,
@@ -462,8 +463,7 @@ BEGIN
      anno_riferimento=nullif(v_wh->>'anno_riferimento','')::int,
      codice_tributo=coalesce(nullif(v_wh->>'codice_tributo',''),r.codice_tributo,'1040'),
      stato=coalesce(nullif(v_wh->>'stato',''),'da_versare'),
-     prima_nota_pagamento_id=v_pn_id,
-     updated_at=transaction_timestamp()
+     prima_nota_pagamento_id=v_pn_id
     WHERE r.id=v_wh_id AND r.societa_id=p_societa_id;
     GET DIAGNOSTICS v_line_count = ROW_COUNT;
     IF v_line_count<>1 THEN RAISE EXCEPTION 'Stage3W withholding update target missing or cross-company'; END IF;

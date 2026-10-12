@@ -1,0 +1,16 @@
+P2_04_START Import parcella + ritenuta 1040 + scadenzario CU
+PERCIPIENTE_ID=c4ec8787-b4b7-4173-92b2-ed1922e2e9d9
+LOGIN_JWT=PASS
+OPEN_DOC=SG-E2E-P204-PARC-083158
+OPEN_SUCCESS=true
+OPEN_PN_ID=9e7e2848-af71-4390-afd0-22c12a0ca8a1
+PN_TOTALS=1268.80|1268.80
+PARTITA=ebc2db66-a0b6-48b9-ab30-b6ecf82a40e6|1068.80|cliente
+RITENUTA={"id":"633012f9-30ce-4bf7-b19b-379ef49bd8e0","percipiente_id":"c4ec8787-b4b7-4173-92b2-ed1922e2e9d9","percipiente_cf":"RSSMRA80A01H501U","percipiente_denominazione":"Professionista SG-E2E","importo_ritenuta":200,"imponibile_ritenuta":1000,"aliquota_ritenuta":20,"codice_tributo":"1040","stato":"aperta","causale_prestazione":"A","contributo_cassa_prev":0}
+CLAIM_OPEN=parcella_documento|import_contabilita
+VAT=vendita|1040.00|228.80
+PAY_STATUS=409
+PAY_OK=false
+PAY_PN_ID=
+PAY_BODY={"error":"FISCAL_ATOMIC_POST_FAILED"}
+P2_04_RESULT=FAIL PAY_MATURATION_FAILED
