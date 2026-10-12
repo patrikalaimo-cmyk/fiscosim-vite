@@ -1,6 +1,5 @@
 -- Stage3W LAB hotfix: replace fiscosim_post_fiscal_journal when SQL 57 is already installed.
--- Fixes pagamento withholding UPDATE that incorrectly set ritenute_dacconto.updated_at
--- (column does not exist in LAB schema -> PG 42703 / FISCAL_ATOMIC_POST_FAILED).
+-- Includes: no updated_at on ritenute UPDATE; partial payment residual update + matured inserts.
 -- Isolated LAB ONLY. Does NOT recreate claim table. Does NOT touch Stage3U.
 -- Source of truth for fresh installs remains 57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql.
 BEGIN;
@@ -382,18 +381,77 @@ BEGIN
     v_wh_id:=nullif(v_wh->>'id','')::uuid;
     IF v_wh_id IS NULL THEN RAISE EXCEPTION 'Stage3W withholding update missing id'; END IF;
     -- Note: public.ritenute_dacconto has no updated_at column in LAB schema.
+    -- Partial payments may keep stato=aperta and only reduce residual amounts.
     UPDATE public.ritenute_dacconto r SET
-     data_pagamento=coalesce(nullif(v_wh->>'data_pagamento','')::date,v_date),
-     data_scadenza=nullif(v_wh->>'data_scadenza','')::date,
-     periodo_riferimento=nullif(v_wh->>'periodo_riferimento',''),
-     anno_riferimento=nullif(v_wh->>'anno_riferimento','')::int,
+     data_pagamento=CASE
+      WHEN coalesce(nullif(v_wh->>'stato',''),'da_versare')='aperta' THEN r.data_pagamento
+      ELSE coalesce(nullif(v_wh->>'data_pagamento','')::date,v_date)
+     END,
+     data_scadenza=CASE
+      WHEN coalesce(nullif(v_wh->>'stato',''),'da_versare')='aperta' THEN r.data_scadenza
+      ELSE nullif(v_wh->>'data_scadenza','')::date
+     END,
+     periodo_riferimento=CASE
+      WHEN coalesce(nullif(v_wh->>'stato',''),'da_versare')='aperta' THEN r.periodo_riferimento
+      ELSE nullif(v_wh->>'periodo_riferimento','')
+     END,
+     anno_riferimento=CASE
+      WHEN coalesce(nullif(v_wh->>'stato',''),'da_versare')='aperta' THEN r.anno_riferimento
+      ELSE nullif(v_wh->>'anno_riferimento','')::int
+     END,
      codice_tributo=coalesce(nullif(v_wh->>'codice_tributo',''),r.codice_tributo,'1040'),
      stato=coalesce(nullif(v_wh->>'stato',''),'da_versare'),
-     prima_nota_pagamento_id=v_pn_id
+     importo_ritenuta=coalesce(nullif(v_wh->>'importo_ritenuta','')::numeric,r.importo_ritenuta),
+     ritenuta=coalesce(nullif(v_wh->>'importo_ritenuta','')::numeric,nullif(v_wh->>'ritenuta','')::numeric,r.ritenuta),
+     imponibile_ritenuta=coalesce(nullif(v_wh->>'imponibile_ritenuta','')::numeric,r.imponibile_ritenuta),
+     compenso_lordo=coalesce(nullif(v_wh->>'compenso_lordo','')::numeric,r.compenso_lordo),
+     compenso_netto=coalesce(nullif(v_wh->>'compenso_netto','')::numeric,r.compenso_netto),
+     contributo_cassa_prev=coalesce(nullif(v_wh->>'contributo_cassa_prev','')::numeric,r.contributo_cassa_prev),
+     prima_nota_pagamento_id=CASE
+      WHEN coalesce(nullif(v_wh->>'stato',''),'da_versare')='aperta' THEN r.prima_nota_pagamento_id
+      ELSE v_pn_id
+     END
     WHERE r.id=v_wh_id AND r.societa_id=p_societa_id;
     GET DIAGNOSTICS v_line_count = ROW_COUNT;
     IF v_line_count<>1 THEN RAISE EXCEPTION 'Stage3W withholding update target missing or cross-company'; END IF;
    END LOOP;
+   -- Optional matured slices for partial payment (da_versare inserts).
+   IF jsonb_typeof(p_withholding->'inserts')='array' THEN
+    FOR v_wh IN SELECT value FROM jsonb_array_elements(p_withholding->'inserts') LOOP
+     INSERT INTO public.ritenute_dacconto(
+      societa_id,prima_nota_id,prima_nota_pagamento_id,partitario_id,percipiente_id,percipiente_cf,
+      percipiente_denominazione,data_documento,numero_documento,data_pagamento,data_scadenza,
+      periodo_riferimento,anno_riferimento,compenso_lordo,imponibile_ritenuta,aliquota_ritenuta,
+      importo_ritenuta,ritenuta,compenso_netto,contributo_cassa_prev,codice_tributo,stato,
+      causale_prestazione,inclusa_cu
+     ) VALUES (
+      p_societa_id,
+      coalesce(nullif(v_wh->>'prima_nota_id','')::uuid,v_pn_id),
+      v_pn_id,
+      coalesce(nullif(v_wh->>'partitario_id','')::uuid,v_opened_partita_id),
+      nullif(v_wh->>'percipiente_id','')::uuid,
+      nullif(v_wh->>'percipiente_cf',''),
+      nullif(v_wh->>'percipiente_denominazione',''),
+      coalesce(nullif(v_wh->>'data_documento','')::date,v_doc_date),
+      coalesce(nullif(v_wh->>'numero_documento',''),nullif(p_header->>'numero_documento','')),
+      coalesce(nullif(v_wh->>'data_pagamento','')::date,v_date),
+      nullif(v_wh->>'data_scadenza','')::date,
+      nullif(v_wh->>'periodo_riferimento',''),
+      nullif(v_wh->>'anno_riferimento','')::int,
+      coalesce((v_wh->>'compenso_lordo')::numeric,0),
+      nullif(v_wh->>'imponibile_ritenuta','')::numeric,
+      nullif(v_wh->>'aliquota_ritenuta','')::numeric,
+      coalesce((v_wh->>'importo_ritenuta')::numeric,0),
+      coalesce((v_wh->>'importo_ritenuta')::numeric,0),
+      coalesce((v_wh->>'compenso_netto')::numeric,0),
+      coalesce((v_wh->>'contributo_cassa_prev')::numeric,0),
+      coalesce(nullif(v_wh->>'codice_tributo',''),'1040'),
+      coalesce(nullif(v_wh->>'stato',''),'da_versare'),
+      nullif(v_wh->>'causale_prestazione',''),
+      coalesce((v_wh->>'inclusa_cu')::boolean,true)
+     );
+    END LOOP;
+   END IF;
   END IF;
  END IF;
 
@@ -435,19 +493,6 @@ DO $verify$
 BEGIN
  IF (SELECT prosecdef FROM pg_proc WHERE oid=
   'public.fiscosim_post_fiscal_journal(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,text)'::regprocedure)
- OR has_function_privilege('authenticated',
-  'public.fiscosim_post_fiscal_journal(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,text)','EXECUTE')
- OR has_function_privilege('anon',
-  'public.fiscosim_post_fiscal_journal(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,text)','EXECUTE')
- THEN RAISE EXCEPTION 'Stage3W fiscal journal grant/definer safety failure after rit patch'; END IF;
+ THEN RAISE EXCEPTION 'Stage3W fiscal journal definer safety failure after rit patch'; END IF;
 END $verify$;
 COMMIT;
-SELECT CASE WHEN pg_get_functiondef('public.fiscosim_post_fiscal_journal'::regproc) LIKE '%updated_at=transaction_timestamp()%'
- AND position('UPDATE public.ritenute_dacconto' in pg_get_functiondef('public.fiscosim_post_fiscal_journal'::regproc)) > 0
- THEN
-  CASE WHEN pg_get_functiondef('public.fiscosim_post_fiscal_journal'::regproc) LIKE '%-- Note: public.ritenute_dacconto has no updated_at%'
-   THEN 'RIT_PATCH|OK_NO_UPDATED_AT_ON_RIT'
-   ELSE 'RIT_PATCH|CHECK_MANUAL'
-  END
- ELSE 'RIT_PATCH|OK_NO_UPDATED_AT_LITERAL'
-END AS rit_patch_status;

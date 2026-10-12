@@ -197,11 +197,15 @@ export async function createPrimaNotaCompleta({
 
   if (Array.isArray(ritenutaEntries) && ritenutaEntries.length > 0) {
     const openedPartitarioId = Array.isArray(partIns?.data) ? partIns.data[0]?.id || null : null
-    const linkedEntries = ritenutaEntries.map((entry) => ({
-      ...entry,
-      prima_nota_id: primaNotaId,
-      partitario_id: entry.partitario_id || openedPartitarioId,
-    }))
+    const linkedEntries = ritenutaEntries.map((entry) => {
+      const matured = String(entry?.stato || '').trim().toLowerCase() === 'da_versare'
+      return {
+        ...entry,
+        prima_nota_id: entry.prima_nota_id || primaNotaId,
+        partitario_id: entry.partitario_id || openedPartitarioId,
+        ...(matured ? { prima_nota_pagamento_id: primaNotaId } : {}),
+      }
+    })
     const query = db.from('ritenute_dacconto').insert(linkedEntries)
     ritenuteIns = await (ritenutaSelect ? query.select(ritenutaSelect) : query.select())
     if (ritenuteIns.error) {
@@ -220,13 +224,17 @@ export async function createPrimaNotaCompleta({
         return { data: null, error, pn, righeIns, vatIns, partIns, ritenuteIns, ritenuteUpd }
       }
       const { id: _id, ...updates } = entry
+      const keepOpen = String(updates.stato || '').trim().toLowerCase() === 'aperta'
+      const payload = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }
+      if (!keepOpen) {
+        payload.prima_nota_pagamento_id = primaNotaId
+      }
       const query = db
         .from('ritenute_dacconto')
-        .update({
-          ...updates,
-          prima_nota_pagamento_id: primaNotaId,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', id)
         .select(ritenutaSelect || '*')
       const result = await query

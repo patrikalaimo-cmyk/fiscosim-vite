@@ -21,7 +21,7 @@ if($LASTEXITCODE -ne 0 -or $sha.Trim() -ne $ExpectedCommit){
  throw 'Stage3W persistent install refused: pinned commit mismatch'
 }
 $expectedBlobs=@{
- '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql'='e7fd5a77eed25c440ad786d13267a639c7c0d411'
+ '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql'='2ff54c6b23410ae02f44d908dcc7a9e96f65486b'
  # Committed blob OID at the review commit (not working-tree hash-object;
  # Windows autocrlf would otherwise false-fail the pin check).
  '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql'='59b9b746391a3a05ffe95cea9b773253f1f9af94'

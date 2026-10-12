@@ -1,0 +1,24 @@
+P2_05_START Import parcella + pagamento parziale ritenuta pro-quota
+PARTIAL_SPLIT={"kind":"parziale","ratio":0.5,"paid":534.4,"residuo":1068.8,"matured":{"importo_ritenuta":100,"imponibile_ritenuta":500,"compenso_lordo":500,"contributo_cassa_prev":0,"compenso_netto":400},"residual":{"importo_ritenuta":100,"imponibile_ritenuta":500,"compenso_lordo":500,"contributo_cassa_prev":0,"compenso_netto":400}}
+PERCIPIENTE_ID=a1dcde06-e2f0-458c-a422-39093f333e78
+LOGIN_JWT=PASS
+OPEN_DOC=SG-E2E-P205-PARC-084308
+OPEN_SUCCESS=true
+OPEN_PN_ID=b4d0519f-4484-4797-a249-e3afef586a23
+PN_TOTALS=1268.80|1268.80
+PARTITA=3bf8ea5e-d717-4d43-86c1-63fa8fac2d4e|1068.80|cliente
+RITENUTA={"id":"ccbfa014-b6a7-4b8a-807f-4694e24c7233","percipiente_id":"a1dcde06-e2f0-458c-a422-39093f333e78","percipiente_cf":"RSSMRA80A01H501U","percipiente_denominazione":"Professionista SG-E2E","importo_ritenuta":200,"imponibile_ritenuta":1000,"aliquota_ritenuta":20,"codice_tributo":"1040","stato":"aperta","causale_prestazione":"A","contributo_cassa_prev":0}
+CLAIM_OPEN=parcella_documento|import_contabilita
+VAT=vendita|1040.00|228.80
+PAY_STATUS=201
+PAY_OK=true
+PAY_PN_ID=79f3b404-d7d2-4c1d-9f6c-50cfbe58a567
+RITENUTA_RESIDUAL={"id":"ccbfa014-b6a7-4b8a-807f-4694e24c7233","stato":"aperta","importo_ritenuta":100,"imponibile_ritenuta":500,"prima_nota_pagamento_id":null}
+RITENUTA_MATURED={"id":"c9d6189f-4c8c-4cbd-81a5-d8e68d6d4fb7","stato":"da_versare","data_pagamento":"2026-09-20","data_scadenza":"2026-10-16","codice_tributo":"1040","prima_nota_pagamento_id":"79f3b404-d7d2-4c1d-9f6c-50cfbe58a567","importo_ritenuta":100,"imponibile_ritenuta":500,"percipiente_id":"a1dcde06-e2f0-458c-a422-39093f333e78","percipiente_cf":"RSSMRA80A01H501U","percipiente_denominazione":"Professionista SG-E2E","periodo_riferimento":"09/2026","anno_riferimento":2026,"prima_nota_id":"b4d0519f-4484-4797-a249-e3afef586a23"}
+PARTITA_AFTER=534.4
+SCADENZARIO_COUNT=1
+SCADENZARIO_STATO=da_versare
+SCADENZARIO_TRIBUTO=1040
+SCADENZARIO_IMPORTO=100
+CU_READY=true
+P2_05_RESULT=PASS

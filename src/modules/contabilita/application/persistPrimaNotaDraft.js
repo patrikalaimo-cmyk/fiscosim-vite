@@ -682,14 +682,24 @@ export async function persistPrimaNotaDraft({
   const ritenuteDraft = resolved.innerDraft?.ritenutaDraft || resolved.bundle?.ritenutaDraft || resolved.innerDraft?.ritenutaData || null
   const ritenutaMode = String(ritenuteDraft?.mode || '').trim().toLowerCase()
   const ritenutaEnabled = Boolean(ritenuteDraft?.active && ritenutaMode === 'documento')
-  const ritenutaEntriesForDb = ritenutaEnabled
+  let ritenutaEntriesForDb = ritenutaEnabled
     ? (Array.isArray(ritenuteDraft?.rows)
         ? ritenuteDraft.rows.map(row => mapRitenutaRowForDb(row, pnPayloadForDb))
         : [mapRitenutaRowForDb(ritenuteDraft, pnPayloadForDb)])
     : []
-  const ritenutaUpdatesForDb = ritenuteDraft?.active && ritenutaMode === 'pagamento'
-    ? [buildRitenutaMaturazionePayload(ritenuteDraft)]
+  const ritenutaMaturazionePlan = ritenuteDraft?.active && ritenutaMode === 'pagamento'
+    ? buildRitenutaMaturazionePayload(ritenuteDraft)
+    : { kind: 'none', updates: [], inserts: [] }
+  const ritenutaUpdatesForDb = Array.isArray(ritenutaMaturazionePlan.updates)
+    ? ritenutaMaturazionePlan.updates
     : []
+  // Partial payment: also insert the matured da_versare slice alongside residual update.
+  if (ritenutaMaturazionePlan.kind === 'parziale' && Array.isArray(ritenutaMaturazionePlan.inserts)) {
+    ritenutaEntriesForDb = [
+      ...ritenutaEntriesForDb,
+      ...ritenutaMaturazionePlan.inserts,
+    ]
+  }
 
   // 1. Sanitize plan before logging and validation
   pnPayloadForDb.documento_import_id = sanitizeUuidOrNull(pnPayloadForDb.documento_import_id)

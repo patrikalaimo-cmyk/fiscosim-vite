@@ -248,10 +248,16 @@ test('pagamento senza conto Erario configurato viene bloccato', () => {
   assert.ok(result.validation.blockers.some((item) => item.includes('Debiti v/Erario')))
 })
 
-test('pagamento parziale con ritenuta viene bloccato', () => {
+test('pagamento parziale con ritenuta matura pro-quota e lascia residuo', () => {
   const result = buildPayment({ importoChiusura: 600 })
-  assert.equal(result.validation.status, 'blocked')
-  assert.ok(result.validation.blockers.includes('pagamento parziale ritenute non ancora supportato'))
+  assert.equal(result.validation.status, 'ok', JSON.stringify(result.validation.blockers))
+  // 600/1268.8 * 200 = 94.58
+  assert.equal(Number(result.ritenutaDraft.ritenuta), 94.58)
+  assert.equal(result.ritenutaDraft.partialMaturation?.kind, 'parziale')
+  const erario = result.draft.rows.find((row) => row.ruolo === 'erario_ritenute')
+  const banca = result.draft.rows.find((row) => row.conto_id === 'banca-1')
+  assert.equal(Number(erario.avere), 94.58)
+  assert.equal(Number(banca.avere), 505.42)
 })
 
 test('persistenza chiude la partita e matura la ritenuta senza duplicarla', async () => {
@@ -275,4 +281,29 @@ test('persistenza chiude la partita e matura la ritenuta senza duplicarla', asyn
   assert.equal(ritenutaUpdate.data.inclusa_cu, true)
   assert.equal(ritenutaUpdate.data.prima_nota_pagamento_id, 'prima_nota-id')
   assert.equal(db.log.some((entry) => entry.action === 'insert' && entry.table === 'ritenute_dacconto'), false)
+})
+
+test('persistenza pagamento parziale riduce residuo e inserisce slice maturata', async () => {
+  const result = buildPayment({ importoChiusura: 600 })
+  assert.equal(result.validation.status, 'ok')
+  const db = new MockDb()
+  const persisted = await persistPrimaNotaDraft({ db, draft: result.draft })
+  assert.equal(persisted.error, null)
+
+  const partUpdate = db.log.find((entry) => entry.action === 'update' && entry.table === 'partitario')
+  assert.ok(partUpdate)
+  assert.equal(partUpdate.data.importo_pagato, 600)
+  assert.equal(Number(partUpdate.data.importo_residuo), 668.8)
+
+  const ritUpdate = db.log.find((entry) => entry.action === 'update' && entry.table === 'ritenute_dacconto')
+  assert.ok(ritUpdate)
+  assert.equal(ritUpdate.data.stato, 'aperta')
+  assert.equal(Number(ritUpdate.data.importo_ritenuta), 105.42)
+
+  const ritInsert = db.log.find((entry) => entry.action === 'insert' && entry.table === 'ritenute_dacconto')
+  assert.ok(ritInsert, JSON.stringify(db.log.filter((e) => e.table === 'ritenute_dacconto')))
+  const inserted = Array.isArray(ritInsert.data) ? ritInsert.data[0] : ritInsert.data
+  assert.equal(inserted.stato, 'da_versare')
+  assert.equal(Number(inserted.importo_ritenuta), 94.58)
+  assert.equal(inserted.codice_tributo, '1040')
 })

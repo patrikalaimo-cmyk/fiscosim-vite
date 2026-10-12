@@ -106,7 +106,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | SG-P2-02 | IVA per cassa E2E | Rilascio su cash event | Quota nel periodo corretto |
 | SG-P2-03 | Reverse/estero limato | Causali policy; doppia annotazione | Neutralità IVA + partitario imponibile |
 | SG-P2-04 | Parcella + ritenuta integrale + 1040 | PASS 20261012 (Import+JWT pay; fix rit updated_at) | Scadenzario + CU readiness |
-| SG-P2-05 | Pagamento parziale ritenuta | Oggi BLOCKED | Implementare **o** escludere formalmente A100 |
+| SG-P2-05 | Pagamento parziale ritenuta | PASS 20261012 (pro-quota residual+matured) | Implementare **o** escludere formalmente A100 |
 | SG-P2-06 | Controllo F24 importato vs maturato | Non compilatore | Stati verde/giallo/rosso |
 | SG-P2-07 | Liquidazione da PN reali + blocco definitiva | — | Doppio consolidamento negato |
 

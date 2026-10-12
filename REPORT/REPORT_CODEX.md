@@ -946,3 +946,14 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Pay PN `8690fa36-e639-4cd6-9923-33521d649ce0`: rit `da_versare` + `prima_nota_pagamento_id`; partita residuo **0**
   - Scadenzario 1 riga tributo 1040 importo 200; **CU_READY=true**
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-05 Import pagamento parziale con ritenuta pro-quota PASS
+
+- Domain `calculateRitenutaPartialMaturation` + maturazione plan (residual `aperta` + insert slice `da_versare`); validator Manuale non blocca piu il parziale se pro-quota coerente.
+- Stage3W RPC `pagamento`: UPDATE residuo (importi, stato aperta) + INSERT maturata con `prima_nota_pagamento_id`; WH keys HTTP estese.
+- Script `scripts/security_p0/run-stage3w-import-parcella-ritenuta-partial-commit.mjs`.
+- Evidence `REPORT/STAGE3W_IMPORT_PARCELLA_RITENUTA_PARTIAL_COMMIT_20261012084308.txt`:
+  - Open PN `b4d0519f-4484-4797-a249-e3afef586a23`; rit open 200/aperta
+  - Pay PN `79f3b404-d7d2-4c1d-9f6c-50cfbe58a567` incasso **534.40**: partita residuo **534.40**; rit residual `ccbfa014-...` 100/aperta; rit matured `c9d6189f-...` 100/da_versare/1040
+  - Scadenzario 1 riga importo **100**; **CU_READY=true**
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.

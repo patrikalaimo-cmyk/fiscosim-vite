@@ -29,8 +29,14 @@ function pickWhInsert(row = {}) {
   set('percipiente_id', row.percipiente_id)
   set('percipiente_cf', row.percipiente_cf)
   set('percipiente_denominazione', row.percipiente_denominazione)
+  set('prima_nota_id', row.prima_nota_id)
+  set('partitario_id', row.partitario_id)
   set('data_documento', isoDate(row.data_documento))
   set('numero_documento', row.numero_documento)
+  set('data_pagamento', isoDate(row.data_pagamento))
+  set('data_scadenza', isoDate(row.data_scadenza))
+  set('periodo_riferimento', row.periodo_riferimento)
+  if (row.anno_riferimento != null) out.anno_riferimento = Number(row.anno_riferimento)
   out.compenso_lordo = money(row.compenso_lordo ?? 0) ?? 0
   set('imponibile_ritenuta', money(row.imponibile_ritenuta))
   set('aliquota_ritenuta', money(row.aliquota_ritenuta))
@@ -40,6 +46,7 @@ function pickWhInsert(row = {}) {
   set('codice_tributo', row.codice_tributo || '1040')
   set('stato', row.stato || 'aperta')
   set('causale_prestazione', row.causale_prestazione)
+  if (row.inclusa_cu != null) out.inclusa_cu = Boolean(row.inclusa_cu)
   return out
 }
 
@@ -55,6 +62,20 @@ function pickWhUpdate(row = {}) {
   if (row.anno_riferimento != null) out.anno_riferimento = Number(row.anno_riferimento)
   set('codice_tributo', row.codice_tributo)
   set('stato', row.stato || 'da_versare')
+  const amountKeys = [
+    'importo_ritenuta',
+    'ritenuta',
+    'imponibile_ritenuta',
+    'compenso_lordo',
+    'compenso_netto',
+    'contributo_cassa_prev',
+  ]
+  for (const key of amountKeys) {
+    if (row[key] != null && row[key] !== '') {
+      const amount = money(row[key])
+      if (amount != null) out[key] = amount
+    }
+  }
   return out
 }
 
@@ -175,16 +196,23 @@ export function mapPersistencePlanToFiscalJournalRequest({
   else if (closures.length) ledger = { mode: 'close', openings: [], closures }
 
   let withholding = { eventType: 'none', inserts: [], updates: [] }
-  if (ritenutaEntries.length > 0) {
+  if (ritenutaUpdates.length > 0) {
+    const updates = ritenutaUpdates.map(pickWhUpdate).filter(Boolean)
+    if (!updates.length) return { ok: false, reason: 'FISCAL_LAB_WITHHOLDING_UPDATE_INVALID' }
+    const maturedInserts = (Array.isArray(ritenutaEntries) ? ritenutaEntries : [])
+      .filter((row) => String(row?.stato || '').toLowerCase() === 'da_versare')
+      .map(pickWhInsert)
+    withholding = {
+      eventType: 'pagamento',
+      inserts: maturedInserts,
+      updates,
+    }
+  } else if (ritenutaEntries.length > 0) {
     withholding = {
       eventType: 'documento',
       inserts: ritenutaEntries.map(pickWhInsert),
       updates: [],
     }
-  } else if (ritenutaUpdates.length > 0) {
-    const updates = ritenutaUpdates.map(pickWhUpdate).filter(Boolean)
-    if (!updates.length) return { ok: false, reason: 'FISCAL_LAB_WITHHOLDING_UPDATE_INVALID' }
-    withholding = { eventType: 'pagamento', inserts: [], updates }
   }
 
   const request_id = UUID.test(String(requestId || ''))

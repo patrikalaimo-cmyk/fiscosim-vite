@@ -286,7 +286,7 @@ test('Stage3W persistent install script is gated and preserves Stage3U', () => {
     'STAGE3W_ROLLBACK_VERIFIED|NO_FISCAL_SCHEMA_PERSISTED',
     '57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql',
     '58_stage3w_fiscal_journal_matrix_TEST_ONLY.sql',
-    '4d4a765eb6b146fdf3343706b54330cb51ba7783',
+    '2ff54c6b23410ae02f44d908dcc7a9e96f65486b',
     '59b9b746391a3a05ffe95cea9b773253f1f9af94',
     'rev-parse --verify',
     'STAGE3U_MUST_REMAIN_UNTOUCHED=true',
