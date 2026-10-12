@@ -1,0 +1,17 @@
+﻿STAGE3W_SG_L4_BROWSER_BANK_IVA
+timestamp=20261012234942
+branch=feat/studio-grade-accounting-e2e-20261010
+scope=SG-L4 studio rules (no foreign UUID) + L4 browser IVA/Bank smoke
+
+UNIT_L4=PASS resolveStudioRuleToSocietaTargets.test.js 3/3
+UNIT_BANK=PASS 29/29 (includes SG-L4)
+L4_IVA=PASS REPORT/STAGE3W_L4_BROWSER_IVA_2026-10-12T2148.txt
+L4_BANK=PASS REPORT/STAGE3W_L4_BROWSER_BANK_2026-10-12T2149.txt
+FISCAL_WRITE_COUNT=0 (both smokes)
+
+DELIVERED:
+- resolveStudioRuleToSocietaTargets + applyStudioRuleFallback
+- L1 staging optional studioRules fallback (codes/natura only)
+- run-stage3w-l4-browser-bank.mjs
+
+GATED: schema DB DecisionFeedback; browser upload/commit Import detailed; LIVE/cutover

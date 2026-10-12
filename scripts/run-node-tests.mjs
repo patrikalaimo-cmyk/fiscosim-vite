@@ -22,6 +22,7 @@ const BANK_APPLICATION_TESTS = new Set([
   'riconciliazione/mapPartitarioRowToMatchCandidate.test.js',
   'riconciliazione/massConfirmEligibility.test.js',
   'learning/decisionFeedbackLab.test.js',
+  'learning/resolveStudioRuleToSocietaTargets.test.js',
 ])
 
 const STAMPE_ROOT_TESTS = new Set([

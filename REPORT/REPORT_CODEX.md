@@ -1160,3 +1160,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Bank: `massConfirmEligibility` (?0.85, no ambiguous/review); `confirmSelected` conferma solo eligible + feedback LAB.
 - Evidence: `REPORT/STAGE3W_SG_L3_HISTORY_L6_MASS_CONFIRM_20261012232650.txt`; bank 26/26 PASS.
 - Residuo A100: browser upload/commit Import+IVA+Bank; schema DB; LIVE/cutover.
+
+## 2026-10-12 - SG-L4 studio rules + L4 browser IVA/Bank
+
+- `resolveStudioRuleToSocietaTargets`: vietati UUID alieni; resolve per codice/natura nella societ? target; L1 fallback opzionale.
+- L4 IVA re-smoke PASS; nuovo `run-stage3w-l4-browser-bank.mjs` PASS (shell riconciliazione, 0 fiscal write).
+- Evidence: `REPORT/STAGE3W_SG_L4_BROWSER_BANK_IVA_20261012234942.txt`, `STAGE3W_L4_BROWSER_IVA_2026-10-12T2148.txt`, `STAGE3W_L4_BROWSER_BANK_2026-10-12T2149.txt`; bank UNIT 29/29.
+- Residuo A100: Import upload/commit XML browser; schema DB; LIVE/cutover.

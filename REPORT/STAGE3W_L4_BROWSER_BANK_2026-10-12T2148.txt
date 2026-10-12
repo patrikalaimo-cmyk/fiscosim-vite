@@ -1,0 +1,6 @@
+L4_BANK_START puppeteer Riconciliazione bancaria smoke
+UI=http://127.0.0.1:5173
+LOGIN_UI=PASS
+NAV=["cont:CONTABILITÀ"]
+BANK_UI={"hasRiconciliazione":false,"hasMovimenti":false,"hasImportOrDemo":true,"hasErrorCrash":false}
+L4_BANK_RESULT=FAIL BANK_UI_NOT_VISIBLE

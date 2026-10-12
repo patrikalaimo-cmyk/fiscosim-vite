@@ -13,6 +13,7 @@ import {
 import { resolveImportWorkingViewCausaleIvaSuggestion } from '../../domain/importContabilitaWorkingViewIvaDraft.js'
 import { buildImportSuggestionContextKey } from './buildImportSuggestionContextKey.js'
 import { lookupImportDecisionFeedback } from './lookupImportDecisionFeedback.js'
+import { applyStudioRuleFallback } from '../../../contabilita/application/learning/resolveStudioRuleToSocietaTargets.js'
 
 function text(value) {
   return String(value ?? '').trim()
@@ -80,6 +81,9 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
   societaId = '',
   feedbackLookup = null,
   storage = globalThis.localStorage,
+  /** Optional Livello B studio rules (codes/natura only — never foreign UUIDs). */
+  studioRules = [],
+  targetSocietaCatalog = null,
 } = {}) {
   const suggestion = resolveImportContabilitaAccountingHistorySuggestion({
     historyIndex,
@@ -236,6 +240,67 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
     historyMatchType: suggestion?.matchType || '',
     kind: 'causale',
   })
+
+  // SG-L4: studio rule fallback only when history/feedback did not fill the field.
+  if ((!account || !causale) && Array.isArray(studioRules) && studioRules.length) {
+    const catalog = targetSocietaCatalog || {
+      pianoConti: Array.from(pianoContiById.values()),
+      causaliContabili: Array.from(causaliContabiliById.values()),
+      causaliIva: [],
+    }
+    for (const rule of studioRules) {
+      const fallback = applyStudioRuleFallback({
+        hasSuggestion: Boolean(account && causale),
+        rule,
+        targetSocietaCatalog: catalog,
+      })
+      if (!fallback.applied) continue
+      const resolved = fallback.resolved
+      if (!account && !hasManualAccount && resolved.account) {
+        account = {
+          value: resolved.account,
+          explanation: createImportSuggestionExplanation({
+            source: 'studio_rule',
+            contextKey,
+            matchType: 'studio_rule',
+            sampleCount: 0,
+            fieldSampleCount: 0,
+            explanation: [`Regola studio ${resolved.ruleId || ''} risolta per codice/natura nella società attiva.`.trim()],
+          }),
+          decorateParams: {
+            kind: 'account',
+            sampleCount: 0,
+            totalSamples: 0,
+            lastSeenAt: '',
+            source: 'studio_rule',
+          },
+          requiresConfirmation: Boolean((resolved.warnings || []).length),
+        }
+      }
+      if (!causale && !hasManualCausale && resolved.causale) {
+        causale = {
+          value: resolved.causale,
+          explanation: createImportSuggestionExplanation({
+            source: 'studio_rule',
+            contextKey,
+            matchType: 'studio_rule',
+            sampleCount: 0,
+            fieldSampleCount: 0,
+            explanation: [`Regola studio ${resolved.ruleId || ''} risolta per codice nella società attiva.`.trim()],
+          }),
+          decorateParams: {
+            kind: 'causale',
+            sampleCount: 0,
+            totalSamples: 0,
+            lastSeenAt: '',
+            source: 'studio_rule',
+          },
+          requiresConfirmation: Boolean((resolved.warnings || []).length),
+        }
+      }
+      if (account && causale) break
+    }
+  }
 
   if (!account && !causale) return null
   return { account, causale, contextKey }
