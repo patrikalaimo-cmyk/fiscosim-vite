@@ -130,7 +130,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 | ID | Intervento |
 |---|---|
-| SG-P4-01 | Suite L5 dataset multi-periodo sintetico |
+| SG-P4-01 | Suite L5 dataset multi-periodo sintetico — **PASS** 20261012 (2 anni 2024-11+2026-02; fingerprint L5MP1; PN/VAT/partite) |
 | SG-P4-02 | L6 regressione LAB ripetibile + report |
 | SG-P4-03 | Eliminazione/isolamento DISUSO + `accounting_entries` |
 | SG-P4-04 | Performance volumi (500+ doc, stampe paginate) |

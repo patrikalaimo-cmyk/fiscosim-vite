@@ -176,7 +176,7 @@
 | L2 | Stage3U generale PASS; Stage3W fiscale PASS (install LAB) | Smoke HTTP + prova flag ON |
 | L3 | JWT fiscal post PASS su loopback; Stage3V formale porte BLOCKED | SG-P0-00 porte + Stage3V harness |
 | L4 | Playwright/browser fiscali assenti | Dopo L3; debito manuale esistente |
-| L5 | Dataset multi-periodo assente | Dopo L2–L4 verticali |
+| L5 | Dataset multi-periodo sintetico PASS (SG-P4-01) | L6 regressione LAB |
 | L6 | CI Node only | Estendere a LAB isolato ripetibile |
 
 **Prefisso fixture proposto:** `SG-E2E-20261010-` · società `SG-E2E-A` / `SG-E2E-B`.

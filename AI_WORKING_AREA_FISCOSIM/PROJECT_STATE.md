@@ -1,17 +1,18 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** **P3 chiusa** — SG-P3-01..07 PASS. Prossimo: P4 stabilizzazione oppure SG-P0-00 porte (approvazione).
+* **Fase corrente:** **P4 avviata** — SG-P4-01 L5 multi-periodo PASS. Prossimo: SG-P4-02 L6 regressione (SG-P0-00 porte in parallelo).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **P3-07:** Aging/insoluti da residui partitario; bucket overdue; coerenza ≡ partitari.totaleAperto + apertura PN in mastrini
-* **Limite:** Stage3V port gate BLOCKED; fascicolo non definitiva server; quote ammortamento senza scrittura PN fine anno; default prod multi-step; no LIVE; UI procedura chiusura / tab aging dedicata non esposta; ledger netto mastrini puo divergere (riapertura SP / movimenti non partitario)
+* **P4-01:** Suite L5 dataset multi-periodo sintetico (2024-11 + 2026-02; FA+FP; fingerprint L5MP1; invarianti PN/VAT/partite)
+* **Limite:** Stage3V port gate / P0-00 in corso; fascicolo non definitiva server; quote ammortamento senza scrittura PN fine anno; default prod multi-step; no LIVE; UI procedura chiusura / tab aging dedicata non esposta; ledger netto mastrini puo divergere; 2025 locked da P3-06 (L5 usa 2024+2026)
 
 ## 2. Prossimo passo operativo
-1. P4 (L5/L6 / DISUSO / performance) oppure SG-P0-00 porte (approvazione)
+1. SG-P4-02 L6 regressione LAB ripetibile (+ resto P4) — P0-00 porte parallelo
 2. Non cleanup silente fixture SG-E2E-*
 3. Cutover default `createPrimaNotaCompleta` solo con consenso esplicito
 
 ## 3. Evidenze
+* `REPORT/STAGE3W_L5_MULTI_PERIODO_P4_01_20261012130502.txt`
 * `REPORT/STAGE3W_AGING_INSOLUTI_P3_07_20261012125302.txt`
 * `REPORT/STAGE3W_CHIUSURA_RIAPERTURA_P3_06_20261012121059.txt`
 * `REPORT/STAGE3W_CESPITI_P3_05_20261012114529.txt`

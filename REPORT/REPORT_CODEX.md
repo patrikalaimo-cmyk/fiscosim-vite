@@ -1046,3 +1046,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - `AGING_RESIDUO=49252` ? `PARTITARI_APERTO`; mastrini apertura FA dare=1220
   - `P3_07_RESULT=PASS` — ledger probe CLI nota divergenza (riapertura SP / movimenti non partitario)
 - Unit `agingInsoluti` 4/4. Gap: no tab UI dedicata; mode `ledger` strict non richiesto su LAB sporco. Nessun LIVE / SG-P0-00. P3 chiusa (01..07).
+
+## 2026-10-12 - SG-P4-01 Suite L5 dataset multi-periodo sintetico PASS
+
+- Helper puro: `buildL5MultiPeriodDatasetPlan` (seed 2 anni / 2 periodi, expected summaries, fingerprint `L5MP1`, `assertL5MultiPeriodInvariants`).
+- Path LAB: JWT + `fiscal-journal-post` FA+FP su **2024-11** e **2026-02** (2025 escluso: lock `stampe_definitive` libro_giornale da P3-06); doc unici `SG-E2E-P401-*`.
+- Invarianti: PN bilanciate, VAT rows per periodo, liquidazione (debito/credito/saldo), partitario lordo, fingerprint match.
+- Script `scripts/security_p0/run-stage3w-l5-multi-periodo.mjs`. Evidence `REPORT/STAGE3W_L5_MULTI_PERIODO_P4_01_20261012130502.txt` `P4_01_RESULT=PASS`.
+- Unit `l5MultiPeriodDataset` 4/4. Gap: non consolida liquidazione_iva; non attraversa chiusura esercizio; UI/L6 non in scope. Nota: Auth Kong 55321 down ~60s mid-P0-00 — retry OK. Nessun LIVE / no touch porte Docker P0.
