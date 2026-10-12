@@ -1,9 +1,9 @@
-﻿# PROJECT_STATE — FiscoSim
+# PROJECT_STATE � FiscoSim
 
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-L2 DecisionFeedback **DB LAB PASS** + L4 Import upload/commit LAB PASS. A100 completo ancora gated (P0-03/04 LIVE, cutover prod, collaudi manuali residui).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit)
+* **HEAD:** `8d97fb1`
 * **Limite:** no LIVE mutations; no cutover prod `createPrimaNotaCompleta`
 
 ## 2. Prossimo passo operativo (richiede operatore esplicito)
