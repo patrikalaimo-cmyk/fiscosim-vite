@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-P0-03/04 LAB + cutover Stage3W **PASS** (anon DML core revocato su LAB; persist Stage3W preferito su stack isolato). LIVE cloud non toccato (nessuna credenziale attiva nel worktree).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit)
+* **HEAD:** `ca26fa3`
 * **Limite:** remediation LIVE cloud ancora da applicare sull?istanza reale con backup; collaudi manuali residui
 
 ## 2. Prossimo passo operativo
