@@ -1036,3 +1036,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Lock: `periodo_chiuso_lock=true` su PN 2025; guards warning `nero`; `stampe_definitive` libro_giornale 2025 ? fiscal write 2025-07-01 ? **409** `FISCAL_ATOMIC_POST_FAILED`.
 - Script `scripts/security_p0/run-stage3w-chiusura-riapertura-esercizio.mjs`. Evidence `REPORT/STAGE3W_CHIUSURA_RIAPERTURA_P3_06_20261012121059.txt` `P3_06_RESULT=PASS`.
 - Unit `chiusuraRiaperturaEsercizio` 4/4. Gap: no UI procedura chiusura; general-journal HTTP flag non richiesto (RPC docker); owner/service_role puo ancora forzare annulla (warning non always-block). Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-07 Aging / insoluti PASS
+
+- Model: `buildAgingInsolutiModel` (bucket current / 1-30 / 31-60 / 61-90 / 90+ / senza_scadenza da residui partitario aperti vs `asOf`) + `checkAgingMastriniCoherence` (mode `partitario` | `ledger`).
+- Equivalence accettata: `aging.residuoComplessivo` ? `partitari.totaleAperto`; apertura partita presente in mastrini (dare/avere = originale sul conto cliente/fornitore). `isStampaOperativa('aging')`.
+- Script `scripts/security_p0/run-stage3w-aging-insoluti.mjs`. Evidence `REPORT/STAGE3W_AGING_INSOLUTI_P3_07_20261012125302.txt`:
+  - FA open PN `c6628f41-...` partita 1220 due 2026-04-01 ? bucket `d90_plus` (105g) asOf 2026-07-15
+  - `AGING_RESIDUO=49252` ? `PARTITARI_APERTO`; mastrini apertura FA dare=1220
+  - `P3_07_RESULT=PASS` — ledger probe CLI nota divergenza (riapertura SP / movimenti non partitario)
+- Unit `agingInsoluti` 4/4. Gap: no tab UI dedicata; mode `ledger` strict non richiesto su LAB sporco. Nessun LIVE / SG-P0-00. P3 chiusa (01..07).

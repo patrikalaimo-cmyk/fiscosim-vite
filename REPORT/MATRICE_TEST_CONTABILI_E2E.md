@@ -83,7 +83,7 @@
 | E04 | Partitario | Rateizzate | PARTIAL | L1 | NOT_EXECUTED E2E | scadenze multi | UI scadenzario commerciale | P1 |
 | E05 | Partitario | Pagamento duplicato / > residuo | PARTIAL | L1 | PASS guard unit | applyPartitarioClosures | Concorrenza L2 | P0 |
 | E06 | Partitario | Link incasso↔PN↔IVA | PARTIAL | L1 | PASS simulato | Manuale | PG | P1 |
-| E07 | Partitario | Aging vs mastrini | PARTIAL | — | NOT_IMPLEMENTED report | mock stampe | Modello aging | P3 |
+| E07 | Partitario | Aging vs mastrini | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 aging≡partitari + apertura in mastrini | `STAGE3W_AGING_INSOLUTI_P3_07_20261012125302.txt` | UI tab dedicata; ledger netto vs residui (SP reopen) | P3 |
 
 ---
 
