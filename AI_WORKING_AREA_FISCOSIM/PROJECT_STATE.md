@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** LIVE P0-04 tranche 1 **APPLICATA** su Fiscosim v4p (`mlydfspmrkaedsocubku`): anon DML core = 0. Dump locale presente. Residui: 8 RPC SECURITY DEFINER anon + policy broad non-core.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (pin dopo commit)
+* **HEAD:** `d8b8011`
 * **Limite:** seconda tranche LIVE (RPC/policy) solo con nuova autorizzazione; collaudi browser A100
 
 ## 2. Prossimo passo operativo
