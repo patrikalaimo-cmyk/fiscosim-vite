@@ -5,6 +5,8 @@ import { validateReconciliationCommitPayload } from './validateReconciliationCom
 import { isBankFiscalCommitLabEnabled } from '../../application/riconciliazione/isBankFiscalCommitLabEnabled.js'
 import { commitBankReconciliationFiscalLab } from '../../application/riconciliazione/commitBankReconciliationFiscalLab.js'
 import { appendBankCronologiaEntry } from '../../application/riconciliazione/bankCronologiaStore.js'
+import { buildBankDecisionFeedbackEvents } from '../../application/learning/buildBankDecisionFeedbackEvents.js'
+import { appendDecisionFeedbackEvents } from '../../application/learning/decisionFeedbackLabStore.js'
 
 function uniqueList(value) {
   return Array.from(new Set((Array.isArray(value) ? value : []).filter((item) => item != null)))
@@ -109,6 +111,27 @@ export async function commitReconciliationCanonicalPayload(payload = {}, context
         })
       } catch {
         /* cronologia locale best-effort */
+      }
+      try {
+        const feedbackEvents = buildBankDecisionFeedbackEvents({
+          societaId: context.societaId,
+          decision: {
+            selectedPartitaId: payload.selectedPartitaId
+              || payload.partitarioMovements?.[0]?.partitaId
+              || '',
+          },
+          movement: {
+            movementId: payload.movementId || context.movementId || '',
+            amount: payload.amount,
+            counterpartyName: payload.counterpartyName || '',
+            direction: payload.direction || '',
+          },
+          commitResult: normalized,
+          dryRun: false,
+        })
+        appendDecisionFeedbackEvents(context.societaId, feedbackEvents)
+      } catch {
+        /* DecisionFeedback LAB best-effort */
       }
     }
     return normalized

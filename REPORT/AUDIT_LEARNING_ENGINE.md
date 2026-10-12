@@ -196,6 +196,6 @@ Sintesi aggiuntiva (codice esecutivo), allineata agli audit Import/Bank:
 - **Id demo:** mock `demo-bm-*` (no collision con fixture `bm-*`).
 
 ### Implicazioni roadmap SG-L*
-- SG-L5 wire partitario live + id fix: **PARTIAL PASS** 20261012; resta memoria match confermati.
-- SG-L1 **PASS** 20261012 (facade); SG-L2 richiede approvazione schema.
+- SG-L5 wire partitario live + id fix + memoria LAB local: **PARTIAL PASS** 20261012; DB memory gated.
+- SG-L1 **PASS** 20261012 (facade); SG-L2 **PARTIAL** localStorage LAB (schema DB gated).
 - L-B07 id collision: **FIXED**.

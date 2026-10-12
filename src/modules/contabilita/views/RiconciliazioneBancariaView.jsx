@@ -256,18 +256,23 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
       const decisionProposal = runRiconciliazioneMatchForMovement({
         movement: matcherMovement,
         partiteAperte: livePartiteCandidates,
+        options: { societaId },
       })
+      const memoryNote = decisionProposal?.matchMemoryHits
+        ? ` · memoria match LAB ${decisionProposal.matchMemoryHits}`
+        : ''
       return {
         fixtures,
         available: true,
         source: 'live_partitario',
-        message: `Match su partitario aperto società (${livePartiteCandidates.length} partite${livePartiteLoading ? ', reload…' : ''})`,
+        message: `Match su partitario aperto società (${livePartiteCandidates.length} partite${livePartiteLoading ? ', reload…' : ''})${memoryNote}`,
         movement: selectedMovement,
         fixtureMovement: matcherMovement,
         fixtureCase: null,
         decisionProposal,
         livePartiteCount: livePartiteCandidates.length,
         livePartiteError,
+        societaId,
       }
     }
 
@@ -287,6 +292,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
         decisionProposal: null,
         livePartiteCount: 0,
         livePartiteError,
+        societaId,
       }
     }
 
@@ -301,11 +307,13 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
         fixtureMovement: null,
         fixtureCase: null,
         decisionProposal: null,
+        societaId,
       }
     }
     const decisionProposal = runRiconciliazioneMatchForMovement({
       movement: fixtureMovement,
       partiteAperte: fixtures.partiteAperte,
+      options: { societaId, applyMatchMemory: Boolean(societaId) },
     })
     const fixtureCase = fixtures.expectedCases.find((item) => item.movementId === fixtureMovement.movementId) || null
     return {
@@ -317,6 +325,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
       fixtureMovement,
       fixtureCase,
       decisionProposal,
+      societaId,
     }
   }, [
     selectedMovement,

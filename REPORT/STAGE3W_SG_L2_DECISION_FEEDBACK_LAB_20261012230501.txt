@@ -1,0 +1,17 @@
+﻿STAGE3W_SG_L2_DECISION_FEEDBACK_LAB
+timestamp=20261012230501
+branch=feat/studio-grade-accounting-e2e-20261010
+scope=SG-L2 DecisionFeedback LAB localStorage (no DB migration) + Bank match memory boost
+
+UNIT_BANK=PASS 22/22 (includes learning/decisionFeedbackLab.test.js 5/5)
+STORAGE=fiscosim.decision_feedback.lab.v1.<societaId>
+GUARDS=no learn on dryRun; dedup societa+anchor+field; append-only
+
+WIRE:
+- Import commit success -> buildImportDecisionFeedbackEvents + append
+- Bank ACCEPT_PROPOSAL (non-demo) -> buildBankDecisionFeedbackEvents + append
+- Bank fiscal LAB commit -> append feedback
+- runRiconciliazioneMatchForMovement -> lookupBankMatchMemory + confidence boost
+
+SCHEMA=NOT_APPLIED (interim localStorage until explicit schema approval)
+A100_RESIDUAL=browser manuale; SG-L2 DB schema; P0-03/04 LIVE; cutover prod

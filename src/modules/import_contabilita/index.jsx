@@ -36,6 +36,8 @@ import {
   buildImportContabilitaL1HistoryIndexes,
   resolveImportContabilitaStagingAccountingHistorySuggestions,
 } from './application/suggestion/importContabilitaL1SuggestionResolver.js'
+import { buildImportDecisionFeedbackEvents } from '../contabilita/application/learning/buildImportDecisionFeedbackEvents.js'
+import { appendDecisionFeedbackEvents } from '../contabilita/application/learning/decisionFeedbackLabStore.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
@@ -5060,6 +5062,22 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
 
       const cronologiaSocietaId = selectedSocietaId || selectedSocietaForDemo?.id || ''
       if (cronologiaSocietaId && commitResult.primaNotaId) {
+        try {
+          const feedbackEvents = buildImportDecisionFeedbackEvents({
+            societaId: cronologiaSocietaId,
+            commitResult,
+            workingViewModel: activeWorkingViewModel,
+            selectedAccount: activeWorkingViewModel?.account || null,
+            selectedCausale: activeWorkingViewModel?.causale || null,
+            proposedAccount: manualAccountByRowId?.[committedKey] || null,
+            proposedCausale: manualCausaleByRowId?.[committedKey] || null,
+            ivaDraftRows: activeWorkingViewModel?.ivaDraftRows || [],
+            dryRun: false,
+          })
+          appendDecisionFeedbackEvents(cronologiaSocietaId, feedbackEvents)
+        } catch {
+          /* DecisionFeedback LAB best-effort */
+        }
         const nextCronologia = appendImportCronologiaEntry(cronologiaSocietaId, {
           sourceFileName: activeWorkingViewModel?.parsedDocument?.filename
             || activeWorkingViewModel?.sourceFileName

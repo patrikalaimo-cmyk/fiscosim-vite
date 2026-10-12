@@ -1136,3 +1136,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Evidence: `REPORT/STAGE3W_SG_L1_BANK_WIRE_20261012225849.txt`; bank profile 16/16 PASS.
 - Residuo A100: browser manuale Import/IVA/Bank; SG-L2 schema; memoria match Bank; P0-03/04 LIVE; cutover prod solo con consenso.
 - Nota preesistente: `importContabilitaWorkflow.test.js` staging-update assertions ancora FAIL (non regressione L1).
+
+## 2026-10-12 - SG-L2 DecisionFeedback LAB localStorage + Bank memory
+
+- Contratto eventi `buildDecisionFeedbackEvent` (no dry-run; dedup societa+anchor+field); store `fiscosim.decision_feedback.lab.v1.*`.
+- Wire: Import post-commit; Bank ACCEPT non-demo; Bank fiscal LAB commit; matcher boost `match_memory_confirmed`.
+- **Nessuna migration DB** ? interim fino ad approvazione schema.
+- Evidence: `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_LAB_*.txt`; bank profile 22/22 PASS.
+- Residuo: schema DB DecisionFeedback; browser A100; LIVE/cutover gated.

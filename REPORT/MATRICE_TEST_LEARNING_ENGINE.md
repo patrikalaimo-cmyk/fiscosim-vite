@@ -16,7 +16,7 @@
 | LE-I03 | Regola studio vs storico divergente (IVA) | Standard Studio vince + warning | UNIT | **PASS** `IMPORT-25A-HISTORY-1` |
 | LE-I04 | Aliquota 22 vs 10 stessa controparte | Causali IVA distinte per aliquota | UNIT | **PASS** vat history index |
 | LE-I05 | Override manuale su conto già scelto | Storico non sovrascrive | UNIT | **PASS** accounting history contract |
-| LE-I06 | Correzione operatore poi nuovo XML stesso contesto | Secondo doc propone scelta corretta | PG+INTEGRATED | **MISSING** feedback |
+| LE-I06 | Correzione operatore poi nuovo XML stesso contesto | Secondo doc propone scelta corretta | PG+INTEGRATED | **PARTIAL** 20261012: feedback LAB local scritto post-commit; consume→proposal ancora via history adapters |
 | LE-I07 | Storia scarsa (1 campione) | requiresConfirmation=true / bassa affidabilità | UNIT | PARTIAL (sampleCount esposto) |
 | LE-I08 | Storia ambigua (50/50 due conti) | Conflitto esposto; no silent pick senza conferma | UNIT | **MISSING** (mode sceglie comunque) |
 | LE-I09 | Storia superata (conto dismesso) | Pattern invalidato; fallback standard | UNIT+PG | **MISSING** |
@@ -25,7 +25,7 @@
 | LE-I12 | Placeholder IVA 0/0 | Esclusi come oggi | UNIT | PASS (regole esistenti) |
 | LE-I13 | NC / reverse / split / parcella | contract_kind corretto; non riusare mode FA ordinario | PG | PARTIAL commit LAB; learning contesto **MISSING** |
 | LE-I14 | Cross-company suggestion API | 403 / zero rows società aliena | HTTP_JWT | TBD Fase B API |
-| LE-I15 | Fail mid-commit | Zero feedback scritto | PG | TBD con feedback log |
+| LE-I15 | Fail mid-commit | Zero feedback scritto | PG | **PARTIAL** guard dryRun/committed=false in builder; PG mid-fail TBD |
 
 ---
 
@@ -43,7 +43,7 @@
 | LE-B06 | Giroconto banche | Nessuna IVA; PN giroconto | UNIT+PG | PARTIAL classify diretta |
 | LE-B07 | F24 non dettagliato | requiresReview; no auto-commit | UNIT | PARTIAL classify `f24` |
 | LE-B08 | Commissione bancaria | Spesa bancaria senza partita cliente | UNIT | PARTIAL |
-| LE-B09 | Conferma match poi stesso pattern | Suggestion da precedenti società | PG | **MISSING** learning |
+| LE-B09 | Conferma match poi stesso pattern | Suggestion da precedenti società | PG | **PARTIAL** 20261012: localStorage LAB boost; DB gated |
 | LE-B10 | Mass confirm solo high-confidence | Commit solo gated; altri restano aperti | UI_E2E | **MISSING** |
 | LE-B11 | Isolamento A/B partite | Zero candidati cross-società | PG+HTTP | TBD |
 | LE-B12 | Dry-run / fail commit | Nessun apprendimento | UNIT+PG | OK oggi (no learn); preservare |

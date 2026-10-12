@@ -144,6 +144,16 @@ test('Bank view wirea matcher su partitario live (source markers)', async () => 
   assert.match(banking, /societaId=\{societaAttiva\?\.id/)
 })
 
+test('Bank matcher applica memoria DecisionFeedback LAB', async () => {
+  const source = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/runRiconciliazioneMatchForMovement.js', import.meta.url), 'utf8')
+  assert.match(source, /lookupBankMatchMemory/)
+  assert.match(source, /applyBankMatchMemoryBoost/)
+  const commit = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/commitReconciliationCanonicalPayload.js', import.meta.url), 'utf8')
+  assert.match(commit, /appendDecisionFeedbackEvents/)
+  const working = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/RiconciliazioneMovementWorkingView.jsx', import.meta.url), 'utf8')
+  assert.match(working, /buildBankDecisionFeedbackEvents/)
+})
+
 test('commit Bank non accetta una riga PN con sezione ignota', async () => {
   const { validateReconciliationCommitPayload } = await import('../src/modules/contabilita/components/riconciliazione/validateReconciliationCommitPayload.js')
   const payload = {
