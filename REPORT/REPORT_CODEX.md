@@ -1225,3 +1225,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Verify: anon DML core 48→0; policy gone; authenticated prima_nota DML grants still 3.
 - Evidence: `REPORT/LIVE_P0_04_CONTAINMENT_APPLY_2026-10-12T2331.txt`.
 - Residual LIVE: 8 SECURITY DEFINER callable by anon; remaining broad TRUE policies (non-core tranche).
+
+## 2026-10-13 - LIVE P0-04 tranche 2 applied (mlydfspmrkaedsocubku)
+
+- SECURITY DEFINER anon EXECUTE: 8→0; authenticated EXECUTE retained (8/8).
+- anon table privileges public: 325→0.
+- Broad allow_all TRUE policies for authenticated/public NOT dropped (31 remain) — replacing them is a tenant-RLS migration, not a safe night hotpatch.
+- Evidence: `REPORT/LIVE_P0_04_TRANCHE2_APPLY_2026-10-12T2340.txt`; SQL `sql/security_p0/64_p0_04_tranche2_LIVE_mlydfspmrkaedsocubku.sql`.
