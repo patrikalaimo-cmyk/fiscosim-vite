@@ -969,3 +969,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Rosso: maturato 100 / versato 40 residual 60
   - SUMMARY verde=1 giallo=1 rosso=1
 - Unit `tests/ritenuteF24Control.test.js`. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-07 Liquidazione da PN reali + blocco definitiva PASS
+
+- Script `scripts/security_p0/run-stage3w-p2-07-liquidazione-definitiva-block.mjs`: JWT FA+FP periodo **2026-12** → `registri_iva` reali → domain calc saldo 0 → RPC `consolida_periodo_iva_transazionale`.
+- Evidence `REPORT/STAGE3W_P2_07_LIQUIDAZIONE_DEFINITIVA_20261012085609.txt`:
+  - FA PN `6d7317ba-...` / FP PN `7f479050-...`; VAT 2 righe; debito 220 / credito 220 / saldo **0**
+  - Provvisorio `502f33f9-...`; riconsolidamento sostituisce → `1e3f0bf0-...` (1 riga periodo)
+  - Lock `[stato:definitiva]` → terzo consolida **rifiutato** (`Periodo bloccato...definitiva`)
+- Gap noto: marker definitiva via note (no RPC mark dedicata). Nessun LIVE / SG-P0-00.
