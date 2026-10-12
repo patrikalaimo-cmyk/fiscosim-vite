@@ -1232,3 +1232,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - anon table privileges public: 325→0.
 - Broad allow_all TRUE policies for authenticated/public NOT dropped (31 remain) — replacing them is a tenant-RLS migration, not a safe night hotpatch.
 - Evidence: `REPORT/LIVE_P0_04_TRANCHE2_APPLY_2026-10-12T2340.txt`; SQL `sql/security_p0/64_p0_04_tranche2_LIVE_mlydfspmrkaedsocubku.sql`.
+
+## 2026-10-13 - LIVE smoke post tranche 2
+
+- Operatore: login + Prima Nota su sito LIVE esistente dopo P0-04 T2 → **smoke T2 ok**.
