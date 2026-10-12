@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** Manual debt LAB gate **PASS** (Import #2 ZIP / #9 PN-IVA-partitario / #10 anti-doppio + inventory L4 7/7). Precedente: P0-03/04 LAB + cutover Stage3W PASS. LIVE cloud non toccato.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (aggiornare al tip dopo push)
+* **HEAD:** `c043c17`
 * **Limite:** remediation LIVE cloud (credenziali/backup); collaudi manuali residui (storico marker, ~500 docs, casi Manuale/IVA dettagliati)
 
 ## 2. Prossimo passo operativo
