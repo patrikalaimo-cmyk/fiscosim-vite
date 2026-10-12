@@ -56,15 +56,15 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | Accettazione | Un errore forzato dopo INSERT IVA lascia **zero** residui PN/IVA/partite/ritenute mutate; stesso `request_id` → stesso UUID |
 | Approvazione | Install LAB persistente dopo rehearsal ROLLBACK PASS |
 
-### SG-P0-02 — Stage3V JWT → HTTP → PostgreSQL — **PASS parziale** 20261012
+### SG-P0-02 — Stage3V JWT → HTTP → PostgreSQL — **PASS** 20261012
 | Campo | Contenuto |
 |---|---|
 | Problema | `REAL_JWT_E2E=false`; harness pronto ma non eseguito |
-| File | `run-sg-p0-02-stage3v-jwt-gate.mjs`, readiness, `run-stage3w-jwt-fiscal-fa22.mjs` |
-| Lavoro | Dopo SG-P0-00: readiness PASS; fiscal JWT FA22 L3 PASS su SG-E2E; general-journal STAGE3V harness SKIP (0 società `STAGE3V-*`) |
+| File | `provision-stage3v-lab-fixtures.mjs`, `run-stage3v-general-journal-write.mjs`, readiness, FA22 |
+| Lavoro | Fixtures `STAGE3V-A/B`; readiness; fiscal FA22; general-journal A/B JWT persist + replay/403/400/409 |
 | Rischio | P0 |
-| Accettazione | Evidence `STAGE3W_SG_P0_02_STAGE3V_JWT_*`; residuo: provisioning `STAGE3V-*` + harness generale A/B |
-| Approvazione | Write persistente opt-in (concesso in sessione LAB) |
+| Accettazione | `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS` + evidence `STAGE3W_SG_P0_02_GENERAL_JOURNAL_*` |
+| Approvazione | Write persistente opt-in (concesso) |
 
 ### SG-P0-03 — Audit + blocchi periodo su path produttivo
 | Campo | Contenuto |
@@ -161,8 +161,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione
 
-1. ~~SG-P0-00~~ **FATTO**; ~~P0-02 readiness+fiscal L3~~ **FATTO** (general STAGE3V harness ancora SKIP).
+1. ~~SG-P0-00~~ / ~~SG-P0-02~~ **FATTO** (general-journal Stage3V A/B PASS).
 2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v2 include P4-03.
-3. Provision `STAGE3V-*` + run `stage3v-signed-jwt-general-journal-e2e.mjs` **oppure** collaudi browser.
+3. Collaudi browser / L4 da `FISCOSIM_MANUAL_TEST_DEBT.md`.
 4. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.

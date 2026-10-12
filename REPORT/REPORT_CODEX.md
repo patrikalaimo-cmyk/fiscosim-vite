@@ -1093,3 +1093,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Stage3V readiness READ-ONLY: `STAGE3V_PINNED_LAB_NETWORK_HTTP_DISCOVERED_NOT_JWT_VERIFIED` (post P0-00 loopback).
 - Fiscal JWT FA22 L3 PASS su SG-E2E (API :3001 riavviata). Gate `run-sg-p0-02-stage3v-jwt-gate.mjs` ? `P0_02_RESULT=PASS` con `GENERAL_JOURNAL_STAGE3V_HARNESS=SKIP_NO_STAGE3V_FIXTURES`.
 - L6 pack `l6_lab_core_v2` aggiunge P4-03 isolation; fingerprint `L6CORE2|…all PASS`. Evidence `STAGE3W_L6_REGRESSIONE_P4_02_20261012195227.txt`.
+
+## 2026-10-12 - SG-P0-02 CHIUSO — Stage3V general-journal JWT persistente
+
+- Provision LAB `STAGE3V-A/B` (UUID `73000000-…`), conti cassa/banca, Auth + membership owner.
+- Harness `stage3v-signed-jwt-general-journal-e2e.mjs` con `LAB_SYNTHETIC_WRITE_APPROVED` ? `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS` (A 100.25 / B 205.10; replay idempotente; cross-company 403).
+- Runner `run-stage3v-general-journal-write.mjs` (park untracked per dirty-tree gate). Evidence `REPORT/STAGE3W_SG_P0_02_GENERAL_JOURNAL_20261012195555.txt`.
+- Nota: società STAGE3V non più vuote — re-run vietato senza review/cleanup esplicito.
