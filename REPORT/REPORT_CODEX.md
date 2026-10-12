@@ -1236,3 +1236,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 ## 2026-10-13 - LIVE smoke post tranche 2
 
 - Operatore: login + Prima Nota su sito LIVE esistente dopo P0-04 T2 → **smoke T2 ok**.
+
+## 2026-10-13 - Deploy production fiscosim-v6 (Studio Grade SPA)
+
+- Target ufficiale: `https://fiscosim-v6.vercel.app` (progetto Vercel `fiscosim-v6`; `fiscosim-v5` lasciato invariato).
+- Hobby plan: `api/` esclusa dal deploy (≤12 serverless) — SPA + Supabase anon/RLS; Stage3W HTTP APIs restano LAB-only.
+- `.vercelignore` + `vercel.json` (Vite `dist` + SPA rewrite).
+- Production alias OK; smoke HTTP homepage da verificare operatore (login LIVE).
