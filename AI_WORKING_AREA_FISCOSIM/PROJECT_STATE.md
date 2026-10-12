@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-L3 history multi-prodotto nativo **PASS** (LAB UNIT) + SG-L6 mass-confirm high-confidence **PARTIAL**. A100 completo ancora gated (browser dettagliato, schema DB, LIVE, cutover).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit)
+* **HEAD:** `37f3646` (locale = origin)
 * **Limite:** no migration learning DB; no LIVE; debito browser A100 upload/commit
 
 ## 2. Prossimo passo operativo
