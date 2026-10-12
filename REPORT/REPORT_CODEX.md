@@ -1211,3 +1211,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Esteso `run-stage3w-l4-browser-manuale.mjs`: post fattura attiva da sessione browser Manuale + check 3 righe / 1 IVA / 1 partita / Dare=Avere.
 - Evidence: `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-12T2236.txt` (`MANUALE_03_COERENZA_RESULT=PASS`).
 - Non chiude preview/form UI completa (debito #3 resta PATH LAB + form operatore).
+
+## 2026-10-12 - Import #7 UNIT + Manuale #2 passiva LAB
+
+- Import #7: UNIT IMPORT-25A-HISTORY-1 PASS; gate `STAGE3W_IMPORT_07_STUDIO_VS_STORICO_2026-10-12T2254.txt` (browser warning UI soft-fail; acceptance via UNIT/LE-I03).
+- Manuale #2: `run-stage3w-l4-browser-manuale.mjs --mode=passiva` FISCAL 201 + coerenza 3/1/1 (`STAGE3W_L4_BROWSER_MANUALE_passiva_2026-10-12T2253.txt`).
+- Fix launcher: Vite `--host 127.0.0.1` (era solo [::1]).
