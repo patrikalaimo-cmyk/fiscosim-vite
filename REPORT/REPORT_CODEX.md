@@ -1217,3 +1217,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Import #7: UNIT IMPORT-25A-HISTORY-1 PASS; gate `STAGE3W_IMPORT_07_STUDIO_VS_STORICO_2026-10-12T2254.txt` (browser warning UI soft-fail; acceptance via UNIT/LE-I03).
 - Manuale #2: `run-stage3w-l4-browser-manuale.mjs --mode=passiva` FISCAL 201 + coerenza 3/1/1 (`STAGE3W_L4_BROWSER_MANUALE_passiva_2026-10-12T2253.txt`).
 - Fix launcher: Vite `--host 127.0.0.1` (era solo [::1]).
+
+## 2026-10-13 - LIVE P0-04 tranche 1 applied (mlydfspmrkaedsocubku)
+
+- Pre-audit: `LIVE_P0_READONLY_AUDIT_2026-10-12T2327.txt` (anon DML core=48, definer anon EXECUTE=8, broad policies=26).
+- Applied `sql/security_p0/63_p0_04_anon_containment_LIVE_mlydfspmrkaedsocubku.sql`: REVOKE ALL FROM anon on 13 core tables; DROP POLICY anon_access_test on avvisi_ade.
+- Verify: anon DML core 48→0; policy gone; authenticated prima_nota DML grants still 3.
+- Evidence: `REPORT/LIVE_P0_04_CONTAINMENT_APPLY_2026-10-12T2331.txt`.
+- Residual LIVE: 8 SECURITY DEFINER callable by anon; remaining broad TRUE policies (non-core tranche).
