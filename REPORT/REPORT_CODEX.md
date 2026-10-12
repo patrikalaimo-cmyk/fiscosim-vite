@@ -926,3 +926,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Pay PN `a743eac2-7a28-474a-bbcd-ca04db4392cf`: rilascio IVA **90.16** / imponibile 409.84; partita residuo 720
   - Luglio: debito effettivo **90.16** (= quota rilasciata); claim `pagamento` / `import_contabilita`
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-03 Import reverse/estero autofattura PASS
+
+- Script `scripts/security_p0/run-stage3w-import-reverse-estero-commit.mjs`: Import acquisto `autofattura` + reverse ? fiscal LAB (ago 2026).
+- Evidence `REPORT/STAGE3W_IMPORT_REVERSE_ESTERO_COMMIT_20261012081416.txt`:
+  - PN `e17ed2c9-9d0b-4874-ae22-79ff12f091a7` 1220/1220, **4** righe (costo+forn imponibile + doppia IVA 220)
+  - Partita fornitore residuo **1000**; VAT `acquisto:220` + `vendita:220`
+  - Liquidazione: debito 220, credito 220, saldo **0** (neutralità)
+  - Claim source `import_contabilita` (contract_kind inferito `fattura_attiva` per dual VAT — gap documentato, effetti PG OK)
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
