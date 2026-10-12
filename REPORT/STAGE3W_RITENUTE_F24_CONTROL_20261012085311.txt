@@ -1,0 +1,13 @@
+P2_06_START Controllo F24 importato vs ritenute maturate 1040
+DB=LAB_DB_OK
+PERCIPIENTE_ID=cae74cfe-5407-43bc-b13f-88b9adfe7452
+RIT_IDS=e90cb6ff-49c3-45f9-a968-71ac5bb71adf,3c57d0cd-bb02-4354-a857-0b4e79280348,51dfd917-b39b-446e-a08c-338e372ca1ce
+F24_IDS=490ca7fb-bdc1-4959-93e6-9ed5e2bb8927,c8239f5d-15ac-4b37-ba1d-bbb6c0b87d85,c69151eb-5070-4e2c-bddf-e40c8cf899dc
+RITENUTE_COUNT=3
+F24_COUNT=3
+SCADENZARIO_COUNT=3
+CONTROL_VERDE={"status":"verde","codiceTributo":"1040","periodo":"09/2026","maturedAmount":200,"paidAmount":200,"residualAmount":0,"dueDate":"2026-10-16","f24PaymentDate":"2026-10-10","onTime":true,"late":false,"shortfall":false,"matchedF24Ids":["490ca7fb-bdc1-4959-93e6-9ed5e2bb8927"],"matchedF24Count":1}
+CONTROL_GIALLO={"status":"giallo","codiceTributo":"1040","periodo":"08/2026","maturedAmount":150,"paidAmount":150,"residualAmount":0,"dueDate":"2026-09-16","f24PaymentDate":"2026-09-20","onTime":false,"late":true,"shortfall":false,"matchedF24Ids":["c8239f5d-15ac-4b37-ba1d-bbb6c0b87d85"],"matchedF24Count":1}
+CONTROL_ROSSO={"status":"rosso","codiceTributo":"1040","periodo":"07/2026","maturedAmount":100,"paidAmount":40,"residualAmount":60,"dueDate":"2026-08-16","f24PaymentDate":"2026-08-10","onTime":false,"late":false,"shortfall":true,"matchedF24Ids":["c69151eb-5070-4e2c-bddf-e40c8cf899dc"],"matchedF24Count":1}
+SUMMARY={"verde":1,"giallo":1,"rosso":1}
+P2_06_RESULT=PASS

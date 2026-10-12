@@ -66,8 +66,8 @@
 | D01 | Ritenute | Parcella IVA+cassa+ritenuta | IMPLEMENTED | L1+L2 | PASS unit; PASS L2 parcella+1040 persist | `…000635-684.txt` rit.200 | L3-L5 | P2 |
 | D02 | Ritenute | Pagamento integrale → debito 1040 | IMPLEMENTED | L1 | PASS (unit) | ritenutePagamentoParcella | E2E | P2 |
 | D03 | Ritenute | Scadenza versamento 16 mese succ. | IMPLEMENTED | L1 | PASS (unit) | scadenzario | E2E | P2 |
-| D04 | Ritenute | Import F24 vs maturato | PARTIAL | L1 | NOT_EXECUTED | roadmap Fase 18 | Modulo controllo incompleto | P2 |
-| D05 | Ritenute | Versato corretto/tardivo/insufficiente/assente | PARTIAL | — | NOT_IMPLEMENTED | — | Stati verde/giallo/rosso | P2 |
+| D04 | Ritenute | Import F24 vs maturato | IMPLEMENTED | L2 | PASS (LAB P2-06) | domain+PG f24 | Controllo 1040 periodo | P2 |
+| D05 | Ritenute | Versato corretto/tardivo/insufficiente/assente | IMPLEMENTED | L1+L2 | PASS (unit+LAB) | verde/giallo/rosso | Evidence 20261012 | P2 |
 | D06 | Ritenute | CU/770 readiness | PARTIAL | L1 | PASS readiness unit | CF obbligatorio | Export ministeriale fuori perimetro | P2 |
 | D07 | Ritenute | Pagamento parziale con ritenuta | BLOCKED | L1 | BLOCKED | guard esplicito | Implementare o escludere formalmente | P2 |
 

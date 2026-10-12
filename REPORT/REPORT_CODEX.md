@@ -957,3 +957,15 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Pay PN `79f3b404-d7d2-4c1d-9f6c-50cfbe58a567` incasso **534.40**: partita residuo **534.40**; rit residual `ccbfa014-...` 100/aperta; rit matured `c9d6189f-...` 100/da_versare/1040
   - Scadenzario 1 riga importo **100**; **CU_READY=true**
 - Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-06 Controllo F24 importato vs maturato (verde/giallo/rosso) PASS
+
+- Domain `resolveRitenutaF24ControlStatus` + `buildRitenuteF24ControlRows` (match 1040 + periodo, allocazione FIFO).
+- Non e un compilatore F24: confronta ritenute `da_versare` con righe `public.f24` importate.
+- Script `scripts/security_p0/run-stage3w-ritenute-f24-control.mjs`.
+- Evidence `REPORT/STAGE3W_RITENUTE_F24_CONTROL_20261012085311.txt`:
+  - Verde: maturato 200 / versato 200 on-time (10<=16 ott)
+  - Giallo: maturato 150 / versato 150 late (20>16 set)
+  - Rosso: maturato 100 / versato 40 residual 60
+  - SUMMARY verde=1 giallo=1 rosso=1
+- Unit `tests/ritenuteF24Control.test.js`. Nessun LIVE / SG-P0-00.
