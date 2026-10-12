@@ -183,7 +183,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione
 
-1. ~~Browser A100 Import upload/commit~~ / ~~DF DB LAB~~ / ~~P0-03/04 LAB + cutover Stage3W~~ **PASS** 20261012.
+1. ~~Browser A100 Import upload/commit~~ / ~~DF DB LAB~~ / ~~P0-03/04 LAB + cutover Stage3W~~ / ~~Import #2/#9/#10 LAB gate~~ **PASS** 20261012.
 2. Bonifica **LIVE cloud** (se richiesta): backup + applicare contenimento anon sull’istanza reale identificata.
-3. Collaudi manuali residui in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
+3. Collaudi manuali residui (Import #4/#6/#7/#11; Manuale/IVA/Consultazione casi fiscali) in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `REPORT/REPORT_CODEX.md`.

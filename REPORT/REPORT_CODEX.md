@@ -1190,3 +1190,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - P0-03: audit su recent PN Stage3W; period guard in RPC; audit append su `createPrimaNotaCompleta`; stampa UI evidence gate.
 - P0-04 LAB: `62_p0_04_anon_containment_LAB_ONLY.sql` ? anon DML core=0; drop `anon_access_test`. LIVE cloud non applicato (no credenziali attive).
 - Evidence: `REPORT/STAGE3W_SG_P0_03_04_CUTOVER_2026-10-12T2221.txt`; UNIT cutover/persist 19/19.
+
+## 2026-10-12 - Manual debt LAB gate (Import #2/#9/#10)
+
+- Script `scripts/security_p0/run-stage3w-manual-debt-lab-gate.mjs`: ZIP upload browser staging PASS; DB coerenza PN/IVA/partitario `QA-2026-001` (3/1/1, Dare=Avere 122); anti-doppio claim PK PASS; inventory L4 Manuale/Consultazione/IVA/Bank/Import 7/7.
+- Debito aggiornato: Import **MANUALE PARZIALE** (1/2/3/8/9/10 LAB); Manuale/IVA/Consultazione shell LAB OK, casi fiscali ancora operatore.
+- Evidence: `REPORT/STAGE3W_MANUAL_DEBT_LAB_GATE_2026-10-12T2226.txt`.
+- Stop operatore: LIVE cloud containment; Import #4/#6/#7/#11; collaudi fiscali Manuale/IVA/Consultazione.
