@@ -19,14 +19,14 @@ Da verificare in browser su societ? esclusivamente di test:
 3. Working Table / Working View e paginazione ? **LAB browser PATH** coperto dallo smoke upload/commit;
 4. marker Proposta da storico e override conto/causale — **LAB browser PASS** (`STAGE3W_IMPORT_STORICO_MARKER_*`; history fallback PN/claim Stage3W + override 5.02);
 5. multi-aliquota 22% + 10% ? HTTP Import multi2210 LAB PASS (non browser dettagliato);
-6. placeholder IVA 0/0 ignorato se non fiscalmente significativo ? **pendente operatore**;
+6. placeholder IVA 0/0 ignorato se non fiscalmente significativo — **LAB UNIT/HTTP PASS** (`importContabilitaVatRowNormalization` + multi2210 prune; non browser);
 7. warning standard Studio vs storico divergente ? **pendente operatore**;
 8. commit singolo con conferma operatore ? **LAB browser PASS** (dialog + fiscal-journal-post);
 9. coerenza PN / registro IVA / partitario ? **LAB DB PASS** (`QA-2026-001`: 3 righe, 1 IVA, 1 partita, Dare=Avere 122);
 10. anti-doppio commit ? **LAB DB PASS** (claim `request_id` unico + PK su `fiscosim_fiscal_journal_claim`);
 11. prova visuale massiva ~500 documenti ? **pendente operatore**.
 
-Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/2/3/4/8/9/10 LAB; 6/7/11 + sessione visiva operatore).
+Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/2/3/4/6/8/9/10 LAB; 7/11 + sessione visiva operatore).
 
 ## Registrazione Manuale ? shell LAB; casi fiscali pendenti
 
