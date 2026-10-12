@@ -1,35 +1,35 @@
-# FISCOSIM — DEBITO COLLAUDI MANUALI
+# FISCOSIM ? DEBITO COLLAUDI MANUALI
 
-Stato aggiornato: 2026-10-07.
+Stato aggiornato: 2026-10-12.
 
 ## Regola
 
-Lo sviluppo può proseguire tra i blocchi A100 con gate automatici verdi. I collaudi manuali vengono accorpati in una sessione finale. Questo documento impedisce che un test differito venga dimenticato o dichiarato implicitamente superato.
+Lo sviluppo pu? proseguire tra i blocchi A100 con gate automatici verdi. I collaudi manuali vengono accorpati in una sessione finale. Questo documento impedisce che un test differito venga dimenticato o dichiarato implicitamente superato.
 
-## Import Contabilità — pendente
+## Import Contabilit? ? pendente
 
 Riferimento: `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.
 
-Da verificare in browser su società esclusivamente di test:
-1. XML singolo ordinario;
+Da verificare in browser su societ? esclusivamente di test:
+1. XML singolo ordinario ? LAB browser smoke PASS 20261012 (STAGE3W_L4_BROWSER_IMPORT_UPLOAD_*; fixture IT01378570350.xml);
 2. ZIP controllato;
-3. Working Table / Working View e paginazione;
-4. marker “Proposta da storico” e override conto/causale;
-5. multi-aliquota 22% + 10%;
+3. Working Table / Working View e paginazione ? WV path coperto dallo smoke upload/commit LAB;
+4. marker Proposta da storico e override conto/causale;
+5. multi-aliquota 22% + 10% ? HTTP Import multi2210 LAB PASS (non browser);
 6. placeholder IVA 0/0 ignorato se non fiscalmente significativo;
 7. warning standard Studio vs storico divergente;
-8. commit singolo con conferma operatore;
-9. coerenza PN / registro IVA / partitario;
+8. commit singolo con conferma operatore ? LAB browser PASS (dialog + fiscal-journal-post);
+9. coerenza PN / registro IVA / partitario ? PN 3 righe verificate in smoke; registro/partitario ancora collaudo operatore;
 10. anti-doppio commit;
 11. prova visuale massiva ~500 documenti.
 
-Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
+Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/3/8 LAB browser; resto sessione operatore).
 
-## Registrazione Manuale — pendente
+## Registrazione Manuale ? pendente
 
 Riferimento: `REPORT/MANUALE_CANONICO_FREEZE_AUDIT.md`.
 
-Da verificare in browser su società esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. movimento generale/giroconto bilanciato senza soggetto/IVA quando non richiesti;
 2. fattura passiva ordinaria: preview, PN, registro acquisti e partita fornitore;
 3. fattura attiva ordinaria: preview, PN, registro vendite e partita cliente;
@@ -46,11 +46,11 @@ Da verificare in browser su società esclusivamente di test:
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
-## IVA / Registri / Liquidazione — pendente
+## IVA / Registri / Liquidazione ? pendente
 
 Riferimento: `REPORT/IVA_REGISTRI_LIQUIDAZIONE_FREEZE_AUDIT.md`.
 
-Da verificare in browser su società esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. selezione periodo mensile e trimestrale e coerenza delle date incluse;
 2. fattura attiva/passiva ordinaria e note credito con corretti segni nei registri;
 3. documento multi-aliquota e dettaglio separato per aliquota/natura;
@@ -58,30 +58,30 @@ Da verificare in browser su società esclusivamente di test:
 5. split payment semplice: IVA esposta ma esclusa dal debito della liquidazione;
 6. IVA per cassa: riga differita esclusa e successivo rilascio incluso nel periodo corretto;
 7. reverse charge/autofattura: esposizione coerente di debito e credito;
-8. cambio società attiva senza contaminazione di registri, causali IVA, liquidazioni o snapshot;
-9. anteprima corrente rispetto a liquidazione già consolidata/definitiva, con warning coerente;
+8. cambio societ? attiva senza contaminazione di registri, causali IVA, liquidazioni o snapshot;
+9. anteprima corrente rispetto a liquidazione gi? consolidata/definitiva, con warning coerente;
 10. selezione operatore e conferma esplicita prima del consolidamento;
 11. blocco del riconsolidamento di una liquidazione definitiva;
 12. prospetto/export con numero documento, controparte, imponibile, IVA, detraibile/indetraibile e natura reali;
 13. periodo senza righe: valori zero e nessun conteggio dimostrativo/fittizio;
 14. storico liquidazioni: nessun operatore inventato e dati coerenti con lo snapshot salvato;
-15. eventuale dettaglio snapshot consolidato, se esposto dalla UI, limitato alla società attiva.
+15. eventuale dettaglio snapshot consolidato, se esposto dalla UI, limitato alla societ? attiva.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
 ## Gate
 
 - sviluppo Manuale/Consultazione/IVA: consentito con CI verde;
-- sviluppo Riconciliazione Bancaria: **NON consentito** finché il debito manuale di Import + Manuale + IVA non è chiuso secondo il gate stabilito;
-- Release A100: **NON consentita** finché tutto il debito manuale non è chiuso.
+- sviluppo Riconciliazione Bancaria: **NON consentito** finch? il debito manuale di Import + Manuale + IVA non ? chiuso secondo il gate stabilito;
+- Release A100: **NON consentita** finch? tutto il debito manuale non ? chiuso.
 
 
-## Consultazione Prima Nota — pendente
+## Consultazione Prima Nota ? pendente
 
 Riferimento: `REPORT/CONSULTAZIONE_FREEZE_AUDIT.md`.
 
-Da verificare in browser su società esclusivamente di test:
-1. caricamento Consultazione con società attiva e default “Ordinarie”;
+Da verificare in browser su societ? esclusivamente di test:
+1. caricamento Consultazione con societ? attiva e default ?Ordinarie?;
 2. filtri esercizio/date/soggetto/documento/causale/conto;
 3. selezione conto e coerenza saldo precedente + saldo progressivo;
 4. toggle Ordinarie / Stornate / Simulate;
@@ -91,17 +91,17 @@ Da verificare in browser su società esclusivamente di test:
 8. periodo chiuso/stampato mostrato come non operativo;
 9. export CSV compatto e completo con N. Prima Nota;
 10. ordinamento numerico N. Prima Nota e riga;
-11. navigazione tastiera ↑/↓/Invio/Esc;
+11. navigazione tastiera ?/?/Invio/Esc;
 12. warning e comportamento visuale sul limite 10.000 righe.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
 
-## Split payment semplice — pendente
+## Split payment semplice ? pendente
 
 Riferimento: `REPORT/SPLIT_SIMPLE_FREEZE_AUDIT.md`.
 
-Da verificare in browser su società esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. cliente ordinario: fattura attiva resta ordinaria e il partitario comprende il lordo;
 2. cliente con flag split: fattura attiva mostra trattamento split e partitario al solo imponibile;
 3. conto tecnico split configurato: righe tecniche coerenti e non modificabili come righe fiscali ordinarie;
@@ -116,31 +116,31 @@ Da verificare in browser su società esclusivamente di test:
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
 
-## Ritenute / Scadenzario — pendente
+## Ritenute / Scadenzario ? pendente
 
 Riferimento: `REPORT/RITENUTE_SCADENZARIO_FREEZE_AUDIT.md`.
 
-Da verificare in browser su società esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. parcella professionista con percipiente configurato, aliquota ritenuta e codice tributo;
 2. prima del pagamento: posizione predisposta ma nessun debito ritenuta maturato/scadenza da versare;
 3. pagamento integrale tramite Registrazione Manuale: PN quadrata, banca/netto, debito Erario e chiusura partitario;
 4. maturazione della ritenuta una sola volta, senza duplicazione;
 5. scadenzario: data pagamento, codice tributo, importo e scadenza al 16 del mese successivo;
 6. pagamento di dicembre: scadenza visualizzata al 16 gennaio dell'anno successivo;
-7. codice fiscale percipiente mancante: stato CU/770 “Dati da verificare”;
+7. codice fiscale percipiente mancante: stato CU/770 ?Dati da verificare?;
 8. aliquota ritenuta non configurata: blocco operativo, senza proposta fiscale inventata;
-9. vista Tax Compliance > Ritenute: sola lettura, senza “Nuovo pagamento”, modifica o elimina;
-10. cambio società attiva: nessuna contaminazione di ritenute/scadenze;
+9. vista Tax Compliance > Ritenute: sola lettura, senza ?Nuovo pagamento?, modifica o elimina;
+10. cambio societ? attiva: nessuna contaminazione di ritenute/scadenze;
 11. coerenza degli stessi dati tra scadenzario, CU e 770;
 12. caso escluso/forfettario dove previsto: nessuna maturazione ritenuta indebita;
-13. pagamento parziale con ritenuta: verificare che il sistema **blocchi esplicitamente** il caso e non effettui scritture parziali, finché il requisito residuo non sarà implementato.
+13. pagamento parziale con ritenuta: verificare che il sistema **blocchi esplicitamente** il caso e non effettui scritture parziali, finch? il requisito residuo non sar? implementato.
 
-Nota: il punto 13 è un controllo del blocker esistente, non una dichiarazione di supporto al pagamento parziale.
+Nota: il punto 13 ? un controllo del blocker esistente, non una dichiarazione di supporto al pagamento parziale.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
 
-## Stampe / Export / Fascicolo — debito QA e sviluppo aperto
+## Stampe / Export / Fascicolo ? debito QA e sviluppo aperto
 
 Riferimento: `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`.
 
@@ -151,9 +151,9 @@ Prima del freeze automatico:
 4. legare checksum definitivo al contenuto, non a soli metadati;
 5. rimuovere fisicamente il codice demo/fac-simile dalla vista Stampe.
 
-Da verificare in browser su società di test:
-1. registri acquisti/vendite/corrispettivi con filtri e dati solo della società attiva;
-2. cambio società senza dati trascinati;
+Da verificare in browser su societ? di test:
+1. registri acquisti/vendite/corrispettivi con filtri e dati solo della societ? attiva;
+2. cambio societ? senza dati trascinati;
 3. note credito e registri con segni coerenti;
 4. libro giornale ordinario, storni, simulazioni e quadrare Dare/Avere;
 5. CSV/XLSX/print-to-PDF senza troncamenti o numerazione fittizia;
@@ -162,76 +162,76 @@ Da verificare in browser su società di test:
 8. anteprima provvisoria vs definitiva; lock, ristampa, versioni e checksum reali;
 9. nessuna voce demo esposta come situazione reale.
 
-Stato: **IN CORSO — NON CONGELATO**.
+Stato: **IN CORSO ? NON CONGELATO**.
 
 
-## Revisione gate Bank (2026-10-08) — distinzione sviluppo / produzione
+## Revisione gate Bank (2026-10-08) ? distinzione sviluppo / produzione
 
-**Sviluppo bancario sbloccato** dall'utente: la vecchia frase “sviluppo NON consentito finché Import+Manuale+IVA non sono collaudati manualmente” è superata SOLO per sviluppo su branch, test sintetici e architettura.
+**Sviluppo bancario sbloccato** dall'utente: la vecchia frase ?sviluppo NON consentito finch? Import+Manuale+IVA non sono collaudati manualmente? ? superata SOLO per sviluppo su branch, test sintetici e architettura.
 
-**Produzione/commit reale rimangono vietati** finché non siano superati:
+**Produzione/commit reale rimangono vietati** finch? non siano superati:
 1. collaudo Import, Manuale e IVA secondo i rispettivi debiti;
 2. audit Bank, isolamento `societa_id`, anti-duplicati, riconciliazione saldo estratto conto;
 3. commit atomico, rollback, idempotency key vincolata, audit persistito, nessuna scrittura UI diretta;
-4. verifica partitario e Prima Nota canonici, casi ignored senza contabilità, blocco casi fiscali non supportati;
-5. QA browser Bank su società esclusivamente fittizie; verifica trimestrale e giroconti interni.
+4. verifica partitario e Prima Nota canonici, casi ignored senza contabilit?, blocco casi fiscali non supportati;
+5. QA browser Bank su societ? esclusivamente fittizie; verifica trimestrale e giroconti interni.
 
 **Non equivale a rilascio A100.**
 
 
-## Stampe — QA aggiornato per la paginazione
+## Stampe ? QA aggiornato per la paginazione
 
 L'export oltre 1000 righe usa ora paginazione a batch; verificare in browser con azienda di test il conteggio completo, l'ordinamento, l'assenza di duplicati, la presenza dei join causale/Prima Nota e il comportamento durante modifiche concorrenti. I collaudi manuali del PDF unico e dei report canonici restano pendenti.
 
 
-## Debito aggiornato 2026-10-08 — Bank e Stampe
+## Debito aggiornato 2026-10-08 ? Bank e Stampe
 
 La protezione CSV e il modello puro di movimenti per conto sono coperti da test automatici, ma richiedono collaudo applicativo:
 1. esportare in CSV da Registro IVA e Giornale contenuti sintetici che iniziano con caratteri formula e verificare in Excel/LibreOffice che restino testo, senza esecuzione;
-2. alimentare il nuovo modello tramite servizio applicativo e verificarne la parità con le PN confermate della società test;
+2. alimentare il nuovo modello tramite servizio applicativo e verificarne la parit? con le PN confermate della societ? test;
 3. verificare saldi di apertura, esercizi precedenti e piano dei conti prima di presentare il risultato come Bilancio di verifica;
 4. verificare che dati non conformi blocchino la stampa, senza fallback a fac-simile;
 5. verificare Bank singolo movimento contro estratto conto intero, idempotenza e scope societario, usando solo fixture test;
 6. collaudare il futuro commit transazionale bancario e il rollback prima di qualunque scrittura reale.
 
-Restano aperti fascicolo PDF unico, modelli/UX completi, hash di contenuto, importi parziali con ritenuta, collaudo browser di Import/Manuale/IVA e Bank. Nessuno di questi è dichiarato eseguito.
+Restano aperti fascicolo PDF unico, modelli/UX completi, hash di contenuto, importi parziali con ritenuta, collaudo browser di Import/Manuale/IVA e Bank. Nessuno di questi ? dichiarato eseguito.
 
 
-## Saldi intraesercizio — ulteriore debito QA (2026-10-08)
+## Saldi intraesercizio ? ulteriore debito QA (2026-10-08)
 
-Prima della qualifica di Mastrini e Bilancio verificare: (1) saldi da scritture di chiusura/riapertura dell'anno precedente e loro origine provata; (2) saldo precedente per periodo intermedio, separato dal saldo d'inizio esercizio; (3) piano conti gerarchico con conti senza movimenti; (4) cancellazioni, storni, note credito e scritture simulate; (5) totale Dare/Avere e saldi in quadratura; (6) completezza dei dati a pagine e consistenza durante scritture concorrenti. Il nuovo modello non è ancora collegato alla UI e non è certificato per output definitivi.
+Prima della qualifica di Mastrini e Bilancio verificare: (1) saldi da scritture di chiusura/riapertura dell'anno precedente e loro origine provata; (2) saldo precedente per periodo intermedio, separato dal saldo d'inizio esercizio; (3) piano conti gerarchico con conti senza movimenti; (4) cancellazioni, storni, note credito e scritture simulate; (5) totale Dare/Avere e saldi in quadratura; (6) completezza dei dati a pagine e consistenza durante scritture concorrenti. Il nuovo modello non ? ancora collegato alla UI e non ? certificato per output definitivi.
 
 ## Debito audit raccordo esercizi (2026-10-08)
 
-Prima di abilitare bilancio/mastri definitivi: recuperare via repository canonico tutte le PN dei due esercizi e tutte le causali, incluse inattive storiche; certificare che le chiusure patrimoniali selezionate siano realmente quelle del workflow e che l'intero esercizio precedente sia completo; verificare saldi iniziali verificabili dalla catena di esercizi, stornate/rettifiche, assestamenti, cambio conti e annualità precedenti; transazione/snapshot durante letture concorrenti; classificazione conti che cambiano natura; rifiuto della definitiva su blocker. Test con società fittizie e controllo contabile indipendente obbligatori. L'audit puro resta `definitive:false`.
+Prima di abilitare bilancio/mastri definitivi: recuperare via repository canonico tutte le PN dei due esercizi e tutte le causali, incluse inattive storiche; certificare che le chiusure patrimoniali selezionate siano realmente quelle del workflow e che l'intero esercizio precedente sia completo; verificare saldi iniziali verificabili dalla catena di esercizi, stornate/rettifiche, assestamenti, cambio conti e annualit? precedenti; transazione/snapshot durante letture concorrenti; classificazione conti che cambiano natura; rifiuto della definitiva su blocker. Test con societ? fittizie e controllo contabile indipendente obbligatori. L'audit puro resta `definitive:false`.
 
 ## Raccordo / lettura database reale (2026-10-08)
 
-Verificare su società fittizia con DB di test: presenza di `causale_id` nelle PN storiche, classificazione `tipo` realmente allineata alle causali chiusura/apertura, piano dei conti con inattivi, anno completo e righe PN complete; riapertura richiesta di altra società fail-closed; stesso dato durante scritture concorrenti e snapshot consistente. I test del loader attualmente usano un query-builder mock e NON risolvono questo debito.
+Verificare su societ? fittizia con DB di test: presenza di `causale_id` nelle PN storiche, classificazione `tipo` realmente allineata alle causali chiusura/apertura, piano dei conti con inattivi, anno completo e righe PN complete; riapertura richiesta di altra societ? fail-closed; stesso dato durante scritture concorrenti e snapshot consistente. I test del loader attualmente usano un query-builder mock e NON risolvono questo debito.
 
 ## Debito QA hash documento (2026-10-08)
 
-Verificare che il PDF/fascicolo consegnato corrisponda esattamente ai byte oggetto del digest persistito, anche per documenti multipagina, rigenerazione e ristampa; fallire su mismatch, output vuoto, file modificato, dati aggiornati in concorrenza e assenza WebCrypto. Il digest del nuovo helper non costituisce prova di integrità se non collegato a snapshot/lock e verificato lato server.
+Verificare che il PDF/fascicolo consegnato corrisponda esattamente ai byte oggetto del digest persistito, anche per documenti multipagina, rigenerazione e ristampa; fallire su mismatch, output vuoto, file modificato, dati aggiornati in concorrenza e assenza WebCrypto. Il digest del nuovo helper non costituisce prova di integrit? se non collegato a snapshot/lock e verificato lato server.
 
 ## QA protezione consolidamento stampe (2026-10-08)
 
-Verificare in browser con società fittizia che "Consolida definitivo" resti non operativo se il precheck non restituisce prove snapshot e SHA-256 del file archiviato, che la UI illustri il motivo e che le stampe provvisorie rimangano accessibili. Il backend deve essere oggetto di redesign: oggi la RPC accetta checksum client non certificato e può essere richiamata bypassando la UI. Non approvare una stampa definitiva finché il server non ricontrolla contenuto/lock in transazione.
+Verificare in browser con societ? fittizia che "Consolida definitivo" resti non operativo se il precheck non restituisce prove snapshot e SHA-256 del file archiviato, che la UI illustri il motivo e che le stampe provvisorie rimangano accessibili. Il backend deve essere oggetto di redesign: oggi la RPC accetta checksum client non certificato e pu? essere richiamata bypassando la UI. Non approvare una stampa definitiva finch? il server non ricontrolla contenuto/lock in transazione.
 
 ## Blocco ambiente test database / sicurezza RPC stampe (2026-10-08)
 
-Supabase "Fiscosim v4p" risulta inattivo e senza branch; lettura schema/migrations via connettore non disponibile per timeout. Non scegliere autonomamente la riattivazione né presumere che sia l'ambiente usato in produzione. Richiesto all'utente: identificare il progetto corrente e predisporre un branch/database isolato senza dati clienti reali; verificare funzioni SQL e permessi (PUBLIC/anon/authenticated) con ruoli di test, chiamante/operatore/società, intertenant, snapshot e checksum su PDF archivio; eseguire QA E2E prima di migration. Dettagli in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.
+Supabase "Fiscosim v4p" risulta inattivo e senza branch; lettura schema/migrations via connettore non disponibile per timeout. Non scegliere autonomamente la riattivazione n? presumere che sia l'ambiente usato in produzione. Richiesto all'utente: identificare il progetto corrente e predisporre un branch/database isolato senza dati clienti reali; verificare funzioni SQL e permessi (PUBLIC/anon/authenticated) con ruoli di test, chiamante/operatore/societ?, intertenant, snapshot e checksum su PDF archivio; eseguire QA E2E prima di migration. Dettagli in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.
 
-## 2026-10-08 — SUPABASE LIVE RIPRISTINATO: P0 SICUREZZA (read-only)
+## 2026-10-08 ? SUPABASE LIVE RIPRISTINATO: P0 SICUREZZA (read-only)
 
-Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) è tornato `ACTIVE_HEALTHY`. Durante `COMING_UP` i cataloghi risultavano temporaneamente vuoti, poi sono riapparse **73 tabelle public, 27 funzioni, 141 policy**. `prima_nota`, `piano_conti` e `stampe_definitive` esistono. `list_migrations` resta vuoto e la relazione di tracking `supabase_migrations.schema_migrations` non risulta presente: vietata applicazione indiscriminata delle 72 migrations repository.
+Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) ? tornato `ACTIVE_HEALTHY`. Durante `COMING_UP` i cataloghi risultavano temporaneamente vuoti, poi sono riapparse **73 tabelle public, 27 funzioni, 141 policy**. `prima_nota`, `piano_conti` e `stampe_definitive` esistono. `list_migrations` resta vuoto e la relazione di tracking `supabase_migrations.schema_migrations` non risulta presente: vietata applicazione indiscriminata delle 72 migrations repository.
 
-**P0 confermato via introspezione:** 8 funzioni `SECURITY DEFINER` eseguibili da anon; due RPC stampa owner postgres senza controlli `auth.uid`/società; **22 tabelle con policy permissiva per anon/PUBLIC e grants anon SELECT/INSERT/UPDATE/DELETE**, incluse `prima_nota_righe` e `utenti_studio`. `get_advisors(security)` senza lint ma non risolve il rischio. Non è stato tentato accesso anon via HTTP o letto dato di cliente.
+**P0 confermato via introspezione:** 8 funzioni `SECURITY DEFINER` eseguibili da anon; due RPC stampa owner postgres senza controlli `auth.uid`/societ?; **22 tabelle con policy permissiva per anon/PUBLIC e grants anon SELECT/INSERT/UPDATE/DELETE**, incluse `prima_nota_righe` e `utenti_studio`. `get_advisors(security)` senza lint ma non risolve il rischio. Non ? stato tentato accesso anon via HTTP o letto dato di cliente.
 
-Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalità operative.
+Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalit? operative.
 
-## Aggiornamento Studio Grade LAB (2026-10-12) � SG-P4-05
+## Aggiornamento Studio Grade LAB (2026-10-12) ? SG-P4-05
 
-I collaudi **browser** restano pendenti. Sul LAB Stage3W (JWT + RPC, societ� `SG-E2E-*`) sono gi� dimostrati in automatico:
+I collaudi **browser** restano pendenti. Sul LAB Stage3W (JWT + RPC, societ? `SG-E2E-*`) sono gi? dimostrati in automatico:
 
 | Area | Evidenza LAB | Nota |
 |---|---|---|
@@ -244,11 +244,11 @@ I collaudi **browser** restano pendenti. Sul LAB Stage3W (JWT + RPC, societ� `SG
 | Aging | P3-07 | Tab UI dedicata ancora dovuta |
 | L6 regressione ripetibile | P4-02 | Pack core, non browser |
 
-**Regola P4-05:** nessun item browser viene marcato chiuso solo perch� esiste evidence LAB. Il debito manuale resta `MANUALE PENDENTE` finch� non collaudato in UI su societ� di test.
+**Regola P4-05:** nessun item browser viene marcato chiuso solo perch? esiste evidence LAB. Il debito manuale resta `MANUALE PENDENTE` finch? non collaudato in UI su societ? di test.
 
 ### Cross-ref LAB (2026-10-12 sera)
 
-- Import Contabilit� **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2045.txt`) ? Cronologia import panel open OK; **non** chiude i punti upload/ZIP/working-table/commit browser.
+- Import Contabilit? **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2045.txt`) ? Cronologia import panel open OK; **non** chiude i punti upload/ZIP/working-table/commit browser.
 - Import commit path LAB (FP22 / equiv / cronologia) coperto in L6 v3; **storico server** via `/api/studio/fiscal-journal-history` + merge UI (`STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012204548.txt` HISTORY_API=PASS).
 - Bank **storico commit** API + UI panel + fileHash marker (`STAGE3W_BANK_COMMIT_LAB_20261012204552.txt` HISTORY_API=PASS) ? **non** chiude QA browser riconciliazione end-to-end.
-- Liquidazioni IVA / Adempimenti **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IVA_2026-10-12T2025.txt`) ? anteprima/KPI/azioni visibili; **non** chiude consolidamento definitiva, LIPE, n� collaudo periodo.
+- Liquidazioni IVA / Adempimenti **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IVA_2026-10-12T2025.txt`) ? anteprima/KPI/azioni visibili; **non** chiude consolidamento definitiva, LIPE, n? collaudo periodo.

@@ -54,7 +54,7 @@
 
 | ID | Scenario | Oracle | Stato |
 |---|---|---|---|
-| LE-S01 | Operatore società A non legge feedback B | Deny | TBD (localStorage isolato per societaId; deny DB gated schema) |
+| LE-S01 | Operatore società A non legge feedback B | Deny | **PASS LAB** 20261012 API GET/POST `SOCIETA_NON_AUTORIZZATA` (`STAGE3W_SG_L2_DECISION_FEEDBACK_DB_*`) |
 | LE-S02 | Regola studio non inietta UUID conti società C in D | Resolve by code/natura only | **PASS** UNIT 20261012 (`resolveStudioRuleToSocietaTargets`) |
 | LE-S03 | Studio X non vede pattern studio Y | Deny | TBD |
 | LE-S04 | AI opzionale non posta senza conferma | No silent fiscal post | Policy esistente LAB flags |

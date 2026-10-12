@@ -1,12 +1,14 @@
 /**
- * SG-L2 DecisionFeedback LAB store — append-only localStorage (no migration).
- * Replaceable later by scoped RPC/table after schema approval.
+ * SG-L2 DecisionFeedback LAB store — append-only localStorage + optional DB dual-write.
+ * DB path: contabile_decision_feedback via /api/studio/decision-feedback (LAB flag).
  */
 
 import {
   buildDecisionFeedbackEvent,
   decisionFeedbackDedupKey,
 } from './buildDecisionFeedbackEvent.js'
+import { isDecisionFeedbackDbLabEnabled } from './isDecisionFeedbackDbLabEnabled.js'
+import { persistDecisionFeedbackEventsToDb } from './decisionFeedbackDbClient.js'
 
 const STORAGE_PREFIX = 'fiscosim.decision_feedback.lab.v1.'
 const MAX_ENTRIES = 400
@@ -61,6 +63,7 @@ export function saveDecisionFeedbackEvents(societaId, events, storage = globalTh
 /**
  * Append events after successful commit / confirmed bank decision.
  * Dedup on (societaId, requestId|primaNotaId|movementId, field).
+ * When DB LAB flag is on, also best-effort POST to scoped API (non-blocking).
  */
 export function appendDecisionFeedbackEvents(societaId, events, storage = globalThis.localStorage) {
   const sid = text(societaId)
@@ -68,6 +71,7 @@ export function appendDecisionFeedbackEvents(societaId, events, storage = global
   const prev = loadDecisionFeedbackEvents(sid, storage)
   const seen = new Set(prev.map(decisionFeedbackDedupKey))
   const next = [...prev]
+  const appended = []
   for (const raw of Array.isArray(events) ? events : []) {
     const event = buildDecisionFeedbackEvent({ ...raw, societaId: sid })
     if (!event) continue
@@ -75,7 +79,11 @@ export function appendDecisionFeedbackEvents(societaId, events, storage = global
     if (seen.has(key)) continue
     seen.add(key)
     next.unshift(event)
+    appended.push(event)
   }
   saveDecisionFeedbackEvents(sid, next, storage)
+  if (appended.length && isDecisionFeedbackDbLabEnabled()) {
+    void persistDecisionFeedbackEventsToDb({ societaId: sid, events: appended }).catch(() => null)
+  }
   return loadDecisionFeedbackEvents(sid, storage)
 }

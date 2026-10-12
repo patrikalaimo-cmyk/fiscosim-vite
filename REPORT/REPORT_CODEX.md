@@ -1175,3 +1175,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Bypass staging UUID ephemeral (`ic-*`) solo SG-E2E + flag persist LAB (`isLabEphemeralImportStagingBypassEnabled`).
 - Evidence: `REPORT/STAGE3W_L4_BROWSER_IMPORT_UPLOAD_2026-10-12T2210.txt` ? `FISCAL_WRITE_COUNT=1`, PN `fe421feb-e3bf-43e0-9135-d17c3b3aa5d8` (3 righe).
 - Stop operatore: schema DecisionFeedback DB; P0-03/04 LIVE; cutover prod; debito manuale A100.
+
+## 2026-10-12 - SG-L2 DecisionFeedback DB LAB + LE-S01
+
+- SQL LAB-only `sql/security_p0/61_contabile_decision_feedback_LAB_ONLY.sql` su volume P0 pinato: RLS on, grants solo `service_role` SELECT/INSERT.
+- API `/api/studio/decision-feedback` (GET/POST) gated `FISCOSIM_DECISION_FEEDBACK_DB_LAB_ENABLED`; dual-write da `appendDecisionFeedbackEvents`.
+- Smoke: `scripts/security_p0/run-sg-l2-decision-feedback-db-lab.mjs` ? POST A 201, GET A 200, GET/POST B 403 `SOCIETA_NON_AUTORIZZATA` (LE-S01).
+- Evidence: `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_DB_2026-10-12T2217.txt`; UNIT `tests/decisionFeedbackApi.test.js` + store 10/10.
+- Non eseguito: P0-03/04 LIVE, cutover prod `createPrimaNotaCompleta`.

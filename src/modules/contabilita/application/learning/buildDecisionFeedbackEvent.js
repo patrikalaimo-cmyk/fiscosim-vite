@@ -70,7 +70,7 @@ export function buildDecisionFeedbackEvent(raw = {}) {
     amount: money(raw.amount),
     counterpartyKey: text(raw.counterpartyKey || raw.counterparty_key) || '',
     createdAt: text(raw.createdAt || raw.created_at) || new Date().toISOString(),
-    storageKind: 'lab_localstorage',
+    storageKind: text(raw.storageKind || raw.storage_kind) || 'lab_localstorage',
   }
 }
 

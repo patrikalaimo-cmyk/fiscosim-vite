@@ -172,7 +172,7 @@ Se serve entità nuova (da approvare):
 
 Per ciascuna: RLS societa/studio, no anon, API scoped come `fiscal-journal-history`, audit.
 
-**Nessuna migration in questa sessione.**
+**Schema LAB applicato 20261012:** `public.contabile_decision_feedback` via `sql/security_p0/61_contabile_decision_feedback_LAB_ONLY.sql` sul volume P0 LAB pinato; accesso solo `service_role` + API scoped. Nessuna applicazione LIVE/prod.
 
 ---
 

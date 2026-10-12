@@ -158,12 +158,12 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 |---|---|---|---|
 | SG-L0 | Audit + architettura + matrice (Fase A) | — | **PASS** 20261012 docs; HEAD `46c60ab` |
 | SG-L1 | Consolida SuggestionResolver su history Import esistenti; de-dup path `ai_learning` | L0 + approvazione | **PASS** 20261012 facade + wire staging/WV IVA; no migration; UNIT L1 3/3 |
-| SG-L2 | DecisionFeedback append-only post-commit (LAB flag) Import/Manuale | L1 + **approvazione schema** | **PARTIAL** 20261012: localStorage LAB wire Import+Bank; **DB schema ancora gated** |
+| SG-L2 | DecisionFeedback append-only post-commit (LAB flag) Import/Manuale | L1 + **approvazione schema** | **PASS LAB** 20261012: tabella `contabile_decision_feedback` + API scoped + dual-write; LE-S01 deny cross-company |
 | SG-L3 | Chiavi contestuali controparte+categoria/descrizione (multi-prodotto) | L2 | **PASS** 20261012 LAB: history nativo desc keys + feedback consume; UNIT LE-I01 |
 | SG-L4 | Regole studio Livello B (no UUID conti alieni) | L1 | **PASS** 20261012 UNIT LE-S02 + resolve-by-code/natura; L1 fallback opzionale |
 | SG-L5 | Bank: wire partitario live + matcher su import; poi memoria match confermati; fix id `bm-*` | L2 | **PARTIAL** 20261012: live wire + `demo-bm-*` + memoria LAB local; DB memory gated |
 | SG-L6 | UI spiegazione proposte + mass-confirm gated | L3/L5 | **PARTIAL** 20261012: WV explanation + mass-confirm high-confidence gate; commit reale ancora LAB/mock |
-| SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | **PARTIAL** L6CORE3 PASS; LE-S01 (feedback cross-company) gated da schema DB |
+| SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | **PARTIAL** L6CORE3 PASS; LE-S01 API deny **PASS** 20261012; metriche baseline ancora aperte |
 
 **Non negoziabile:** nessuna migration senza consenso; nessun cutover prod; non rompere P0–P4 PASS.
 
@@ -181,8 +181,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione (stop operatore)
 
-1. ~~Browser A100 Import upload/commit XML~~ **PASS LAB** 20261012 (`STAGE3W_L4_BROWSER_IMPORT_UPLOAD_*`; fiscal-journal-post).
-2. Promuovere DecisionFeedback a **schema DB** solo con approvazione.
-3. P0-03/P0-04 LIVE; cutover prod `createPrimaNotaCompleta` solo con consenso esplicito.
+1. ~~Browser A100 Import upload/commit XML~~ **PASS LAB** 20261012.
+2. ~~DecisionFeedback schema DB LAB~~ **PASS LAB** 20261012 (`contabile_decision_feedback` + `/api/studio/decision-feedback`; no anon grants).
+3. **P0-03/P0-04 LIVE** e **cutover prod** `createPrimaNotaCompleta` — richiedono consenso esplicito dedicato (non ancora eseguiti).
 4. Collaudi manuali residui in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md` (A100 non dichiarabile al 100% senza sessione operatore).
 Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `REPORT/REPORT_CODEX.md`.
