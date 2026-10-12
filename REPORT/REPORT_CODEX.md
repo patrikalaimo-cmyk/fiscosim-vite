@@ -1183,3 +1183,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Smoke: `scripts/security_p0/run-sg-l2-decision-feedback-db-lab.mjs` ? POST A 201, GET A 200, GET/POST B 403 `SOCIETA_NON_AUTORIZZATA` (LE-S01).
 - Evidence: `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_DB_2026-10-12T2217.txt`; UNIT `tests/decisionFeedbackApi.test.js` + store 10/10.
 - Non eseguito: P0-03/04 LIVE, cutover prod `createPrimaNotaCompleta`.
+
+## 2026-10-12 - SG-P0-03/04 LAB + cutover Stage3W
+
+- Cutover: `isFiscalJournalPersistEnabled` (LAB flags + `FISCOSIM_FISCAL_JOURNAL_PERSIST_ENABLED` + stack isolato); legacy solo con `FISCOSIM_FISCAL_JOURNAL_LEGACY_FALLBACK`.
+- P0-03: audit su recent PN Stage3W; period guard in RPC; audit append su `createPrimaNotaCompleta`; stampa UI evidence gate.
+- P0-04 LAB: `62_p0_04_anon_containment_LAB_ONLY.sql` ? anon DML core=0; drop `anon_access_test`. LIVE cloud non applicato (no credenziali attive).
+- Evidence: `REPORT/STAGE3W_SG_P0_03_04_CUTOVER_2026-10-12T2221.txt`; UNIT cutover/persist 19/19.

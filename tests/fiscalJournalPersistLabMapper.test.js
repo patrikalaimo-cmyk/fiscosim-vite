@@ -14,9 +14,13 @@ const C3 = '71000000-0000-4000-8000-000000000012'
 const REQ = '71000000-0000-4000-8000-000000000099'
 
 test('fiscal persist LAB flag is OFF by default', () => {
+  const prev = process.env.FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED
+  delete process.env.FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED
   assert.equal(isFiscalJournalPersistLabEnabled(), false)
   assert.equal(isFiscalJournalPersistLabEnabled(false), false)
   assert.equal(isFiscalJournalPersistLabEnabled(true), true)
+  if (prev === undefined) delete process.env.FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED
+  else process.env.FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED = prev
 })
 
 test('resolveFiscalContractKind maps fattura / NC / split / pagamento / parcella', () => {
@@ -90,7 +94,7 @@ test('persistPrimaNotaDraft stays on createPrimaNotaCompleta by default and has 
     'utf8',
   )
   assert.match(pn, /createPrimaNotaCompleta/)
-  assert.match(pn, /isFiscalJournalPersistLabEnabled/)
+  assert.match(pn, /isFiscalJournalPersistEnabled/)
   assert.match(pn, /mapPersistencePlanToFiscalJournalRequest/)
   assert.match(pn, /postFiscalJournalAtomicViaStudioApi/)
   assert.doesNotMatch(pn, /fiscosim_post_fiscal_journal/)

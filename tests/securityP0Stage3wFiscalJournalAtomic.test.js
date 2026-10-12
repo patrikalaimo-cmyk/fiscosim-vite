@@ -296,15 +296,16 @@ test('Stage3W persistent install script is gated and preserves Stage3U', () => {
   assert.match(ps, /fiscosim_post_general_journal/)
 })
 
-test('Stage3W RPC name stays out of Manuale/Import; persist default remains createPrimaNotaCompleta', () => {
+test('Stage3W RPC name stays out of Manuale/Import; persist routes via HTTP flag/cutover', () => {
   const pn = source('src/modules/contabilita/application/persistPrimaNotaDraft.js')
   const service = source('services/primaNotaService.js')
   assert.match(pn, /createPrimaNotaCompleta/)
-  assert.match(pn, /isFiscalJournalPersistLabEnabled/)
+  assert.match(pn, /isFiscalJournalPersistEnabled/)
+  assert.match(pn, /isFiscalJournalLegacyFallbackEnabled/)
   assert.doesNotMatch(pn, /fiscosim_post_fiscal_journal/)
   assert.doesNotMatch(service, /fiscosim_post_fiscal_journal/)
   assert.doesNotMatch(source('src/modules/import_contabilita/application/importContabilitaWorkflow.js'), /fiscosim_post_fiscal_journal/)
-  const flag = source('src/modules/contabilita/application/fiscalJournal/isFiscalJournalPersistLabEnabled.js')
-  assert.match(flag, /VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB/)
-  assert.match(flag, /FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED/)
+  const flag = source('src/modules/contabilita/application/fiscalJournal/isFiscalJournalPersistEnabled.js')
+  assert.match(flag, /FISCOSIM_FISCAL_JOURNAL_PERSIST_ENABLED/)
+  assert.match(flag, /isFiscalJournalPersistLabEnabled/)
 })

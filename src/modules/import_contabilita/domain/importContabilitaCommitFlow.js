@@ -3,7 +3,7 @@
  */
 
 import { isDemoCompany } from '../../test_mode/demoCompanyGuard.js'
-import { isFiscalJournalPersistLabEnabled } from '../../contabilita/application/fiscalJournal/isFiscalJournalPersistLabEnabled.js'
+import { isFiscalJournalPersistEnabled } from '../../contabilita/application/fiscalJournal/isFiscalJournalPersistEnabled.js'
 
 const DOCUMENTI_IMPORT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SG_E2E_SOCIETA_CODE_RE = /^sg-e2e/i
@@ -58,7 +58,7 @@ export function getImportCommitLogTag(flowKind) {
 export function isLabEphemeralImportStagingBypassEnabled(societa = null, labPersistOverride) {
   const codice = String(societa?.codice || '').trim()
   if (!SG_E2E_SOCIETA_CODE_RE.test(codice)) return false
-  return isFiscalJournalPersistLabEnabled(labPersistOverride)
+  return isFiscalJournalPersistEnabled(labPersistOverride)
 }
 
 /**

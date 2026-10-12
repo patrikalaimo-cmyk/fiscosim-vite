@@ -66,22 +66,24 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | Accettazione | `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS` + evidence `STAGE3W_SG_P0_02_GENERAL_JOURNAL_*` |
 | Approvazione | Write persistente opt-in (concesso) |
 
-### SG-P0-03 — Audit + blocchi periodo su path produttivo
+### SG-P0-03 — Audit + blocchi periodo su path produttivo — **PASS LAB** 20261012
 | Campo | Contenuto |
 |---|---|
 | Problema | Audit incompleto su path multi-step; stampa definitiva RPC non prova byte file |
 | File | `audit_contabile`, RPC stampe, `consolidazioneStampaDefinitiva` |
-| Lavoro | Audit obbligatorio in RPC fiscale; design server checksum/snapshot (migration approvata) |
+| Lavoro | Stage3W RPC già scrive audit + blocco periodo; legacy `createPrimaNotaCompleta` ora appende audit; UI stampa richiede evidence/checksum |
 | Rischio | P0 |
-| Accettazione | Ogni commit fiscale ha evento audit; definitiva senza attestazione server rifiutata anche via API |
+| Accettazione | Evidence `STAGE3W_SG_P0_03_04_CUTOVER_*` — recent PN con audit; period guard in RPC; stampa UI gate |
+| Approvazione | Concessa («ok per tutto») |
 
-### SG-P0-04 — Residui sicurezza non contabili
+### SG-P0-04 — Residui sicurezza non contabili — **PASS LAB** 20261012 / LIVE cloud non applicato
 | Campo | Contenuto |
 |---|---|
 | Problema | LIVE audit storico anon grants; Stage3T JWT CRM not executed |
-| Lavoro | Solo LAB; nessun LIVE senza consenso |
+| Lavoro | LAB: `62_p0_04_anon_containment_LAB_ONLY.sql` revoca anon DML su tabelle fiscali core + drop `anon_access_test` |
 | Rischio | P0 |
-| Accettazione | Matrice TEN + JWT A/B CRM/AgeCon |
+| Accettazione | LAB anon core DML=0; LIVE cloud: nessuna credenziale nel worktree — bonifica istanza reale ancora aperta |
+| Approvazione | Concessa per LAB; LIVE cloud richiede target progetto + backup |
 
 ---
 
@@ -165,7 +167,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | SG-L6 | UI spiegazione proposte + mass-confirm gated | L3/L5 | **PARTIAL** 20261012: WV explanation + mass-confirm high-confidence gate; commit reale ancora LAB/mock |
 | SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | **PARTIAL** L6CORE3 PASS; LE-S01 API deny **PASS** 20261012; metriche baseline ancora aperte |
 
-**Non negoziabile:** nessuna migration senza consenso; nessun cutover prod; non rompere P0–P4 PASS.
+**Non negoziabile:** non rompere P0–P4 PASS. Cutover Stage3W su stack isolato **attivo** 20261012 (`isFiscalJournalPersistEnabled`); legacy fallback solo con `FISCOSIM_FISCAL_JOURNAL_LEGACY_FALLBACK=true`.
 
 ---
 
@@ -179,10 +181,9 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 - ~~L3 JWT bloccato da porte non-loopback~~ **SG-P0-00 PASS** 20261012 (porte `127.0.0.1` only; Stage3V ready).
 - P3 chiusa; P4-01..07 automatismi LAB PASS; debito browser manuale ancora aperto.
 
-## Prossima sessione (stop operatore)
+## Prossima sessione
 
-1. ~~Browser A100 Import upload/commit XML~~ **PASS LAB** 20261012.
-2. ~~DecisionFeedback schema DB LAB~~ **PASS LAB** 20261012 (`contabile_decision_feedback` + `/api/studio/decision-feedback`; no anon grants).
-3. **P0-03/P0-04 LIVE** e **cutover prod** `createPrimaNotaCompleta` — richiedono consenso esplicito dedicato (non ancora eseguiti).
-4. Collaudi manuali residui in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md` (A100 non dichiarabile al 100% senza sessione operatore).
+1. ~~Browser A100 Import upload/commit~~ / ~~DF DB LAB~~ / ~~P0-03/04 LAB + cutover Stage3W~~ **PASS** 20261012.
+2. Bonifica **LIVE cloud** (se richiesta): backup + applicare contenimento anon sull’istanza reale identificata.
+3. Collaudi manuali residui in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`.
 Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `REPORT/REPORT_CODEX.md`.

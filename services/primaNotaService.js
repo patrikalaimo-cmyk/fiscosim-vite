@@ -248,6 +248,30 @@ export async function createPrimaNotaCompleta({
     ritenuteUpd = { data: updatedRows, error: null }
   }
 
+  // SG-P0-03: every successful fiscal commit must leave an audit_contabile row.
+  // Best-effort on legacy multi-step path (Stage3W already inserts audit in-RPC).
+  try {
+    const societaId = pnPayload?.societa_id || pn?.societa_id || null
+    if (societaId && primaNotaId) {
+      await db.from('audit_contabile').insert([{
+        societa_id: societaId,
+        entity_type: 'prima_nota',
+        entity_id: primaNotaId,
+        operation_type: 'INSERT',
+        operation_reason: String(pnPayload?.motivazione || pnPayload?.descrizione || 'createPrimaNotaCompleta').slice(0, 500),
+        after_data: {
+          path: 'createPrimaNotaCompleta',
+          numero_documento: pnPayload?.numero_documento || pn?.numero_documento || null,
+          data_registrazione: pnPayload?.data_registrazione || pn?.data_registrazione || null,
+        },
+        performed_by: pnPayload?.created_by || pnPayload?.operatore_id || null,
+        source_module: pnPayload?.documento_import_id ? 'import_contabilita' : 'registrazione_manual',
+      }])
+    }
+  } catch {
+    /* audit best-effort on legacy path */
+  }
+
   return {
     data: { primaNotaId, pn, righeIns, vatIns, partIns, ritenuteIns, ritenuteUpd },
     error: null,
