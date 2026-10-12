@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** Import #4 storico marker **PASS** (history fallback Stage3W PN/claim + override 5.02). Precedente: manual-debt gate #2/#9/#10 PASS. LIVE cloud non toccato.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (pin dopo push)
+* **HEAD:** `179a7d8`
 * **Limite:** LIVE cloud containment; Import #6/#7/#11; collaudi fiscali Manuale/IVA/Consultazione
 
 ## 2. Prossimo passo operativo
