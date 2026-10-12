@@ -50,6 +50,7 @@ const STAMPE_TABS = [
   { id: 'giornale', label: 'Giornale' },
   { id: 'mastrini', label: 'Mastrini' },
   { id: 'bilancio', label: 'Bilancio' },
+  { id: 'fascicolo', label: 'Fascicolo cliente' },
 ]
 
 const CONT_TAB_ALIASES = {

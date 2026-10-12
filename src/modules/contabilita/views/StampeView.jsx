@@ -10,6 +10,11 @@ import {
   isStampaOperativa,
 } from '../application/stampe/buildPartitariStampaModel.js'
 import {
+  buildFascicoloClientePeriodo,
+  fascicoloHtmlToBytes,
+} from '../application/stampe/buildFascicoloClientePeriodo.js'
+import { hashStampaContenuto } from '../application/stampe/hashStampaContenuto.js'
+import {
   buildRegistroIvaCsv,
   buildRegistroIvaXlsx,
   buildGiornaleCsv,
@@ -352,7 +357,7 @@ const GiornaleEmptyState = ({ periodoInizio, periodoFine }) => (
 
 export default function StampeView({ contTab, societaAttiva, scritture, pianoConti, causaliIva }) {
   if (!societaAttiva) return null
-  if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio', 'liquidazione_iva_periodica'].includes(contTab)) return null
+  if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio', 'fascicolo', 'liquidazione_iva_periodica'].includes(contTab)) return null
   return (
     <StampeDetailView
       tipoStampa={contTab}
@@ -378,6 +383,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const [partitariModel,setPartitariModel]=useState(null);
   const [mastriniModel,setMastriniModel]=useState(null);
   const [bilancioModel,setBilancioModel]=useState(null);
+  const [fascicoloModel,setFascicoloModel]=useState(null);
+  const [fascicoloHash,setFascicoloHash]=useState('');
   const [error,setError]=useState('');
   const currentYear = String(new Date().getFullYear());
   const [bilancioViewTab,setBilancioViewTab]=useState('verifica');
@@ -415,7 +422,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     partitari:'Partitari Clienti/Fornitori',
     giornale:'Giornale Contabile',
     mastrini:'Mastrini',
-    bilancio:'Bilancio di Verifica'
+    bilancio:'Bilancio di Verifica',
+    fascicolo:'Fascicolo cliente'
   };
 
   const handleSort = (col) => {
@@ -538,6 +546,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     setPartitariModel(null);
     setMastriniModel(null);
     setBilancioModel(null);
+    setFascicoloModel(null);
+    setFascicoloHash('');
     
     try{
       if(tipoStampa==='registri_iva'){
@@ -628,6 +638,78 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
           setInfoAlert(model.warnings[0]);
         }
       }
+      else if(tipoStampa==='fascicolo'){
+        const year = String(periodoInizio.slice(0, 4) || new Date().getFullYear());
+        const esercizioInizio = `${year}-01-01`;
+        const [{ data: pnEntries, error: pnError }, partRes] = await Promise.all([
+          contabilitaRepo.getLibroGiornalePerStampa(societa.id, esercizioInizio, periodoFine),
+          contabilitaRepo.getPartitarioBySocieta(societa.id, {}),
+        ]);
+        if(pnError) throw pnError;
+        if(partRes.error) throw partRes.error;
+        let chart = Array.isArray(pianoConti) ? pianoConti : [];
+        if(!chart.length){
+          const { data: chartRows, error: chartError } = await contabilitaRepo.getPianoConti(societa.id);
+          if(chartError) throw chartError;
+          chart = Array.isArray(chartRows) ? chartRows : [];
+        }
+        const giornale = buildLibroGiornaleModel(
+          (pnEntries || []).filter((e) => String(e.data_registrazione || '').slice(0, 10) >= periodoInizio)
+        );
+        const partitari = buildPartitariStampaModel(partRes.data || [], {
+          societaId: societa.id,
+          tipo: 'tutti',
+          stato: 'tutti',
+          periodoInizio,
+          periodoFine,
+        });
+        const mastrini = buildMovimentiPerContoModel(pnEntries || [], {
+          societaId: societa.id,
+          periodoInizio,
+          periodoFine,
+        });
+        const bilancio = buildSaldiPerContoEsercizioModel(pnEntries || [], chart, {
+          societaId: societa.id,
+          esercizioInizio,
+          periodoInizio: periodoInizio.startsWith(year) ? periodoInizio : esercizioInizio,
+          periodoFine,
+        });
+        const fascicolo = buildFascicoloClientePeriodo({
+          societa,
+          periodoInizio,
+          periodoFine,
+          giornaleModel: giornale,
+          partitariModel: partitari,
+          mastriniModel: mastrini,
+          bilancioModel: bilancio,
+        });
+        setGiornaleModel(giornale);
+        setPartitariModel(partitari);
+        setMastriniModel(mastrini);
+        setBilancioModel(bilancio);
+        setFascicoloModel(fascicolo);
+        setPreviewHtml(fascicolo.html || '');
+        if(!fascicolo.ok){
+          setError(`Fascicolo: ${(fascicolo.blockers || []).join(', ') || 'non generabile'}`);
+        } else {
+          const bytes = fascicoloHtmlToBytes(fascicolo.html);
+          try {
+            const digest = await hashStampaContenuto({
+              fileBytes: bytes,
+              mimeType: 'text/html',
+              societaId: societa.id,
+              tipoStampa: 'fascicolo',
+              annoFiscale: year,
+              periodoInizio,
+              periodoFine,
+            });
+            setFascicoloHash(digest);
+            setInfoAlert(`Fascicolo generato (${fascicolo.fileName}). Hash contenuto: ${digest.slice(0, 16)}…`);
+          } catch (hashErr) {
+            setInfoAlert(`Fascicolo generato (${fascicolo.fileName}). Hash non disponibile: ${hashErr.message || hashErr}`);
+          }
+        }
+      }
     }catch(err){
       setError(err.message || String(err));
     }finally{
@@ -650,7 +732,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;
-    a.download=`${tipoStampa}_${societa?.denominazione||'stampa'}_${periodoFine}.html`;
+    a.download=fascicoloModel?.fileName
+      || `${tipoStampa}_${societa?.denominazione||'stampa'}_${periodoFine}.html`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -661,6 +744,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     partitari: 'Partitari',
     mastrini: 'Mastrini',
     bilancio: 'Bilancio',
+    fascicolo: 'Fascicolo cliente',
     liquidazione_iva_periodica: 'Liquidazione IVA Periodica'
   };
 
@@ -670,6 +754,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     partitari: 'Stampa schede e prospetti partitari per clienti e fornitori',
     mastrini: 'Visualizza le schede di mastro per i singoli conti del piano dei conti',
     bilancio: 'Prospetti di bilancio di verifica, situazione economica e patrimoniale',
+    fascicolo: 'Un unico file di fine periodo da modelli canonici (HTML stampabile / print-to-PDF)',
     liquidazione_iva_periodica: 'Visualizzazione e consolidamento definitivo della Liquidazione IVA del periodo'
   };
 
@@ -2949,11 +3034,37 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
         );
       })()}
 
+      {tipoStampa === 'fascicolo' && fascicoloModel && (
+        <ContPreviewCard title="Fascicolo cliente — file unico di periodo">
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--tx)' }}>
+              File: <strong>{fascicoloModel.fileName}</strong>
+              {fascicoloHash ? <> · hash <code style={{ fontSize: '0.75rem' }}>{fascicoloHash.slice(0, 24)}…</code></> : null}
+            </div>
+            <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--mu)', fontSize: '0.82rem' }}>
+              {(fascicoloModel.sections || []).map((s) => (
+                <li key={s.id}>{s.title}: {s.included ? `incluso (${s.count})` : `escluso (${s.reason})`}</li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <ContActionButton label="Scarica file unico" onClick={scaricaHTML} disabled={!previewHtml} />
+              <ContActionButton label="Stampa / PDF" onClick={stampaPDF} disabled={!previewHtml} variant="secondary" />
+            </div>
+            <ContGridFooter text="Fascicolo provvisorio da modelli canonici. Print-to-PDF dal browser; non è stampa definitiva server-side." type="warning" />
+          </div>
+        </ContPreviewCard>
+      )}
+
       {/* Spazio per card iniziale quando non è ancora stata generata la stampa per le schede operative */}
-      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !partitariModel && !mastriniModel && !bilancioModel && !loading && !['partitari', 'mastrini', 'bilancio'].includes(tipoStampa) && (
+      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !partitariModel && !mastriniModel && !bilancioModel && !fascicoloModel && !loading && !['partitari', 'mastrini', 'bilancio', 'fascicolo'].includes(tipoStampa) && (
         <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '.5rem' }}>🖨️</div>
           <div style={{ color: 'var(--mu)' }}>Seleziona il periodo e clicca "Genera Anteprima" per visualizzare il documento</div>
+        </div>
+      )}
+      {isOperativo && tipoStampa === 'fascicolo' && !fascicoloModel && !loading && (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
+          <div style={{ color: 'var(--mu)' }}>Seleziona il periodo e genera il fascicolo cliente (file unico fine periodo).</div>
         </div>
       )}
       {tipoStampa === 'liquidazione_iva_periodica' && (

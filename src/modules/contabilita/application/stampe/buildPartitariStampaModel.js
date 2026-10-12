@@ -231,6 +231,7 @@ export const STAMPE_OPERATIVE_TYPES = [
   'partitari',
   'mastrini',
   'bilancio',
+  'fascicolo',
 ]
 
 export function isStampaOperativa(tipoStampa) {

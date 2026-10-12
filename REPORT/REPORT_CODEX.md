@@ -998,6 +998,16 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - History query hit; UI store 1 riga stesso hash
 - Unit `importCronologiaHash` 4/4. Nessun LIVE / SG-P0-00.
 
+## 2026-10-12 - SG-P3-04 Fascicolo cliente PDF (file unico periodo) PASS
+
+- Builder `buildFascicoloClientePeriodo`: un HTML stampabile (print-to-PDF) da giornale+partitari+mastrini+bilancio canonici; `definitive:false`; hash SHA-256 sul file (`hashStampaContenuto`).
+- UI: tab Stampe `fascicolo` operativo; genera/scarica/stampa file unico.
+- Script `scripts/security_p0/run-stage3w-fascicolo-cliente-periodo.mjs`. Evidence:
+  - `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.txt` PASS
+  - file unico `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.html` (49118 bytes, hash `3df9c797…`)
+  - sezioni: giornale|partitari|mastrini|bilancio; no mock amounts
+- Unit `fascicoloClientePeriodo` 3/3. Gap: non definitiva server-side / non puppeteer PDF byte nativo; print-to-PDF browser. Nessun LIVE / SG-P0-00.
+
 ## 2026-10-12 - SG-P3-03 Stampe Partitari/Mastrini/Bilancio da PN PASS
 
 - UI `StampeView`: `isOperativo` include `partitari` / `mastrini` / `bilancio`; rimossa gate fac-simile; `generaStampa` carica partitario + PN + piano conti.

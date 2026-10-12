@@ -71,7 +71,7 @@ test('isOperativo include partitari, mastrini, bilancio', () => {
   assert.ok(STAMPE_OPERATIVE_TYPES.includes('partitari'))
   assert.ok(STAMPE_OPERATIVE_TYPES.includes('mastrini'))
   assert.ok(STAMPE_OPERATIVE_TYPES.includes('bilancio'))
-  assert.equal(isStampaOperativa('fascicolo'), false)
+  assert.equal(isStampaOperativa('fascicolo'), true)
 })
 
 test('mastrini e bilancio models restano interrogabili da PN (no mock amounts)', () => {
