@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** SG-L3 context keys + consume DecisionFeedback LAB **PARTIAL**; SG-L6 UI explanation IVA **PARTIAL**. A100 completo ancora gated.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit)
+* **HEAD:** `4d642a7` (locale = origin)
 * **Limite:** no migration learning DB; no LIVE; debito browser A100; mass-confirm Bank aperto
 
 ## 2. Prossimo passo operativo
