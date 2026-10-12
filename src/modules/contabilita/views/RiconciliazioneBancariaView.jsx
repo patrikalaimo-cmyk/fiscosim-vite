@@ -27,6 +27,11 @@ import RiconciliazioneTableJumpControls from '../components/riconciliazione/Rico
 import { getRiconciliazioneMatchingFixtures } from '../components/riconciliazione/riconciliazioneMatchingFixtures.js'
 import { runRiconciliazioneMatchForMovement } from '../components/riconciliazione/runRiconciliazioneMatchForMovement.js'
 import { mapBankStatementMovementToWorkingRow } from '../components/riconciliazione/mapBankStatementMovementToWorkingRow.js'
+import {
+  buildMatcherMovementFromWorkingRow,
+  mapPartitarioRowsToMatchCandidates,
+} from '../application/riconciliazione/mapPartitarioRowToMatchCandidate.js'
+import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { applyBankMovementCorrection } from '../components/riconciliazione/applyBankMovementCorrection.js'
 import { buildReconciliationStorageKey } from '../components/riconciliazione/buildReconciliationStorageKey.js'
 import {
@@ -98,9 +103,12 @@ function buildImportIdentifier({ file, importDraft }) {
   return `${fileName}-${fileSize}-${lastModified}`
 }
 
-export default function RiconciliazioneBancariaView() {
+export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
   const [mode, setMode] = useState('demo')
   const [selectedId, setSelectedId] = useState(RICONCILIAZIONE_MOCK_DATA.movements[0]?.id)
+  const [livePartiteCandidates, setLivePartiteCandidates] = useState([])
+  const [livePartiteError, setLivePartiteError] = useState('')
+  const [livePartiteLoading, setLivePartiteLoading] = useState(false)
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   const [detailCollapsed, setDetailCollapsed] = useState(false)
   const [summaryCollapsed, setSummaryCollapsed] = useState({ ...DEFAULT_RECONCILIATION_SUMMARY_COLLAPSED })
@@ -205,23 +213,100 @@ export default function RiconciliazioneBancariaView() {
     )
   }, [filteredMovements, selectedId, sourceMovements])
 
+  useEffect(() => {
+    const sid = String(societaId || '').trim()
+    if (!sid) {
+      setLivePartiteCandidates([])
+      setLivePartiteError('')
+      setLivePartiteLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    setLivePartiteLoading(true)
+    setLivePartiteError('')
+    Promise.resolve(contabilitaRepo.getPartitarioAperto(sid))
+      .then((result) => {
+        if (cancelled) return
+        if (result?.error) {
+          setLivePartiteCandidates([])
+          setLivePartiteError(String(result.error.message || result.error))
+          return
+        }
+        setLivePartiteCandidates(mapPartitarioRowsToMatchCandidates(result?.data || []))
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setLivePartiteCandidates([])
+        setLivePartiteError(String(error?.message || error || 'Errore caricamento partitario'))
+      })
+      .finally(() => {
+        if (!cancelled) setLivePartiteLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [societaId])
+
   const workingContext = useMemo(() => {
     const fixtures = getRiconciliazioneMatchingFixtures()
     const selectedMovementId = selectedMovement?.movementId || selectedMovement?.id || ''
+
+    if (hasImportedStatement && selectedMovement && livePartiteCandidates.length > 0) {
+      const matcherMovement = buildMatcherMovementFromWorkingRow(selectedMovement, bankStatement)
+      const decisionProposal = runRiconciliazioneMatchForMovement({
+        movement: matcherMovement,
+        partiteAperte: livePartiteCandidates,
+      })
+      return {
+        fixtures,
+        available: true,
+        source: 'live_partitario',
+        message: `Match su partitario aperto società (${livePartiteCandidates.length} partite${livePartiteLoading ? ', reload…' : ''})`,
+        movement: selectedMovement,
+        fixtureMovement: matcherMovement,
+        fixtureCase: null,
+        decisionProposal,
+        livePartiteCount: livePartiteCandidates.length,
+        livePartiteError,
+      }
+    }
+
+    if (hasImportedStatement && selectedMovement && societaId) {
+      return {
+        fixtures,
+        available: false,
+        source: 'live_partitario_empty',
+        message: livePartiteError
+          ? `Partitario non disponibile: ${livePartiteError}`
+          : livePartiteLoading
+            ? 'Caricamento partitario aperto…'
+            : 'Nessuna partita aperta sul partitario società — match non eseguibile',
+        movement: selectedMovement,
+        fixtureMovement: buildMatcherMovementFromWorkingRow(selectedMovement, bankStatement),
+        fixtureCase: null,
+        decisionProposal: null,
+        livePartiteCount: 0,
+        livePartiteError,
+      }
+    }
+
     const fixtureMovement = fixtures.movements.find((item) => item.movementId === selectedMovementId) || null
     if (!fixtureMovement) {
       return {
         fixtures,
         available: false,
         source: 'fallback',
-        message: 'Decisione non disponibile - movimento reale non presente nel dataset mock',
+        message: 'Decisione non disponibile — usa import estratto + partitario società, oppure demo R7B',
         movement: selectedMovement,
         fixtureMovement: null,
         fixtureCase: null,
         decisionProposal: null,
       }
     }
-    const decisionProposal = runRiconciliazioneMatchForMovement({ movement: fixtureMovement, partiteAperte: fixtures.partiteAperte })
+    const decisionProposal = runRiconciliazioneMatchForMovement({
+      movement: fixtureMovement,
+      partiteAperte: fixtures.partiteAperte,
+    })
     const fixtureCase = fixtures.expectedCases.find((item) => item.movementId === fixtureMovement.movementId) || null
     return {
       fixtures,
@@ -233,7 +318,15 @@ export default function RiconciliazioneBancariaView() {
       fixtureCase,
       decisionProposal,
     }
-  }, [selectedMovement])
+  }, [
+    selectedMovement,
+    hasImportedStatement,
+    livePartiteCandidates,
+    livePartiteLoading,
+    livePartiteError,
+    bankStatement,
+    societaId,
+  ])
 
   const visibleSelectableIds = useMemo(
     () => filteredMovements.filter(isMovementSelectableForMassActions).map((movement) => movement.id),

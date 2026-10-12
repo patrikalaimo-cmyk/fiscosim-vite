@@ -75,7 +75,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
   },
   movements: [
     {
-      id: 'bm-001',
+      id: 'demo-bm-001',
       status: 'Pronta',
       statusTone: 'green',
       dateOp: '21/12/2025',
@@ -154,7 +154,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
       },
     },
     {
-      id: 'bm-002',
+      id: 'demo-bm-002',
       status: 'Pronta',
       statusTone: 'green',
       dateOp: '22/12/2025',
@@ -224,7 +224,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
       },
     },
     {
-      id: 'bm-003',
+      id: 'demo-bm-003',
       status: 'Pronta',
       statusTone: 'blue',
       dateOp: '22/12/2025',
@@ -303,7 +303,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
       },
     },
     {
-      id: 'bm-004',
+      id: 'demo-bm-004',
       status: 'Pronta',
       statusTone: 'green',
       dateOp: '23/12/2025',
@@ -363,7 +363,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
       },
     },
     {
-      id: 'bm-005',
+      id: 'demo-bm-005',
       status: 'Da dettagliare',
       statusTone: 'amber',
       dateOp: '24/12/2025',
@@ -423,7 +423,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
       },
     },
     {
-      id: 'bm-006',
+      id: 'demo-bm-006',
       status: 'Da abbinare',
       statusTone: 'blue',
       dateOp: '24/12/2025',
@@ -490,7 +490,7 @@ export const RICONCILIAZIONE_MOCK_DATA = {
       },
     },
     {
-      id: 'bm-007',
+      id: 'demo-bm-007',
       status: 'Duplicata',
       statusTone: 'red',
       dateOp: '24/12/2025',

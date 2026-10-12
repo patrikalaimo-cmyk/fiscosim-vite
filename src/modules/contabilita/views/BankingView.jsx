@@ -6,7 +6,9 @@ import RiconciliazioneBancariaView from './RiconciliazioneBancariaView.jsx'
 
 export default function BankingView({ contTab, societaAttiva, setContTab }) {
   if (!societaAttiva) return null
-  if (contTab === 'riconciliazione') return <RiconciliazioneBancariaView />
+  if (contTab === 'riconciliazione') {
+    return <RiconciliazioneBancariaView societaId={societaAttiva?.id || ''} />
+  }
   if (contTab !== 'movimenti_banca' && contTab !== 'riconciliazione') return null
   return <ModuloBanche societaId={societaAttiva?.id} contTab={contTab} setContTab={setContTab} />
 }

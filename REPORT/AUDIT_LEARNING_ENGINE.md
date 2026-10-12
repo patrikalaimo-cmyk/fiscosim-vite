@@ -39,7 +39,7 @@ Bank (stato UI reale):
 ```
 partiteAperte = SOLO ricondiliazioneMatchingFixtures (non partitario live)
         ↓
-UI: matcher solo se movementId ∈ bm-001..bm-016 fixture
+UI: demo mock usa `demo-bm-*`; matcher live su import+partitario; fixture R7A resta `bm-*` (demo R7B)
 import CSV/PDF → mapBankStatementMovementToWorkingRow → "Nessun match contabile reale"
         ↓
 proposal / accept locale (non in staging draft; non commit da UI bulk)
@@ -142,7 +142,7 @@ guided templates layout: localStorage globale (non per società)
 | L-B04 | Template layout estratto | **PARTIAL** | localStorage globale (non scoped società) |
 | L-B05 | Mass confirm proposte sicure con gate | **MISSING** | `autoMatch`/`confirmSelected` mock in view |
 | L-B06 | Partitario/PN live nel matcher | **MISSING** | nessun import `contabilitaRepo` partitario in `riconciliazione/**` |
-| L-B07 | Demo id collision `bm-*` mock vs fixture | **BROKEN** UX | stessi id, importi/descrizioni diversi |
+| L-B07 | Demo id collision `bm-*` mock vs fixture | **FIXED** 20261012 | mock `demo-bm-*`; fixture resta `bm-*` |
 | L-C01 | Cronologia commit Import/Bank interrogabile | **IMPLEMENTED** (LAB) | P3-01/02 HISTORY_API PASS `46c60ab` |
 
 ---
@@ -189,13 +189,13 @@ Sintesi aggiuntiva (codice esecutivo), allineata agli audit Import/Bank:
 
 ### Bank
 - Pipeline reale e testata: `classifyBankMovement` → `buildRiconciliazioneMatchCandidates` → `scoreRiconciliazioneMatch` → `buildRiconciliazioneDecisionProposal`.
-- **Partite:** solo `riconciliazioneMatchingFixtures.js`; nessun fetch partitario live.
-- **UI:** matcher attivo solo su collisioni id fixture; import mappati a “nessun match”; bulk actions mock.
+- **Partite (20261012):** import estratto → `getPartitarioAperto` + matcher; demo R7B resta su fixture.
+- **UI:** source `live_partitario` su movimenti importati; demo mock senza collisioni fixture.
 - **Learning:** solo template layout guided import (localStorage); nessun learn da accept match.
 - **Persistenza server:** solo claim fiscal LAB (cronologia commit), non audit proposte match.
-- **BROKEN UX:** id `bm-*` condivisi tra `mockRiconciliazioneData` e fixture con economics diverse.
+- **Id demo:** mock `demo-bm-*` (no collision con fixture `bm-*`).
 
 ### Implicazioni roadmap SG-L*
-- SG-L5 deve includere **wire partitario live + run matcher su ogni movimento importato** prima del solo “feedback memory”.
-- SG-L1/L2 restano prioritarie su Import (feedback + contesto multi-prodotto).
-- Fix L-B07 (id collision) è quick-win UI senza migration.
+- SG-L5 wire partitario live + id fix: **PARTIAL PASS** 20261012; resta memoria match confermati.
+- SG-L1 **PASS** 20261012 (facade); SG-L2 richiede approvazione schema.
+- L-B07 id collision: **FIXED**.

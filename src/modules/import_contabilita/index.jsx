@@ -31,12 +31,11 @@ import {
   normalizeAnagraficaText,
   paginateWorkingTableRows,
 } from './domain/importContabilitaPerformanceIndexes.js'
-import { buildImportContabilitaVatHistoryIndex } from './domain/importContabilitaVatHistory.js'
+import { decorateImportAccountingHistorySuggestion } from './domain/importContabilitaAccountingHistory.js'
 import {
-  buildImportContabilitaAccountingHistoryIndex,
-  decorateImportAccountingHistorySuggestion,
-  resolveImportContabilitaAccountingHistorySuggestion,
-} from './domain/importContabilitaAccountingHistory.js'
+  buildImportContabilitaL1HistoryIndexes,
+  resolveImportContabilitaStagingAccountingHistorySuggestions,
+} from './application/suggestion/importContabilitaL1SuggestionResolver.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
@@ -2709,9 +2708,14 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     [causaliIvaIndexes],
   )
 
-  const vatHistoryIndex = useMemo(
-    () => buildImportContabilitaVatHistoryIndex(vatHistoryRows),
-    [vatHistoryRows],
+  const { vatHistoryIndex, accountingHistoryIndex } = useMemo(
+    () => buildImportContabilitaL1HistoryIndexes({
+      vatHistoryRows,
+      accountingHistoryBundle,
+      pianoConti,
+      causaliContabili,
+    }),
+    [vatHistoryRows, accountingHistoryBundle, pianoConti, causaliContabili],
   )
 
   const pianoContiById = useMemo(
@@ -2722,17 +2726,6 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const causaliContabiliIndexes = useMemo(
     () => buildCausaliContabiliByIdMap(causaliContabili),
     [causaliContabili],
-  )
-
-  const accountingHistoryIndex = useMemo(
-    () => buildImportContabilitaAccountingHistoryIndex({
-      documents: accountingHistoryBundle?.documents || [],
-      headers: accountingHistoryBundle?.headers || [],
-      rows: accountingHistoryBundle?.rows || [],
-      pianoConti,
-      causaliContabili,
-    }),
-    [accountingHistoryBundle, pianoConti, causaliContabili],
   )
 
   const counterpartyAccountByRowId = useMemo(() => {
@@ -3628,38 +3621,30 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       const preferredCounterparty = getPreferredCounterparty(parsedDocument)
       const role = normalizeText(preferredCounterparty?.role || '').toLowerCase()
       const direction = role === 'cliente' ? 'vendita' : role === 'fornitore' ? 'acquisto' : ''
-      const suggestion = resolveImportContabilitaAccountingHistorySuggestion({
+      const resolved = resolveImportContabilitaStagingAccountingHistorySuggestions({
         historyIndex: accountingHistoryIndex,
         parsedDocument,
         counterpartyAccount: counterpartyAccountByRowId[rowKey] || null,
         direction,
         pianoContiById,
         causaliContabiliById: causaliContabiliIndexes.byId,
+        hasManualAccount: Object.prototype.hasOwnProperty.call(nextAccounts, rowKey),
+        hasManualCausale: Object.prototype.hasOwnProperty.call(nextCausali, rowKey),
       })
-      if (!suggestion) return
+      if (!resolved) return
 
-      if (!Object.prototype.hasOwnProperty.call(nextAccounts, rowKey) && suggestion.costRevenueAccount) {
+      if (resolved.account) {
         nextAccounts[rowKey] = decorateImportAccountingHistorySuggestion(
-          suggestion.costRevenueAccount,
-          {
-            kind: 'account',
-            sampleCount: suggestion.accountSampleCount,
-            totalSamples: suggestion.sampleCount,
-            lastSeenAt: suggestion.lastSeenAt,
-          },
+          resolved.account.value,
+          resolved.account.decorateParams,
         )
         accountChanged = true
       }
 
-      if (!Object.prototype.hasOwnProperty.call(nextCausali, rowKey) && suggestion.causaleContabile) {
+      if (resolved.causale) {
         nextCausali[rowKey] = decorateImportAccountingHistorySuggestion(
-          suggestion.causaleContabile,
-          {
-            kind: 'causale',
-            sampleCount: suggestion.causaleSampleCount,
-            totalSamples: suggestion.sampleCount,
-            lastSeenAt: suggestion.lastSeenAt,
-          },
+          resolved.causale.value,
+          resolved.causale.decorateParams,
         )
         causaleChanged = true
       }

@@ -1128,3 +1128,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Prodotti: `REPORT/AUDIT_LEARNING_ENGINE.md`, `ARCHITETTURA_LEARNING_ENGINE.md`, `MATRICE_TEST_LEARNING_ENGINE.md`; roadmap P5 SG-L0..L7.
 - Esito audit: Import Contabilita ha storico proposte mode (conto/causale/IVA) societa-scoped + priorita IVA standard>storico; manca feedback conferma e contesto multi-prodotto; `ai_learning` e path parallelo scollegato; Bank match euristico senza memoria decisioni; cronologia commit LAB distinta dal learning.
 - Nessuna migration / nessun intervento persistenza. Stop per revisione architetturale.
+
+## 2026-10-12 - SG-L1 + Bank wire (verso A100, no migration)
+
+- SG-L1: `importContabilitaL1SuggestionResolver.js` facade; wire staging (`index.jsx`) + Working View IVA (`resolveVatRowSuggestion`); explanation/conflicts DTO; UNIT 3/3 PASS.
+- Bank: mock ids `demo-bm-*` (LE-B0X PASS); `RiconciliazioneBancariaView` carica `getPartitarioAperto` e lancia matcher su movimenti importati (`live_partitario`); `BankingView` passa `societaId`.
+- Evidence: `REPORT/STAGE3W_SG_L1_BANK_WIRE_20261012225849.txt`; bank profile 16/16 PASS.
+- Residuo A100: browser manuale Import/IVA/Bank; SG-L2 schema; memoria match Bank; P0-03/04 LIVE; cutover prod solo con consenso.
+- Nota preesistente: `importContabilitaWorkflow.test.js` staging-update assertions ancora FAIL (non regressione L1).

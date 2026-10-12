@@ -1,17 +1,18 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase A learning engine **consegnata** (audit/architettura/matrice); in attesa revisione prima di persistenza. Storico commit Import+Bank LAB già PASS.
+* **Fase corrente:** SG-L1 SuggestionResolver Import **PASS** (no migration) + Bank wire partitario live + fix id `demo-bm-*`. A100 completo ancora gated (manuale browser, LIVE, cutover, SG-L2+ schema).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** `46c60ab` (locale = origin). Checkpoint storico `54e883a` superato.
+* **HEAD:** (vedi git log) — slice L1/Bank in corso di commit.
 * **Limite:** no migration learning senza approvazione; no LIVE; default prod multi-step; debito A100 browser dettagliato
 
 ## 2. Prossimo passo operativo
-1. Revisione architetturale operatore su `REPORT/AUDIT_LEARNING_ENGINE.md` + `ARCHITETTURA_*` + `MATRICE_TEST_LEARNING_*`
-2. Solo dopo ok: SG-L1 SuggestionResolver / SG-L2 DecisionFeedback (LAB)
+1. SG-L2 DecisionFeedback (LAB) solo dopo approvazione schema
+2. Residuo A100 UI: upload/commit Import, IVA consolidamento, Bank E2E browser
 3. Non cleanup silente fixture SG-E2E-* / STAGE3V-*; cutover `createPrimaNotaCompleta` solo con consenso
 
 ## 3. Evidenze
+* `REPORT/STAGE3W_SG_L1_BANK_WIRE_*.txt` (UNIT L1+Bank PASS)
 * `REPORT/AUDIT_LEARNING_ENGINE.md`
 * `REPORT/ARCHITETTURA_LEARNING_ENGINE.md`
 * `REPORT/MATRICE_TEST_LEARNING_ENGINE.md`

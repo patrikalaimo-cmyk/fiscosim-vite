@@ -114,16 +114,20 @@ export default function RiconciliazioneMovementWorkingView({
     return runRiconciliazioneMatchForMovement({ movement: demoFixtureMovement, partiteAperte: fixtures.partiteAperte })
   }, [demoFixtureMovement, fixtures.partiteAperte])
 
-  const activeMovement = demoMode ? demoFixtureMovement : workingContext?.fixtureMovement || movement || null
+  const activeMovement = demoMode
+    ? demoFixtureMovement
+    : workingContext?.fixtureMovement || movement || null
   const decisionProposal = demoMode ? demoDecisionProposal : workingContext?.decisionProposal || null
   const activeCase = demoMode ? demoFixtureCase : workingContext?.fixtureCase || null
   const isFixtureMatched = Boolean(!demoMode && workingContext?.available && decisionProposal)
   const decisionSourceMessage =
     demoMode
       ? 'Modalita demo R7B attiva - nessun effetto reale'
-      : workingContext?.available
-        ? 'Contesto R7A/R7B disponibile per il movimento selezionato'
-        : workingContext?.message || 'Decisione non disponibile - movimento reale non presente nel dataset mock'
+      : workingContext?.source === 'live_partitario'
+        ? workingContext.message || 'Match su partitario aperto società'
+        : workingContext?.available
+          ? 'Contesto R7A/R7B disponibile per il movimento selezionato'
+          : workingContext?.message || 'Decisione non disponibile — import estratto + partitario, oppure demo R7B'
 
   const builtDecision = useMemo(() => {
     if (!decisionProposal) return null

@@ -157,11 +157,11 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | ID | Intervento | Dipende | Accettazione |
 |---|---|---|---|
 | SG-L0 | Audit + architettura + matrice (Fase A) | — | **PASS** 20261012 docs; HEAD `46c60ab` |
-| SG-L1 | Consolida SuggestionResolver su history Import esistenti; de-dup path `ai_learning` | L0 + approvazione | Un solo resolver spiegabile; L6 invariato |
+| SG-L1 | Consolida SuggestionResolver su history Import esistenti; de-dup path `ai_learning` | L0 + approvazione | **PASS** 20261012 facade + wire staging/WV IVA; no migration; UNIT L1 3/3 |
 | SG-L2 | DecisionFeedback append-only post-commit (LAB flag) Import/Manuale | L1 + **approvazione schema** | LE-I06/I10/I15; no learn su dry-run/fail |
 | SG-L3 | Chiavi contestuali controparte+categoria/descrizione (multi-prodotto) | L2 | LE-I01/I08 verdi |
 | SG-L4 | Regole studio Livello B (no UUID conti alieni) | L1 | LE-S02; IVA standard>storico preservato |
-| SG-L5 | Bank: wire partitario live + matcher su import; poi memoria match confermati; fix id `bm-*` | L2 | LE-B00/B01/B09; no IVA ordinaria spuriosa |
+| SG-L5 | Bank: wire partitario live + matcher su import; poi memoria match confermati; fix id `bm-*` | L2 | **PARTIAL** 20261012: live wire + `demo-bm-*`; memoria match ancora MISSING |
 | SG-L6 | UI spiegazione proposte + mass-confirm gated | L3/L5 | LE-B10; zero commit silenzioso |
 | SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | LE-S01/P02–P05; L6CORE* PASS |
 
@@ -181,8 +181,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione
 
-1. **Revisione architetturale** learning engine (`AUDIT` / `ARCHITETTURA` / `MATRICE_TEST_LEARNING_*`) — stop prima di SG-L1/L2.
-2. Dopo approvazione: SG-L1 → L2 (feedback) senza migration LIVE.
-3. In parallelo residuo A100 UI: upload/commit Import, IVA consolidamento, Bank E2E; P0-03/P0-04; cutover prod solo con consenso.
-4. Default produttivo resta `createPrimaNotaCompleta` finché UI non certificata.
+1. SG-L2 DecisionFeedback (LAB) solo con **approvazione schema** — nessuna migration senza consenso.
+2. Completare SG-L5 memoria match confermati; residuo A100 UI browser (Import upload/commit, IVA, Bank E2E).
+3. P0-03/P0-04; cutover prod `createPrimaNotaCompleta` solo con consenso esplicito.
+4. Default produttivo resta multi-step finché UI non certificata.
 Checkpoint: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `REPORT/REPORT_CODEX.md`.

@@ -120,6 +120,30 @@ test('commit Bank blocca incongruenze societa, esercizio e conto bancario', asyn
   }
 })
 
+test('demo mock movement ids non collidono con fixture bm-*', async () => {
+  const { RICONCILIAZIONE_MOCK_DATA } = await import('../src/modules/contabilita/components/riconciliazione/mockRiconciliazioneData.js')
+  const { getRiconciliazioneMatchingFixtures } = await import('../src/modules/contabilita/components/riconciliazione/riconciliazioneMatchingFixtures.js')
+  const mockIds = (RICONCILIAZIONE_MOCK_DATA.movements || []).map((row) => row.id)
+  assert.ok(mockIds.length > 0)
+  for (const id of mockIds) {
+    assert.match(String(id), /^demo-bm-/)
+  }
+  const fixtureIds = new Set(getRiconciliazioneMatchingFixtures().movements.map((row) => row.movementId))
+  for (const id of mockIds) {
+    assert.equal(fixtureIds.has(id), false)
+  }
+})
+
+test('Bank view wirea matcher su partitario live (source markers)', async () => {
+  const source = await readFile(new URL('../src/modules/contabilita/views/RiconciliazioneBancariaView.jsx', import.meta.url), 'utf8')
+  assert.match(source, /mapPartitarioRowsToMatchCandidates/)
+  assert.match(source, /getPartitarioAperto/)
+  assert.match(source, /live_partitario/)
+  assert.match(source, /buildMatcherMovementFromWorkingRow/)
+  const banking = await readFile(new URL('../src/modules/contabilita/views/BankingView.jsx', import.meta.url), 'utf8')
+  assert.match(banking, /societaId=\{societaAttiva\?\.id/)
+})
+
 test('commit Bank non accetta una riga PN con sezione ignota', async () => {
   const { validateReconciliationCommitPayload } = await import('../src/modules/contabilita/components/riconciliazione/validateReconciliationCommitPayload.js')
   const payload = {

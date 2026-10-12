@@ -19,6 +19,7 @@ import {
   resolveImportWorkingViewStandardCausaleIvaId,
 } from '../../domain/importContabilitaWorkingViewIvaDraft.js'
 import { normalizeImportVatRows } from '../../domain/importContabilitaVatRowNormalization.js'
+import { resolveImportContabilitaWorkingViewVatRowSuggestion } from '../../application/suggestion/importContabilitaL1SuggestionResolver.js'
 
 let workingViewIvaDraftSequence = 0
 
@@ -310,6 +311,14 @@ export function ImportContabilitaWorkingView({
     causaliIva,
     isDemoSocieta,
   })
+  const resolveVatRowSuggestionL1 = (source) => resolveImportContabilitaWorkingViewVatRowSuggestion({
+    vatHistoryIndex,
+    source,
+    counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
+    parsedDocument: activeWorkingViewModel?.parsedDocument,
+    causaliIva,
+    isDemoSocieta,
+  })
   const [ivaDraftRows, setIvaDraftRows] = useState(() => rebuildImportWorkingViewIvaDraftRows({
     parsedDocument: activeWorkingViewModel?.parsedDocument,
     previousRows: [],
@@ -318,6 +327,7 @@ export function ImportContabilitaWorkingView({
     isDemoSocieta,
     causaliIvaById,
     vatHistoryIndex,
+    resolveVatRowSuggestion: resolveVatRowSuggestionL1,
     createRowId: nextWorkingViewIvaDraftId,
   }))
   const effectiveIvaDraftRows = useMemo(
@@ -608,6 +618,14 @@ export function ImportContabilitaWorkingView({
       isDemoSocieta,
       causaliIvaById,
       vatHistoryIndex,
+      resolveVatRowSuggestion: (source) => resolveImportContabilitaWorkingViewVatRowSuggestion({
+        vatHistoryIndex,
+        source,
+        counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
+        parsedDocument: activeWorkingViewModel?.parsedDocument,
+        causaliIva,
+        isDemoSocieta,
+      }),
       createRowId: nextWorkingViewIvaDraftId,
     }))
     setSelectedIvaDraftRowId(null)
