@@ -162,7 +162,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 ## Prossima sessione
 
 1. ~~SG-P0-00~~ / ~~SG-P0-02~~ **FATTO** (general-journal Stage3V A/B PASS).
-2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v2 include P4-03.
-3. Collaudi browser / L4 da `FISCOSIM_MANUAL_TEST_DEBT.md`.
-4. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
+2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v3 include Import + P4-03.
+3. L4 browser shell: Consultazione + Manuale + Import + Liquidazioni IVA **PASS** (smoke; non chiude debito A100 dettagliato).
+4. Residuo: upload/commit Import UI, consolidamento IVA/LIPE UI, Bank UI; P0-03/P0-04; cutover prod solo con consenso.
+5. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
