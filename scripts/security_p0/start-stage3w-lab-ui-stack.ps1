@@ -222,7 +222,7 @@ Write-Host 'Stage3W LAB env loaded. Starting...' -ForegroundColor Cyan
 "@
 # Must separate boot from launch with a newline (else "Cyan"+"npx" => "Cyannpx").
 $apiCmd=$boot + "`nnode scripts/dev-api.mjs`n"
-$viteCmd=$boot + "`nnpx vite --port 5173 --strictPort`n"
+$viteCmd=$boot + "`nnpx vite --port 5173 --strictPort --host 127.0.0.1`n"
 Start-Process powershell -ArgumentList @('-NoExit','-Command',$apiCmd) | Out-Null
 Start-Sleep -Seconds 3
 Start-Process powershell -ArgumentList @('-NoExit','-Command',$viteCmd) | Out-Null

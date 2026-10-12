@@ -1,0 +1,14 @@
+IMPORT_07_START
+UNIT_HISTORY1_STATUS=0
+UNIT_HISTORY1_PASS=true
+UNIT_RESULT=PASS
+HIST_REGISTRO_UPDATE=df6ffa42-e25b-448e-b49d-a956a43d517e|72000000-0000-4000-8000-0000000000a2
+SEED_STD=SG-IVA22|true
+UPDATE 1
+SEED_HIST=SG-IVA22H|false
+INSERT 0 1
+AVVIA={"ok":true}
+WARNING_UI={"hasStudioVsStorico":false,"hasStoricoDiverso":false,"snippet":"acquisti 22% SG-E2E LAB · 22% ▾ Causale standard Studio × + Aggiungi riga IVA Elimina riga selezionata B Totale imponibile 100,00 % Tot"}
+WV_DUMP=⚪ AI standby 📋 Log pipeline (6) FiscoSim V6 Professional AI AGENT STUDIO Dashboard Clienti Import Excel Utenti Studio Impostazioni Studio Impostazioni Procedure Deleghe Uniche DOCUMENT HUB Import Contabilità Import Documenti Export Dati Fatture Massive ADE Lettura Mail Richieste Fatture ADE CONTABILITÀ Prima Nota Partitario Bilancio STRUMENTI Gestione F24 Simulatore Fiscale Ammortamenti Certificazioni Uniche Revisione Dichiarativi AgeCon — Avvisi ADE COMUNICAZIONI Adempimenti Agenda Invii ENGINE STATUS AI non disponibile 00:54 Test local AI Avvia local AI Test online AI Riprova tutto IA locale TIMEOUT / ERRORE La IA locale non ha risposto in tempo. Motivo: Timeout durante la chiamata locale. Prossimo passo: Riprova oppure avvia Ollama e controlla il carico del sistema. Test local AI Avvia local AI IA online NON CONFIGURATA IA online non configurata. Motivo: Manca ANTHROPIC_API_KEY. Pros
+BROWSER_RESULT=SOFT_FAIL STUDIO_VS_STORICO_WARNING_MISSING
+IMPORT_07_RESULT=PASS

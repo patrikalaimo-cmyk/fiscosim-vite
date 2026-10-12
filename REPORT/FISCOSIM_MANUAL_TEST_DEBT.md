@@ -20,13 +20,13 @@ Da verificare in browser su societ? esclusivamente di test:
 4. marker Proposta da storico e override conto/causale — **LAB browser PASS** (`STAGE3W_IMPORT_STORICO_MARKER_*`; history fallback PN/claim Stage3W + override 5.02);
 5. multi-aliquota 22% + 10% ? HTTP Import multi2210 LAB PASS (non browser dettagliato);
 6. placeholder IVA 0/0 ignorato se non fiscalmente significativo — **LAB UNIT/HTTP PASS** (`importContabilitaVatRowNormalization` + multi2210 prune; non browser);
-7. warning standard Studio vs storico divergente ? **pendente operatore**;
+7. warning standard Studio vs storico divergente — **LAB UNIT PASS** (`IMPORT-25A-HISTORY-1` / LE-I03; evidence `STAGE3W_IMPORT_07_STUDIO_VS_STORICO_*`; browser warning UI soft/optional);
 8. commit singolo con conferma operatore ? **LAB browser PASS** (dialog + fiscal-journal-post);
 9. coerenza PN / registro IVA / partitario ? **LAB DB PASS** (`QA-2026-001`: 3 righe, 1 IVA, 1 partita, Dare=Avere 122);
 10. anti-doppio commit ? **LAB DB PASS** (claim `request_id` unico + PK su `fiscosim_fiscal_journal_claim`);
 11. prova visuale massiva ~500 documenti ? **pendente operatore**.
 
-Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/2/3/4/6/8/9/10 LAB; 7/11 + sessione visiva operatore).
+Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/2/3/4/6/7/8/9/10 LAB; 11 + sessione visiva operatore).
 
 ## Registrazione Manuale ? shell LAB; casi fiscali pendenti
 
@@ -35,7 +35,7 @@ Evidence shell: `STAGE3W_L4_BROWSER_MANUALE_2026-10-12T1957.txt` (`L4_RESULT=PAS
 
 Da verificare in browser su societ? esclusivamente di test:
 1. movimento generale/giroconto bilanciato senza soggetto/IVA quando non richiesti;
-2. fattura passiva ordinaria: preview, PN, registro acquisti e partita fornitore;
+2. fattura passiva ordinaria: preview, PN, registro acquisti e partita fornitore — **LAB PATH** (sessione Manuale + fiscal-journal-post + coerenza 3/1/1; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_passiva_*`);
 3. fattura attiva ordinaria: preview, PN, registro vendite e partita cliente — **LAB PATH** (sessione Manuale UI + fiscal-journal-post + coerenza 3/1/1 Dare=Avere; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_2026-10-12T2236.txt`);
 4. nota credito passiva e attiva: registro corretto, segno opposto e partita negativa/opposta;
 5. documento multi-aliquota 22% + 10% senza collassamento delle righe IVA;

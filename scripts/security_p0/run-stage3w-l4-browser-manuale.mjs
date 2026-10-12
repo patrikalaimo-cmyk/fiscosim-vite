@@ -18,9 +18,13 @@ const PASSWORD = 'SgE2eLabBrowser!20261011'
 const SOCIETA_A = '72000000-0000-4000-8000-000000000001'
 const CONTO_CLIENTE = '72000000-0000-4000-8000-000000000010'
 const CONTO_RICAVO = '72000000-0000-4000-8000-000000000011'
-const CONTO_IVA = '72000000-0000-4000-8000-000000000012'
+const CONTO_IVA_DEBITO = '72000000-0000-4000-8000-000000000012'
+const CONTO_FORNITORE = '72000000-0000-4000-8000-000000000016'
+const CONTO_COSTO = '72000000-0000-4000-8000-000000000014'
+const CONTO_IVA_CREDITO = '72000000-0000-4000-8000-000000000015'
+const MODE = (process.argv.find((a) => a.startsWith('--mode=')) || '--mode=attiva').slice('--mode='.length)
 const stamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
-const outPath = join(process.cwd(), 'REPORT', `STAGE3W_L4_BROWSER_MANUALE_${stamp}.txt`)
+const outPath = join(process.cwd(), 'REPORT', `STAGE3W_L4_BROWSER_MANUALE_${MODE}_${stamp}.txt`)
 
 function loadEnvFile(path) {
   const map = {}
@@ -79,7 +83,9 @@ async function main() {
     throw new Error('VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB must be true in .env.stage3w.lab.local')
   }
   ensurePassword()
+  if (!['attiva', 'passiva'].includes(MODE)) throw new Error(`MODE_INVALID ${MODE}`)
   log('L4_START puppeteer Manuale LAB')
+  log(`MODE=${MODE}`)
   log(`UI=${UI}`)
 
   const userDataDir = mkdtempSync(join(tmpdir(), 'fiscosim-l4-'))
@@ -192,9 +198,10 @@ async function main() {
     await new Promise((r) => setTimeout(r, 800))
 
     const requestId = randomUUID()
-    const docNum = `SG-E2E-L4-${stamp.slice(-6)}`
+    const docNum = `SG-E2E-L4-${MODE.slice(0, 3)}-${stamp.slice(-6)}`
+    const isPassiva = MODE === 'passiva'
     const postResult = await page.evaluate(
-      async ({ societaId, requestId, docNum, cCli, cRic, cIva }) => {
+      async ({ societaId, requestId, docNum, isPassiva, cCli, cRic, cIvaDeb, cFor, cCos, cIvaCre }) => {
         let accessToken = ''
         const walk = (o) => {
           if (!o || typeof o !== 'object') return ''
@@ -218,25 +225,67 @@ async function main() {
         if (!accessToken) {
           return { ok: false, reason: 'NO_BROWSER_SESSION_TOKEN', keys: Object.keys(localStorage) }
         }
-        const body = {
-          societa_id: societaId,
-          request_id: requestId,
-          contract_kind: 'fattura_attiva',
-          source_module: 'registrazione_manual',
-          header: {
-            data_registrazione: '2026-04-10',
-            data_documento: '2026-04-10',
-            numero_documento: docNum,
-            descrizione: '[SG-E2E] L4 browser Manuale fiscal post',
-          },
-          rows: [
-            { conto_id: cCli, dare: 1220, avere: 0 },
-            { conto_id: cRic, dare: 0, avere: 1000 },
-            { conto_id: cIva, dare: 0, avere: 220 },
-          ],
-          vat: {
+        const body = isPassiva
+          ? {
+            societa_id: societaId,
+            request_id: requestId,
+            contract_kind: 'fattura_passiva',
+            source_module: 'registrazione_manual',
+            header: {
+              data_registrazione: '2026-04-11',
+              data_documento: '2026-04-11',
+              numero_documento: docNum,
+              descrizione: '[SG-E2E] L4 browser Manuale fattura passiva',
+            },
             rows: [
-              {
+              { conto_id: cCos, dare: 1000, avere: 0 },
+              { conto_id: cIvaCre, dare: 220, avere: 0 },
+              { conto_id: cFor, dare: 0, avere: 1220 },
+            ],
+            vat: {
+              rows: [{
+                tipo: 'acquisto',
+                imponibile: 1000,
+                iva: 220,
+                aliquota: 22,
+                esigibilita: 'immediata',
+                split_payment: false,
+                documento_id: docNum,
+                riga_idx: 0,
+              }],
+            },
+            ledger: {
+              mode: 'open',
+              openings: [{
+                tipo: 'fornitore',
+                conto_id: cFor,
+                numero_documento: docNum,
+                data_documento: '2026-04-11',
+                importo_originale: 1220,
+              }],
+              closures: [],
+            },
+            withholding: { eventType: 'none', inserts: [], updates: [] },
+            motivazione: 'SG-E2E L4 Manuale fattura passiva',
+          }
+          : {
+            societa_id: societaId,
+            request_id: requestId,
+            contract_kind: 'fattura_attiva',
+            source_module: 'registrazione_manual',
+            header: {
+              data_registrazione: '2026-04-10',
+              data_documento: '2026-04-10',
+              numero_documento: docNum,
+              descrizione: '[SG-E2E] L4 browser Manuale fiscal post',
+            },
+            rows: [
+              { conto_id: cCli, dare: 1220, avere: 0 },
+              { conto_id: cRic, dare: 0, avere: 1000 },
+              { conto_id: cIvaDeb, dare: 0, avere: 220 },
+            ],
+            vat: {
+              rows: [{
                 tipo: 'vendita',
                 imponibile: 1000,
                 iva: 220,
@@ -245,25 +294,22 @@ async function main() {
                 split_payment: false,
                 documento_id: docNum,
                 riga_idx: 0,
-              },
-            ],
-          },
-          ledger: {
-            mode: 'open',
-            openings: [
-              {
+              }],
+            },
+            ledger: {
+              mode: 'open',
+              openings: [{
                 tipo: 'cliente',
                 conto_id: cCli,
                 numero_documento: docNum,
                 data_documento: '2026-04-10',
                 importo_originale: 1220,
-              },
-            ],
-            closures: [],
-          },
-          withholding: { eventType: 'none', inserts: [], updates: [] },
-          motivazione: 'SG-E2E L4 browser session fiscal post via Manuale surface',
-        }
+              }],
+              closures: [],
+            },
+            withholding: { eventType: 'none', inserts: [], updates: [] },
+            motivazione: 'SG-E2E L4 browser session fiscal post via Manuale surface',
+          }
         const res = await fetch('/api/studio/fiscal-journal-post', {
           method: 'POST',
           headers: {
@@ -285,9 +331,13 @@ async function main() {
         societaId: SOCIETA_A,
         requestId,
         docNum,
+        isPassiva,
         cCli: CONTO_CLIENTE,
         cRic: CONTO_RICAVO,
-        cIva: CONTO_IVA,
+        cIvaDeb: CONTO_IVA_DEBITO,
+        cFor: CONTO_FORNITORE,
+        cCos: CONTO_COSTO,
+        cIvaCre: CONTO_IVA_CREDITO,
       },
     )
 
@@ -315,13 +365,14 @@ SELECT
   coalesce((SELECT round(sum(coalesce(r.importo_dare,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')||'|'||
   coalesce((SELECT round(sum(coalesce(r.importo_avere,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')
 `)
-    log(`MANUALE_03_COERENZA=${coerenza}`)
+    const tag = isPassiva ? 'MANUALE_02' : 'MANUALE_03'
+    log(`${tag}_COERENZA=${coerenza}`)
     const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
-    if (Number(righe) < 3) throw new Error('MANUALE_03_RIGHE')
-    if (Number(iva) < 1) throw new Error('MANUALE_03_IVA')
-    if (Number(partite) < 1) throw new Error('MANUALE_03_PARTITE')
-    if (Number(dare) !== Number(avere)) throw new Error(`MANUALE_03_UNBALANCED ${dare}!=${avere}`)
-    log('MANUALE_03_COERENZA_RESULT=PASS')
+    if (Number(righe) < 3) throw new Error(`${tag}_RIGHE`)
+    if (Number(iva) < 1) throw new Error(`${tag}_IVA`)
+    if (Number(partite) < 1) throw new Error(`${tag}_PARTITE`)
+    if (Number(dare) !== Number(avere)) throw new Error(`${tag}_UNBALANCED ${dare}!=${avere}`)
+    log(`${tag}_COERENZA_RESULT=PASS`)
 
     log(`FISCAL_HTTP_INTERCEPTS=${JSON.stringify(fiscalPosts)}`)
     log('L4_RESULT=PASS')
