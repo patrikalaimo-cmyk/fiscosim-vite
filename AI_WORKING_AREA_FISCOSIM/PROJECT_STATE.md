@@ -3,7 +3,7 @@
 ## 1. Stato attuale sintetico
 * **Fase corrente:** L4 Import **upload/commit XML browser LAB PASS** (fiscal-journal-post + PN). A100 completo ancora gated (schema DecisionFeedback DB, collaudi manuali pieni, LIVE, cutover).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** (post-commit locale; sync origin dopo push)
+* **HEAD:** `3c0cc27`
 * **Limite:** no migration learning DB; no LIVE; no cutover prod
 
 ## 2. Prossimo passo operativo (richiede operatore)
