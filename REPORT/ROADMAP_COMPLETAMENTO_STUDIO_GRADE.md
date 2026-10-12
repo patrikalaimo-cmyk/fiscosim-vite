@@ -120,7 +120,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | SG-P3-02 | Cronologia Import UI + hash file | PASS 20261012 (claim fileHash + UI panel + history) | Storico interrogabile |
 | SG-P3-03 | Stampe Partitari/Mastrini/Bilancio da PN (no mock) | PASS 20261012 (modelli da PN/partitario; no mock KPI) | UI `isOperativo` su modelli canonici |
 | SG-P3-04 | Fascicolo cliente PDF | PASS 20261012 (HTML unico + hash da modelli PN; print-to-PDF) | Un file fine periodo |
-| SG-P3-05 | Cespiti operativi + quote | | Bridge non duplica PN |
+| SG-P3-05 | Cespiti operativi + quote | PASS 20261012 (bridge link PN + quote; no 2nd PN) | Bridge non duplica PN |
 | SG-P3-06 | Chiusura/riapertura esercizio | | Continuity saldi; lock; audit |
 | SG-P3-07 | Aging / insoluti | | Report residui coerente mastrini |
 

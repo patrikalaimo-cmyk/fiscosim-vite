@@ -1,3 +1,5 @@
+import { bridgeCespiteFromExistingPrimaNota } from './bridgeCespiteFromExistingPrimaNota.js'
+
 function normalizeText(value) {
   return String(value ?? '').trim()
 }
@@ -49,6 +51,9 @@ async function resolveClienteForCespite(db, societa = {}) {
   }
 }
 
+/**
+ * Post-persist Manuale: bridge scheda cespite to existing prima_nota_id (no second PN).
+ */
 export async function createCespiteFromManualRegistration({
   db,
   societa,
@@ -57,6 +62,7 @@ export async function createCespiteFromManualRegistration({
   header = {},
   fallbackDate = '',
   aliquotaAmmortamento = 20,
+  proposeQuotes = true,
 } = {}) {
   const pnId = normalizeText(primaNotaId)
   if (!db?.from || !pnId || !cespiteMatch?.row) {
@@ -65,6 +71,7 @@ export async function createCespiteFromManualRegistration({
       error: null,
       skipped: true,
       reason: 'missing_required_input',
+      pnCreated: false,
     }
   }
 
@@ -75,34 +82,41 @@ export async function createCespiteFromManualRegistration({
       error: null,
       skipped: true,
       reason: 'invalid_cost',
+      pnCreated: false,
     }
   }
 
-  const aliquota = Number(aliquotaAmmortamento)
-  const normalizedAliquota = Number.isFinite(aliquota) && aliquota > 0 ? aliquota : 20
-  const anni = Math.ceil(100 / normalizedAliquota)
   const cliente = await resolveClienteForCespite(db, societa)
-
-  const payload = {
-    cliente_id: cliente.id,
-    cliente_nome: cliente.nome,
+  const bridge = await bridgeCespiteFromExistingPrimaNota({
+    db,
+    primaNotaId: pnId,
+    source: 'registrazione contabile',
     descrizione: resolveCespiteDescription(cespiteMatch, header),
     categoria: 'Attrezzatura',
-    data_acquisto: normalizeText(header?.dataDocumento || header?.data_documento || header?.dataRegistrazione || header?.data_registrazione || fallbackDate),
-    costo_storico: costo,
-    aliquota_ammortamento: normalizedAliquota,
-    fondo_ammortamento: 0,
-    valore_residuo: costo,
-    anni_vita_utile: anni,
-    note: `Cespite inserito automaticamente da registrazione contabile. ID prima nota: ${pnId}`,
-    attivo: true,
-  }
+    dataAcquisto: normalizeText(
+      header?.dataDocumento
+      || header?.data_documento
+      || header?.dataRegistrazione
+      || header?.data_registrazione
+      || fallbackDate
+    ),
+    costoStorico: costo,
+    aliquotaAmmortamento,
+    clienteId: cliente.id,
+    clienteNome: cliente.nome,
+    proposeQuotes,
+  })
 
-  try {
-    const { data, error } = await db.from('beni_ammortizzabili').insert([payload]).select?.() ?? {}
-    if (error) return { data: null, error, skipped: false, payload }
-    return { data: data ?? null, error: null, skipped: false, payload }
-  } catch (error) {
-    return { data: null, error, skipped: false, payload }
+  return {
+    data: bridge.bene,
+    error: bridge.error,
+    skipped: bridge.skipped,
+    reason: bridge.reason,
+    payload: bridge.payload,
+    created: bridge.created,
+    duplicatePrevented: bridge.duplicatePrevented,
+    linkedPrimaNotaId: bridge.linkedPrimaNotaId,
+    pnCreated: false,
+    quotesProposed: bridge.quotesProposed,
   }
 }

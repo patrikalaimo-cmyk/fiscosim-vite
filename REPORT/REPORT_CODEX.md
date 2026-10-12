@@ -1004,7 +1004,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - UI: tab Stampe `fascicolo` operativo; genera/scarica/stampa file unico.
 - Script `scripts/security_p0/run-stage3w-fascicolo-cliente-periodo.mjs`. Evidence:
   - `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.txt` PASS
-  - file unico `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.html` (49118 bytes, hash `3df9c797Ö`)
+  - file unico `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.html` (49118 bytes, hash `3df9c797ù`)
   - sezioni: giornale|partitari|mastrini|bilancio; no mock amounts
 - Unit `fascicoloClientePeriodo` 3/3. Gap: non definitiva server-side / non puppeteer PDF byte nativo; print-to-PDF browser. Nessun LIVE / SG-P0-00.
 
@@ -1017,3 +1017,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - FA PN `17263f40-...` + partita; PARTITARI/MASTRINI/BILANCIO `valid=true` da PN LAB
   - `P3_03_RESULT=PASS`
 - Unit `stampePartitariMastriniBilancio` 4/4. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-05 Cespiti operativi + quote PASS
+
+- Domain: `calculatePianoAmmortamento` / `proposeQuotaAmmortamento` + link note `ID prima nota:`.
+- Application: `bridgeCespiteFromExistingPrimaNota` collega `beni_ammortizzabili` a PN gia postata (Import/Manuale); dedupe per PN; `pnCreated=false` sempre; quote proponibili (+ opz. persist `quote_ammortamento`) senza seconda PN di acquisizione.
+- Manuale/Import riusano il bridge (`createCespiteFromPrimaNota`, `importContabilitaWorkflow`).
+- Script `scripts/security_p0/run-stage3w-cespiti-p3-05.mjs`. Evidence `REPORT/STAGE3W_CESPITI_P3_05_20261012114529.txt`:
+  - FP acquisition PN `0f8e4dcb-...`; bridge create + re-bridge dedupe; PN count stabile (51); `BENE_LINKED_COUNT=1`; `QUOTE_ROWS=5`; quota 2026=500
+  - `P3_05_RESULT=PASS` ó acceptance Bridge non duplica PN
+- Unit `cespitiOperativiQuote` 4/4 + createCespiteFromPrimaNota 4/4. Gap: no colonna dedicata `prima_nota_id` (link via note); no scrittura PN automatica quote fine anno; piano conti LAB senza conto 1.02 dedicato. Nessun LIVE / SG-P0-00.

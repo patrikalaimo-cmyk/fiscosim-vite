@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sb } from '../../lib/supabase'
 import { ModuleHeader } from '../../shared/components'
+import { calculatePianoAmmortamento } from '../contabilita/domain/cespiti/calculatePianoAmmortamento.js'
 
 
 const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n || 0)
@@ -23,18 +24,13 @@ export function ModuloAmmortamenti(){
   const salva=async(data)=>{setSaving(true);try{const anni=Math.ceil(100/parseFloat(data.aliquota_ammortamento||20));const vr=parseFloat(data.costo_storico||0)-parseFloat(data.fondo_ammortamento||0);const rec={...data,anni_vita_utile:anni,valore_residuo:vr};if(modal&&modal.mode==="edit"){const{error}=await sb.from("beni_ammortizzabili").update(rec).eq("id",modal.data.id);if(error)throw error;}else{const{error}=await sb.from("beni_ammortizzabili").insert([rec]);if(error)throw error;}await carica();setModal(null);setXmlModal(false);}catch(e){alert(e.message);}finally{setSaving(false);}};
   const elimina=async(id)=>{if(!confirm("Eliminare?"))return;await sb.from("beni_ammortizzabili").update({attivo:false}).eq("id",id);carica();};
   const calcPiano=(bene)=>{
-    const costo=parseFloat(bene.costo_storico||0);
-    const aliq=parseFloat(bene.aliquota_ammortamento||20)/100;
-    const fondo=parseFloat(bene.fondo_ammortamento||0);
-    const annoAcq=new Date(bene.data_acquisto).getFullYear();
-    const rows=[];let fondoAcc=fondo;
-    for(let a=annoAcq;fondoAcc<costo;a++){
-      const quota=Math.min(costo*aliq,costo-fondoAcc);
-      fondoAcc+=quota;
-      rows.push({anno:a,quota,fondo:fondoAcc,residuo:Math.max(0,costo-fondoAcc)});
-      if(rows.length>50)break;
-    }
-    return rows;
+    const piano=calculatePianoAmmortamento(bene);
+    return (piano.rows||[]).map((r)=>({
+      anno:r.anno,
+      quota:r.quota_annua,
+      fondo:r.fondo_progressivo,
+      residuo:r.valore_residuo,
+    }));
   };
   return(
     <div className="page">
