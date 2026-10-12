@@ -307,6 +307,22 @@ async function main() {
     log(`PN_DB_COUNT=${pnCheck}`)
     if (pnCheck !== '1') throw new Error('PN_DB_MISSING')
 
+    const coerenza = psql(`
+SELECT
+  (SELECT count(*)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid)||'|'||
+  (SELECT count(*)::text FROM public.registri_iva v WHERE v.prima_nota_id='${postResult.id}'::uuid)||'|'||
+  (SELECT count(*)::text FROM public.partitario p WHERE p.prima_nota_id='${postResult.id}'::uuid)||'|'||
+  coalesce((SELECT round(sum(coalesce(r.importo_dare,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')||'|'||
+  coalesce((SELECT round(sum(coalesce(r.importo_avere,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')
+`)
+    log(`MANUALE_03_COERENZA=${coerenza}`)
+    const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
+    if (Number(righe) < 3) throw new Error('MANUALE_03_RIGHE')
+    if (Number(iva) < 1) throw new Error('MANUALE_03_IVA')
+    if (Number(partite) < 1) throw new Error('MANUALE_03_PARTITE')
+    if (Number(dare) !== Number(avere)) throw new Error(`MANUALE_03_UNBALANCED ${dare}!=${avere}`)
+    log('MANUALE_03_COERENZA_RESULT=PASS')
+
     log(`FISCAL_HTTP_INTERCEPTS=${JSON.stringify(fiscalPosts)}`)
     log('L4_RESULT=PASS')
   } finally {

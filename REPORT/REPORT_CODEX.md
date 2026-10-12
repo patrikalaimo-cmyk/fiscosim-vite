@@ -1205,3 +1205,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Smoke: `run-stage3w-import-storico-marker-lab.mjs` ? marker PASS + override conto 5.02 PASS.
 - Evidence: `REPORT/STAGE3W_IMPORT_STORICO_MARKER_2026-10-12T2235.txt`; UNIT history 8/8.
 - Residuo Import: #6/#7/#11; Manuale/IVA casi fiscali; LIVE cloud.
+
+## 2026-10-12 - Manuale #3 LAB coerenza PN/IVA/partitario
+
+- Esteso un-stage3w-l4-browser-manuale.mjs: post fattura attiva da sessione browser Manuale + check 3 righe / 1 IVA / 1 partita / Dare=Avere.
+- Evidence: `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-12T2236.txt` (`MANUALE_03_COERENZA_RESULT=PASS`).
+- Non chiude preview/form UI completa (debito #3 resta PATH LAB + form operatore).

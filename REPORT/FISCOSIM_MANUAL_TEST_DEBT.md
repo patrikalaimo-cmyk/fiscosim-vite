@@ -36,7 +36,7 @@ Evidence shell: `STAGE3W_L4_BROWSER_MANUALE_2026-10-12T1957.txt` (`L4_RESULT=PAS
 Da verificare in browser su societ? esclusivamente di test:
 1. movimento generale/giroconto bilanciato senza soggetto/IVA quando non richiesti;
 2. fattura passiva ordinaria: preview, PN, registro acquisti e partita fornitore;
-3. fattura attiva ordinaria: preview, PN, registro vendite e partita cliente;
+3. fattura attiva ordinaria: preview, PN, registro vendite e partita cliente — **LAB PATH** (sessione Manuale UI + fiscal-journal-post + coerenza 3/1/1 Dare=Avere; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_2026-10-12T2236.txt`);
 4. nota credito passiva e attiva: registro corretto, segno opposto e partita negativa/opposta;
 5. documento multi-aliquota 22% + 10% senza collassamento delle righe IVA;
 6. split payment semplice con cliente configurato PA e partitario sul netto corretto;
