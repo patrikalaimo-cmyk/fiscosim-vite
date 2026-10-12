@@ -1087,3 +1087,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - `assertAccountingEntriesOnlyOnAllowlist`: nuovo `.from('accounting_entries')` / `insertAccountingEntry` fuori allowlist = FAIL.
 - Freeze audit `REPORT/LEGACY_DISUSO_ACCOUNTING_ENTRIES_FREEZE_AUDIT.md`; `DISUSO/README.md`.
 - Fingerprint `P403ISO2|…allowlist=19`; evidence `STAGE3W_P4_03_LEGACY_ISOLATION_20261012131719.txt`; unit 6/6.
+
+## 2026-10-12 - SG-P0-02 gate + L6 v2
+
+- Stage3V readiness READ-ONLY: `STAGE3V_PINNED_LAB_NETWORK_HTTP_DISCOVERED_NOT_JWT_VERIFIED` (post P0-00 loopback).
+- Fiscal JWT FA22 L3 PASS su SG-E2E (API :3001 riavviata). Gate `run-sg-p0-02-stage3v-jwt-gate.mjs` ? `P0_02_RESULT=PASS` con `GENERAL_JOURNAL_STAGE3V_HARNESS=SKIP_NO_STAGE3V_FIXTURES`.
+- L6 pack `l6_lab_core_v2` aggiunge P4-03 isolation; fingerprint `L6CORE2|…all PASS`. Evidence `STAGE3W_L6_REGRESSIONE_P4_02_20261012195227.txt`.

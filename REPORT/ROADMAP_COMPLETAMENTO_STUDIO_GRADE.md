@@ -56,15 +56,15 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | Accettazione | Un errore forzato dopo INSERT IVA lascia **zero** residui PN/IVA/partite/ritenute mutate; stesso `request_id` → stesso UUID |
 | Approvazione | Install LAB persistente dopo rehearsal ROLLBACK PASS |
 
-### SG-P0-02 — Stage3V JWT → HTTP → PostgreSQL
+### SG-P0-02 — Stage3V JWT → HTTP → PostgreSQL — **PASS parziale** 20261012
 | Campo | Contenuto |
 |---|---|
 | Problema | `REAL_JWT_E2E=false`; harness pronto ma non eseguito |
-| File | `stage3v-signed-jwt-general-journal-e2e.mjs`, `stage3v-lab-binding.mjs` (già aggiornato per branch/worktree Studio Grade) |
-| Lavoro | Dopo SG-P0-00: readiness → binding A/B → opt-in write generale → estensione fiscale |
+| File | `run-sg-p0-02-stage3v-jwt-gate.mjs`, readiness, `run-stage3w-jwt-fiscal-fa22.mjs` |
+| Lavoro | Dopo SG-P0-00: readiness PASS; fiscal JWT FA22 L3 PASS su SG-E2E; general-journal STAGE3V harness SKIP (0 società `STAGE3V-*`) |
 | Rischio | P0 |
-| Accettazione | Marker esplicito PASS con SHA, società `STAGE3V-`/`SG-E2E-`, query post-commit |
-| Approvazione | Write persistente opt-in |
+| Accettazione | Evidence `STAGE3W_SG_P0_02_STAGE3V_JWT_*`; residuo: provisioning `STAGE3V-*` + harness generale A/B |
+| Approvazione | Write persistente opt-in (concesso in sessione LAB) |
 
 ### SG-P0-03 — Audit + blocchi periodo su path produttivo
 | Campo | Contenuto |
@@ -131,7 +131,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | ID | Intervento |
 |---|---|
 | SG-P4-01 | Suite L5 dataset multi-periodo sintetico — **PASS** 20261012 (fingerprint L5MP1) |
-| SG-P4-02 | L6 regressione LAB ripetibile — **PASS** 20261012 (pack `l6_lab_core_v1`; L6CORE1) |
+| SG-P4-02 | L6 regressione LAB ripetibile — **PASS** 20261012 (`l6_lab_core_v2` + P4-03; fingerprint L6CORE2) |
 | SG-P4-03 | Isolamento DISUSO + `accounting_entries` — **PASS** 20261012 (fingerprint `P403ISO2`; allowlist 19 + anti-reintro scan; freeze audit) |
 | SG-P4-04 | Performance baseline LAB — **PASS** 20261012 (L6 core ~12s; 500+ SLA resta debito manuale) |
 | SG-P4-05 | Debito collaudi manuali — **documentato** 20261012 (LAB≠browser; nessuna chiusura silente) |
@@ -161,8 +161,8 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## Prossima sessione
 
-1. ~~SG-P0-00~~ **FATTO**.
-2. ~~P4 automatismi LAB (01..07)~~ **FATTO**.
-3. Collaudi browser da `FISCOSIM_MANUAL_TEST_DEBT.md` (sessione dedicata).
+1. ~~SG-P0-00~~ **FATTO**; ~~P0-02 readiness+fiscal L3~~ **FATTO** (general STAGE3V harness ancora SKIP).
+2. ~~P4 automatismi LAB (01..07)~~ **FATTO**; L6 v2 include P4-03.
+3. Provision `STAGE3V-*` + run `stage3v-signed-jwt-general-journal-e2e.mjs` **oppure** collaudi browser.
 4. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.

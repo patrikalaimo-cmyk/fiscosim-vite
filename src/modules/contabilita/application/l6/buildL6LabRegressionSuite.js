@@ -4,7 +4,7 @@
  */
 
 /** Canonical core pack: preflight + L5 + representative P2/P3 (no browser). */
-export const L6_CORE_PACK_ID = 'l6_lab_core_v1'
+export const L6_CORE_PACK_ID = 'l6_lab_core_v2'
 
 /**
  * @typedef {{
@@ -26,6 +26,14 @@ export const L6_CORE_STEPS = Object.freeze([
     resultKey: 'P0_00_RESULT',
     required: true,
     maxMs: 60_000,
+  },
+  {
+    id: 'P4_03',
+    title: 'DISUSO + accounting_entries isolation',
+    script: 'scripts/security_p0/run-stage3w-p4-03-legacy-isolation.mjs',
+    resultKey: 'P4_03_RESULT',
+    required: true,
+    maxMs: 120_000,
   },
   {
     id: 'P2_06',
@@ -165,5 +173,5 @@ export function buildL6SuiteFingerprint(rows) {
   const parts = (rows || [])
     .filter((r) => r.required !== false)
     .map((r) => `${r.id}:${r.status}`)
-  return `L6CORE1|${parts.join(';')}`
+  return `L6CORE2|${parts.join(';')}`
 }
