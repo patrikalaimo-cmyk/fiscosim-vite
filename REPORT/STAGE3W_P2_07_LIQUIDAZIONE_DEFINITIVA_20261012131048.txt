@@ -1,0 +1,25 @@
+P2_07_START Liquidazione da PN reali + blocco definitiva
+PERIOD=2027-01-01..2027-01-31
+PRIOR_VAT_PERIOD=0
+LOGIN_JWT=PASS
+FA_STATUS=201
+FA_PN=acf5e7f9-792b-4115-9a25-23e545381e2b
+FP_STATUS=201
+FP_PN=bebf752f-5195-4a1a-8f1d-dcfeaceb6b70
+VAT_ROWS=2
+IVA_DEBITO=220
+IVA_CREDITO=220
+SALDO=0
+FIRST={"stato":"provvisoria","message":"Consolidamento liquidazione IVA completato; snapshot righe sospeso per FK legacy liquidazioni_iva_righe → liquidazioni_iva","success":true,"periodoFine":"2027-01-31","periodoInizio":"2027-01-01","righeSnapshot":0,"liquidazioneId":"10a28ebf-3b46-47f4-9cc3-0d8e729c8328"}
+SECOND={"stato":"provvisoria","message":"Consolidamento liquidazione IVA completato; snapshot righe sospeso per FK legacy liquidazioni_iva_righe → liquidazioni_iva","success":true,"periodoFine":"2027-01-31","periodoInizio":"2027-01-01","righeSnapshot":0,"liquidazioneId":"0e44062e-8b16-4be1-8e1e-dfeb795f2c4e"}
+OLD_PROVVISORIA_COUNT=0
+LIQ_PERIOD_COUNT=1
+NOTE_AFTER_LOCK=[SG-E2E] P2-07 riconsolidamento provvisorio 2027-01-01 | [stato:definitiva] | Operatore: Operatore Studio
+BLOCKED={"error":"Periodo bloccato: la liquidazione per questo periodo è definitiva e non può essere riconsolidata.","success":false}
+FA_PN_ID=acf5e7f9-792b-4115-9a25-23e545381e2b
+FP_PN_ID=bebf752f-5195-4a1a-8f1d-dcfeaceb6b70
+LIQ_ID=0e44062e-8b16-4be1-8e1e-dfeb795f2c4e
+PROVVISORIA=PASS
+RICONSOLIDAMENTO=PASS
+DEFINITIVA_LOCK_BLOCK=PASS
+P2_07_RESULT=PASS

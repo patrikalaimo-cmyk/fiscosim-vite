@@ -1,7 +1,7 @@
 /**
- * Stage3W SG-P2-07: liquidazione IVA da PN/registri reali (periodo isolato dic 2026)
+ * Stage3W SG-P2-07: liquidazione IVA da PN/registri reali (periodo vuoto auto 2027+)
  * + consolidamento provvisorio + riconsolidamento + blocco doppio dopo definitiva.
- * LAB-only. Never prints tokens/passwords.
+ * LAB-only. L6-repeatable (picks empty month). Never prints tokens/passwords.
  */
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -25,15 +25,38 @@ const CONTO_COSTO = '72000000-0000-4000-8000-000000000014'
 const CONTO_IVA_CRED = '72000000-0000-4000-8000-000000000015'
 const CONTO_FORNITORE = '72000000-0000-4000-8000-000000000016'
 const INSTANCE = '00000000-0000-0000-0000-000000000000'
-const PERIODO_INIZIO = '2026-12-01'
-const PERIODO_FINE = '2026-12-31'
 const TAXABLE = 1000
 const VAT = 220
 const GROSS = 1220
-const FA_DATE = '2026-12-10'
-const FP_DATE = '2026-12-12'
 const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
 const outPath = join(process.cwd(), 'REPORT', `STAGE3W_P2_07_LIQUIDAZIONE_DEFINITIVA_${stamp}.txt`)
+
+/** Pick first month (from 2027-01) with zero registri_iva for SG-E2E-A — L6-repeatable. */
+function pickEmptyPeriod() {
+  for (let year = 2027; year <= 2030; year++) {
+    for (let month = 1; month <= 12; month++) {
+      const mm = String(month).padStart(2, '0')
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+      const inizio = `${year}-${mm}-01`
+      const fine = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+      const priorVat = Number(psql(`
+SELECT count(*)::text FROM public.registri_iva
+WHERE societa_id='${SOCIETA_A}'::uuid
+  AND data>='${inizio}'::date AND data<='${fine}'::date
+`))
+      if (priorVat === 0) {
+        return {
+          periodoInizio: inizio,
+          periodoFine: fine,
+          faDate: `${year}-${mm}-10`,
+          fpDate: `${year}-${mm}-12`,
+          priorVat,
+        }
+      }
+    }
+  }
+  throw new Error('NO_EMPTY_IVA_PERIOD_2027_2030')
+}
 
 const lines = []
 function log(msg) {
@@ -129,13 +152,13 @@ async function postFiscal(token, body) {
   return { status: res.status, json, text }
 }
 
-function callConsolidate(motivo, payload) {
+function callConsolidate(motivo, payload, periodoInizio, periodoFine) {
   const payloadLit = JSON.stringify(payload).replace(/'/g, "''")
   return psqlJson(`
 SELECT public.consolida_periodo_iva_transazionale(
   '${SOCIETA_A}'::uuid,
-  '${PERIODO_INIZIO}'::date,
-  '${PERIODO_FINE}'::date,
+  '${periodoInizio}'::date,
+  '${periodoFine}'::date,
   'mensile',
   '${UTENTE_A}'::uuid,
   '${motivo.replace(/'/g, "''")}',
@@ -151,14 +174,10 @@ async function main() {
   if (!anonKey) throw new Error('LAB_KEYS_MISSING')
   if (env.VITE_SUPABASE_URL !== AUTH_URL) throw new Error('LAB_URL_MISMATCH')
 
-  // Ensure clean period ledger for liquidazione
-  const priorVat = Number(psql(`
-SELECT count(*)::text FROM public.registri_iva
-WHERE societa_id='${SOCIETA_A}'::uuid
-  AND data>='${PERIODO_INIZIO}'::date AND data<='${PERIODO_FINE}'::date
-`))
-  log(`PRIOR_VAT_PERIOD=${priorVat}`)
-  if (priorVat !== 0) throw new Error('PERIOD_NOT_EMPTY')
+  const period = pickEmptyPeriod()
+  const { periodoInizio, periodoFine, faDate, fpDate } = period
+  log(`PERIOD=${periodoInizio}..${periodoFine}`)
+  log(`PRIOR_VAT_PERIOD=${period.priorVat}`)
 
   const password = 'SgE2eLiq!' + randomBytes(8).toString('base64url')
   ensureAuthPassword(password)
@@ -181,10 +200,10 @@ WHERE societa_id='${SOCIETA_A}'::uuid
     request_id: randomUUID(),
     contract_kind: 'fattura_attiva',
     source_module: 'registrazione_manual',
-    motivazione: 'SG-E2E P2-07 FA vendita dic 2026',
+    motivazione: `SG-E2E P2-07 FA vendita ${periodoInizio}`,
     header: {
-      data_registrazione: FA_DATE,
-      data_documento: FA_DATE,
+      data_registrazione: faDate,
+      data_documento: faDate,
       numero_documento: faDoc,
       descrizione: '[SG-E2E] P2-07 FA',
     },
@@ -201,7 +220,7 @@ WHERE societa_id='${SOCIETA_A}'::uuid
         aliquota: 22,
         split_payment: false,
         numero_documento: faDoc,
-        data_documento: FA_DATE,
+        data_documento: faDate,
       }],
     },
     ledger: {
@@ -211,7 +230,7 @@ WHERE societa_id='${SOCIETA_A}'::uuid
         conto_id: CONTO_CLIENTE,
         importo_originale: GROSS,
         numero_documento: faDoc,
-        data_documento: FA_DATE,
+        data_documento: faDate,
       }],
       closures: [],
     },
@@ -228,10 +247,10 @@ WHERE societa_id='${SOCIETA_A}'::uuid
     request_id: randomUUID(),
     contract_kind: 'fattura_passiva',
     source_module: 'registrazione_manual',
-    motivazione: 'SG-E2E P2-07 FP acquisto dic 2026',
+    motivazione: `SG-E2E P2-07 FP acquisto ${periodoInizio}`,
     header: {
-      data_registrazione: FP_DATE,
-      data_documento: FP_DATE,
+      data_registrazione: fpDate,
+      data_documento: fpDate,
       numero_documento: fpDoc,
       descrizione: '[SG-E2E] P2-07 FP',
     },
@@ -249,7 +268,7 @@ WHERE societa_id='${SOCIETA_A}'::uuid
         iva_detraibile: VAT,
         split_payment: false,
         numero_documento: fpDoc,
-        data_documento: FP_DATE,
+        data_documento: fpDate,
       }],
     },
     ledger: {
@@ -259,7 +278,7 @@ WHERE societa_id='${SOCIETA_A}'::uuid
         conto_id: CONTO_FORNITORE,
         importo_originale: GROSS,
         numero_documento: fpDoc,
-        data_documento: FP_DATE,
+        data_documento: fpDate,
       }],
       closures: [],
     },
@@ -278,7 +297,7 @@ SELECT coalesce(json_agg(row_to_json(t) ORDER BY t.data, t.id), '[]'::json) FROM
          esigibilita, split_payment, prima_nota_id::text AS prima_nota_id
   FROM public.registri_iva
   WHERE societa_id='${SOCIETA_A}'::uuid
-    AND data>='${PERIODO_INIZIO}'::date AND data<='${PERIODO_FINE}'::date
+    AND data>='${periodoInizio}'::date AND data<='${periodoFine}'::date
 ) t
 `)
   log(`VAT_ROWS=${vatRows.length}`)
@@ -286,8 +305,8 @@ SELECT coalesce(json_agg(row_to_json(t) ORDER BY t.data, t.id), '[]'::json) FROM
 
   const calc = calcoloLiquidazioneIvaDefinitiva(vatRows, {
     societaId: SOCIETA_A,
-    periodoInizio: PERIODO_INIZIO,
-    periodoFine: PERIODO_FINE,
+    periodoInizio,
+    periodoFine,
     periodicita: 'mensile',
   })
   log(`IVA_DEBITO=${calc.ivaDebitoEffettiva}`)
@@ -309,14 +328,14 @@ SELECT coalesce(json_agg(row_to_json(t) ORDER BY t.data, t.id), '[]'::json) FROM
     f24Dovuto: calc.f24Dovuto,
   }
 
-  const first = callConsolidate('[SG-E2E] P2-07 consolidamento provvisorio dic 2026', payload)
+  const first = callConsolidate(`[SG-E2E] P2-07 consolidamento provvisorio ${periodoInizio}`, payload, periodoInizio, periodoFine)
   log(`FIRST=${JSON.stringify(first)}`)
   if (first.success !== true) throw new Error('FIRST_CONSOLIDATE_FAILED')
   if (first.stato !== 'provvisoria') throw new Error('FIRST_NOT_PROVVISORIA')
   const id1 = first.liquidazioneId
   if (!id1) throw new Error('FIRST_MISSING_ID')
 
-  const second = callConsolidate('[SG-E2E] P2-07 riconsolidamento provvisorio dic 2026', payload)
+  const second = callConsolidate(`[SG-E2E] P2-07 riconsolidamento provvisorio ${periodoInizio}`, payload, periodoInizio, periodoFine)
   log(`SECOND=${JSON.stringify(second)}`)
   if (second.success !== true) throw new Error('SECOND_CONSOLIDATE_FAILED')
   const id2 = second.liquidazioneId
@@ -328,8 +347,8 @@ SELECT coalesce(json_agg(row_to_json(t) ORDER BY t.data, t.id), '[]'::json) FROM
   const countPeriod = psql(`
 SELECT count(*)::text FROM public.liquidazione_iva
 WHERE societa_id='${SOCIETA_A}'::uuid
-  AND periodo_inizio='${PERIODO_INIZIO}'::date
-  AND periodo_fine='${PERIODO_FINE}'::date
+  AND periodo_inizio='${periodoInizio}'::date
+  AND periodo_fine='${periodoFine}'::date
 `)
   log(`LIQ_PERIOD_COUNT=${countPeriod}`)
   if (countPeriod !== '1') throw new Error('EXPECTED_ONE_LIQ')
@@ -344,7 +363,7 @@ WHERE id='${id2}'::uuid;
   log(`NOTE_AFTER_LOCK=${noteAfter.slice(0, 120)}`)
   if (!noteAfter.includes('[stato:definitiva]')) throw new Error('DEFINITIVA_MARKER_MISSING')
 
-  const blocked = callConsolidate('[SG-E2E] P2-07 must fail after definitiva', payload)
+  const blocked = callConsolidate('[SG-E2E] P2-07 must fail after definitiva', payload, periodoInizio, periodoFine)
   log(`BLOCKED=${JSON.stringify(blocked)}`)
   if (blocked.success !== false) throw new Error('DEFINITIVA_BLOCK_MISSING')
   const err = String(blocked.error || '').toLowerCase()
@@ -364,7 +383,7 @@ WHERE id='${id2}'::uuid;
 main()
   .catch((err) => {
     console.error(err)
-    lines.push(`P2_07_RESULT=FAIL ${err?.message || err}`)
+    log(`P2_07_RESULT=FAIL ${err?.message || err}`)
   })
   .finally(() => {
     writeFileSync(outPath, lines.join('\n') + '\n', 'utf8')

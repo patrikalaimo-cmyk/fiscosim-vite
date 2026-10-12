@@ -1063,3 +1063,11 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Stage3V `ready=true` / `allLabPortsLoopback=true`; Stage3U+W RPC presenti; stack `fiscosim-local`/54321 non toccato.
 - Scripts: `run-sg-p0-00-loopback-rebind.mjs`, `verify-sg-p0-00-loopback.mjs`. Evidence `REPORT/STAGE3W_SG_P0_00_LOOPBACK_20261012130553.txt` `P0_00_RESULT=PASS`.
 - Prossimo: SG-P4-02 L6 regressione LAB.
+
+## 2026-10-12 - SG-P4-02 L6 regressione LAB ripetibile PASS
+
+- Catalogo puro `buildL6LabRegressionSuite` (pack `l6_lab_core_v1`): P0_00, P2_06, P2_07, P3_01, P3_03, P3_07, P4_01.
+- Orchestrator `run-stage3w-l6-lab-regression.mjs`; unit `l6LabRegressionSuite` 4/4.
+- P2-07 reso L6-ripetibile: auto-pick mese IVA vuoto 2027+ (niente cleanup fixture).
+- Evidence `REPORT/STAGE3W_L6_REGRESSIONE_P4_02_20261012131055.txt` fingerprint `L6CORE1|…all PASS` `P4_02_RESULT=PASS`.
+- Prossimo: SG-P4-03..07.
