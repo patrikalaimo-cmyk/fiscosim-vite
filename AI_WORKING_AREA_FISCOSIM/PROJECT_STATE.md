@@ -1,17 +1,19 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** **SG-P0-02 CHIUSO** — readiness + fiscal FA22 + general-journal Stage3V A/B persistent JWT PASS. L6 v2 PASS.
+* **Fase corrente:** **P0-02 chiuso + L4 browser LAB PASS** (Consultazione + Manuale). Debito collaudi A100 browser resta (lista completa).
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **STAGE3V fixtures:** `STAGE3V-A/B` (UUID `73000000-…`); PN A/B persistite (re-run harness richiede review + società vuote)
-* **Limite:** collaudi browser manuali; default prod multi-step; no LIVE; cleanup STAGE3V PN solo con consenso
+* **STAGE3V fixtures:** `STAGE3V-A/B`; PN persistite (no re-run silent)
+* **Limite:** debito manuale A100 completo; default prod multi-step; no LIVE
 
 ## 2. Prossimo passo operativo
-1. Sessione collaudi manuali browser (`FISCOSIM_MANUAL_TEST_DEBT`) / L4 Playwright
+1. Continuare collaudi da `FISCOSIM_MANUAL_TEST_DEBT.md` (Import/IVA/Bank UI, ecc.)
 2. Non cleanup silente fixture SG-E2E-* / STAGE3V-*
 3. Cutover default `createPrimaNotaCompleta` solo con consenso esplicito
 
 ## 3. Evidenze
+* `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-12T1957.txt`
+* `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-12T1956.txt`
 * `REPORT/STAGE3W_SG_P0_02_GENERAL_JOURNAL_20261012195555.txt`
 * `REPORT/STAGE3W_SG_P0_02_STAGE3V_JWT_20261012195212.txt`
 * `REPORT/STAGE3W_L6_REGRESSIONE_P4_02_20261012195227.txt`

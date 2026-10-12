@@ -1100,3 +1100,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Harness `stage3v-signed-jwt-general-journal-e2e.mjs` con `LAB_SYNTHETIC_WRITE_APPROVED` ? `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS` (A 100.25 / B 205.10; replay idempotente; cross-company 403).
 - Runner `run-stage3v-general-journal-write.mjs` (park untracked per dirty-tree gate). Evidence `REPORT/STAGE3W_SG_P0_02_GENERAL_JOURNAL_20261012195555.txt`.
 - Nota: società STAGE3V non più vuote — re-run vietato senza review/cleanup esplicito.
+
+## 2026-10-12 - L4 browser LAB Consultazione + Manuale PASS
+
+- Vite :5173 + API :3001 LAB; password browser SG-E2E-A impostata solo in Auth LAB.
+- `run-stage3w-l4-browser-consultazione.mjs` ? `P1_06_RESULT=PASS` (filter/detail read-only; 0 write in consult).
+- `run-stage3w-l4-browser-manuale.mjs` ? `L4_RESULT=PASS` (fiscal-journal-post 201 via UI path).
+- Evidence `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-12T1956.txt`, `…MANUALE_2026-10-12T1957.txt`.
