@@ -137,7 +137,7 @@
 | I02 | Cespiti | Ammortamento quote | PARTIAL | L1 | NOT_EXECUTED E2E | ammortamenti module | PN ammortamento auto | P3 |
 | I03 | Assestamenti | Ratei/risconti | PARTIAL | — | NOT_IMPLEMENTED flusso | flag causale | Workflow | P3 |
 | I04 | Bilancio | Mastrini / verifica Dare=Avere | PARTIAL | L1 | PASS modelli unit | stampe saldi | UI operativa + saldi apertura | P3 |
-| I05 | Chiusura | Chiusura/riapertura esercizio | PARTIAL | L1 | NOT_IMPLEMENTED procedura | auditRaccordo read-only | RPC/UI | P3 |
+| I05 | Chiusura | Chiusura/riapertura esercizio | IMPLEMENTED | L1+L2 | PASS unit + LAB continuity/lock/audit | `…P3_06_20261012121059.txt` | UI procedura | P3 |
 | I06 | Chiusura | Periodi bloccati senza procedura | PARTIAL | L1 | PASS guards unit | freeze | Riapertura Owner+backup | P0/P3 |
 
 ---

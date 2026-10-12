@@ -1027,3 +1027,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - FP acquisition PN `0f8e4dcb-...`; bridge create + re-bridge dedupe; PN count stabile (51); `BENE_LINKED_COUNT=1`; `QUOTE_ROWS=5`; quota 2026=500
   - `P3_05_RESULT=PASS` — acceptance Bridge non duplica PN
 - Unit `cespitiOperativiQuote` 4/4 + createCespiteFromPrimaNota 4/4. Gap: no colonna dedicata `prima_nota_id` (link via note); no scrittura PN automatica quote fine anno; piano conti LAB senza conto 1.02 dedicato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-06 Chiusura/riapertura esercizio PASS
+
+- Builders puri: `buildChiusuraRiaperturaPlans` (close-CE, close-SP, reopen-SP) + `postGeneralJournalLab` mapper Stage3U.
+- Path LAB: vendita 2025 via `fiscosim_post_general_journal` (docker/psql) ? chiusura CE 2025-12-30 ? chiusura SP 2025-12-31 ? riapertura SP 2026-01-02; causali `tipo=chiusura/apertura` seedate LAB.
+- Audit: `auditRaccordoEserciziModel` su PN reali ? `valid=true`; continuity cliente chiusura ?1000 / riapertura +1000.
+- Lock: `periodo_chiuso_lock=true` su PN 2025; guards warning `nero`; `stampe_definitive` libro_giornale 2025 ? fiscal write 2025-07-01 ? **409** `FISCAL_ATOMIC_POST_FAILED`.
+- Script `scripts/security_p0/run-stage3w-chiusura-riapertura-esercizio.mjs`. Evidence `REPORT/STAGE3W_CHIUSURA_RIAPERTURA_P3_06_20261012121059.txt` `P3_06_RESULT=PASS`.
+- Unit `chiusuraRiaperturaEsercizio` 4/4. Gap: no UI procedura chiusura; general-journal HTTP flag non richiesto (RPC docker); owner/service_role puo ancora forzare annulla (warning non always-block). Nessun LIVE / SG-P0-00.
