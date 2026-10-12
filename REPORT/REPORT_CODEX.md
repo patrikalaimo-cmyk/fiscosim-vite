@@ -1054,3 +1054,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Invarianti: PN bilanciate, VAT rows per periodo, liquidazione (debito/credito/saldo), partitario lordo, fingerprint match.
 - Script `scripts/security_p0/run-stage3w-l5-multi-periodo.mjs`. Evidence `REPORT/STAGE3W_L5_MULTI_PERIODO_P4_01_20261012130502.txt` `P4_01_RESULT=PASS`.
 - Unit `l5MultiPeriodDataset` 4/4. Gap: non consolida liquidazione_iva; non attraversa chiusura esercizio; UI/L6 non in scope. Nota: Auth Kong 55321 down ~60s mid-P0-00 — retry OK. Nessun LIVE / no touch porte Docker P0.
+
+## 2026-10-12 - SG-P0-00 Contenimento porte LAB loopback PASS
+
+- Approvazione operatore esplicita («autorizzo tutto»). Backup volume+dump in `C:\Users\patri\FiscoSim-P0-LAB-BACKUP-20261012130159`.
+- Recreate surgical publish `127.0.0.1:host:container` per Kong/DB/Studio/Inbucket/Analytics; volume `supabase_db_FiscoSim-P0-LAB-20261008-164658` preservato (no `rm -v`).
+- Kong ephemeral `/home/kong` (localhost.crt/key + kong.yml) ripristinato post-recreate; script ora snapshot/restore automatico.
+- Stage3V `ready=true` / `allLabPortsLoopback=true`; Stage3U+W RPC presenti; stack `fiscosim-local`/54321 non toccato.
+- Scripts: `run-sg-p0-00-loopback-rebind.mjs`, `verify-sg-p0-00-loopback.mjs`. Evidence `REPORT/STAGE3W_SG_P0_00_LOOPBACK_20261012130553.txt` `P0_00_RESULT=PASS`.
+- Prossimo: SG-P4-02 L6 regressione LAB.

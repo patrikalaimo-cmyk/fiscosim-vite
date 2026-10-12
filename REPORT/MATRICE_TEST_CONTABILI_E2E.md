@@ -174,9 +174,9 @@
 |---|---|---|
 | L1 | Operativo (`test:*` CI) | Mantenere regressione; **1199 PASS** @ sessione Windows |
 | L2 | Stage3U generale PASS; Stage3W fiscale PASS (install LAB) | Smoke HTTP + prova flag ON |
-| L3 | JWT fiscal post PASS su loopback; Stage3V formale porte BLOCKED | SG-P0-00 porte + Stage3V harness |
+| L3 | JWT fiscal post PASS; **SG-P0-00 porte loopback PASS** (Stage3V ready) | Stage3V harness formale + UI Manuale/Import |
 | L4 | Playwright/browser fiscali assenti | Dopo L3; debito manuale esistente |
 | L5 | Dataset multi-periodo sintetico PASS (SG-P4-01) | L6 regressione LAB |
-| L6 | CI Node only | Estendere a LAB isolato ripetibile |
+| L6 | CI Node only | SG-P4-02 LAB isolato ripetibile |
 
 **Prefisso fixture proposto:** `SG-E2E-20261010-` · società `SG-E2E-A` / `SG-E2E-B`.

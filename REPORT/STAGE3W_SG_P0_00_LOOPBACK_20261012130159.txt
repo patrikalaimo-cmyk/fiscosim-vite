@@ -1,0 +1,42 @@
+P0_00_START loopback rebind (volume-preserving)
+VOLUME_OK=supabase_db_FiscoSim-P0-LAB-20261008-164658
+BACKUP_ROOT=C:\Users\patri\FiscoSim-P0-LAB-BACKUP-20261012130159
+BACKUP_DUMP=C:\Users\patri\FiscoSim-P0-LAB-BACKUP-20261012130159\p0lab.dump
+BACKUP_TAR=C:\Users\patri\FiscoSim-P0-LAB-BACKUP-20261012130159\supabase_db_volume.tgz
+BEFORE_PORTS=supabase_studio_FiscoSim-P0-LAB-20261008-164658 0.0.0.0:55323->3000/tcp, [::]:55323->3000/tcp | supabase_pg_meta_FiscoSim-P0-LAB-20261008-164658 8080/tcp | supabase_storage_FiscoSim-P0-LAB-20261008-164658 5000/tcp | supabase_rest_FiscoSim-P0-LAB-20261008-164658 3000/tcp | supabase_realtime_FiscoSim-P0-LAB-20261008-164658 4000/tcp | supabase_inbucket_FiscoSim-P0-LAB-20261008-164658 0.0.0.0:55324->8025/tcp, [::]:55324->8025/tcp | supabase_auth_FiscoSim-P0-LAB-20261008-164658 9999/tcp | supabase_kong_FiscoSim-P0-LAB-20261008-164658 0.0.0.0:55321->8000/tcp, [::]:55321->8000/tcp | supabase_vector_FiscoSim-P0-LAB-20261008-164658  | supabase_analytics_FiscoSim-P0-LAB-20261008-164658 0.0.0.0:55327->4000/tcp, [::]:55327->4000/tcp | supabase_db_FiscoSim-P0-LAB-20261008-164658 0.0.0.0:55322->5432/tcp, [::]:55322->5432/tcp
+REBIND_START=supabase_kong_FiscoSim-P0-LAB-20261008-164658
+CREATE_ARGS_COUNT=56
+PORT_CHECK=supabase_kong_FiscoSim-P0-LAB-20261008-164658 8000/tcp ok=true bad=false pubs=[{"HostIp":"127.0.0.1","HostPort":"55321"}]
+REBIND_PASS=supabase_kong_FiscoSim-P0-LAB-20261008-164658
+REBIND_START=supabase_db_FiscoSim-P0-LAB-20261008-164658
+CREATE_ARGS_COUNT=54
+PORT_CHECK=supabase_db_FiscoSim-P0-LAB-20261008-164658 5432/tcp ok=true bad=false pubs=[{"HostIp":"127.0.0.1","HostPort":"55322"}]
+REBIND_PASS=supabase_db_FiscoSim-P0-LAB-20261008-164658
+REBIND_START=supabase_studio_FiscoSim-P0-LAB-20261008-164658
+CREATE_ARGS_COUNT=84
+PORT_CHECK=supabase_studio_FiscoSim-P0-LAB-20261008-164658 3000/tcp ok=true bad=false pubs=[{"HostIp":"127.0.0.1","HostPort":"55323"}]
+REBIND_PASS=supabase_studio_FiscoSim-P0-LAB-20261008-164658
+REBIND_START=supabase_inbucket_FiscoSim-P0-LAB-20261008-164658
+CREATE_ARGS_COUNT=38
+PORT_CHECK=supabase_inbucket_FiscoSim-P0-LAB-20261008-164658 8025/tcp ok=true bad=false pubs=[{"HostIp":"127.0.0.1","HostPort":"55324"}]
+REBIND_PASS=supabase_inbucket_FiscoSim-P0-LAB-20261008-164658
+REBIND_START=supabase_analytics_FiscoSim-P0-LAB-20261008-164658
+CREATE_ARGS_COUNT=66
+PORT_CHECK=supabase_analytics_FiscoSim-P0-LAB-20261008-164658 4000/tcp ok=true bad=false pubs=[{"HostIp":"127.0.0.1","HostPort":"55327"}]
+REBIND_PASS=supabase_analytics_FiscoSim-P0-LAB-20261008-164658
+VOLUME_OK=supabase_db_FiscoSim-P0-LAB-20261008-164658
+AFTER_PORTS=supabase_analytics_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55327->4000/tcp | supabase_inbucket_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55324->8025/tcp | supabase_studio_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55323->3000/tcp | supabase_db_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55322->5432/tcp | supabase_kong_FiscoSim-P0-LAB-20261008-164658  | supabase_pg_meta_FiscoSim-P0-LAB-20261008-164658 8080/tcp | supabase_storage_FiscoSim-P0-LAB-20261008-164658 5000/tcp | supabase_rest_FiscoSim-P0-LAB-20261008-164658 3000/tcp | supabase_realtime_FiscoSim-P0-LAB-20261008-164658 4000/tcp | supabase_auth_FiscoSim-P0-LAB-20261008-164658 9999/tcp | supabase_vector_FiscoSim-P0-LAB-20261008-164658
+RESTART_OK=supabase_auth_FiscoSim-P0-LAB-20261008-164658
+RESTART_OK=supabase_rest_FiscoSim-P0-LAB-20261008-164658
+RESTART_OK=supabase_realtime_FiscoSim-P0-LAB-20261008-164658
+RESTART_OK=supabase_storage_FiscoSim-P0-LAB-20261008-164658
+RESTART_SKIP=supabase_meta_FiscoSim-P0-LAB-20261008-164658 Command failed: docker restart supabase_meta_FiscoSim-P0-LAB-20261008-164658
+Error response from daemon: No such container: supabase_meta_FiscoSim-P0-LAB-20261008-164658
+
+RESTART_OK=supabase_kong_FiscoSim-P0-LAB-20261008-164658
+PG_READY=true
+STAGE3V_READY=true
+STAGE3V_LOOPBACK=true
+STAGE3V_NETWORK=true
+STAGE3U_W_RPC=true|true
+P0_00_RESULT=FAIL STAGE3U_OR_W_RPC_MISSING

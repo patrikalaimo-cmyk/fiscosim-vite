@@ -30,18 +30,18 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 ## P0 — Sicurezza, integrità, atomicità
 
-### SG-P0-00 — Contenimento porte stack P0 (LAB only)
+### SG-P0-00 — Contenimento porte stack P0 (LAB only) — **PASS** 20261012
 | Campo | Contenuto |
 |---|---|
 | Problema | LAB pubblica `55321–55327` (e DB `55322`) su `0.0.0.0`/`[::]`; Stage3V fail-closed |
-| File/servizi | Docker P0 compose/CLI reale; `scripts/security_p0/stage3v-local-stack.mjs` |
+| File/servizi | `scripts/security_p0/run-sg-p0-00-loopback-rebind.mjs`, `verify-sg-p0-00-loopback.mjs`, `stage3v-local-stack.mjs` |
 | Riutilizzabile | Topologia `fiscosim-p0-loopback`, volume `supabase_db_FiscoSim-P0-LAB-20261008-164658`, Stage3U RPC |
-| Lavoro | Redesign binding loopback-only; verifica volume/Stage3U post-recreate |
+| Lavoro | Recreate publish `127.0.0.1:host:container`; snapshot/restore `/home/kong`; verify Stage3V+RPC |
 | Dipendenze | Approvazione esplicita operatore; backup volume; nessuna touch stack ordinario `54321` |
 | Rischio | **P0** — perdita volume o contaminazione stack |
-| Test | Readiness Stage3V post-fix; inventory RPC Stage3U ancora presente |
-| Accettazione | Tutte le porte LAB bind `127.0.0.1`/`::1`; Stage3U schema ancora PASS; readiness non BLOCKED_UNSAFE |
-| Approvazione | **OBBLIGATORIA** prima di stop/rm/recreate |
+| Test | Evidence `REPORT/STAGE3W_SG_P0_00_LOOPBACK_20261012130553.txt` |
+| Accettazione | Tutte le porte LAB bind `127.0.0.1`; Stage3U/W RPC presenti; Stage3V `ready=true` |
+| Approvazione | **Concessa** 20261012 («autorizzo tutto») |
 
 ### SG-P0-01 — Commit fiscale ACID canonico ★ PRIMO INTERVENTO CODICE
 | Campo | Contenuto |
@@ -156,14 +156,13 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 - Windows P0 LAB: preflight READ-ONLY **PASS** + rehearsal ROLLBACK **PASS** + install persistente **PASS** (`…231404-750.txt`, commit `fe21da0`). RPC Stage3W presente; fixture rolled back; Stage3U OK.
 - Wire Manuale/Import → Stage3W: **implementato dietro flag LAB (default OFF)**. Attivazione runtime richiede env LAB + `dev-api` + sessione owner/admin.
 - Launcher UI LAB + smoke HTTP: script pronti (`start-stage3w-lab-ui-stack.ps1`, `smoke-stage3w-fiscal-lab-http.ps1`); hardening launch fino a `53e1f8e`.
-- L3 JWT ancora bloccato da porte non-loopback.
-- Sessione Windows refresh: worktree allineato a `53e1f8e`; `test:all` 1199/1199; Docker Desktop **spento** → smoke LAB non rieseguibile qui.
+- ~~L3 JWT bloccato da porte non-loopback~~ **SG-P0-00 PASS** 20261012 (porte `127.0.0.1` only; Stage3V ready).
+- P3 chiusa; P4-01 L5 PASS; prossimo SG-P4-02 L6.
 
 ## Prossima sessione
 
-1. **Non** applicare SG-P0-00 senza approvazione.
-2. ~~Stage3W install + smoke + FA22 persist + MATRIX persist~~ **FATTO** (`…000635-684.txt`).
-3. L3 JWT / UI Manuale-Import: Auth login-ready + (consigliato) porte loopback.
-4. Opzionale L2: liquidazione IVA da movimenti SG-E2E persistiti.
-5. Default produttivo resta `createPrimaNotaCompleta` finche L3/L4 non certificati.
+1. ~~SG-P0-00~~ **FATTO** (approvazione + evidence PASS).
+2. ~~Stage3W install + smoke + FA22 persist + MATRIX persist~~ **FATTO**.
+3. SG-P4-02 L6 regressione LAB ripetibile (+ P4-03..07).
+4. Default produttivo resta `createPrimaNotaCompleta` finche L3/L4 non certificati end-to-end UI.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.
