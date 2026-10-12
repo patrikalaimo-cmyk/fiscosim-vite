@@ -31,6 +31,8 @@ export function buildImportDecisionFeedbackEvents({
   proposedAccount = null,
   proposedCausale = null,
   ivaDraftRows = [],
+  contextKey = '',
+  direction = '',
   dryRun = false,
 } = {}) {
   if (dryRun) return []
@@ -39,6 +41,14 @@ export function buildImportDecisionFeedbackEvents({
   const requestId = text(commitResult.requestId || commitResult.request_id)
   const primaNotaId = text(commitResult.primaNotaId || commitResult.prima_nota_id)
   if (!requestId && !primaNotaId) return []
+
+  const piva = text(
+    workingViewModel?.counterpartyAccount?.partitaIva
+      || workingViewModel?.parsedDocument?.fornitore?.partitaIva
+      || workingViewModel?.parsedDocument?.cedente?.partitaIva
+      || '',
+  )
+  const resolvedContextKey = text(contextKey) || (piva ? `piva:${piva.replace(/^IT/i, '')}|${text(direction) || 'unknown'}` : '')
 
   const base = {
     societaId,
@@ -54,12 +64,7 @@ export function buildImportDecisionFeedbackEvents({
     outcome: 'confirmed',
     committed: true,
     dryRun: false,
-    contextKey: text(
-      workingViewModel?.counterpartyAccount?.partitaIva
-        || workingViewModel?.parsedDocument?.fornitore?.partitaIva
-        || workingViewModel?.parsedDocument?.cedente?.partitaIva
-        || '',
-    ),
+    contextKey: resolvedContextKey,
     counterpartyKey: text(
       workingViewModel?.counterpartyAccount?.descrizione
         || workingViewModel?.parsedDocument?.fornitore?.denominazione
@@ -104,7 +109,9 @@ export function buildImportDecisionFeedbackEvents({
       proposedValue: proposedIva || null,
       proposedSource: text(row?.causaleIvaSuggestionSource) || null,
       finalValue: finalIva,
-      contextKey: `${base.contextKey}|${Number(row?.aliquota || 0)}`,
+      contextKey: base.contextKey
+        ? `${base.contextKey}|iva:${Number(row?.aliquota || 0)}`
+        : `iva:${Number(row?.aliquota || 0)}`,
     }))
   }
 

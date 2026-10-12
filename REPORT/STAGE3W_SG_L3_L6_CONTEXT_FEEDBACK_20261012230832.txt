@@ -1,0 +1,16 @@
+﻿STAGE3W_SG_L3_L6_CONTEXT_FEEDBACK
+timestamp=20261012230832
+branch=feat/studio-grade-accounting-e2e-20261010
+scope=SG-L3 contextual keys + consume DecisionFeedback LAB; SG-L6 UI explanation IVA
+
+UNIT_L3=PASS importContabilitaL3ContextFeedback.test.js 3/3
+UNIT_L1=PASS 3/3
+UNIT_BANK=PASS 22/22
+
+DELIVERED:
+- buildImportSuggestionContextKey (controparte+direzione+desc prodotto)
+- lookupImportDecisionFeedback + L1 staging prefers feedback over history
+- Import commit writes contextual contextKey
+- Working View IVA shows explanation/conflicts lines
+
+GATED: DB schema DecisionFeedback; full browser A100; LIVE/cutover

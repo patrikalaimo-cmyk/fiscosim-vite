@@ -1270,6 +1270,22 @@ export function ImportContabilitaWorkingView({
                                 <div style={{ marginTop: '.04rem', fontSize: '.58rem', lineHeight: 1.2, color: '#a9c8ec' }}>
                                   Suggerita dallo storico controparte
                                 </div>
+                              ) : row.causaleIvaSuggestionSource === 'standard' && !row.causaleIvaManual ? (
+                                <div style={{ marginTop: '.04rem', fontSize: '.58rem', lineHeight: 1.2, color: '#a9c8ec' }}>
+                                  Causale standard Studio
+                                </div>
+                              ) : null}
+                              {!row.causaleIvaManual && Array.isArray(row.suggestionExplanation?.explanation)
+                                && row.suggestionExplanation.explanation.length ? (
+                                <div style={{ marginTop: '.04rem', fontSize: '.56rem', lineHeight: 1.25, color: 'rgba(188,204,226,.78)' }}>
+                                  {row.suggestionExplanation.explanation.slice(0, 2).join(' · ')}
+                                </div>
+                              ) : null}
+                              {!row.causaleIvaManual && Array.isArray(row.suggestionExplanation?.conflicts)
+                                && row.suggestionExplanation.conflicts.length ? (
+                                <div style={{ marginTop: '.02rem', fontSize: '.56rem', lineHeight: 1.25, color: '#ffcf70' }}>
+                                  Conflitto spiegato · verifica prima del commit
+                                </div>
                               ) : null}
                             </td>
                             <td style={{ padding: '.1rem', width: '6%', borderBottom: isPickerOpen ? 'none' : '1px solid rgba(124,157,202,.08)' }}>

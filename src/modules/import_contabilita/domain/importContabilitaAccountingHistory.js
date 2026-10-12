@@ -334,11 +334,15 @@ export function decorateImportAccountingHistorySuggestion(value, {
   sampleCount = 0,
   totalSamples = 0,
   lastSeenAt = '',
+  source = 'history',
 } = {}) {
   if (!value || typeof value !== 'object') return value || null
+  const suggestionSource = normalizeText(source) || 'history'
   return {
     ...value,
     _importHistorySuggested: true,
+    _importSuggestionSource: suggestionSource,
+    _importFeedbackSuggested: suggestionSource === 'feedback',
     _importHistoryKind: normalizeText(kind),
     _importHistorySampleCount: Number(sampleCount || 0),
     _importHistoryTotalSamples: Number(totalSamples || 0),

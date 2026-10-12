@@ -1144,3 +1144,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Nessuna migration DB** ? interim fino ad approvazione schema.
 - Evidence: `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_LAB_*.txt`; bank profile 22/22 PASS.
 - Residuo: schema DB DecisionFeedback; browser A100; LIVE/cutover gated.
+
+## 2026-10-12 - SG-L3 context keys + SG-L6 explanation UI (LAB)
+
+- `buildImportSuggestionContextKey` / `lookupImportDecisionFeedback`: stesso fornitore, prodotti diversi ? conti diversi da feedback.
+- L1 staging: feedback contestuale > storico mode; DTO conflicts `feedback_vs_history`.
+- Working View IVA: linee explanation + badge conflitto.
+- L4 browser Import re-smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2108.txt`).
+- Evidence: `REPORT/STAGE3W_SG_L3_L6_CONTEXT_FEEDBACK_20261012230832.txt`; UNIT L3 3/3 + L1 3/3.
+- Residuo: history adapter multi-prodotto nativo; mass-confirm Bank; schema DB; browser A100 dettagliato.

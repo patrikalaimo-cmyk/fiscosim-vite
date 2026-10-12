@@ -1,19 +1,17 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** SG-L2 DecisionFeedback **LAB localStorage** (no migration) + Bank match memory boost. A100 completo ancora gated (manuale browser, schema DB learning, LIVE, cutover).
+* **Fase corrente:** SG-L3 context keys + consume DecisionFeedback LAB **PARTIAL**; SG-L6 UI explanation IVA **PARTIAL**. A100 completo ancora gated.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** `207fb07` (locale = origin)
-* **Limite:** no migration learning DB senza approvazione; no LIVE; default prod multi-step; debito A100 browser
+* **HEAD:** (post-commit)
+* **Limite:** no migration learning DB; no LIVE; debito browser A100; mass-confirm Bank aperto
 
 ## 2. Prossimo passo operativo
-1. Approvazione schema DecisionFeedback DB (sostituisce localStorage LAB)
-2. Residuo A100 UI browser: upload/commit Import, IVA, Bank E2E
-3. Non cleanup silente fixture SG-E2E-* / STAGE3V-*; cutover `createPrimaNotaCompleta` solo con consenso
+1. Schema DecisionFeedback DB solo con approvazione; oppure browser A100 Import/IVA/Bank
+2. History adapter multi-prodotto nativo (oltre feedback); mass-confirm gated Bank
+3. Non cleanup silente fixture; cutover `createPrimaNotaCompleta` solo con consenso
 
 ## 3. Evidenze
-* `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_LAB_*.txt`
+* `REPORT/STAGE3W_SG_L3_L6_CONTEXT_FEEDBACK_*.txt`
+* `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_LAB_20261012230501.txt`
 * `REPORT/STAGE3W_SG_L1_BANK_WIRE_20261012225849.txt`
-* `REPORT/AUDIT_LEARNING_ENGINE.md`
-* `REPORT/ARCHITETTURA_LEARNING_ENGINE.md`
-* `REPORT/MATRICE_TEST_LEARNING_ENGINE.md`

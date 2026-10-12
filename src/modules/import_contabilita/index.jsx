@@ -36,6 +36,7 @@ import {
   buildImportContabilitaL1HistoryIndexes,
   resolveImportContabilitaStagingAccountingHistorySuggestions,
 } from './application/suggestion/importContabilitaL1SuggestionResolver.js'
+import { buildImportSuggestionContextKey } from './application/suggestion/buildImportSuggestionContextKey.js'
 import { buildImportDecisionFeedbackEvents } from '../contabilita/application/learning/buildImportDecisionFeedbackEvents.js'
 import { appendDecisionFeedbackEvents } from '../contabilita/application/learning/decisionFeedbackLabStore.js'
 import { sb } from '../../lib/supabase.js'
@@ -3632,6 +3633,7 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         causaliContabiliById: causaliContabiliIndexes.byId,
         hasManualAccount: Object.prototype.hasOwnProperty.call(nextAccounts, rowKey),
         hasManualCausale: Object.prototype.hasOwnProperty.call(nextCausali, rowKey),
+        societaId: selectedSocietaId,
       })
       if (!resolved) return
 
@@ -5063,6 +5065,21 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       const cronologiaSocietaId = selectedSocietaId || selectedSocietaForDemo?.id || ''
       if (cronologiaSocietaId && commitResult.primaNotaId) {
         try {
+          const feedbackDirection = (
+            activeWorkingViewModel?.counterpartyAccount?.isCliente
+            || activeWorkingViewModel?.counterpartyAccount?.is_cliente
+          ) ? 'vendita' : 'acquisto'
+          const feedbackContextKey = buildImportSuggestionContextKey({
+            counterpartyPiva: activeWorkingViewModel?.counterpartyAccount?.partitaIva
+              || activeWorkingViewModel?.parsedDocument?.fornitore?.partitaIva
+              || activeWorkingViewModel?.parsedDocument?.cedente?.partitaIva
+              || '',
+            counterpartyName: activeWorkingViewModel?.counterpartyAccount?.descrizione
+              || activeWorkingViewModel?.parsedDocument?.fornitore?.denominazione
+              || '',
+            direction: feedbackDirection,
+            parsedDocument: activeWorkingViewModel?.parsedDocument || null,
+          })
           const feedbackEvents = buildImportDecisionFeedbackEvents({
             societaId: cronologiaSocietaId,
             commitResult,
@@ -5072,6 +5089,8 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
             proposedAccount: manualAccountByRowId?.[committedKey] || null,
             proposedCausale: manualCausaleByRowId?.[committedKey] || null,
             ivaDraftRows: activeWorkingViewModel?.ivaDraftRows || [],
+            contextKey: feedbackContextKey,
+            direction: feedbackDirection,
             dryRun: false,
           })
           appendDecisionFeedbackEvents(cronologiaSocietaId, feedbackEvents)

@@ -1,0 +1,109 @@
+/**
+ * SG-L3 — contextual suggestion keys (controparte + direzione + descrizione/prodotto).
+ */
+
+function text(value) {
+  return String(value ?? '').trim()
+}
+
+function normalizeToken(value) {
+  return text(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const STOPWORDS = new Set([
+  'di', 'da', 'del', 'della', 'delle', 'dei', 'degli', 'lo', 'la', 'le', 'il', 'un', 'una',
+  'e', 'ed', 'per', 'con', 'su', 'nel', 'nella', 'ft', 'fattura', 'n', 'nr', 'num',
+  'euro', 'iva', 'tot', 'totale', 'imponibile', 'srl', 'spa', 'snc', 'sas',
+])
+
+/**
+ * Extract a stable product/description token from invoice text lines.
+ */
+export function extractImportDescriptionToken(parsedDocument = null) {
+  const lines = []
+  const doc = parsedDocument || {}
+  const push = (value) => {
+    const t = text(value)
+    if (t) lines.push(t)
+  }
+  push(doc.descrizione)
+  push(doc.oggetto)
+  push(doc.causale)
+  push(doc.note)
+  const articoli = doc.righe || doc.linee || doc.lines || doc.dettaglioLinee || []
+  ;(Array.isArray(articoli) ? articoli : []).slice(0, 8).forEach((row) => {
+    push(row?.descrizione || row?.description || row?.nome || row?.name)
+  })
+
+  const joined = normalizeToken(lines.join(' '))
+  if (!joined) return ''
+
+  const tokens = joined
+    .split(' ')
+    .filter((token) => token.length >= 3 && !STOPWORDS.has(token) && !/^\d+$/.test(token))
+
+  if (!tokens.length) return ''
+  // Prefer first two informative tokens as product/category fingerprint.
+  return tokens.slice(0, 2).join('_')
+}
+
+export function buildImportSuggestionContextKey({
+  counterpartyPiva = '',
+  counterpartyName = '',
+  direction = '',
+  parsedDocument = null,
+  descriptionToken = null,
+} = {}) {
+  const piva = text(counterpartyPiva).replace(/^IT/i, '')
+  const name = normalizeToken(counterpartyName).replace(/\s+/g, '_')
+  const dir = text(direction).toLowerCase() || 'unknown'
+  const desc = descriptionToken == null
+    ? extractImportDescriptionToken(parsedDocument)
+    : normalizeToken(descriptionToken).replace(/\s+/g, '_')
+
+  const identity = piva ? `piva:${piva}` : name ? `name:${name}` : 'unknown'
+  const base = `${identity}|${dir}`
+  return desc ? `${base}|desc:${desc}` : base
+}
+
+/**
+ * Score overlap between a stored context key and the current document key.
+ * Higher = better contextual match (exact desc > same identity+dir > identity only).
+ */
+export function scoreImportContextKeyMatch(storedKey = '', currentKey = '') {
+  const stored = text(storedKey)
+  const current = text(currentKey)
+  if (!stored || !current) return 0
+  if (stored === current) return 100
+
+  const storedParts = stored.split('|')
+  const currentParts = current.split('|')
+  const storedId = storedParts[0] || ''
+  const currentId = currentParts[0] || ''
+  const storedDir = storedParts[1] || ''
+  const currentDir = currentParts[1] || ''
+  const storedDesc = (storedParts.find((p) => p.startsWith('desc:')) || '').slice(5)
+  const currentDesc = (currentParts.find((p) => p.startsWith('desc:')) || '').slice(5)
+
+  let score = 0
+  if (storedId && storedId === currentId) score += 40
+  else return 0
+  if (storedDir && storedDir === currentDir) score += 20
+  if (storedDesc && currentDesc) {
+    if (storedDesc === currentDesc) score += 40
+    else if (storedDesc.includes(currentDesc) || currentDesc.includes(storedDesc)) score += 20
+    else {
+      const a = new Set(storedDesc.split('_'))
+      const b = currentDesc.split('_')
+      const overlap = b.filter((t) => a.has(t)).length
+      score += Math.min(30, overlap * 15)
+    }
+  }
+  return score
+}

@@ -11,6 +11,8 @@ import {
   resolveImportContabilitaVatHistorySuggestion,
 } from '../../domain/importContabilitaVatHistory.js'
 import { resolveImportWorkingViewCausaleIvaSuggestion } from '../../domain/importContabilitaWorkingViewIvaDraft.js'
+import { buildImportSuggestionContextKey } from './buildImportSuggestionContextKey.js'
+import { lookupImportDecisionFeedback } from './lookupImportDecisionFeedback.js'
 
 function text(value) {
   return String(value ?? '').trim()
@@ -64,7 +66,7 @@ export function buildImportContabilitaL1HistoryIndexes({
 }
 
 /**
- * Staging working-table: conto/causale from società history (never overwrite manuals).
+ * Staging working-table: feedback LAB (contextual) > history (never overwrite manuals).
  */
 export function resolveImportContabilitaStagingAccountingHistorySuggestions({
   historyIndex = new Map(),
@@ -75,6 +77,9 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
   causaliContabiliById = new Map(),
   hasManualAccount = false,
   hasManualCausale = false,
+  societaId = '',
+  feedbackLookup = null,
+  storage = globalThis.localStorage,
 } = {}) {
   const suggestion = resolveImportContabilitaAccountingHistorySuggestion({
     historyIndex,
@@ -84,53 +89,145 @@ export function resolveImportContabilitaStagingAccountingHistorySuggestions({
     pianoContiById,
     causaliContabiliById,
   })
-  if (!suggestion) return null
 
-  const base = {
-    source: 'history',
-    contextKey: suggestion.matchKey || '',
-    matchType: suggestion.matchType || '',
-    sampleCount: suggestion.sampleCount || 0,
-    lastSeenAt: suggestion.lastSeenAt || '',
-    conflicts: [],
+  const feedback = feedbackLookup || (societaId
+    ? lookupImportDecisionFeedback({
+      societaId,
+      parsedDocument,
+      counterpartyAccount,
+      direction,
+      storage,
+    })
+    : { account: null, causale: null, causaleIva: null })
+
+  const contextKey = buildImportSuggestionContextKey({
+    counterpartyPiva: counterpartyAccount?.partitaIva
+      || counterpartyAccount?.partita_iva
+      || parsedDocument?.fornitore?.partitaIva
+      || parsedDocument?.cedente?.partitaIva
+      || '',
+    counterpartyName: counterpartyAccount?.descrizione
+      || counterpartyAccount?.denominazione
+      || parsedDocument?.fornitore?.denominazione
+      || parsedDocument?.cedente?.denominazione
+      || '',
+    direction,
+    parsedDocument,
+  })
+
+  const resolveField = ({
+    hasManual,
+    feedbackHit,
+    historyValue,
+    historySampleCount,
+    historyTotal,
+    historyLastSeen,
+    historyMatchType,
+    kind,
+  }) => {
+    if (hasManual) return null
+
+    const feedbackValue = feedbackHit?.valueId
+      ? (kind === 'account' ? pianoContiById.get(feedbackHit.valueId) : causaliContabiliById.get(feedbackHit.valueId)) || null
+      : null
+
+    const conflicts = []
+    if (
+      feedbackValue
+      && historyValue
+      && text(feedbackValue.id) !== text(historyValue.id)
+    ) {
+      conflicts.push({
+        kind: 'feedback_vs_history',
+        field: kind,
+        feedbackValueId: text(feedbackValue.id),
+        historicalValueId: text(historyValue.id),
+        message: 'Correzione operatore diversa dallo storico mode: preferita la conferma recente.',
+      })
+    }
+    if (feedbackHit?.ambiguous) {
+      conflicts.push({
+        kind: 'feedback_ambiguous',
+        field: kind,
+        message: 'Feedback multipli discordanti sullo stesso contesto.',
+      })
+    }
+
+    if (feedbackValue) {
+      return {
+        value: feedbackValue,
+        explanation: createImportSuggestionExplanation({
+          source: 'feedback',
+          contextKey: feedbackHit.contextKey || contextKey,
+          matchType: feedbackHit.score >= 100 ? 'feedback_context' : 'feedback_counterparty',
+          sampleCount: feedbackHit.sampleCount || 0,
+          fieldSampleCount: feedbackHit.sampleCount || 0,
+          lastSeenAt: feedbackHit.lastSeenAt || '',
+          conflicts,
+          explanation: feedbackHit.explanation || [],
+        }),
+        decorateParams: {
+          kind,
+          sampleCount: feedbackHit.sampleCount || 0,
+          totalSamples: feedbackHit.sampleCount || 0,
+          lastSeenAt: feedbackHit.lastSeenAt || '',
+          source: 'feedback',
+        },
+        requiresConfirmation: Boolean(feedbackHit.ambiguous || conflicts.length),
+      }
+    }
+
+    if (!historyValue) return null
+    return {
+      value: historyValue,
+      explanation: createImportSuggestionExplanation({
+        source: 'history',
+        contextKey: suggestion?.matchKey || contextKey,
+        matchType: historyMatchType || suggestion?.matchType || '',
+        sampleCount: historyTotal || 0,
+        fieldSampleCount: historySampleCount || 0,
+        lastSeenAt: historyLastSeen || '',
+        conflicts,
+        explanation: [
+          kind === 'account'
+            ? 'Proposta da storico contabile società (conto costo/ricavo).'
+            : 'Proposta da storico contabile società (causale).',
+        ],
+      }),
+      decorateParams: {
+        kind,
+        sampleCount: historySampleCount || 0,
+        totalSamples: historyTotal || 0,
+        lastSeenAt: historyLastSeen || '',
+      },
+      requiresConfirmation: false,
+    }
   }
 
-  const account = !hasManualAccount && suggestion.costRevenueAccount
-    ? {
-        value: suggestion.costRevenueAccount,
-        explanation: createImportSuggestionExplanation({
-          ...base,
-          fieldSampleCount: suggestion.accountSampleCount || 0,
-          explanation: ['Proposta da storico contabile società (conto costo/ricavo).'],
-        }),
-        decorateParams: {
-          kind: 'account',
-          sampleCount: suggestion.accountSampleCount || 0,
-          totalSamples: suggestion.sampleCount || 0,
-          lastSeenAt: suggestion.lastSeenAt || '',
-        },
-      }
-    : null
+  const account = resolveField({
+    hasManual: hasManualAccount,
+    feedbackHit: feedback.account,
+    historyValue: suggestion?.costRevenueAccount || null,
+    historySampleCount: suggestion?.accountSampleCount || 0,
+    historyTotal: suggestion?.sampleCount || 0,
+    historyLastSeen: suggestion?.lastSeenAt || '',
+    historyMatchType: suggestion?.matchType || '',
+    kind: 'account',
+  })
 
-  const causale = !hasManualCausale && suggestion.causaleContabile
-    ? {
-        value: suggestion.causaleContabile,
-        explanation: createImportSuggestionExplanation({
-          ...base,
-          fieldSampleCount: suggestion.causaleSampleCount || 0,
-          explanation: ['Proposta da storico contabile società (causale).'],
-        }),
-        decorateParams: {
-          kind: 'causale',
-          sampleCount: suggestion.causaleSampleCount || 0,
-          totalSamples: suggestion.sampleCount || 0,
-          lastSeenAt: suggestion.lastSeenAt || '',
-        },
-      }
-    : null
+  const causale = resolveField({
+    hasManual: hasManualCausale,
+    feedbackHit: feedback.causale,
+    historyValue: suggestion?.causaleContabile || null,
+    historySampleCount: suggestion?.causaleSampleCount || 0,
+    historyTotal: suggestion?.sampleCount || 0,
+    historyLastSeen: suggestion?.lastSeenAt || '',
+    historyMatchType: suggestion?.matchType || '',
+    kind: 'causale',
+  })
 
   if (!account && !causale) return null
-  return { account, causale }
+  return { account, causale, contextKey }
 }
 
 /**
