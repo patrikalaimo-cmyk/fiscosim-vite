@@ -815,9 +815,80 @@ export async function loadImportContabilitaAccountingHistoryBySocieta(societaId,
       created_at: normalizeText(row?.created_at),
     }))
 
-  const pnIds = Array.from(new Set(eligibleDocuments.map((row) => row.prima_nota_id).filter(Boolean)))
+  let workingDocuments = eligibleDocuments
+  let pnIds = Array.from(new Set(workingDocuments.map((row) => row.prima_nota_id).filter(Boolean)))
+
+  // Stage3W / fiscal-journal path: PN may exist without documenti_contabilita bridge.
+  // Synthesize read-only history docs from recent PN + claim payload (P.IVA / tipo).
   if (!pnIds.length) {
-    return { documents: eligibleDocuments, headers: [], rows: [] }
+    const pnLimit = Math.min(limit, 200)
+    const { data: pnList, error: pnListError } = await sb
+      .from('prima_nota')
+      .select('id,societa_id,causale_id,causale_codice,cliente_fornitore_id,cliente_fornitore_nome,data_registrazione,created_at,numero_documento,descrizione')
+      .eq('societa_id', sid)
+      .order('created_at', { ascending: false })
+      .limit(pnLimit)
+    if (pnListError) throw pnListError
+
+    const pnRows = Array.isArray(pnList) ? pnList : []
+    pnIds = pnRows.map((row) => normalizeText(row?.id)).filter(Boolean)
+
+    const claimMetaByPn = new Map()
+    if (pnIds.length) {
+      const { data: claims, error: claimError } = await sb
+        .from('fiscosim_fiscal_journal_claim')
+        .select('prima_nota_id,request_payload,created_at')
+        .eq('societa_id', sid)
+        .in('prima_nota_id', pnIds.slice(0, 100))
+      if (!claimError && Array.isArray(claims)) {
+        claims.forEach((claim) => {
+          const pnId = normalizeText(claim?.prima_nota_id)
+          if (!pnId || claimMetaByPn.has(pnId)) return
+          const payload = claim?.request_payload && typeof claim.request_payload === 'object'
+            ? claim.request_payload
+            : {}
+          const header = payload.header && typeof payload.header === 'object' ? payload.header : {}
+          const vatRows = Array.isArray(payload?.vat?.rows) ? payload.vat.rows : []
+          const vat0 = vatRows[0] && typeof vatRows[0] === 'object' ? vatRows[0] : {}
+          const tipoVat = normalizeText(vat0.tipo).toLowerCase()
+          const tipoDocumento = tipoVat.includes('vendit') || tipoVat.includes('attiv')
+            ? 'Fattura attiva'
+            : 'Fattura passiva'
+          claimMetaByPn.set(pnId, {
+            soggetto_piva: normalizeText(vat0.soggetto_piva || header.soggetto_piva || header.partita_iva),
+            soggetto_denominazione: normalizeText(
+              vat0.soggetto_denominazione || header.soggetto_denominazione || header.cliente_fornitore_nome,
+            ),
+            tipo_documento: tipoDocumento,
+            descrizione: normalizeText(header.descrizione || ''),
+            registered_at: normalizeText(claim?.created_at),
+          })
+        })
+      }
+    }
+
+    workingDocuments = pnRows.map((row) => {
+      const pnId = normalizeText(row?.id)
+      const meta = claimMetaByPn.get(pnId) || {}
+      return {
+        id: `pn-hist-${pnId}`,
+        societa_id: normalizeText(row?.societa_id) || sid,
+        tipo_documento: meta.tipo_documento || 'Fattura passiva',
+        soggetto_denominazione: meta.soggetto_denominazione || normalizeText(row?.cliente_fornitore_nome),
+        soggetto_piva: meta.soggetto_piva || '',
+        soggetto_cf: '',
+        validation_status: 'registered',
+        workflow_status: 'registered',
+        registered_at: meta.registered_at || normalizeText(row?.created_at || row?.data_registrazione),
+        prima_nota_id: pnId,
+        created_at: normalizeText(row?.created_at),
+        descrizione: meta.descrizione || normalizeText(row?.descrizione),
+      }
+    }).filter((row) => row.prima_nota_id)
+  }
+
+  if (!pnIds.length) {
+    return { documents: workingDocuments, headers: [], rows: [] }
   }
 
   const headers = []
@@ -830,7 +901,7 @@ export async function loadImportContabilitaAccountingHistoryBySocieta(societaId,
     const [{ data: headerRows, error: headerError }, { data: lineRows, error: lineError }] = await Promise.all([
       sb
         .from('prima_nota')
-        .select('id,societa_id,causale_id,causale_codice,cliente_fornitore_id,cliente_fornitore_nome,data_registrazione,created_at')
+        .select('id,societa_id,causale_id,causale_codice,cliente_fornitore_id,cliente_fornitore_nome,data_registrazione,created_at,descrizione')
         .eq('societa_id', sid)
         .in('id', chunk),
       sb
@@ -853,6 +924,7 @@ export async function loadImportContabilitaAccountingHistoryBySocieta(societaId,
         cliente_fornitore_nome: normalizeText(row?.cliente_fornitore_nome),
         data_registrazione: normalizeText(row?.data_registrazione),
         created_at: normalizeText(row?.created_at),
+        descrizione: normalizeText(row?.descrizione),
       })
     })
 
@@ -872,7 +944,7 @@ export async function loadImportContabilitaAccountingHistoryBySocieta(societaId,
   }
 
   return {
-    documents: eligibleDocuments,
+    documents: workingDocuments,
     headers,
     rows,
   }

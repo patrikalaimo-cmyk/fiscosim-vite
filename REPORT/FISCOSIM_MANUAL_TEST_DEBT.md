@@ -4,20 +4,20 @@ Stato aggiornato: 2026-10-12 (sera, gate manual-debt LAB).
 
 ## Regola
 
-Lo sviluppo pu� proseguire tra i blocchi A100 con gate automatici verdi. I collaudi manuali vengono accorpati in una sessione finale. Questo documento impedisce che un test differito venga dimenticato o dichiarato implicitamente superato.
+Lo sviluppo pu? proseguire tra i blocchi A100 con gate automatici verdi. I collaudi manuali vengono accorpati in una sessione finale. Questo documento impedisce che un test differito venga dimenticato o dichiarato implicitamente superato.
 
-**Regola smoke vs collaudo:** uno smoke LAB (Puppeteer/HTTP/DB) pu� chiudere un punto solo se dimostra lo stesso criterio di accettazione del collaudo. Shell UI ? caso fiscale completo.
+**Regola smoke vs collaudo:** uno smoke LAB (Puppeteer/HTTP/DB) pu? chiudere un punto solo se dimostra lo stesso criterio di accettazione del collaudo. Shell UI ? caso fiscale completo.
 
-## Import Contabilit� ? parziale LAB
+## Import Contabilit? ? parziale LAB
 
 Riferimento: `REPORT/IMPORT_25A_FREEZE_AUDIT.md`.  
 Gate aggregato: `REPORT/STAGE3W_MANUAL_DEBT_LAB_GATE_2026-10-12T2226.txt`.
 
-Da verificare in browser su societ� esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. XML singolo ordinario ? **LAB browser PASS** (`STAGE3W_L4_BROWSER_IMPORT_UPLOAD_*`, fixture `IT01378570350.xml`);
 2. ZIP controllato ? **LAB browser PASS** (ZIP da fixture + staging rows/`Avvia`; stesso gate `IMPORT_02_RESULT=PASS`);
 3. Working Table / Working View e paginazione ? **LAB browser PATH** coperto dallo smoke upload/commit;
-4. marker Proposta da storico e override conto/causale ? **pendente operatore**;
+4. marker Proposta da storico e override conto/causale — **LAB browser PASS** (`STAGE3W_IMPORT_STORICO_MARKER_*`; history fallback PN/claim Stage3W + override 5.02);
 5. multi-aliquota 22% + 10% ? HTTP Import multi2210 LAB PASS (non browser dettagliato);
 6. placeholder IVA 0/0 ignorato se non fiscalmente significativo ? **pendente operatore**;
 7. warning standard Studio vs storico divergente ? **pendente operatore**;
@@ -26,14 +26,14 @@ Da verificare in browser su societ� esclusivamente di test:
 10. anti-doppio commit ? **LAB DB PASS** (claim `request_id` unico + PK su `fiscosim_fiscal_journal_claim`);
 11. prova visuale massiva ~500 documenti ? **pendente operatore**.
 
-Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/2/3/8/9/10 LAB; 4/6/7/11 + sessione visiva operatore).
+Stato: **AUTOMATICO VERDE / MANUALE PARZIALE** (1/2/3/4/8/9/10 LAB; 6/7/11 + sessione visiva operatore).
 
 ## Registrazione Manuale ? shell LAB; casi fiscali pendenti
 
 Riferimento: `REPORT/MANUALE_CANONICO_FREEZE_AUDIT.md`.  
 Evidence shell: `STAGE3W_L4_BROWSER_MANUALE_2026-10-12T1957.txt` (`L4_RESULT=PASS`).
 
-Da verificare in browser su societ� esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. movimento generale/giroconto bilanciato senza soggetto/IVA quando non richiesti;
 2. fattura passiva ordinaria: preview, PN, registro acquisti e partita fornitore;
 3. fattura attiva ordinaria: preview, PN, registro vendite e partita cliente;
@@ -55,7 +55,7 @@ Stato: **AUTOMATICO VERDE / MANUALE PENDENTE** (shell UI LAB OK; punti 1?13 anco
 Riferimento: `REPORT/IVA_REGISTRI_LIQUIDAZIONE_FREEZE_AUDIT.md`.  
 Evidence shell: `STAGE3W_L4_BROWSER_IVA_2026-10-12T2148.txt` (`L4_IVA_RESULT=PASS`).
 
-Da verificare in browser su societ� esclusivamente di test:
+Da verificare in browser su societ? esclusivamente di test:
 1. selezione periodo mensile e trimestrale e coerenza delle date incluse;
 2. fattura attiva/passiva ordinaria e note credito con corretti segni nei registri;
 3. documento multi-aliquota e dettaglio separato per aliquota/natura;
@@ -63,23 +63,23 @@ Da verificare in browser su societ� esclusivamente di test:
 5. split payment semplice: IVA esposta ma esclusa dal debito della liquidazione;
 6. IVA per cassa: riga differita esclusa e successivo rilascio incluso nel periodo corretto;
 7. reverse charge/autofattura: esposizione coerente di debito e credito;
-8. cambio societ� attiva senza contaminazione di registri, causali IVA, liquidazioni o snapshot;
-9. anteprima corrente rispetto a liquidazione gi� consolidata/definitiva, con warning coerente;
+8. cambio societ? attiva senza contaminazione di registri, causali IVA, liquidazioni o snapshot;
+9. anteprima corrente rispetto a liquidazione gi? consolidata/definitiva, con warning coerente;
 10. selezione operatore e conferma esplicita prima del consolidamento;
 11. blocco del riconsolidamento di una liquidazione definitiva;
 12. prospetto/export con numero documento, controparte, imponibile, IVA, detraibile/indetraibile e natura reali;
 13. periodo senza righe: valori zero e nessun conteggio dimostrativo/fittizio;
 14. storico liquidazioni: nessun operatore inventato e dati coerenti con lo snapshot salvato;
-15. eventuale dettaglio snapshot consolidato, se esposto dalla UI, limitato alla societ� attiva.
+15. eventuale dettaglio snapshot consolidato, se esposto dalla UI, limitato alla societ? attiva.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE** (shell/KPI LAB OK; consolidamento/LIPE/periodo ancora operatore).  
-Nota HTTP: P2-07 liquidazione definitiva gi� PASS in LAB JWT ? non chiude i punti UI 9?15.
+Nota HTTP: P2-07 liquidazione definitiva gi? PASS in LAB JWT ? non chiude i punti UI 9?15.
 
 ## Gate
 
 - sviluppo Manuale/Consultazione/IVA: consentito con CI verde;
-- sviluppo Riconciliazione Bancaria: consentito su branch/LAB (vedi revisione gate Bank sotto); produzione Bank vietata finch� Import+Manuale+IVA non sono collaudati;
-- Release A100: **NON consentita** finch� tutto il debito manuale non � chiuso.
+- sviluppo Riconciliazione Bancaria: consentito su branch/LAB (vedi revisione gate Bank sotto); produzione Bank vietata finch? Import+Manuale+IVA non sono collaudati;
+- Release A100: **NON consentita** finch? tutto il debito manuale non ? chiuso.
 
 
 ## Consultazione Prima Nota ? shell LAB; filtri/export pendenti
@@ -87,8 +87,8 @@ Nota HTTP: P2-07 liquidazione definitiva gi� PASS in LAB JWT ? non chiude i pu
 Riferimento: `REPORT/CONSULTAZIONE_FREEZE_AUDIT.md`.  
 Evidence shell: `STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-12T1956.txt` (`P1_06_RESULT=PASS`).
 
-Da verificare in browser su societ� esclusivamente di test:
-1. caricamento Consultazione con societ� attiva e default �Ordinarie� ? **path LAB shell**;
+Da verificare in browser su societ? esclusivamente di test:
+1. caricamento Consultazione con societ? attiva e default ?Ordinarie? ? **path LAB shell**;
 2. filtri esercizio/date/soggetto/documento/causale/conto;
 3. selezione conto e coerenza saldo precedente + saldo progressivo;
 4. toggle Ordinarie / Stornate / Simulate;
@@ -236,14 +236,14 @@ Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) ? tornato `AC
 
 Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalit? operative.
 
-## Aggiornamento Studio Grade LAB (2026-10-12) — SG-P4-05
+## Aggiornamento Studio Grade LAB (2026-10-12) ? SG-P4-05
 
-I collaudi **browser di caso fiscale** restano pendenti dove indicato. Sul LAB Stage3W (JWT + RPC, società `SG-E2E-*`) sono già dimostrati in automatico:
+I collaudi **browser di caso fiscale** restano pendenti dove indicato. Sul LAB Stage3W (JWT + RPC, societ? `SG-E2E-*`) sono gi? dimostrati in automatico:
 
 | Area | Evidenza LAB | Nota |
 |---|---|---|
 | Commit fiscale atomico FA/FP | Stage3W P1/P4-01/L6 | Non sostituisce collaudo UI Manuale completo |
-| Import XML/ZIP upload+commit | L4 IMPORT_UPLOAD + MANUAL_DEBT_LAB_GATE | Chiude Import #1/#2/#3/#8/#9/#10 in LAB; non #4/#6/#7/#11 |
+| Import XML/ZIP upload+commit | L4 IMPORT_UPLOAD + MANUAL_DEBT_LAB_GATE + STORICO_MARKER | Chiude Import #1/#2/#3/#4/#8/#9/#10 in LAB; non #6/#7/#11 |
 | Import parcella/ritenuta/reverse | P2-03..05 REPORT STAGE3W_IMPORT_* | Browser caso-per-caso ancora dovuto |
 | Liquidazione + blocco definitiva | P2-07 + L4 IVA shell | UI consolidamento/LIPE ancora dovuta |
 | Bank fiscal commit | P3-01 + L4 BANK shell | Riconciliazione UI end-to-end ancora dovuta |
@@ -252,13 +252,14 @@ I collaudi **browser di caso fiscale** restano pendenti dove indicato. Sul LAB S
 | Aging | P3-07 | Tab UI dedicata ancora dovuta |
 | L6 regressione ripetibile | P4-02 | Pack core, non browser |
 
-**Regola P4-05:** nessuno smoke chiude un punto se non dimostra lo stesso criterio di accettazione. Shell UI ≠ caso fiscale completo.
+**Regola P4-05:** nessuno smoke chiude un punto se non dimostra lo stesso criterio di accettazione. Shell UI ? caso fiscale completo.
 
 ### Cross-ref LAB (2026-10-12 sera, aggiornato)
 
-- Gate aggregato debito: `STAGE3W_MANUAL_DEBT_LAB_GATE_2026-10-12T2226.txt` — Import #2 ZIP / #9 coerenza / #10 anti-doppio PASS; inventory L4 Manuale/Consultazione/IVA/Bank/Import 7/7.
-- Import Contabilità upload/commit: `STAGE3W_L4_BROWSER_IMPORT_UPLOAD_2026-10-12T2210.txt`.
+- Gate aggregato debito: `STAGE3W_MANUAL_DEBT_LAB_GATE_2026-10-12T2226.txt` ? Import #2 ZIP / #9 coerenza / #10 anti-doppio PASS; inventory L4 Manuale/Consultazione/IVA/Bank/Import 7/7.
+- Import #4 storico: `STAGE3W_IMPORT_STORICO_MARKER_2026-10-12T2235.txt` — marker + override 5.02; loader history fallback PN/claim quando `documenti_contabilita` assente.
+- Import Contabilit? upload/commit: `STAGE3W_L4_BROWSER_IMPORT_UPLOAD_2026-10-12T2210.txt`.
 - Manuale / Consultazione / IVA / Bank: smoke shell PASS (vedi sezioni sopra); casi fiscali dettagliati ancora operatore.
 - Import commit path LAB (FP22 / equiv / cronologia) in L6 v3; history API merge (`STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012204548.txt`).
-- Bank storico commit API + UI panel (`STAGE3W_BANK_COMMIT_LAB_20261012204552.txt`) — non chiude QA riconciliazione E2E.
+- Bank storico commit API + UI panel (`STAGE3W_BANK_COMMIT_LAB_20261012204552.txt`) ? non chiude QA riconciliazione E2E.
 

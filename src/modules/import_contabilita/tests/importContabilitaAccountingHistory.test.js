@@ -235,6 +235,7 @@ test('IMPORT-25A-HISTORY-2 — data source storico è read-only su documenti con
 
   assert.match(block, /from\('prima_nota'\)/)
   assert.match(block, /from\('prima_nota_righe'\)/)
+  assert.match(block, /fiscosim_fiscal_journal_claim/)
   assert.doesNotMatch(block, /\.insert\(/)
   assert.doesNotMatch(block, /\.update\(/)
   assert.doesNotMatch(block, /\.delete\(/)
