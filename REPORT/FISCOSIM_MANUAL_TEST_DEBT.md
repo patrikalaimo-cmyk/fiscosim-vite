@@ -228,3 +228,20 @@ Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) Ã¨ tornato `A
 **P0 confermato via introspezione:** 8 funzioni `SECURITY DEFINER` eseguibili da anon; due RPC stampa owner postgres senza controlli `auth.uid`/societÃ ; **22 tabelle con policy permissiva per anon/PUBLIC e grants anon SELECT/INSERT/UPDATE/DELETE**, incluse `prima_nota_righe` e `utenti_studio`. `get_advisors(security)` senza lint ma non risolve il rischio. Non Ã¨ stato tentato accesso anon via HTTP o letto dato di cliente.
 
 Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalitÃ  operative.
+
+## Aggiornamento Studio Grade LAB (2026-10-12) — SG-P4-05
+
+I collaudi **browser** restano pendenti. Sul LAB Stage3W (JWT + RPC, società `SG-E2E-*`) sono già dimostrati in automatico:
+
+| Area | Evidenza LAB | Nota |
+|---|---|---|
+| Commit fiscale atomico FA/FP | Stage3W P1/P4-01/L6 | Non sostituisce collaudo UI Manuale |
+| Import parcella/ritenuta/reverse | P2-03..05 REPORT STAGE3W_IMPORT_* | Browser Import ancora dovuto |
+| Liquidazione + blocco definitiva | P2-07 | UI Tax Compliance ancora dovuta |
+| Bank fiscal commit | P3-01 | Riconciliazione UI ancora dovuta |
+| Stampe partitari/mastrini | P3-03 | Paginazione 1000+/PDF definitiva ancora dovuta |
+| Fascicolo HTML | P3-04 | Print-to-PDF operatore ancora dovuto |
+| Aging | P3-07 | Tab UI dedicata ancora dovuta |
+| L6 regressione ripetibile | P4-02 | Pack core, non browser |
+
+**Regola P4-05:** nessun item browser viene marcato chiuso solo perché esiste evidence LAB. Il debito manuale resta `MANUALE PENDENTE` finché non collaudato in UI su società di test.

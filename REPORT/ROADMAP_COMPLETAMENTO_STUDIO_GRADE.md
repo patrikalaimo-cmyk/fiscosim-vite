@@ -130,13 +130,13 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 
 | ID | Intervento |
 |---|---|
-| SG-P4-01 | Suite L5 dataset multi-periodo sintetico — **PASS** 20261012 (2 anni 2024-11+2026-02; fingerprint L5MP1; PN/VAT/partite) |
-| SG-P4-02 | L6 regressione LAB ripetibile + report — **PASS** 20261012 (pack `l6_lab_core_v1`; fingerprint L6CORE1 all PASS) |
-| SG-P4-03 | Eliminazione/isolamento DISUSO + `accounting_entries` |
-| SG-P4-04 | Performance volumi (500+ doc, stampe paginate) |
-| SG-P4-05 | Chiusura debito collaudi manuali (`FISCOSIM_MANUAL_TEST_DEBT.md`) |
-| SG-P4-06 | Documentazione operativa studio + backup/restore LAB |
-| SG-P4-07 | Criterio “completo nel perimetro”: tutti scenari obbligatori matrice = PASS reale |
+| SG-P4-01 | Suite L5 dataset multi-periodo sintetico — **PASS** 20261012 (fingerprint L5MP1) |
+| SG-P4-02 | L6 regressione LAB ripetibile — **PASS** 20261012 (pack `l6_lab_core_v1`; L6CORE1) |
+| SG-P4-03 | Isolamento DISUSO + `accounting_entries` — **PASS** 20261012 (no DISUSO imports; canonical AE-free; allowlist 14) |
+| SG-P4-04 | Performance baseline LAB — **PASS** 20261012 (L6 core ~12s; 500+ SLA resta debito manuale) |
+| SG-P4-05 | Debito collaudi manuali — **documentato** 20261012 (LAB≠browser; nessuna chiusura silente) |
+| SG-P4-06 | Doc operativa + backup/restore LAB — **PASS** 20261012 (`LAB_BACKUP_RESTORE_OPERATIVA.md`) |
+| SG-P4-07 | Completo nel perimetro (evidence gate) — **PASS** 20261012 (automatismi LAB; browser escluso) |
 
 ---
 
@@ -157,12 +157,12 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 - Wire Manuale/Import → Stage3W: **implementato dietro flag LAB (default OFF)**. Attivazione runtime richiede env LAB + `dev-api` + sessione owner/admin.
 - Launcher UI LAB + smoke HTTP: script pronti (`start-stage3w-lab-ui-stack.ps1`, `smoke-stage3w-fiscal-lab-http.ps1`); hardening launch fino a `53e1f8e`.
 - ~~L3 JWT bloccato da porte non-loopback~~ **SG-P0-00 PASS** 20261012 (porte `127.0.0.1` only; Stage3V ready).
-- P3 chiusa; P4-01 L5 PASS; P4-02 L6 PASS; prossimo SG-P4-03..07.
+- P3 chiusa; P4-01..07 automatismi LAB PASS; debito browser manuale ancora aperto.
 
 ## Prossima sessione
 
-1. ~~SG-P0-00~~ **FATTO** (approvazione + evidence PASS).
-2. ~~Stage3W install + smoke + FA22 persist + MATRIX persist~~ **FATTO**.
-3. ~~SG-P4-02 L6~~ **FATTO**; continuare SG-P4-03..07.
-4. Default produttivo resta `createPrimaNotaCompleta` finche L3/L4 non certificati end-to-end UI.
+1. ~~SG-P0-00~~ **FATTO**.
+2. ~~P4 automatismi LAB (01..07)~~ **FATTO**.
+3. Collaudi browser da `FISCOSIM_MANUAL_TEST_DEBT.md` (sessione dedicata).
+4. Default produttivo resta `createPrimaNotaCompleta` finche UI non certificata.
 Checkpoint operativo: `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md` e append `REPORT/REPORT_CODEX.md`.

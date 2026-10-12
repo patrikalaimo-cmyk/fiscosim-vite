@@ -1071,3 +1071,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - P2-07 reso L6-ripetibile: auto-pick mese IVA vuoto 2027+ (niente cleanup fixture).
 - Evidence `REPORT/STAGE3W_L6_REGRESSIONE_P4_02_20261012131055.txt` fingerprint `L6CORE1|…all PASS` `P4_02_RESULT=PASS`.
 - Prossimo: SG-P4-03..07.
+
+## 2026-10-12 - SG-P4-03..07 stabilizzazione LAB PASS
+
+- **P4-03:** policy `legacyIsolationPolicy` + test scan (no import `DISUSO/`; path fiscali canonici senza `accounting_entries`; allowlist 14 consumer legacy). Evidence `STAGE3W_P4_03_LEGACY_ISOLATION_20261012131320.txt`.
+- **P4-04:** baseline perf LAB (L6 core ~11.5s; stampe empty build <5ms). 500+ doc resta debito manuale. Evidence `STAGE3W_P4_04_PERF_BASELINE_20261012131432.txt`.
+- **P4-05:** append `FISCOSIM_MANUAL_TEST_DEBT.md` — cross-ref LAB vs browser (nessuna chiusura silente).
+- **P4-06:** `REPORT/LAB_BACKUP_RESTORE_OPERATIVA.md` (dump/tar P0-00 + verify Stage3V/L6).
+- **P4-07:** completeness gate evidence inventory PASS `STAGE3W_P4_07_COMPLETENESS_20261012131449.txt`.
+- Perimetro Studio Grade **automatismi LAB** chiuso; collaudi UI ancora aperti.

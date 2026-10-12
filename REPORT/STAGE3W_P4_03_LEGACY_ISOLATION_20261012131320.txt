@@ -1,0 +1,23 @@
+P4_03_START legacy DISUSO + accounting_entries isolation
+DISUSO_IMPORTS_OK=true
+CANONICAL_FREE_OF_AE=true
+ALLOWLIST_COUNT=14
+ALLOWLIST=src/modules/contabilita/data/contabilitaRepo.js exists=true
+ALLOWLIST=src/modules/contabilita/da_validare_split_view.jsx exists=true
+ALLOWLIST=src/modules/contabilita/ContabileCopilotPanel.jsx exists=true
+ALLOWLIST=src/modules/import_unificato/data/importRepo.js exists=true
+ALLOWLIST=src/modules/import_unificato/components/ImportDocumentCard.jsx exists=true
+ALLOWLIST=src/modules/test_mode/TestScenarioE2EPanel.jsx exists=true
+ALLOWLIST=src/components/PipelineResultView.jsx exists=true
+ALLOWLIST=services/aiDocumentMemoryService.js exists=true
+ALLOWLIST=services/copilotAccountingService.js exists=true
+ALLOWLIST=services/pipelineLedgerSyncService.js exists=true
+ALLOWLIST=services/testScenarioEngine.js exists=true
+ALLOWLIST=services/ivaRegistriSyncService.js exists=true
+ALLOWLIST=services/autoValidateAccountingEngine.js exists=true
+ALLOWLIST=services/operatorCorrectionsMemoryService.js exists=true
+DISUSO_DIR_EXISTS=true
+UNIT_EXIT=0
+UNIT_PASS=true
+FINGERPRINT=P403ISO1|disuso=PASS;canonical=PASS;allowlist=14
+P4_03_RESULT=PASS
