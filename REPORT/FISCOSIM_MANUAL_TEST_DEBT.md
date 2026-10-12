@@ -245,3 +245,8 @@ I collaudi **browser** restano pendenti. Sul LAB Stage3W (JWT + RPC, società `SG
 | L6 regressione ripetibile | P4-02 | Pack core, non browser |
 
 **Regola P4-05:** nessun item browser viene marcato chiuso solo perché esiste evidence LAB. Il debito manuale resta `MANUALE PENDENTE` finché non collaudato in UI su società di test.
+
+### Cross-ref LAB (2026-10-12 sera)
+
+- Import Contabilità **UI shell** smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2011.txt`) — **non** chiude i punti upload/ZIP/working-table/commit browser.
+- Import commit path LAB (FP22 / equiv / cronologia) coperto in L6 v3.

@@ -1,17 +1,18 @@
 ﻿# PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** **P0-02 chiuso + L4 browser LAB PASS** (Consultazione + Manuale). Debito collaudi A100 browser resta (lista completa).
+* **Fase corrente:** L4 browser (Consultazione + Manuale + Import smoke) PASS; L6 `l6_lab_core_v3` (+ Import FP22/equiv/cronologia) PASS.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **STAGE3V fixtures:** `STAGE3V-A/B`; PN persistite (no re-run silent)
-* **Limite:** debito manuale A100 completo; default prod multi-step; no LIVE
+* **Limite:** debito A100 browser dettagliato (upload XML/ZIP UI, IVA UI, Bank UI); default prod multi-step; no LIVE
 
 ## 2. Prossimo passo operativo
-1. Continuare collaudi da `FISCOSIM_MANUAL_TEST_DEBT.md` (Import/IVA/Bank UI, ecc.)
+1. Collaudi A100 residui (`FISCOSIM_MANUAL_TEST_DEBT`) — upload/commit Import UI, IVA Tax Compliance UI
 2. Non cleanup silente fixture SG-E2E-* / STAGE3V-*
 3. Cutover default `createPrimaNotaCompleta` solo con consenso esplicito
 
 ## 3. Evidenze
+* `REPORT/STAGE3W_L6_REGRESSIONE_P4_02_20261012201141.txt`
+* `REPORT/STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2011.txt`
 * `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-12T1957.txt`
 * `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-12T1956.txt`
 * `REPORT/STAGE3W_SG_P0_02_GENERAL_JOURNAL_20261012195555.txt`

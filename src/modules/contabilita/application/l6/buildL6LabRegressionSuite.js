@@ -3,8 +3,8 @@
  * Used by Stage3W SG-P4-02 — no I/O, no LIVE.
  */
 
-/** Canonical core pack: preflight + L5 + representative P2/P3 (no browser). */
-export const L6_CORE_PACK_ID = 'l6_lab_core_v2'
+/** Canonical core pack: preflight + Import + L5 + representative P2/P3 (no browser). */
+export const L6_CORE_PACK_ID = 'l6_lab_core_v3'
 
 /**
  * @typedef {{
@@ -34,6 +34,30 @@ export const L6_CORE_STEPS = Object.freeze([
     resultKey: 'P4_03_RESULT',
     required: true,
     maxMs: 120_000,
+  },
+  {
+    id: 'P1_01',
+    title: 'Import FP22 commit',
+    script: 'scripts/security_p0/run-stage3w-import-fp22-commit.mjs',
+    resultKey: 'P1_01_RESULT',
+    required: true,
+    maxMs: 180_000,
+  },
+  {
+    id: 'P1_05',
+    title: 'Import vs Manuale equivalence',
+    script: 'scripts/security_p0/run-stage3w-import-vs-manuale-equiv.mjs',
+    resultKey: 'P1_05_RESULT',
+    required: true,
+    maxMs: 180_000,
+  },
+  {
+    id: 'P3_02',
+    title: 'Import cronologia hash',
+    script: 'scripts/security_p0/run-stage3w-import-cronologia-hash.mjs',
+    resultKey: 'P3_02_RESULT',
+    required: true,
+    maxMs: 180_000,
   },
   {
     id: 'P2_06',
@@ -92,7 +116,7 @@ export function buildL6LabRegressionSuite({ packId = L6_CORE_PACK_ID } = {}) {
   return {
     kind: 'l6_lab_regressione',
     packId: L6_CORE_PACK_ID,
-    version: 1,
+    version: 3,
     steps: L6_CORE_STEPS.map((s) => ({ ...s })),
     stepIds: L6_CORE_STEPS.map((s) => s.id),
     requiredCount: L6_CORE_STEPS.filter((s) => s.required).length,
@@ -173,5 +197,5 @@ export function buildL6SuiteFingerprint(rows) {
   const parts = (rows || [])
     .filter((r) => r.required !== false)
     .map((r) => `${r.id}:${r.status}`)
-  return `L6CORE2|${parts.join(';')}`
+  return `L6CORE3|${parts.join(';')}`
 }

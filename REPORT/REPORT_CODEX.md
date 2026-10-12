@@ -1107,3 +1107,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - `run-stage3w-l4-browser-consultazione.mjs` ? `P1_06_RESULT=PASS` (filter/detail read-only; 0 write in consult).
 - `run-stage3w-l4-browser-manuale.mjs` ? `L4_RESULT=PASS` (fiscal-journal-post 201 via UI path).
 - Evidence `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-12T1956.txt`, `…MANUALE_2026-10-12T1957.txt`.
+
+## 2026-10-12 - L6 v3 Import pack + L4 Import UI smoke
+
+- L6 pack `l6_lab_core_v3`: aggiunti P1_01 FP22, P1_05 Import?Manuale, P3_02 cronologia hash. Fingerprint `L6CORE3|…all PASS`. Evidence `STAGE3W_L6_REGRESSIONE_P4_02_20261012201141.txt`.
+- L4 browser Import Contabilità smoke (nav + shell upload, 0 fiscal write): `L4_IMPORT_RESULT=PASS` ? `STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2011.txt`.
+- Debito A100: upload/commit XML in UI e Tax Compliance browser restano aperti.

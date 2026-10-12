@@ -175,8 +175,8 @@
 | L1 | Operativo (`test:*` CI) | Mantenere regressione; **1199 PASS** @ sessione Windows |
 | L2 | Stage3U generale PASS; Stage3W fiscale PASS (install LAB) | Smoke HTTP + prova flag ON |
 | L3 | JWT fiscal + **Stage3V general-journal A/B PASS** (P0-02) + porte loopback | Mantenere; no re-run STAGE3V senza cleanup |
-| L4 | Consultazione + Manuale browser LAB PASS (20261012) | Espandere Import/IVA UI; debito A100 |
+| L4 | Consultazione + Manuale + Import smoke browser LAB PASS | Upload/commit Import UI; IVA UI; debito A100 |
 | L5 | Dataset multi-periodo sintetico PASS (SG-P4-01) | Mantenere fingerprint L5MP1 |
-| L6 | LAB isolato ripetibile PASS (SG-P4-02 core pack) | Espandere pack opzionale (Import/browser) |
+| L6 | `l6_lab_core_v3` PASS (Import+P2/P3/L5) | Opzionale: browser steps in pack |
 
 **Prefisso fixture proposto:** `SG-E2E-20261010-` · società `SG-E2E-A` / `SG-E2E-B`.
