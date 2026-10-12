@@ -10,6 +10,7 @@ import {
   CANONICAL_FISCAL_WRITE_PATHS,
   assertNoDisusoImports,
   assertCanonicalPathsFreeOfAccountingEntries,
+  assertAccountingEntriesOnlyOnAllowlist,
   buildLegacyIsolationFingerprint,
 } from '../../src/modules/contabilita/application/legacy/legacyIsolationPolicy.js'
 
@@ -37,7 +38,7 @@ function walkJsFiles(dir, out = []) {
 try {
   log('P4_03_START legacy DISUSO + accounting_entries isolation')
   const root = process.cwd()
-  const dirs = ['src', 'services', 'lib', 'scripts', 'api'].map((d) => join(root, d))
+  const dirs = ['src', 'services', 'lib', 'scripts', 'api', 'qa'].map((d) => join(root, d))
   const files = dirs.flatMap((d) => walkJsFiles(d)).map((full) => ({
     filePath: relative(root, full).replace(/\\/g, '/'),
     sourceText: readFileSync(full, 'utf8'),
@@ -54,6 +55,10 @@ try {
   log(`CANONICAL_FREE_OF_AE=${canon.ok}`)
   if (!canon.ok) log(`CANONICAL_VIOLATIONS=${JSON.stringify(canon.violations)}`)
 
+  const allowScan = assertAccountingEntriesOnlyOnAllowlist(files)
+  log(`ALLOWLIST_SCAN_OK=${allowScan.ok}`)
+  if (!allowScan.ok) log(`ALLOWLIST_VIOLATIONS=${JSON.stringify(allowScan.violations)}`)
+
   log(`ALLOWLIST_COUNT=${ACCOUNTING_ENTRIES_LEGACY_ALLOWLIST.length}`)
   for (const p of ACCOUNTING_ENTRIES_LEGACY_ALLOWLIST) {
     log(`ALLOWLIST=${p} exists=${existsSync(join(root, p))}`)
@@ -67,18 +72,19 @@ try {
   })
   log(`UNIT_EXIT=${unit.status}`)
   const unitOut = `${unit.stdout || ''}\n${unit.stderr || ''}`
-  const unitPass = unit.status === 0 && !/\bfail\b/i.test(unitOut.match(/ℹ fail \d+/)?.[0] || '') && !/✖/.test(unitOut)
+  const unitPass = unit.status === 0 && !/✖/.test(unitOut)
   log(`UNIT_PASS=${unitPass}`)
   if (!unitPass) log(`UNIT_TAIL=${unitOut.slice(-500).replace(/\n/g, ' | ')}`)
 
   const fp = buildLegacyIsolationFingerprint({
     disusoOk: disuso.ok,
     canonicalOk: canon.ok,
+    allowlistOk: allowScan.ok,
     allowlistCount: ACCOUNTING_ENTRIES_LEGACY_ALLOWLIST.length,
   })
   log(`FINGERPRINT=${fp}`)
 
-  if (!disuso.ok || !canon.ok || !unitPass) throw new Error('P4_03_ISOLATION_FAIL')
+  if (!disuso.ok || !canon.ok || !allowScan.ok || !unitPass) throw new Error('P4_03_ISOLATION_FAIL')
   log('P4_03_RESULT=PASS')
 } catch (err) {
   console.error(err)

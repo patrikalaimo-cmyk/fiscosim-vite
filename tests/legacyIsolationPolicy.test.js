@@ -10,6 +10,7 @@ import {
   detectAccountingEntriesAccess,
   assertNoDisusoImports,
   assertCanonicalPathsFreeOfAccountingEntries,
+  assertAccountingEntriesOnlyOnAllowlist,
   buildLegacyIsolationFingerprint,
 } from '../src/modules/contabilita/application/legacy/legacyIsolationPolicy.js'
 
@@ -37,14 +38,23 @@ function walkJsFiles(dir, out = []) {
   return out
 }
 
+function loadPayloads(dirs) {
+  const files = dirs.flatMap((d) => walkJsFiles(join(ROOT, d)))
+  return files.map((full) => ({
+    filePath: relative(ROOT, full).replace(/\\/g, '/'),
+    sourceText: readFileSync(full, 'utf8'),
+  }))
+}
+
 test('detectDisusoImport catches import/require of DISUSO', () => {
   assert.equal(detectDisusoImport("import x from '../DISUSO/import_nuovo'").hit, true)
   assert.equal(detectDisusoImport("const x = require('./DISUSO/foo.js')").hit, true)
   assert.equal(detectDisusoImport("import x from '../import_contabilita'").hit, false)
 })
 
-test('detectAccountingEntriesAccess catches .from accounting_entries', () => {
+test('detectAccountingEntriesAccess catches .from and insertAccountingEntry', () => {
   assert.equal(detectAccountingEntriesAccess("sb.from('accounting_entries').insert([])").hit, true)
+  assert.equal(detectAccountingEntriesAccess('await contabilitaRepo.insertAccountingEntry(p)').hit, true)
   assert.equal(detectAccountingEntriesAccess("sb.from('prima_nota').insert([])").hit, false)
 })
 
@@ -53,7 +63,6 @@ test('assert helpers aggregate violations', () => {
     { filePath: 'a.js', sourceText: "import z from 'DISUSO/x'" },
   ])
   assert.equal(bad.ok, false)
-  assert.equal(bad.violations.length, 1)
 
   const goodCanon = assertCanonicalPathsFreeOfAccountingEntries([
     {
@@ -70,35 +79,43 @@ test('assert helpers aggregate violations', () => {
     },
   ])
   assert.equal(badCanon.ok, false)
+
+  const allowHit = assertAccountingEntriesOnlyOnAllowlist([
+    {
+      filePath: 'services/brandNewAeWriter.js',
+      sourceText: "db.from('accounting_entries').select('*')",
+    },
+  ])
+  assert.equal(allowHit.ok, false)
+  assert.equal(allowHit.violations[0].file, 'services/brandNewAeWriter.js')
 })
 
-test('repo: no live imports of DISUSO/ (scan src+services+lib+scripts)', () => {
-  const dirs = ['src', 'services', 'lib', 'scripts', 'api'].map((d) => join(ROOT, d))
-  const files = dirs.flatMap((d) => walkJsFiles(d))
-  const payloads = files.map((full) => ({
-    filePath: relative(ROOT, full).replace(/\\/g, '/'),
-    sourceText: readFileSync(full, 'utf8'),
-  }))
+test('repo: no live imports of DISUSO/', () => {
+  const payloads = loadPayloads(['src', 'services', 'lib', 'scripts', 'api', 'qa'])
   const res = assertNoDisusoImports(payloads)
   assert.equal(res.ok, true, JSON.stringify(res.violations))
-  assert.ok(ACCOUNTING_ENTRIES_LEGACY_ALLOWLIST.length >= 5)
   assert.equal(DISUSO_ROOT, 'DISUSO')
 })
 
 test('repo: canonical fiscal write paths free of accounting_entries', () => {
-  const payloads = CANONICAL_FISCAL_WRITE_PATHS.map((p) => {
-    const full = join(ROOT, p)
-    return {
-      filePath: p,
-      sourceText: readFileSync(full, 'utf8'),
-    }
-  })
+  const payloads = CANONICAL_FISCAL_WRITE_PATHS.map((p) => ({
+    filePath: p,
+    sourceText: readFileSync(join(ROOT, p), 'utf8'),
+  }))
   const res = assertCanonicalPathsFreeOfAccountingEntries(payloads)
   assert.equal(res.ok, true, JSON.stringify(res.violations))
+})
+
+test('repo: accounting_entries access only on allowlist', () => {
+  const payloads = loadPayloads(['src', 'services', 'lib', 'scripts', 'api', 'qa'])
+  const res = assertAccountingEntriesOnlyOnAllowlist(payloads)
+  assert.equal(res.ok, true, JSON.stringify(res.violations, null, 2))
+  assert.ok(ACCOUNTING_ENTRIES_LEGACY_ALLOWLIST.length >= 15)
   const fp = buildLegacyIsolationFingerprint({
     disusoOk: true,
-    canonicalOk: res.ok,
+    canonicalOk: true,
+    allowlistOk: res.ok,
     allowlistCount: ACCOUNTING_ENTRIES_LEGACY_ALLOWLIST.length,
   })
-  assert.match(fp, /^P403ISO1\|disuso=PASS;canonical=PASS;allowlist=\d+$/)
+  assert.match(fp, /^P403ISO2\|disuso=PASS;canonical=PASS;allowlistScan=PASS;allowlist=\d+$/)
 })

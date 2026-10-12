@@ -1,0 +1,29 @@
+P4_03_START legacy DISUSO + accounting_entries isolation
+DISUSO_IMPORTS_OK=true
+CANONICAL_FREE_OF_AE=true
+ALLOWLIST_SCAN_OK=true
+ALLOWLIST_COUNT=19
+ALLOWLIST=src/modules/contabilita/data/contabilitaRepo.js exists=true
+ALLOWLIST=src/modules/contabilita/da_validare_split_view.jsx exists=true
+ALLOWLIST=src/modules/contabilita/application/contabilitaRegistrationWorkflow.js exists=true
+ALLOWLIST=src/modules/contabilita/application/historicalImportNesService.js exists=true
+ALLOWLIST=src/modules/import_unificato/data/importRepo.js exists=true
+ALLOWLIST=src/components/PipelineResultView.jsx exists=true
+ALLOWLIST=services/aiAccountingService.js exists=true
+ALLOWLIST=services/aiAccountingFeedbackService.js exists=true
+ALLOWLIST=services/aiDocumentMemoryService.js exists=true
+ALLOWLIST=services/accountingModuleService.js exists=true
+ALLOWLIST=services/autoValidateAccountingEngine.js exists=true
+ALLOWLIST=services/copilotAccountingService.js exists=true
+ALLOWLIST=services/copilotAccountingTools.js exists=true
+ALLOWLIST=services/ivaRegistriSyncService.js exists=true
+ALLOWLIST=services/operatorCorrectionsMemoryService.js exists=true
+ALLOWLIST=services/partitarioSyncService.js exists=true
+ALLOWLIST=services/pipelineLedgerSyncService.js exists=true
+ALLOWLIST=services/testScenarioEngine.js exists=true
+ALLOWLIST=qa/run-sprint1-smoke.mjs exists=true
+DISUSO_DIR_EXISTS=true
+UNIT_EXIT=0
+UNIT_PASS=true
+FINGERPRINT=P403ISO2|disuso=PASS;canonical=PASS;allowlistScan=PASS;allowlist=19
+P4_03_RESULT=PASS

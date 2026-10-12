@@ -1080,3 +1080,10 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **P4-06:** `REPORT/LAB_BACKUP_RESTORE_OPERATIVA.md` (dump/tar P0-00 + verify Stage3V/L6).
 - **P4-07:** completeness gate evidence inventory PASS `STAGE3W_P4_07_COMPLETENESS_20261012131449.txt`.
 - Perimetro Studio Grade **automatismi LAB** chiuso; collaudi UI ancora aperti.
+
+## 2026-10-12 - SG-P4-03 harden allowlist + anti-reintro (follow-up)
+
+- Completata allowlist AE (19 path: AI/sync/workflow/qa mancanti).
+- `assertAccountingEntriesOnlyOnAllowlist`: nuovo `.from('accounting_entries')` / `insertAccountingEntry` fuori allowlist = FAIL.
+- Freeze audit `REPORT/LEGACY_DISUSO_ACCOUNTING_ENTRIES_FREEZE_AUDIT.md`; `DISUSO/README.md`.
+- Fingerprint `P403ISO2|…allowlist=19`; evidence `STAGE3W_P4_03_LEGACY_ISOLATION_20261012131719.txt`; unit 6/6.
