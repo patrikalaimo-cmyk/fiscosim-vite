@@ -978,3 +978,13 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
   - Provvisorio `502f33f9-...`; riconsolidamento sostituisce → `1e3f0bf0-...` (1 riga periodo)
   - Lock `[stato:definitiva]` → terzo consolida **rifiutato** (`Periodo bloccato...definitiva`)
 - Gap noto: marker definitiva via note (no RPC mark dedicata). Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-01 Bank RPC atomica + storico server PASS
+
+- Path LAB: `commitReconciliationCanonicalPayload` ? `commitBankReconciliationFiscalLab` ? Stage3W `fiscosim_post_fiscal_journal` (`source_module=riconciliazione_bancaria`, `contract_kind=pagamento` + ledger close). Default resta dry-run senza flag+JWT.
+- Gate: `FISCOSIM_ISOLATED_LAB_API` + `FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED` + `FISCOSIM_BANK_COMMIT_LAB_ENABLED` + Bearer token.
+- SQL 57: `source_module` ammette `riconciliazione_bancaria`. Storico claim via `listBankFiscalCommitHistory`.
+- Script `scripts/security_p0/run-stage3w-bank-commit-lab.mjs`. Evidence `REPORT/STAGE3W_BANK_COMMIT_LAB_20261012091055.txt`:
+  - FA open PN `d1a98b58-...` partita 1220 ? bank close PN `08c3f3f8-...` residuo **0**
+  - Claim `riconciliazione_bancaria|pagamento|08c3f3f8-...`; history hit; replay stesso body ? **201** stesso PN
+- Unit: `bankFiscalCommitLab` 3/3 + `riconciliazioneBankSafety` 11/11. Nessun LIVE / SG-P0-00.

@@ -2,6 +2,8 @@ import { commitCanonicalAccountingPayload } from '../../../../../services/canoni
 import { buildReconciliationCommitInput } from '../../canonical/buildReconciliationCommitInput.js'
 import { buildReconciliationCommitPreview } from './buildReconciliationCommitPreview.js'
 import { validateReconciliationCommitPayload } from './validateReconciliationCommitPayload.js'
+import { isBankFiscalCommitLabEnabled } from '../../application/riconciliazione/isBankFiscalCommitLabEnabled.js'
+import { commitBankReconciliationFiscalLab } from '../../application/riconciliazione/commitBankReconciliationFiscalLab.js'
 
 function uniqueList(value) {
   return Array.from(new Set((Array.isArray(value) ? value : []).filter((item) => item != null)))
@@ -67,15 +69,28 @@ function normalizeBlockedResult(payload, context, validation) {
 }
 
 export async function commitReconciliationCanonicalPayload(payload = {}, context = {}, repo = null) {
+  const accessToken = context.accessToken || context.token || null
+  // LAB real commit only when flags ON and caller supplies a JWT (E2E/script).
+  // Without token, keep dry-run even if flags leak into the process env.
+  const labCommit = isBankFiscalCommitLabEnabled() && Boolean(accessToken)
   const validation = validateReconciliationCommitPayload(payload, {
     ...context,
-    allowRealCommit: false,
-    adapterTransactional: false,
-    adapterSupportsIdempotency: false,
+    allowRealCommit: labCommit,
+    adapterTransactional: labCommit,
+    adapterSupportsIdempotency: labCommit,
   })
 
   if (validation.blockers.length > 0) {
     return normalizeBlockedResult(payload, context, validation)
+  }
+
+  if (labCommit) {
+    const labResult = await commitBankReconciliationFiscalLab({
+      payload,
+      context,
+      accessToken,
+    })
+    return normalizeResult(labResult)
   }
 
   const commitInput = buildReconciliationCommitInput({ canonicalPayload: payload, context })

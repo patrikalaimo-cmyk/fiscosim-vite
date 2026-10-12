@@ -1,0 +1,17 @@
+P3_01_START Bank RPC atomica via Stage3W + storico claim
+LOGIN_JWT=PASS
+FA_STATUS=201
+FA_PN=d1a98b58-3a84-4e04-b359-5f381fda5077
+PARTITA_ID=176e934b-b5eb-4fdc-bbec-5e79c972973c
+PARTITA_OPEN=1220
+BANK_STATUS=committed
+BANK_COMMITTED=true
+BANK_PN=08c3f3f8-c8f1-4e1e-989b-2c008f08f8a1
+BANK_REQUEST=756dbd5f-055c-4fdb-96e2-523fed41d2cb
+CLAIM=riconciliazione_bancaria|pagamento|08c3f3f8-c8f1-4e1e-989b-2c008f08f8a1
+PARTITA_AFTER=0
+HISTORY_COUNT=2
+HISTORY_HIT={"requestId":"756dbd5f-055c-4fdb-96e2-523fed41d2cb","primaNotaId":"08c3f3f8-c8f1-4e1e-989b-2c008f08f8a1","createdAt":"2026-10-12 09:10:56.311823+00","sourceModule":"riconciliazione_bancaria","contractKind":"pagamento","descrizione":"Riconciliazione bancaria bm-p301-091055","numeroDocumento":"BANK-bm-p301-091055","dataRegistrazione":"2026-04-18"}
+REPLAY_STATUS=201
+REPLAY_PN=08c3f3f8-c8f1-4e1e-989b-2c008f08f8a1
+P3_01_RESULT=PASS

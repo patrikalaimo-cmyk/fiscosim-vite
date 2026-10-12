@@ -244,7 +244,9 @@ export function mapPersistencePlanToFiscalJournalRequest({
     || `LAB Stage3W atomic fiscal post (${contract_kind})`
   const source_module = sourceModule === 'import_contabilita'
     ? 'import_contabilita'
-    : 'registrazione_manual'
+    : sourceModule === 'riconciliazione_bancaria'
+      ? 'riconciliazione_bancaria'
+      : 'registrazione_manual'
 
   const candidate = {
     societa_id,

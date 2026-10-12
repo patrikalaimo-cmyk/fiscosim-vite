@@ -130,7 +130,7 @@ BEGIN
    'fattura_attiva','fattura_passiva','nota_credito_attiva','nota_credito_passiva',
    'pagamento','parcella_documento','split_attiva')
   OR p_source_module IS NULL
-  OR p_source_module NOT IN ('registrazione_manual','import_contabilita')
+  OR p_source_module NOT IN ('registrazione_manual','import_contabilita','riconciliazione_bancaria')
   OR p_header IS NULL OR jsonb_typeof(p_header)<>'object'
   OR p_rows IS NULL OR jsonb_typeof(p_rows)<>'array'
   OR jsonb_array_length(p_rows) NOT BETWEEN 2 AND 100

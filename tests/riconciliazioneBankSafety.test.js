@@ -67,12 +67,15 @@ test('commit bancario fixture resta soltanto dry run + replay', async () => {
   assert.equal(result.rows.length, 16)
 })
 
-test('nessuna abilitazione alla scrittura contabile reale dalla UI bancaria', async () => {
+test('scrittura bancaria reale resta gated LAB; default dry-run', async () => {
   const source = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/commitReconciliationCanonicalPayload.js', import.meta.url), 'utf8')
+  assert.match(source, /isBankFiscalCommitLabEnabled/)
+  assert.match(source, /commitBankReconciliationFiscalLab/)
   assert.match(source, /dryRun:\s*true/)
   assert.match(source, /allowRealCommit:\s*false/)
   assert.match(source, /auditWriteEnabled:\s*false/)
-  assert.doesNotMatch(source, /dryRun:\s*false|allowRealCommit:\s*true/)
+  // Must not hardcode unconditional real commit outside LAB gate.
+  assert.doesNotMatch(source, /allowRealCommit:\s*true(?!\s*,?\s*\/\/)/)
 })
 
 
