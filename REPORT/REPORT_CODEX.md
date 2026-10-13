@@ -1271,3 +1271,8 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Class G: residuali 8 → **0** TRUE auth/public (`71_*`, `LIVE_P0_04_CLASS_G_APPLY_*`); RLS smoke DB PASS; `invii_log`/`revisioni_dichiarativi` con policy uid (no `societa_id` su LIVE).
 - Operatore re-smoke post-G: **PASS** («ok funziona») — `LIVE_DEPLOY_SMOKE_POST_CLASS_G_2026-10-13T0226.txt`.
 - Gate sicurezza allow_all TRUE: **chiuso** (0). Stop A100: collaudi manuali in `FISCOSIM_MANUAL_TEST_DEBT.md`.
+
+## 2026-10-13 - Manuale NC/split PATH LAB + guida operatore
+
+- L4 Manuale `--mode=nc_attiva|nc_passiva|split` PASS (PATH API da superficie Manuale; form UI ancora operatore).
+- Guida sessione: `REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md` (io = LAB auto; tu = form/visual su società test).

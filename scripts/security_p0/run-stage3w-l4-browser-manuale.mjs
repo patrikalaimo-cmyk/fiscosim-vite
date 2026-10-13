@@ -24,7 +24,9 @@ const CONTO_COSTO = '72000000-0000-4000-8000-000000000014'
 const CONTO_IVA_CREDITO = '72000000-0000-4000-8000-000000000015'
 const CONTO_BANCA = '72000000-0000-4000-8000-000000000013'
 const CONTO_CASSA = '72000000-0000-4000-8000-0000000000c0'
+const CONTO_SPLIT = '72000000-0000-4000-8000-000000000017'
 const MODE = (process.argv.find((a) => a.startsWith('--mode=')) || '--mode=attiva').slice('--mode='.length)
+const ALLOWED_MODES = ['attiva', 'passiva', 'giroconto', 'nc_attiva', 'nc_passiva', 'split']
 const stamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
 const outPath = join(process.cwd(), 'REPORT', `STAGE3W_L4_BROWSER_MANUALE_${MODE}_${stamp}.txt`)
 
@@ -100,7 +102,7 @@ async function main() {
     throw new Error('VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB must be true in .env.stage3w.lab.local')
   }
   ensurePassword()
-  if (!['attiva', 'passiva', 'giroconto'].includes(MODE)) throw new Error(`MODE_INVALID ${MODE}`)
+  if (!ALLOWED_MODES.includes(MODE)) throw new Error(`MODE_INVALID ${MODE} allowed=${ALLOWED_MODES.join(',')}`)
   if (MODE === 'giroconto') ensureCassaConto()
   log('L4_START puppeteer Manuale LAB')
   log(`MODE=${MODE}`)
@@ -220,15 +222,12 @@ async function main() {
 
     const requestId = randomUUID()
     const docNum = `SG-E2E-L4-${MODE.slice(0, 3)}-${stamp.slice(-6)}`
-    const isPassiva = MODE === 'passiva'
-    const isGiroconto = MODE === 'giroconto'
     const postResult = await page.evaluate(
       async ({
         societaId,
         requestId,
         docNum,
-        isPassiva,
-        isGiroconto,
+        mode,
         cCli,
         cRic,
         cIvaDeb,
@@ -237,6 +236,7 @@ async function main() {
         cIvaCre,
         cBan,
         cCas,
+        cSplit,
       }) => {
         let accessToken = ''
         const walk = (o) => {
@@ -262,7 +262,7 @@ async function main() {
           return { ok: false, reason: 'NO_BROWSER_SESSION_TOKEN', keys: Object.keys(localStorage) }
         }
 
-        if (isGiroconto) {
+        if (mode === 'giroconto') {
           const body = {
             societa_id: societaId,
             request_id: requestId,
@@ -295,8 +295,8 @@ async function main() {
           }
         }
 
-        const body = isPassiva
-          ? {
+        const bodies = {
+          passiva: {
             societa_id: societaId,
             request_id: requestId,
             contract_kind: 'fattura_passiva',
@@ -305,7 +305,7 @@ async function main() {
               data_registrazione: '2026-04-11',
               data_documento: '2026-04-11',
               numero_documento: docNum,
-              descrizione: '[SG-E2E] L4 browser Manuale fattura passiva',
+              descrizione: '[SG-E2E] L4 Manuale fattura passiva',
             },
             rows: [
               { conto_id: cCos, dare: 1000, avere: 0 },
@@ -314,31 +314,22 @@ async function main() {
             ],
             vat: {
               rows: [{
-                tipo: 'acquisto',
-                imponibile: 1000,
-                iva: 220,
-                aliquota: 22,
-                esigibilita: 'immediata',
-                split_payment: false,
-                documento_id: docNum,
-                riga_idx: 0,
+                tipo: 'acquisto', imponibile: 1000, iva: 220, aliquota: 22,
+                esigibilita: 'immediata', split_payment: false, documento_id: docNum, riga_idx: 0,
               }],
             },
             ledger: {
               mode: 'open',
               openings: [{
-                tipo: 'fornitore',
-                conto_id: cFor,
-                numero_documento: docNum,
-                data_documento: '2026-04-11',
-                importo_originale: 1220,
+                tipo: 'fornitore', conto_id: cFor, numero_documento: docNum,
+                data_documento: '2026-04-11', importo_originale: 1220,
               }],
               closures: [],
             },
             withholding: { eventType: 'none', inserts: [], updates: [] },
             motivazione: 'SG-E2E L4 Manuale fattura passiva',
-          }
-          : {
+          },
+          attiva: {
             societa_id: societaId,
             request_id: requestId,
             contract_kind: 'fattura_attiva',
@@ -347,7 +338,7 @@ async function main() {
               data_registrazione: '2026-04-10',
               data_documento: '2026-04-10',
               numero_documento: docNum,
-              descrizione: '[SG-E2E] L4 browser Manuale fiscal post',
+              descrizione: '[SG-E2E] L4 Manuale fattura attiva',
             },
             rows: [
               { conto_id: cCli, dare: 1220, avere: 0 },
@@ -356,30 +347,124 @@ async function main() {
             ],
             vat: {
               rows: [{
-                tipo: 'vendita',
-                imponibile: 1000,
-                iva: 220,
-                aliquota: 22,
-                esigibilita: 'immediata',
-                split_payment: false,
-                documento_id: docNum,
-                riga_idx: 0,
+                tipo: 'vendita', imponibile: 1000, iva: 220, aliquota: 22,
+                esigibilita: 'immediata', split_payment: false, documento_id: docNum, riga_idx: 0,
               }],
             },
             ledger: {
               mode: 'open',
               openings: [{
-                tipo: 'cliente',
-                conto_id: cCli,
-                numero_documento: docNum,
-                data_documento: '2026-04-10',
-                importo_originale: 1220,
+                tipo: 'cliente', conto_id: cCli, numero_documento: docNum,
+                data_documento: '2026-04-10', importo_originale: 1220,
               }],
               closures: [],
             },
             withholding: { eventType: 'none', inserts: [], updates: [] },
-            motivazione: 'SG-E2E L4 browser session fiscal post via Manuale surface',
-          }
+            motivazione: 'SG-E2E L4 Manuale fattura attiva',
+          },
+          nc_attiva: {
+            societa_id: societaId,
+            request_id: requestId,
+            contract_kind: 'nota_credito_attiva',
+            source_module: 'registrazione_manual',
+            header: {
+              data_registrazione: '2026-04-18',
+              data_documento: '2026-04-18',
+              numero_documento: docNum,
+              descrizione: '[SG-E2E] L4 Manuale NC attiva',
+            },
+            rows: [
+              { conto_id: cRic, dare: 1000, avere: 0 },
+              { conto_id: cIvaDeb, dare: 220, avere: 0 },
+              { conto_id: cCli, dare: 0, avere: 1220 },
+            ],
+            vat: {
+              rows: [{
+                tipo: 'vendita', imponibile: -1000, iva: -220, aliquota: 22,
+                esigibilita: 'immediata', split_payment: false, documento_id: docNum, riga_idx: 0,
+              }],
+            },
+            ledger: {
+              mode: 'open',
+              openings: [{
+                tipo: 'cliente', conto_id: cCli, numero_documento: docNum,
+                data_documento: '2026-04-18', importo_originale: -1220,
+              }],
+              closures: [],
+            },
+            withholding: { eventType: 'none', inserts: [], updates: [] },
+            motivazione: 'SG-E2E L4 Manuale NC attiva',
+          },
+          nc_passiva: {
+            societa_id: societaId,
+            request_id: requestId,
+            contract_kind: 'nota_credito_passiva',
+            source_module: 'registrazione_manual',
+            header: {
+              data_registrazione: '2026-04-19',
+              data_documento: '2026-04-19',
+              numero_documento: docNum,
+              descrizione: '[SG-E2E] L4 Manuale NC passiva',
+            },
+            rows: [
+              { conto_id: cFor, dare: 1220, avere: 0 },
+              { conto_id: cCos, dare: 0, avere: 1000 },
+              { conto_id: cIvaCre, dare: 0, avere: 220 },
+            ],
+            vat: {
+              rows: [{
+                tipo: 'acquisto', imponibile: -1000, iva: -220, aliquota: 22,
+                esigibilita: 'immediata', split_payment: false, documento_id: docNum, riga_idx: 0,
+              }],
+            },
+            ledger: {
+              mode: 'open',
+              openings: [{
+                tipo: 'fornitore', conto_id: cFor, numero_documento: docNum,
+                data_documento: '2026-04-19', importo_originale: -1220,
+              }],
+              closures: [],
+            },
+            withholding: { eventType: 'none', inserts: [], updates: [] },
+            motivazione: 'SG-E2E L4 Manuale NC passiva',
+          },
+          split: {
+            societa_id: societaId,
+            request_id: requestId,
+            contract_kind: 'fattura_attiva',
+            source_module: 'registrazione_manual',
+            header: {
+              data_registrazione: '2026-04-20',
+              data_documento: '2026-04-20',
+              numero_documento: docNum,
+              descrizione: '[SG-E2E] L4 Manuale split payment',
+            },
+            rows: [
+              { conto_id: cCli, dare: 1000, avere: 0 },
+              { conto_id: cRic, dare: 0, avere: 1000 },
+              { conto_id: cIvaDeb, dare: 220, avere: 0 },
+              { conto_id: cSplit, dare: 0, avere: 220 },
+            ],
+            vat: {
+              rows: [{
+                tipo: 'vendita', imponibile: 1000, iva: 220, aliquota: 22,
+                esigibilita: 'immediata', split_payment: true, documento_id: docNum, riga_idx: 0,
+              }],
+            },
+            ledger: {
+              mode: 'open',
+              openings: [{
+                tipo: 'cliente', conto_id: cCli, numero_documento: docNum,
+                data_documento: '2026-04-20', importo_originale: 1000,
+              }],
+              closures: [],
+            },
+            withholding: { eventType: 'none', inserts: [], updates: [] },
+            motivazione: 'SG-E2E L4 Manuale split payment',
+          },
+        }
+        const body = bodies[mode]
+        if (!body) return { ok: false, reason: 'MODE_BODY_MISSING', mode }
         const res = await fetch('/api/studio/fiscal-journal-post', {
           method: 'POST',
           headers: {
@@ -402,8 +487,7 @@ async function main() {
         societaId: SOCIETA_A,
         requestId,
         docNum,
-        isPassiva,
-        isGiroconto,
+        mode: MODE,
         cCli: CONTO_CLIENTE,
         cRic: CONTO_RICAVO,
         cIvaDeb: CONTO_IVA_DEBITO,
@@ -412,6 +496,7 @@ async function main() {
         cIvaCre: CONTO_IVA_CREDITO,
         cBan: CONTO_BANCA,
         cCas: CONTO_CASSA,
+        cSplit: CONTO_SPLIT,
       },
     )
 
@@ -440,25 +525,39 @@ SELECT
   coalesce((SELECT round(sum(coalesce(r.importo_dare,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')||'|'||
   coalesce((SELECT round(sum(coalesce(r.importo_avere,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')
 `)
-    if (isGiroconto) {
-      log(`MANUALE_01_COERENZA=${coerenza}`)
-      const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
-      if (Number(righe) < 2) throw new Error('MANUALE_01_RIGHE')
-      if (Number(iva) !== 0) throw new Error(`MANUALE_01_IVA_UNEXPECTED ${iva}`)
-      if (Number(partite) !== 0) throw new Error(`MANUALE_01_PARTITE_UNEXPECTED ${partite}`)
-      if (Number(dare) !== Number(avere)) throw new Error(`MANUALE_01_UNBALANCED ${dare}!=${avere}`)
-      log('MANUALE_01_COERENZA_RESULT=PASS')
-      log('NOTE=PATH LAB via general-journal-post from Manuale surface; form UI giroconto still operator')
+    const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
+    const tagByMode = {
+      giroconto: 'MANUALE_01',
+      passiva: 'MANUALE_02',
+      attiva: 'MANUALE_03',
+      nc_attiva: 'MANUALE_04A',
+      nc_passiva: 'MANUALE_04B',
+      split: 'MANUALE_06',
+    }
+    const tag = tagByMode[MODE] || `MANUALE_${MODE}`
+    log(`${tag}_COERENZA=${coerenza}`)
+    if (MODE === 'giroconto') {
+      if (Number(righe) < 2) throw new Error(`${tag}_RIGHE`)
+      if (Number(iva) !== 0) throw new Error(`${tag}_IVA_UNEXPECTED ${iva}`)
+      if (Number(partite) !== 0) throw new Error(`${tag}_PARTITE_UNEXPECTED ${partite}`)
+    } else if (MODE === 'split') {
+      if (Number(righe) < 4) throw new Error(`${tag}_RIGHE`)
+      if (Number(iva) < 1) throw new Error(`${tag}_IVA`)
+      if (Number(partite) < 1) throw new Error(`${tag}_PARTITE`)
+      const partitaAmt = psql(`
+SELECT coalesce(round(sum(coalesce(importo_originale,0))::numeric,2)::text,'0')
+FROM public.partitario WHERE prima_nota_id='${postResult.id}'::uuid
+`)
+      log(`${tag}_PARTITA_IMPORTO=${partitaAmt}`)
+      if (Number(partitaAmt) !== 1000) throw new Error(`${tag}_PARTITA_NOT_NETTO ${partitaAmt}`)
     } else {
-      const tag = isPassiva ? 'MANUALE_02' : 'MANUALE_03'
-      log(`${tag}_COERENZA=${coerenza}`)
-      const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
       if (Number(righe) < 3) throw new Error(`${tag}_RIGHE`)
       if (Number(iva) < 1) throw new Error(`${tag}_IVA`)
       if (Number(partite) < 1) throw new Error(`${tag}_PARTITE`)
-      if (Number(dare) !== Number(avere)) throw new Error(`${tag}_UNBALANCED ${dare}!=${avere}`)
-      log(`${tag}_COERENZA_RESULT=PASS`)
     }
+    if (Number(dare) !== Number(avere)) throw new Error(`${tag}_UNBALANCED ${dare}!=${avere}`)
+    log(`${tag}_COERENZA_RESULT=PASS`)
+    log('NOTE=PATH LAB via API from Manuale surface; form UI caso fiscale still operator')
 
     log(`FISCAL_HTTP_INTERCEPTS=${JSON.stringify(fiscalPosts)}`)
     log('L4_RESULT=PASS')
