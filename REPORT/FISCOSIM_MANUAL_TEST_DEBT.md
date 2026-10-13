@@ -45,10 +45,10 @@ Da verificare in browser su societ? esclusivamente di test:
 9. parcella professionista con ritenuta, cassa previdenziale, spese escluse e maturazione ritenuta al pagamento — **LAB PATH** (JWT `parcella_documento` + pay maturazione 1040; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 10. partitario: apertura, chiusura, pagamento/incasso anche parziale e segni corretti sulle NC — **LAB PATH** (JWT FA + pay parziale residuo 720; NC segni già L4 nc_*; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 11. modifica/storno su periodo aperto e verifica blocco su periodo chiuso/stampato — **LAB PATH** (JWT deny su `stampe_definitive` valida → HTTP 409; P3-06 chiusura/lock; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
-12. verifica visuale di warning/blocker del payload canonico prima del commit;
+12. verifica visuale di warning/blocker del payload canonico prima del commit — **LAB PATH** (JWT `FISCAL_PAYLOAD_INVALIDO` su payload incompleto/sbilanciato, 0 PN scritte; form UI warning ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 13. verifica che l'eventuale proposta cespite post-save resti accessoria e non duplichi la scrittura contabile — **LAB** cespiti P3-05 bridge no 2nd PN; form UI ancora operatore.
 
-Stato: **AUTOMATICO VERDE / MANUALE PENDENTE** (PATH API #1–11 + #13 LAB; #12 + form UI sessione operatore).
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE** (PATH API #1–13 LAB; form UI sessione operatore).
 
 ## IVA / Registri / Liquidazione ? shell LAB; consolidamento pendente
 
@@ -156,7 +156,7 @@ Prima del freeze automatico:
 2. generare fascicolo cliente PDF unico — **LAB PATH** file unico HTML+hash (`STAGE3W_FASCICOLO_P3_04_*`, L6 `P3_04`); print-to-PDF browser ancora operatore;
 3. paginare completamente registri e giornale oltre 1000 righe;
 4. legare checksum definitivo al contenuto, non a soli metadati — **LAB PATH** hash contenuto fascicolo/stampe; snapshot/lock server ancora aperti;
-5. rimuovere fisicamente il codice demo/fac-simile dalla vista Stampe.
+5. rimuovere fisicamente il codice demo/fac-simile dalla vista Stampe — **DONE** badge non-operativo (`Non operativo`); tipi stampe canoniche già `isOperativo`.
 
 Da verificare in browser su societ? di test:
 1. registri acquisti/vendite/corrispettivi con filtri e dati solo della societ? attiva;

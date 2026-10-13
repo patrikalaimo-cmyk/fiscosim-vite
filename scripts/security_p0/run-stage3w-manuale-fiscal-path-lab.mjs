@@ -5,6 +5,7 @@
  *  3) Parcella + ritenuta 1040 open + maturazione su pagamento
  *  4) Partitario: FA ordinaria + pagamento parziale (residuo)
  *  5) Blocco scrittura su periodo con stampa definitiva valida
+ *  6) Payload invalido / sbilanciato → blocker HTTP (no write)
  * LAB-only. Never prints tokens/passwords. Form UI collaudi restano operatore.
  */
 import { createClient } from '@supabase/supabase-js'
@@ -874,6 +875,93 @@ ON CONFLICT (id) DO NOTHING
   return { stampaId }
 }
 
+async function runPayloadBlockers(token) {
+  log('--- MANUALE_PATH_PAYLOAD_BLOCKERS ---')
+  const badDoc = `SG-E2E-MAN-BAD-${stamp.slice(-6)}`
+  const invalid = await postFiscal(token, {
+    societa_id: SOCIETA_A,
+    request_id: randomUUID(),
+    contract_kind: 'fattura_attiva',
+    source_module: 'registrazione_manual',
+    motivazione: 'SG-E2E Manuale PATH invalid payload',
+    header: {
+      data_registrazione: '2026-05-05',
+      data_documento: '2026-05-05',
+      numero_documento: badDoc,
+      descrizione: '[SG-E2E] Manuale invalid payload',
+    },
+    // Missing VAT + ledger → validator null → 400
+    rows: [
+      { conto_id: CONTO_CLIENTE, dare: 122, avere: 0 },
+      { conto_id: CONTO_RICAVO, dare: 0, avere: 100 },
+      { conto_id: CONTO_IVA, dare: 0, avere: 22 },
+    ],
+  })
+  log(`INVALID_STATUS=${invalid.status}`)
+  log(`INVALID_ERROR=${invalid.json?.error || ''}`)
+  if (invalid.status !== 400 || invalid.json?.error !== 'FISCAL_PAYLOAD_INVALIDO') {
+    throw new Error('INVALID_PAYLOAD_NOT_BLOCKED')
+  }
+
+  const unbalancedDoc = `SG-E2E-MAN-UNB-${stamp.slice(-6)}`
+  const unbalanced = await postFiscal(token, {
+    societa_id: SOCIETA_A,
+    request_id: randomUUID(),
+    contract_kind: 'fattura_attiva',
+    source_module: 'registrazione_manual',
+    motivazione: 'SG-E2E Manuale PATH unbalanced rows',
+    header: {
+      data_registrazione: '2026-05-06',
+      data_documento: '2026-05-06',
+      numero_documento: unbalancedDoc,
+      descrizione: '[SG-E2E] Manuale unbalanced',
+    },
+    rows: [
+      { conto_id: CONTO_CLIENTE, dare: 1220, avere: 0 },
+      { conto_id: CONTO_RICAVO, dare: 0, avere: 1000 },
+      // Missing IVA avere 220 → sbilancio
+    ],
+    vat: {
+      rows: [{
+        tipo: 'vendita',
+        imponibile: TAXABLE,
+        iva: VAT,
+        aliquota: 22,
+        esigibilita: 'immediata',
+        split_payment: false,
+        documento_id: unbalancedDoc,
+        riga_idx: 0,
+      }],
+    },
+    ledger: {
+      mode: 'open',
+      openings: [{
+        tipo: 'cliente',
+        conto_id: CONTO_CLIENTE,
+        numero_documento: unbalancedDoc,
+        data_documento: '2026-05-06',
+        importo_originale: GROSS,
+      }],
+      closures: [],
+    },
+    withholding: { eventType: 'none', inserts: [], updates: [] },
+  })
+  log(`UNBALANCED_STATUS=${unbalanced.status}`)
+  log(`UNBALANCED_ERROR=${unbalanced.json?.error || ''}`)
+  if (unbalanced.status !== 400 || unbalanced.json?.error !== 'FISCAL_PAYLOAD_INVALIDO') {
+    throw new Error('UNBALANCED_NOT_BLOCKED')
+  }
+
+  const pnCount = Number(psql(`
+SELECT count(*)::text FROM public.prima_nota
+WHERE societa_id='${SOCIETA_A}'::uuid AND numero_documento IN (${sqlQuote(badDoc)},${sqlQuote(unbalancedDoc)})
+`))
+  log(`BLOCKER_PN_WRITTEN=${pnCount}`)
+  if (pnCount !== 0) throw new Error('BLOCKER_WROTE_PN')
+
+  log('MANUALE_PATH_PAYLOAD_BLOCKERS=PASS')
+}
+
 async function main() {
   log('MANUALE_FISCAL_PATH_START')
   process.env.FISCOSIM_ISOLATED_LAB_API = 'true'
@@ -904,6 +992,7 @@ async function main() {
   await runParcella(token)
   await runPartitarioParziale(token)
   await runPeriodoChiusoBlock(token)
+  await runPayloadBlockers(token)
 
   log('MANUALE_FISCAL_PATH_RESULT=PASS')
   log('NOTE=form_UI_collaudi_ancora_operatore')

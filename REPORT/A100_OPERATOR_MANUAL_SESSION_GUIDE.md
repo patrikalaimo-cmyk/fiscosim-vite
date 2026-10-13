@@ -1,55 +1,73 @@
 # A100 — Guida sessione collaudi (società TEST)
 
-**Politica 2026-10-13:** i collaudi manuali restano **accantonati a fine sviluppo** (regola già in `FISCOSIM_MANUAL_TEST_DEBT.md`). Lo sviluppo LAB/prod code continua con gate automatici verdi; la sessione operatore chiude bug/UX/mancanze sull’intero sistema prima del freeze A100.
+**Stato 2026-10-13:** sviluppo residuale automatizzabile **chiuso** (~84% A100). Questa sessione chiude il debito **form UI / visuale** verso freeze A100.
 
 ## Chi fa cosa
 
 | Ruolo | Cosa |
 |---|---|
-| **Agente (io)** | Test **LAB** automatici (Puppeteer/JWT/DB) su società sintetica `SG-E2E-*`. Chiude PATH/API se il criterio di accettazione è dimostrato. **Non** scrive su clienti LIVE reali. |
-| **Tu (operatore)** | Collaudo **form UI** e **prova visuale** su **società di test** (LAB `http://127.0.0.1:5173` oppure prod `fiscosim-v6` solo se è chiaramente società fittizia). |
+| **Agente** | Guida passo-passo; aggiorna debito su PASS/FAIL; LAB auto già verde. **Non** scrive su clienti LIVE reali. |
+| **Tu** | Collaudo **form UI** su società **di test** (LAB o prod fittizia). |
 
-Non posso sostituire al 100% i collaudi “caso fiscale completo” nel form Manuale/IVA/Consultazione, né Import #11 (~500 documenti a occhio). Posso guidarti passo-passo e aggiornare il debito quando mi dici PASS/FAIL.
+## Ambiente
 
-## Ambiente consigliato per la sessione
+1. **Consigliato:** LAB `http://127.0.0.1:5173` — login `sg-e2e-a@example.invalid` (password negli script Stage3W / `.env.stage3w.lab.local` se la conosci).
+2. Oppure prod `https://fiscosim-v6.vercel.app` **solo** società test (mai clienti reali).
 
-1. LAB già tipico: `http://127.0.0.1:5173` — login `sg-e2e-a@example.invalid` (password LAB nota negli script Stage3W).
-2. Oppure prod `https://fiscosim-v6.vercel.app` **solo** su società test (mai clienti reali).
+Dimmi `parto LAB` o `parto prod-test` prima di iniziare.
 
-## Checklist minima (ordine)
+## Checklist sessione 1 (ordine obbligatorio)
 
-### Import Contabilità
-- [ ] #11 — carica / elenca ~molti documenti (o ZIP grande) e verifica UI stabile (paginazione, niente freeze). **Solo tu.**
+Rispondi `PASS` / `FAIL` (+ screenshot se FAIL) per ogni riga.
 
-### Registrazione Manuale (form UI)
-Per ciascun caso: Nuova registrazione → compila → preview → commit → Controlla PN + registro IVA + partitario.
-- [ ] #1 Giroconto cassa/banca senza soggetto/IVA
-- [ ] #2 Fattura passiva ordinaria
-- [ ] #3 Fattura attiva ordinaria
-- [ ] #4 NC passiva + NC attiva
-- [ ] #5 Multi-aliquota 22+10
-- [ ] #6 Split payment (cliente PA / flag split)
-- [ ] #12 Warning/blocker prima del commit (almeno 1 caso)
+### A — Import Contabilità
+- [ ] **A1 / #11** — carica molti documenti (ZIP grande o batch) e verifica UI stabile (paginazione, niente freeze).
 
-*(#7–#11/#13 possono seguire in seconda sessione.)*
+### B — Registrazione Manuale (form UI)
+Per ogni caso: Nuova registrazione → compila → preview → commit → Controlla PN + registro IVA + partitario.
+- [ ] **B1** Giroconto cassa/banca senza soggetto/IVA
+- [ ] **B2** Fattura passiva ordinaria
+- [ ] **B3** Fattura attiva ordinaria
+- [ ] **B4** NC passiva + NC attiva (segni)
+- [ ] **B5** Multi-aliquota 22+10 (2 righe IVA)
+- [ ] **B6** Split payment (cliente PA)
+- [ ] **B7** Warning/blocker prima del commit (es. sbilancio o campi obbligatori) — almeno 1 caso
 
-### IVA
-- [ ] Periodo mensile + elenco registri con fatture/NC già presenti
-- [ ] Anteprima liquidazione vs consolidata (se hai una definitiva in LAB)
-- [ ] Blocco riconsolidamento definitiva
+### C — IVA / Liquidazione
+- [ ] **C1** Periodo mensile + elenco registri con fatture/NC già presenti
+- [ ] **C2** Anteprima liquidazione (e warning se esiste una definitiva)
+- [ ] **C3** Blocco riconsolidamento su liquidazione definitiva (se disponibile in LAB)
 
-### Consultazione
-- [ ] Filtri date/soggetto
-- [ ] Dettaglio scrittura + banner read-only
-- [ ] Export CSV con N. Prima Nota
+### D — Consultazione
+- [ ] **D1** Filtri date/soggetto
+- [ ] **D2** Dettaglio scrittura + banner read-only
+- [ ] **D3** Export CSV con N. Prima Nota
 
-## Come lavoriamo insieme
+### E — Stampe (smoke breve)
+- [ ] **E1** Partitari o Aging: Genera anteprima → dati società attiva
+- [ ] **E2** Fascicolo: genera file unico + hash visibile (print-to-PDF opzionale)
 
-1. Dimmi «parto Import» / «parto Manuale» / «parto IVA».
-2. Io ti do **un solo passo** alla volta (cosa cliccare + cosa verificare).
-3. Tu rispondi `PASS` / `FAIL` + screenshot se FAIL.
-4. Aggiorno `FISCOSIM_MANUAL_TEST_DEBT.md`.
+### F — Bank (smoke breve, società test)
+- [ ] **F1** Import estratto / match proposta su partitario
+- [ ] **F2** Conferma high-confidence (o dry-run) senza write LIVE reali
 
-## Già coperto in LAB (non ripete come collaudo automatico)
+## Sessione 2 (se tempo)
 
-Import 1–10 (con #11 ancora tuo); Manuale PATH API #1–11+#13 (fiscali + partitario parziale + periodo chiuso); #12 + form UI ancora tuoi; Stampe Aging tab; Bank L5 memory DB+local; L6CORE4 PASS; A100 stima ~82% (form session = grosso del resto).
+Manuale avanzati già PATH LAB (form ancora utile): IVA cassa, reverse, parcella, pagamento parziale, periodo chiuso.
+
+## Come lavoriamo
+
+1. Tu: `parto Import` / `parto Manuale` / `parto IVA` / …
+2. Io: **un solo passo** (click + verifica).
+3. Tu: `PASS` / `FAIL`.
+4. Io aggiorno `FISCOSIM_MANUAL_TEST_DEBT.md`.
+
+## Già coperto in LAB (non ripetere come smoke automatico)
+
+- Import #1–10; Manuale PATH API #1–13 (fiscali + partitario + lock + payload blockers)
+- L6CORE4; Aging tab; Bank L5 memory DB+local; P0 LIVE allow_all TRUE=0
+- Fascicolo HTML+hash; Stampe partitari/mastrini/bilancio modelli
+
+## Dopo la sessione
+
+Solo con checklist verde: dichiarare **A100** / Bank live. Bug/UX trovati → fix → re-smoke mirato.

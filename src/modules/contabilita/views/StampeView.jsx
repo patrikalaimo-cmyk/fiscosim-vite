@@ -793,7 +793,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   };
 
   const isOperativo = isStampaOperativa(tipoStampa);
-  const badgeText = isOperativo ? 'Anteprima provvisoria' : 'Fac-simile UX';
+  const badgeText = isOperativo ? 'Anteprima provvisoria' : 'Non operativo';
 
   return (
     <div>
