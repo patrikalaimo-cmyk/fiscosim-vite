@@ -3,8 +3,8 @@
  * Used by Stage3W SG-P4-02 — no I/O, no LIVE.
  */
 
-/** Canonical core pack: preflight + Import + L5 + representative P2/P3 (no browser). */
-export const L6_CORE_PACK_ID = 'l6_lab_core_v3'
+/** Canonical core pack: preflight + Import + Manuale PATH + L5 + representative P2/P3 (no browser). */
+export const L6_CORE_PACK_ID = 'l6_lab_core_v4'
 
 /**
  * @typedef {{
@@ -52,6 +52,14 @@ export const L6_CORE_STEPS = Object.freeze([
     maxMs: 180_000,
   },
   {
+    id: 'P1_06',
+    title: 'Manuale PATH iva_cassa/reverse/parcella',
+    script: 'scripts/security_p0/run-stage3w-manuale-fiscal-path-lab.mjs',
+    resultKey: 'MANUALE_FISCAL_PATH_RESULT',
+    required: true,
+    maxMs: 180_000,
+  },
+  {
     id: 'P3_02',
     title: 'Import cronologia hash',
     script: 'scripts/security_p0/run-stage3w-import-cronologia-hash.mjs',
@@ -92,6 +100,14 @@ export const L6_CORE_STEPS = Object.freeze([
     maxMs: 120_000,
   },
   {
+    id: 'P3_04',
+    title: 'Fascicolo cliente periodo',
+    script: 'scripts/security_p0/run-stage3w-fascicolo-cliente-periodo.mjs',
+    resultKey: 'P3_04_RESULT',
+    required: true,
+    maxMs: 180_000,
+  },
+  {
     id: 'P3_07',
     title: 'Aging insoluti',
     script: 'scripts/security_p0/run-stage3w-aging-insoluti.mjs',
@@ -116,7 +132,7 @@ export function buildL6LabRegressionSuite({ packId = L6_CORE_PACK_ID } = {}) {
   return {
     kind: 'l6_lab_regressione',
     packId: L6_CORE_PACK_ID,
-    version: 3,
+    version: 4,
     steps: L6_CORE_STEPS.map((s) => ({ ...s })),
     stepIds: L6_CORE_STEPS.map((s) => s.id),
     requiredCount: L6_CORE_STEPS.filter((s) => s.required).length,
@@ -197,5 +213,5 @@ export function buildL6SuiteFingerprint(rows) {
   const parts = (rows || [])
     .filter((r) => r.required !== false)
     .map((r) => `${r.id}:${r.status}`)
-  return `L6CORE3|${parts.join(';')}`
+  return `L6CORE4|${parts.join(';')}`
 }

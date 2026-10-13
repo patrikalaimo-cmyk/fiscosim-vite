@@ -152,10 +152,10 @@ Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 Riferimento: `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`.
 
 Prima del freeze automatico:
-1. collegare realmente Partitari, Mastrini e Bilancio alle scritture canoniche;
-2. generare fascicolo cliente PDF unico;
+1. collegare realmente Partitari, Mastrini e Bilancio alle scritture canoniche — **LAB PATH** partitari/mastrini/bilancio già in pack L6 (`P3_03`); UI definitiva ancora operatore;
+2. generare fascicolo cliente PDF unico — **LAB PATH** file unico HTML+hash (`STAGE3W_FASCICOLO_P3_04_*`, L6 `P3_04`); print-to-PDF browser ancora operatore;
 3. paginare completamente registri e giornale oltre 1000 righe;
-4. legare checksum definitivo al contenuto, non a soli metadati;
+4. legare checksum definitivo al contenuto, non a soli metadati — **LAB PATH** hash contenuto fascicolo/stampe; snapshot/lock server ancora aperti;
 5. rimuovere fisicamente il codice demo/fac-simile dalla vista Stampe.
 
 Da verificare in browser su societ? di test:

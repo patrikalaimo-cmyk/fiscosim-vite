@@ -1284,3 +1284,8 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Bank L5: `lookupBankMatchMemory` accetta `events` precaricati; View preload merge localStorage + `fetchDecisionFeedbackEventsFromDb`; unit SG-L5 DB-only PASS.
 - Manuale PATH JWT LAB: `run-stage3w-manuale-fiscal-path-lab.mjs` — iva_cassa (differita+rilascio), reverse (doppia IVA + liq 0), parcella 1040 + maturazione — `STAGE3W_MANUALE_FISCAL_PATH_*` RESULT=PASS; source_module `registrazione_manual`.
 - Debito Manuale #7/#8/#9 aggiornato a LAB PATH (form UI ancora operatore).
+
+## 2026-10-13 - L6 core pack v4 (fascicolo + Manuale PATH)
+
+- `l6_lab_core_v4`: aggiunti step required `P1_06` (Manuale fiscal PATH) e `P3_04` (fascicolo cliente); fingerprint `L6CORE4|…`.
+- Fascicolo LAB re-run PASS (`STAGE3W_FASCICOLO_P3_04_20261013080109.txt`, hash contenuto + HTML unico).
