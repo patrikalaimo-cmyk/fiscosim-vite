@@ -1294,3 +1294,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 
 - Tab Stampe `aging`: genera anteprima da `buildAgingInsolutiModel` (KPI fasce + tabella residui); modello già P3-07 LAB.
 - Debito ritenute #13 aggiornato: pagamento parziale pro-quota **LAB PASS** (SG-P2-05), non più blocker esplicito di prodotto.
+
+## 2026-10-13 - Manuale PATH #10/#11 + stima A100 ~82%
+
+- `run-stage3w-manuale-fiscal-path-lab.mjs`: + partitario FA + pay parziale residuo 720; + deny scrittura su `stampe_definitive` (HTTP 409).
+- Debito Manuale PATH API #1–11+#13 LAB; #12 + form UI restano operatore.
+- Stima release A100 ~82% (automazione ~96%; collaudi form ~20%).

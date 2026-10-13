@@ -3,6 +3,8 @@
  *  1) IVA per cassa open (differita + iva_per_cassa) + partial pay with VAT rilascio
  *  2) Reverse/estero: fattura_passiva doppia annotazione IVA + partita imponibile
  *  3) Parcella + ritenuta 1040 open + maturazione su pagamento
+ *  4) Partitario: FA ordinaria + pagamento parziale (residuo)
+ *  5) Blocco scrittura su periodo con stampa definitiva valida
  * LAB-only. Never prints tokens/passwords. Form UI collaudi restano operatore.
  */
 import { createClient } from '@supabase/supabase-js'
@@ -19,6 +21,7 @@ const AUTH_URL = 'http://127.0.0.1:55321'
 const API = 'http://127.0.0.1:3001/api/studio/fiscal-journal-post'
 const SOCIETA_A = '72000000-0000-4000-8000-000000000001'
 const AUTH_A = '72000000-0000-4000-8000-000000000003'
+const UTENTE_A = '72000000-0000-4000-8000-000000000005'
 const EMAIL_A = 'sg-e2e-a@example.invalid'
 const CONTO_CLIENTE = '72000000-0000-4000-8000-000000000010'
 const CONTO_RICAVO = '72000000-0000-4000-8000-000000000011'
@@ -672,6 +675,205 @@ SELECT row_to_json(t) FROM (
   return { openPn, payPn: payRes.json.id, doc }
 }
 
+async function runPartitarioParziale(token) {
+  log('--- MANUALE_PATH_PARTITARIO_PARZIALE ---')
+  const doc = `SG-E2E-MAN-PART-${stamp.slice(-6)}`
+  const openReq = randomUUID()
+  const openBody = {
+    societa_id: SOCIETA_A,
+    request_id: openReq,
+    contract_kind: 'fattura_attiva',
+    source_module: 'registrazione_manual',
+    motivazione: 'SG-E2E Manuale PATH partitario apertura',
+    header: {
+      data_registrazione: '2026-04-08',
+      data_documento: '2026-04-08',
+      numero_documento: doc,
+      descrizione: '[SG-E2E] Manuale FA partitario ' + doc,
+    },
+    rows: [
+      { conto_id: CONTO_CLIENTE, dare: GROSS, avere: 0 },
+      { conto_id: CONTO_RICAVO, dare: 0, avere: TAXABLE },
+      { conto_id: CONTO_IVA, dare: 0, avere: VAT },
+    ],
+    vat: {
+      rows: [{
+        tipo: 'vendita',
+        imponibile: TAXABLE,
+        iva: VAT,
+        aliquota: 22,
+        esigibilita: 'immediata',
+        split_payment: false,
+        documento_id: doc,
+        riga_idx: 0,
+      }],
+    },
+    ledger: {
+      mode: 'open',
+      openings: [{
+        tipo: 'cliente',
+        conto_id: CONTO_CLIENTE,
+        numero_documento: doc,
+        data_documento: '2026-04-08',
+        importo_originale: GROSS,
+      }],
+      closures: [],
+    },
+    withholding: { eventType: 'none', inserts: [], updates: [] },
+  }
+
+  const openRes = await postFiscal(token, openBody)
+  log(`PART_OPEN_STATUS=${openRes.status}`)
+  log(`PART_OPEN_PN=${openRes.json?.id || ''}`)
+  if (openRes.status !== 201 || !openRes.json?.ok || !openRes.json?.id) {
+    log(`PART_OPEN_BODY=${(openRes.text || '').slice(0, 400)}`)
+    throw new Error('PART_OPEN_FAILED')
+  }
+
+  const partita = psql(`
+SELECT id::text||'|'||coalesce(importo_residuo::text,'0')||'|'||coalesce(tipo,'')
+FROM public.partitario
+WHERE prima_nota_id='${openRes.json.id}'::uuid AND societa_id='${SOCIETA_A}'::uuid
+LIMIT 1
+`)
+  log(`PART_PARTITA=${partita}`)
+  const [partitaId, residuoOpen, tipo] = partita.split('|')
+  if (!partitaId || tipo !== 'cliente' || Number(residuoOpen) !== GROSS) {
+    throw new Error('PART_OPEN_RESIDUO')
+  }
+
+  const payReq = randomUUID()
+  const payDoc = `PAY-${doc}`
+  const payBody = {
+    societa_id: SOCIETA_A,
+    request_id: payReq,
+    contract_kind: 'pagamento',
+    source_module: 'registrazione_manual',
+    motivazione: 'SG-E2E Manuale PATH pagamento parziale',
+    header: {
+      data_registrazione: '2026-04-18',
+      data_documento: '2026-04-18',
+      numero_documento: payDoc,
+      descrizione: '[SG-E2E] Manuale incasso parziale ' + doc,
+    },
+    rows: [
+      { conto_id: CONTO_BANCA, dare: PAY_AMOUNT, avere: 0 },
+      { conto_id: CONTO_CLIENTE, dare: 0, avere: PAY_AMOUNT },
+    ],
+    ledger: {
+      mode: 'close',
+      openings: [],
+      closures: [{ partita_id: partitaId, importo_chiuso: PAY_AMOUNT }],
+    },
+    withholding: { eventType: 'none', inserts: [], updates: [] },
+  }
+
+  const payRes = await postFiscal(token, payBody)
+  log(`PART_PAY_STATUS=${payRes.status}`)
+  log(`PART_PAY_PN=${payRes.json?.id || ''}`)
+  if (payRes.status !== 201 || !payRes.json?.ok || !payRes.json?.id) {
+    log(`PART_PAY_BODY=${(payRes.text || '').slice(0, 400)}`)
+    throw new Error('PART_PAY_FAILED')
+  }
+
+  const residuoAfter = Number(psql(`SELECT importo_residuo::text FROM public.partitario WHERE id='${partitaId}'::uuid`))
+  const statoAfter = psql(`SELECT coalesce(stato,'') FROM public.partitario WHERE id='${partitaId}'::uuid`)
+  log(`PART_RESIDUO_AFTER=${residuoAfter}`)
+  log(`PART_STATO_AFTER=${statoAfter}`)
+  if (residuoAfter !== GROSS - PAY_AMOUNT) throw new Error('PART_RESIDUO_MISMATCH')
+  if (statoAfter !== 'aperta' && statoAfter !== 'parziale') throw new Error('PART_STATO_NOT_OPEN')
+
+  const claim = psql(`
+SELECT coalesce(contract_kind,'')||'|'||coalesce(request_payload->>'source_module','')
+FROM public.fiscosim_fiscal_journal_claim
+WHERE prima_nota_id='${payRes.json.id}'::uuid AND societa_id='${SOCIETA_A}'::uuid
+LIMIT 1
+`)
+  log(`PART_CLAIM_PAY=${claim}`)
+  if (!String(claim).startsWith('pagamento|registrazione_manual')) throw new Error('PART_CLAIM')
+
+  log('MANUALE_PATH_PARTITARIO_PARZIALE=PASS')
+  return { openPn: openRes.json.id, payPn: payRes.json.id, partitaId }
+}
+
+async function runPeriodoChiusoBlock(token) {
+  log('--- MANUALE_PATH_PERIODO_CHIUSO ---')
+  const lockStart = '2024-11-01'
+  const lockEnd = '2024-11-30'
+  const stampaId = randomUUID()
+  psql(`
+INSERT INTO public.stampe_definitive(
+  id, societa_id, tipo_stampa, famiglia_numerazione, anno_fiscale,
+  periodo_inizio, periodo_fine, pagina_iniziale, checksum, stato, creato_by, motivo, metadata
+) VALUES (
+  '${stampaId}'::uuid, '${SOCIETA_A}'::uuid, 'libro_giornale', 'libro_giornale', 2024,
+  '${lockStart}'::date, '${lockEnd}'::date, 1,
+  ${sqlQuote('SG-E2E-MAN-LOCK-' + stamp)}, 'valida', '${UTENTE_A}'::uuid,
+  'SG-E2E Manuale PATH lock Nov 2024',
+  '{"source":"MANUALE_FISCAL_PATH"}'::jsonb
+)
+ON CONFLICT (id) DO NOTHING
+`)
+  log(`LOCK_STAMPA_ID=${stampaId}`)
+
+  const blockDoc = `SG-E2E-MAN-LOCK-${stamp.slice(-6)}`
+  const blocked = await postFiscal(token, {
+    societa_id: SOCIETA_A,
+    request_id: randomUUID(),
+    contract_kind: 'fattura_attiva',
+    source_module: 'registrazione_manual',
+    motivazione: 'SG-E2E Manuale PATH must block on locked period',
+    header: {
+      data_registrazione: '2024-11-15',
+      data_documento: '2024-11-15',
+      numero_documento: blockDoc,
+      descrizione: '[SG-E2E] Manuale blocked on locked period',
+    },
+    rows: [
+      { conto_id: CONTO_CLIENTE, dare: 122, avere: 0 },
+      { conto_id: CONTO_RICAVO, dare: 0, avere: 100 },
+      { conto_id: CONTO_IVA, dare: 0, avere: 22 },
+    ],
+    vat: {
+      rows: [{
+        tipo: 'vendita',
+        imponibile: 100,
+        iva: 22,
+        aliquota: 22,
+        esigibilita: 'immediata',
+        split_payment: false,
+        documento_id: blockDoc,
+        riga_idx: 0,
+      }],
+    },
+    ledger: {
+      mode: 'open',
+      openings: [{
+        tipo: 'cliente',
+        conto_id: CONTO_CLIENTE,
+        numero_documento: blockDoc,
+        data_documento: '2024-11-15',
+        importo_originale: 122,
+      }],
+      closures: [],
+    },
+    withholding: { eventType: 'none', inserts: [], updates: [] },
+  })
+
+  log(`LOCK_WRITE_STATUS=${blocked.status}`)
+  log(`LOCK_WRITE_ERROR=${(blocked.json?.error || blocked.text || '').slice(0, 200)}`)
+  if (blocked.status === 201) throw new Error('LOCK_DID_NOT_BLOCK')
+  if (![400, 409, 503].includes(blocked.status)) {
+    throw new Error('LOCK_UNEXPECTED_STATUS:' + blocked.status)
+  }
+  const err = String(blocked.json?.error || blocked.text || '')
+  if (!/period locked|PERIOD|JOURNAL_ATOMIC|locked/i.test(err) && blocked.status === 201) {
+    throw new Error('LOCK_MSG_MISSING')
+  }
+  log('MANUALE_PATH_PERIODO_CHIUSO=PASS')
+  return { stampaId }
+}
+
 async function main() {
   log('MANUALE_FISCAL_PATH_START')
   process.env.FISCOSIM_ISOLATED_LAB_API = 'true'
@@ -700,6 +902,8 @@ async function main() {
   await runIvaCassa(token)
   await runReverse(token)
   await runParcella(token)
+  await runPartitarioParziale(token)
+  await runPeriodoChiusoBlock(token)
 
   log('MANUALE_FISCAL_PATH_RESULT=PASS')
   log('NOTE=form_UI_collaudi_ancora_operatore')

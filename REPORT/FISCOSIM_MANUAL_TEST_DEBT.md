@@ -43,12 +43,12 @@ Da verificare in browser su societ? esclusivamente di test:
 7. IVA per cassa: fattura differita e successivo rilascio su incasso/pagamento — **LAB PATH** (JWT `registrazione_manual` open differita + pay rilascio; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 8. reverse charge / autofattura / UE-extra UE: doppia annotazione ove prevista e IVA neutrale — **LAB PATH** (JWT Manuale 4 PN + VAT acquisto/vendita + liq saldo 0; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 9. parcella professionista con ritenuta, cassa previdenziale, spese escluse e maturazione ritenuta al pagamento — **LAB PATH** (JWT `parcella_documento` + pay maturazione 1040; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
-10. partitario: apertura, chiusura, pagamento/incasso anche parziale e segni corretti sulle NC;
-11. modifica/storno su periodo aperto e verifica blocco su periodo chiuso/stampato;
+10. partitario: apertura, chiusura, pagamento/incasso anche parziale e segni corretti sulle NC — **LAB PATH** (JWT FA + pay parziale residuo 720; NC segni già L4 nc_*; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
+11. modifica/storno su periodo aperto e verifica blocco su periodo chiuso/stampato — **LAB PATH** (JWT deny su `stampe_definitive` valida → HTTP 409; P3-06 chiusura/lock; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 12. verifica visuale di warning/blocker del payload canonico prima del commit;
-13. verifica che l'eventuale proposta cespite post-save resti accessoria e non duplichi la scrittura contabile.
+13. verifica che l'eventuale proposta cespite post-save resti accessoria e non duplichi la scrittura contabile — **LAB** cespiti P3-05 bridge no 2nd PN; form UI ancora operatore.
 
-Stato: **AUTOMATICO VERDE / MANUALE PENDENTE** (shell UI LAB OK; punti 1?13 ancora sessione operatore).
+Stato: **AUTOMATICO VERDE / MANUALE PENDENTE** (PATH API #1–11 + #13 LAB; #12 + form UI sessione operatore).
 
 ## IVA / Registri / Liquidazione ? shell LAB; consolidamento pendente
 

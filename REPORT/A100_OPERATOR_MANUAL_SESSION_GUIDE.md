@@ -52,4 +52,4 @@ Per ciascun caso: Nuova registrazione → compila → preview → commit → Con
 
 ## Già coperto in LAB (non ripete come collaudo automatico)
 
-Import 1–10 (con #11 ancora tuo); Manuale PATH API #1–9 (ordinarie/NC/split/multi2210 + iva_cassa/reverse/parcella JWT); Stampe Aging tab wired (P3-07); form UI ancora tuo; shell IVA/Consultazione; Bank L5 memory DB+local; L6CORE4 PASS; P0 sicurezza LIVE allow_all TRUE=0.
+Import 1–10 (con #11 ancora tuo); Manuale PATH API #1–11+#13 (fiscali + partitario parziale + periodo chiuso); #12 + form UI ancora tuoi; Stampe Aging tab; Bank L5 memory DB+local; L6CORE4 PASS; A100 stima ~82% (form session = grosso del resto).
