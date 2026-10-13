@@ -5,9 +5,8 @@ Stato: 2026-10-13. LIVE anon DML/SELECT/EXECUTE = 0 (T1+T2). Residuo A100: polic
 ## Inventario (fonte)
 
 - `scripts/security_p0/run-live-p0-readonly-audit.mjs` → `BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC` + dettaglio `BROAD_AUTH_POLICY`.
-- Baseline post-T2: 31 → dopo D/E/F (2026-10-13): **8** residui:
-  - `coda_import_fatture` (2× allow_all), `fatture_xml`, `invii_log`
-  - `corrispettivi_giornalieri`, `intrastat_operazioni`, `liquidazioni_iva_societa`, `revisioni_dichiarativi` (`Accesso autenticati` true)
+- Baseline post-T2: 31 → D/E/F: 8 → **class G: 0** TRUE auth/public (2026-10-13).
+- Nota qualità: `invii_log` e `revisioni_dichiarativi` su LIVE senza colonna `societa_id` → policy `auth.uid() IS NOT NULL` (non tenant-complete).
 
 ## Classi di rischio
 

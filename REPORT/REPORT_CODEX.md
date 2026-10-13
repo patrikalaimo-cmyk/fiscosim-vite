@@ -1267,4 +1267,6 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Class E: drop allow_all ridondanti su fiscal/core con twin scoped → 28→19; smoke RLS fallito (ricorsione `current_utente_ruolo` / `utenti_studio`).
 - Hotfix E: SECURITY DEFINER + `row_security=off` su helper RLS → smoke PASS (US/CAUSALI/PN_RIGHE) (`68_*`, `LIVE_P0_04_CLASS_E_HOTFIX_*`).
 - Class F: drop TRUE policies con twin non-true (adempimenti/deleghe/f24/invii/impostazioni/…) → **19→8** (`LIVE_P0_04_CLASS_F_APPLY_*`).
-- Stop operatore: **smoke Contabilità su https://fiscosim-v6.vercel.app** (login + Prima Nota); poi residui 8 allow_all + collaudi A100.
+- Operatore Contabilità post-F: **PASS** («funziona tutto») — `LIVE_DEPLOY_SMOKE_CONTABILITA_POST_RLS_2026-10-13T0224.txt`.
+- Class G: residuali 8 → **0** TRUE auth/public (`71_*`, `LIVE_P0_04_CLASS_G_APPLY_*`); RLS smoke DB PASS; `invii_log`/`revisioni_dichiarativi` con policy uid (no `societa_id` su LIVE).
+- Stop operatore: **re-smoke post-G** (Prima Nota + Agenda se usata); poi collaudi A100 manuali.

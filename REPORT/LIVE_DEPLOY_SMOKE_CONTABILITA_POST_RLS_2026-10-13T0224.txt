@@ -1,0 +1,11 @@
+LIVE_DEPLOY_SMOKE_CONTABILITA_POST_RLS PASS
+timestamp: 2026-10-13T02:24+02:00
+url: https://fiscosim-v6.vercel.app
+operator: patrik.alaimo@gmail.com
+checks:
+- login: PASS (prior)
+- Contabilità / Prima Nota post P0-04 D/E/F + helper hotfix: PASS («funziona tutto»)
+context:
+- BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC: 31 → 8
+- anon DML/SELECT core: 0
+- DEFINER anon EXECUTE helpers: revoked after hotfix
