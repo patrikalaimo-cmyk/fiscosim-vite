@@ -1269,4 +1269,5 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Class F: drop TRUE policies con twin non-true (adempimenti/deleghe/f24/invii/impostazioni/…) → **19→8** (`LIVE_P0_04_CLASS_F_APPLY_*`).
 - Operatore Contabilità post-F: **PASS** («funziona tutto») — `LIVE_DEPLOY_SMOKE_CONTABILITA_POST_RLS_2026-10-13T0224.txt`.
 - Class G: residuali 8 → **0** TRUE auth/public (`71_*`, `LIVE_P0_04_CLASS_G_APPLY_*`); RLS smoke DB PASS; `invii_log`/`revisioni_dichiarativi` con policy uid (no `societa_id` su LIVE).
-- Stop operatore: **re-smoke post-G** (Prima Nota + Agenda se usata); poi collaudi A100 manuali.
+- Operatore re-smoke post-G: **PASS** («ok funziona») — `LIVE_DEPLOY_SMOKE_POST_CLASS_G_2026-10-13T0226.txt`.
+- Gate sicurezza allow_all TRUE: **chiuso** (0). Stop A100: collaudi manuali in `FISCOSIM_MANUAL_TEST_DEBT.md`.
