@@ -799,18 +799,25 @@ LIMIT 1
 
 async function runPeriodoChiusoBlock(token) {
   log('--- MANUALE_PATH_PERIODO_CHIUSO ---')
-  const lockStart = '2024-11-01'
-  const lockEnd = '2024-11-30'
+  // Use 2023-06 — must NOT overlap L5 multi-periodo windows (2024-11, 2026-02).
+  const lockStart = '2023-06-01'
+  const lockEnd = '2023-06-30'
+  // Clear prior Manuale PATH locks that polluted L5 (e.g. 2024-11).
+  psql(`
+DELETE FROM public.stampe_definitive
+WHERE societa_id='${SOCIETA_A}'::uuid
+  AND coalesce(motivo,'') LIKE 'SG-E2E Manuale PATH lock%'
+`)
   const stampaId = randomUUID()
   psql(`
 INSERT INTO public.stampe_definitive(
   id, societa_id, tipo_stampa, famiglia_numerazione, anno_fiscale,
   periodo_inizio, periodo_fine, pagina_iniziale, checksum, stato, creato_by, motivo, metadata
 ) VALUES (
-  '${stampaId}'::uuid, '${SOCIETA_A}'::uuid, 'libro_giornale', 'libro_giornale', 2024,
+  '${stampaId}'::uuid, '${SOCIETA_A}'::uuid, 'libro_giornale', 'libro_giornale', 2023,
   '${lockStart}'::date, '${lockEnd}'::date, 1,
   ${sqlQuote('SG-E2E-MAN-LOCK-' + stamp)}, 'valida', '${UTENTE_A}'::uuid,
-  'SG-E2E Manuale PATH lock Nov 2024',
+  'SG-E2E Manuale PATH lock Jun 2023',
   '{"source":"MANUALE_FISCAL_PATH"}'::jsonb
 )
 ON CONFLICT (id) DO NOTHING
@@ -825,8 +832,8 @@ ON CONFLICT (id) DO NOTHING
     source_module: 'registrazione_manual',
     motivazione: 'SG-E2E Manuale PATH must block on locked period',
     header: {
-      data_registrazione: '2024-11-15',
-      data_documento: '2024-11-15',
+      data_registrazione: '2023-06-15',
+      data_documento: '2023-06-15',
       numero_documento: blockDoc,
       descrizione: '[SG-E2E] Manuale blocked on locked period',
     },
@@ -853,7 +860,7 @@ ON CONFLICT (id) DO NOTHING
         tipo: 'cliente',
         conto_id: CONTO_CLIENTE,
         numero_documento: blockDoc,
-        data_documento: '2024-11-15',
+        data_documento: '2023-06-15',
         importo_originale: 122,
       }],
       closures: [],
