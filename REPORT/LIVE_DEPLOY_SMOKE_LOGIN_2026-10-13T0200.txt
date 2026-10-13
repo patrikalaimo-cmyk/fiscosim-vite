@@ -1,0 +1,13 @@
+LIVE_DEPLOY_SMOKE_LOGIN PASS
+timestamp: 2026-10-13T02:00+02:00
+url: https://fiscosim-v6.vercel.app
+deployment: dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi
+project: fiscosim-v6
+user: patrik.alaimo@gmail.com
+checks:
+- login UI: PASS (operatore conferma "sono live")
+- /api/auth/session: deployed (pre-check 401 JSON Missing bearer token)
+- profilo societa predefinita: PASS (post-fix session API)
+notes:
+- fix prior: SPA rewrite + missing api/auth/session caused false PROFILE_INCOMPLETE
+- Stage3W studio APIs still LAB-only (Hobby ≤12 functions; only session shipped)

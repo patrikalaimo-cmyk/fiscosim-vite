@@ -16,9 +16,22 @@ fiscosim/qa-logs/
 docs/
 *.zip
 LIVE_BACKUP*
-# Hobby plan ≤12 serverless functions: Stage3W/studio APIs stay LAB-only for now.
-# Production SPA talks to Supabase with the anon key + RLS (same model as prior deploys).
-api/
-services/api/
 tests/
 src/modules/**/tests/
+
+# Hobby plan ≤12 serverless functions.
+# Ship only auth session (required for login). Stage3W/studio APIs stay LAB-only.
+api/accounting/**
+api/admin/**
+api/contabilita/**
+api/document.js
+api/email.js
+api/ai.js
+api/banking.js
+api/insights/**
+api/prima-nota/**
+api/stampe.js
+api/studio/**
+api/test-scenario/**
+api/auth/users.js
+services/api/

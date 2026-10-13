@@ -1,17 +1,18 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** LIVE P0-04 tranche 1+2 **APPLICATE** su `mlydfspmrkaedsocubku` (anon DML/SELECT public=0; SECURITY DEFINER anon EXECUTE=0). Residuo sicurezza: 31 policy broad authenticated/public (richiede redesign RLS tenant). A100 non dichiarabile senza deploy nuovo + collaudi manuali.
+* **Fase corrente:** Prod **fiscosim-v6** live (`https://fiscosim-v6.vercel.app`); login operatore OK. LIVE P0-04 T1+T2 su `mlydfspmrkaedsocubku`. A100 ancora bloccata da collaudi manuali + 31 policy allow_all.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
-* **HEAD:** `396608d`
-* **Limite:** policy allow_all; deploy produzione; Import #11 e form Manuale/IVA/Consultazione
+* **Deploy:** `dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi` (SPA + `api/auth/session` only)
+* **Limite:** policy allow_all; Import #11; form Manuale/IVA/Consultazione; Stage3W API Hobby
 
 ## 2. Prossimo passo operativo (verso A100)
-1. Smoke LIVE post-tranche2 (login + Contabilità)
-2. Piano deploy unico (sostituire siti marzo/aprile) dal branch Studio Grade
-3. Collaudi manuali residui in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`
+1. ~~Smoke LIVE post-tranche2~~ OK
+2. ~~Deploy fiscosim-v6 + login~~ OK (`REPORT/LIVE_DEPLOY_SMOKE_LOGIN_2026-10-13T0200.txt`)
+3. Collaudi manuali residui in `REPORT/FISCOSIM_MANUAL_TEST_DEBT.md` (Import #11, Manuale/IVA/Consultazione)
 4. Redesign RLS tenant per rimuovere allow_all (blocco qualità A100 sicurezza)
 
 ## 3. Evidenze
+* `REPORT/LIVE_DEPLOY_SMOKE_LOGIN_2026-10-13T0200.txt`
 * `REPORT/LIVE_P0_04_TRANCHE2_APPLY_2026-10-12T2340.txt`
 * `REPORT/LIVE_P0_04_CONTAINMENT_APPLY_2026-10-12T2331.txt`

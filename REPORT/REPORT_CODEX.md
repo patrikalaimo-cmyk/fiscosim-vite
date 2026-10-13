@@ -1243,3 +1243,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Hobby plan: `api/` esclusa dal deploy (≤12 serverless) — SPA + Supabase anon/RLS; Stage3W HTTP APIs restano LAB-only.
 - `.vercelignore` + `vercel.json` (Vite `dist` + SPA rewrite).
 - Production alias OK; smoke HTTP homepage da verificare operatore (login LIVE).
+
+## 2026-10-13 - Fix login prod (session API Hobby)
+
+- Causa: SPA-only deploy → `/api/auth/session` riscritto a `index.html` → client vede profilo vuoto → «Profilo utente incompleto» (membership LIVE ok).
+- Fix: whitelist `api/auth/session.js` (1 function); rewrite SPA esclude `api/`; redeploy `dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi`.
+- Verifica: `GET /api/auth/session` → `401` JSON `Missing bearer token` (non HTML).
+- Operatore: rilogin su https://fiscosim-v6.vercel.app → **PASS** («sono live»).
+- Evidence: `REPORT/LIVE_DEPLOY_SMOKE_LOGIN_2026-10-13T0200.txt`.
+- Stop A100: collaudi manuali residui + redesign RLS allow_all; Stage3W APIs restano LAB.
