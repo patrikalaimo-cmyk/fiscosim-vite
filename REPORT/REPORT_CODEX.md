@@ -1259,4 +1259,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - LAB class D: `65_p0_04_drop_test_allow_all_LAB_ONLY.sql` applicato (test_* deny); LIVE non toccato.
 - Manuale #1 giroconto **LAB PATH** PASS (`STAGE3W_L4_BROWSER_MANUALE_giroconto_*`); form UI ancora operatore.
 - L6 core pack PASS (`STAGE3W_L6_REGRESSIONE_P4_02_20261013000521.txt`).
-- Stop operatore: collaudi manuali A100; autorizzazione esplicita per tranche RLS LIVE (classe D+).
+
+## 2026-10-13 - LIVE P0-04 class D/E/F (autorizzato «approvo continua»)
+
+- Backup: `REPORT/LIVE_BACKUP_schema_public_20261013.sql` presente.
+- Class D: drop `test_*` allow_all → broad 31→28 (`LIVE_P0_04_CLASS_D_APPLY_*`).
+- Class E: drop allow_all ridondanti su fiscal/core con twin scoped → 28→19; smoke RLS fallito (ricorsione `current_utente_ruolo` / `utenti_studio`).
+- Hotfix E: SECURITY DEFINER + `row_security=off` su helper RLS → smoke PASS (US/CAUSALI/PN_RIGHE) (`68_*`, `LIVE_P0_04_CLASS_E_HOTFIX_*`).
+- Class F: drop TRUE policies con twin non-true (adempimenti/deleghe/f24/invii/impostazioni/…) → **19→8** (`LIVE_P0_04_CLASS_F_APPLY_*`).
+- Stop operatore: **smoke Contabilità su https://fiscosim-v6.vercel.app** (login + Prima Nota); poi residui 8 allow_all + collaudi A100.
