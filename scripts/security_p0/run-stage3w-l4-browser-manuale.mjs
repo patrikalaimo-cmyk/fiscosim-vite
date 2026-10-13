@@ -26,7 +26,7 @@ const CONTO_BANCA = '72000000-0000-4000-8000-000000000013'
 const CONTO_CASSA = '72000000-0000-4000-8000-0000000000c0'
 const CONTO_SPLIT = '72000000-0000-4000-8000-000000000017'
 const MODE = (process.argv.find((a) => a.startsWith('--mode=')) || '--mode=attiva').slice('--mode='.length)
-const ALLOWED_MODES = ['attiva', 'passiva', 'giroconto', 'nc_attiva', 'nc_passiva', 'split']
+const ALLOWED_MODES = ['attiva', 'passiva', 'giroconto', 'nc_attiva', 'nc_passiva', 'split', 'multi2210']
 const stamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
 const outPath = join(process.cwd(), 'REPORT', `STAGE3W_L4_BROWSER_MANUALE_${MODE}_${stamp}.txt`)
 
@@ -462,6 +462,45 @@ async function main() {
             withholding: { eventType: 'none', inserts: [], updates: [] },
             motivazione: 'SG-E2E L4 Manuale split payment',
           },
+          multi2210: {
+            societa_id: societaId,
+            request_id: requestId,
+            contract_kind: 'fattura_passiva',
+            source_module: 'registrazione_manual',
+            header: {
+              data_registrazione: '2026-04-22',
+              data_documento: '2026-04-22',
+              numero_documento: docNum,
+              descrizione: '[SG-E2E] L4 Manuale multi 22+10',
+            },
+            rows: [
+              { conto_id: cCos, dare: 1500, avere: 0 },
+              { conto_id: cIvaCre, dare: 270, avere: 0 },
+              { conto_id: cFor, dare: 0, avere: 1770 },
+            ],
+            vat: {
+              rows: [
+                {
+                  tipo: 'acquisto', imponibile: 1000, iva: 220, aliquota: 22,
+                  esigibilita: 'immediata', split_payment: false, documento_id: docNum, riga_idx: 0,
+                },
+                {
+                  tipo: 'acquisto', imponibile: 500, iva: 50, aliquota: 10,
+                  esigibilita: 'immediata', split_payment: false, documento_id: docNum, riga_idx: 1,
+                },
+              ],
+            },
+            ledger: {
+              mode: 'open',
+              openings: [{
+                tipo: 'fornitore', conto_id: cFor, numero_documento: docNum,
+                data_documento: '2026-04-22', importo_originale: 1770,
+              }],
+              closures: [],
+            },
+            withholding: { eventType: 'none', inserts: [], updates: [] },
+            motivazione: 'SG-E2E L4 Manuale multi aliquota 22+10',
+          },
         }
         const body = bodies[mode]
         if (!body) return { ok: false, reason: 'MODE_BODY_MISSING', mode }
@@ -532,6 +571,7 @@ SELECT
       attiva: 'MANUALE_03',
       nc_attiva: 'MANUALE_04A',
       nc_passiva: 'MANUALE_04B',
+      multi2210: 'MANUALE_05',
       split: 'MANUALE_06',
     }
     const tag = tagByMode[MODE] || `MANUALE_${MODE}`
@@ -550,6 +590,16 @@ FROM public.partitario WHERE prima_nota_id='${postResult.id}'::uuid
 `)
       log(`${tag}_PARTITA_IMPORTO=${partitaAmt}`)
       if (Number(partitaAmt) !== 1000) throw new Error(`${tag}_PARTITA_NOT_NETTO ${partitaAmt}`)
+    } else if (MODE === 'multi2210') {
+      if (Number(righe) < 3) throw new Error(`${tag}_RIGHE`)
+      if (Number(iva) !== 2) throw new Error(`${tag}_IVA_ROWS_NOT_2 ${iva}`)
+      if (Number(partite) < 1) throw new Error(`${tag}_PARTITE`)
+      const aliquote = psql(`
+SELECT string_agg(round(aliquota::numeric,0)::text, ',' ORDER BY aliquota DESC)
+FROM public.registri_iva WHERE prima_nota_id='${postResult.id}'::uuid
+`)
+      log(`${tag}_ALIQUOTE=${aliquote}`)
+      if (aliquote !== '22,10') throw new Error(`${tag}_ALIQUOTE_COLLAPSE ${aliquote}`)
     } else {
       if (Number(righe) < 3) throw new Error(`${tag}_RIGHE`)
       if (Number(iva) < 1) throw new Error(`${tag}_IVA`)

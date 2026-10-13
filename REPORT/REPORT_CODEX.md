@@ -1276,3 +1276,5 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 
 - L4 Manuale `--mode=nc_attiva|nc_passiva|split` PASS (PATH API da superficie Manuale; form UI ancora operatore).
 - Guida sessione: `REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md` (io = LAB auto; tu = form/visual su società test).
+- Operatore: collaudi manuali **a fine sviluppo**; sviluppo continuo con CI/LAB verdi.
+- L4 Manuale `--mode=multi2210` PASS (2 IVA 22+10, no collapse).

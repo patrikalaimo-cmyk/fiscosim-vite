@@ -1,18 +1,18 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Prod fiscosim-v6 live. LIVE P0-04 D→G: **BROAD_TRUE=0** + smoke Contabilità post-G OK. Gate A100 residuo = collaudi manuali (non sicurezza allow_all).
+* **Fase corrente:** Sviluppo residuale A100 **senza** collaudi manuali (operatore: sessione finale). Prod fiscosim-v6 OK; LIVE P0-04 broad TRUE=0. Import storico (#4/#7) già LAB.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
 * **Deploy:** `dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi` (SPA + `api/auth/session`)
-* **Limite:** Import #11 + form Manuale/IVA/Consultazione; Stage3W API Hobby; `invii_log`/`revisioni` uid-only
+* **Limite sviluppo:** Stampe/fascicolo; Manuale PATH multi2210+; Bank L5 memory DB; Hobby API; tenant `invii_log`/`revisioni`. Collaudi form = fine.
 
 ## 2. Prossimo passo operativo (verso A100)
-1. ~~Smoke Contabilità post-F/G~~ OK
-2. Collaudi manuali residui (`REPORT/FISCOSIM_MANUAL_TEST_DEBT.md`) — **serve operatore**
-3. Opzionale: Pro/Hobby API Stage3W; tenant colonna su `invii_log`/`revisioni`
+1. Continuare sviluppo automatizzabile (Manuale multi-aliquota PATH, Stampe/UX, Bank L5, API Hobby se ≤12)
+2. Sessione collaudi manuali **a fine sviluppo** (`FISCOSIM_MANUAL_TEST_DEBT.md` + `A100_OPERATOR_MANUAL_SESSION_GUIDE.md`)
+3. Solo dopo collaudi verdi: dichiarare A100 / Bank live
 
 ## 3. Evidenze
 * `REPORT/LIVE_DEPLOY_SMOKE_POST_CLASS_G_2026-10-13T0226.txt`
-* `REPORT/LIVE_P0_04_CLASS_G_APPLY_2026-10-13T0025.txt` (broad 8→0)
-* `REPORT/LIVE_DEPLOY_SMOKE_CONTABILITA_POST_RLS_2026-10-13T0224.txt`
+* `REPORT/STAGE3W_IMPORT_STORICO_MARKER_*` / `STAGE3W_IMPORT_07_STUDIO_VS_STORICO_*` (storico Import)
+* `REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md`
 * `REPORT/P0_04_RLS_TENANT_REDESIGN_PLAN.md`

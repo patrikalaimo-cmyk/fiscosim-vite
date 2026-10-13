@@ -1,5 +1,7 @@
 # A100 — Guida sessione collaudi (società TEST)
 
+**Politica 2026-10-13:** i collaudi manuali restano **accantonati a fine sviluppo** (regola già in `FISCOSIM_MANUAL_TEST_DEBT.md`). Lo sviluppo LAB/prod code continua con gate automatici verdi; la sessione operatore chiude bug/UX/mancanze sull’intero sistema prima del freeze A100.
+
 ## Chi fa cosa
 
 | Ruolo | Cosa |

@@ -38,7 +38,7 @@ Da verificare in browser su societ? esclusivamente di test:
 2. fattura passiva ordinaria: preview, PN, registro acquisti e partita fornitore — **LAB PATH** (sessione Manuale + fiscal-journal-post + coerenza 3/1/1; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_passiva_*`);
 3. fattura attiva ordinaria: preview, PN, registro vendite e partita cliente — **LAB PATH** (sessione Manuale UI + fiscal-journal-post + coerenza 3/1/1 Dare=Avere; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_2026-10-12T2236.txt`);
 4. nota credito passiva e attiva: registro corretto, segno opposto e partita negativa/opposta — **LAB PATH** (Manuale + fiscal-journal-post NC attiva/passiva 3|1|1; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_nc_*`);
-5. documento multi-aliquota 22% + 10% senza collassamento delle righe IVA;
+5. documento multi-aliquota 22% + 10% senza collassamento delle righe IVA — **LAB PATH** (2 righe IVA aliquote 22,10; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_multi2210_*`);
 6. split payment semplice con cliente configurato PA e partitario sul netto corretto — **LAB PATH** (4 righe + partita netto 1000; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_split_*`);
 7. IVA per cassa: fattura differita e successivo rilascio su incasso/pagamento;
 8. reverse charge / autofattura / UE-extra UE: doppia annotazione ove prevista e IVA neutrale;
