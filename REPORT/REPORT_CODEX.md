@@ -1251,4 +1251,12 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Verifica: `GET /api/auth/session` → `401` JSON `Missing bearer token` (non HTML).
 - Operatore: rilogin su https://fiscosim-v6.vercel.app → **PASS** («sono live»).
 - Evidence: `REPORT/LIVE_DEPLOY_SMOKE_LOGIN_2026-10-13T0200.txt`.
-- Stop A100: collaudi manuali residui + redesign RLS allow_all; Stage3W APIs restano LAB.
+
+## 2026-10-13 - Post-deploy LAB advance (no LIVE mutations)
+
+- LIVE readonly audit: anon containment still 0; `BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC=31` (`LIVE_P0_READONLY_AUDIT_2026-10-13T0004.txt`).
+- Piano RLS: `REPORT/P0_04_RLS_TENANT_REDESIGN_PLAN.md`.
+- LAB class D: `65_p0_04_drop_test_allow_all_LAB_ONLY.sql` applicato (test_* deny); LIVE non toccato.
+- Manuale #1 giroconto **LAB PATH** PASS (`STAGE3W_L4_BROWSER_MANUALE_giroconto_*`); form UI ancora operatore.
+- L6 core pack PASS (`STAGE3W_L6_REGRESSIONE_P4_02_20261013000521.txt`).
+- Stop operatore: collaudi manuali A100; autorizzazione esplicita per tranche RLS LIVE (classe D+).

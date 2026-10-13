@@ -1,0 +1,6 @@
+﻿STAGE3W_P0_04_CLASS_D_LAB PASS
+timestamp: 2026-10-13T0205
+container: supabase_db_FiscoSim-P0-LAB-20261008-164658
+sql: sql/security_p0/65_p0_04_drop_test_allow_all_LAB_ONLY.sql
+result: test_* allow_all dropped; deny authenticated policies present
+LIVE: NOT touched

@@ -22,6 +22,8 @@ const CONTO_IVA_DEBITO = '72000000-0000-4000-8000-000000000012'
 const CONTO_FORNITORE = '72000000-0000-4000-8000-000000000016'
 const CONTO_COSTO = '72000000-0000-4000-8000-000000000014'
 const CONTO_IVA_CREDITO = '72000000-0000-4000-8000-000000000015'
+const CONTO_BANCA = '72000000-0000-4000-8000-000000000013'
+const CONTO_CASSA = '72000000-0000-4000-8000-0000000000c0'
 const MODE = (process.argv.find((a) => a.startsWith('--mode=')) || '--mode=attiva').slice('--mode='.length)
 const stamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
 const outPath = join(process.cwd(), 'REPORT', `STAGE3W_L4_BROWSER_MANUALE_${MODE}_${stamp}.txt`)
@@ -70,6 +72,21 @@ WHERE u.id='72000000-0000-4000-8000-000000000003'::uuid
 `)
 }
 
+function ensureCassaConto() {
+  psql(`
+INSERT INTO public.piano_conti (id, societa_id, codice, descrizione, tipo, attivo)
+VALUES (
+  '${CONTO_CASSA}'::uuid,
+  '${SOCIETA_A}'::uuid,
+  '1.00',
+  'Cassa SG-E2E-A',
+  'patrimoniale',
+  true
+)
+ON CONFLICT (id) DO UPDATE SET attivo = true, descrizione = EXCLUDED.descrizione;
+`)
+}
+
 const lines = []
 function log(msg) {
   const row = String(msg)
@@ -83,7 +100,8 @@ async function main() {
     throw new Error('VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB must be true in .env.stage3w.lab.local')
   }
   ensurePassword()
-  if (!['attiva', 'passiva'].includes(MODE)) throw new Error(`MODE_INVALID ${MODE}`)
+  if (!['attiva', 'passiva', 'giroconto'].includes(MODE)) throw new Error(`MODE_INVALID ${MODE}`)
+  if (MODE === 'giroconto') ensureCassaConto()
   log('L4_START puppeteer Manuale LAB')
   log(`MODE=${MODE}`)
   log(`UI=${UI}`)
@@ -100,7 +118,10 @@ async function main() {
   page.on('response', async (res) => {
     try {
       const url = res.url()
-      if (url.includes('/api/studio/fiscal-journal-post')) {
+      if (
+        url.includes('/api/studio/fiscal-journal-post') ||
+        url.includes('/api/studio/general-journal-post')
+      ) {
         fiscalPosts.push({ status: res.status(), url })
       }
     } catch {
@@ -200,8 +221,23 @@ async function main() {
     const requestId = randomUUID()
     const docNum = `SG-E2E-L4-${MODE.slice(0, 3)}-${stamp.slice(-6)}`
     const isPassiva = MODE === 'passiva'
+    const isGiroconto = MODE === 'giroconto'
     const postResult = await page.evaluate(
-      async ({ societaId, requestId, docNum, isPassiva, cCli, cRic, cIvaDeb, cFor, cCos, cIvaCre }) => {
+      async ({
+        societaId,
+        requestId,
+        docNum,
+        isPassiva,
+        isGiroconto,
+        cCli,
+        cRic,
+        cIvaDeb,
+        cFor,
+        cCos,
+        cIvaCre,
+        cBan,
+        cCas,
+      }) => {
         let accessToken = ''
         const walk = (o) => {
           if (!o || typeof o !== 'object') return ''
@@ -225,6 +261,40 @@ async function main() {
         if (!accessToken) {
           return { ok: false, reason: 'NO_BROWSER_SESSION_TOKEN', keys: Object.keys(localStorage) }
         }
+
+        if (isGiroconto) {
+          const body = {
+            societa_id: societaId,
+            request_id: requestId,
+            header: {
+              data_registrazione: '2026-04-12',
+              descrizione: '[SG-E2E] L4 Manuale giroconto cassa-banca',
+            },
+            rows: [
+              { conto_id: cCas, dare: 100, avere: 0 },
+              { conto_id: cBan, dare: 0, avere: 100 },
+            ],
+            motivazione: 'SG-E2E L4 Manuale giroconto senza soggetto/IVA',
+          }
+          const res = await fetch('/api/studio/general-journal-post', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(body),
+          })
+          const json = await res.json().catch(() => ({}))
+          return {
+            ok: res.ok,
+            status: res.status,
+            id: json?.id || json?.prima_nota_id || null,
+            request_id: requestId,
+            error: json?.error || json?.message || null,
+            path: 'general-journal-post',
+          }
+        }
+
         const body = isPassiva
           ? {
             societa_id: societaId,
@@ -325,6 +395,7 @@ async function main() {
           id: json?.id || json?.prima_nota_id || null,
           request_id: requestId,
           error: json?.error || json?.message || null,
+          path: 'fiscal-journal-post',
         }
       },
       {
@@ -332,17 +403,21 @@ async function main() {
         requestId,
         docNum,
         isPassiva,
+        isGiroconto,
         cCli: CONTO_CLIENTE,
         cRic: CONTO_RICAVO,
         cIvaDeb: CONTO_IVA_DEBITO,
         cFor: CONTO_FORNITORE,
         cCos: CONTO_COSTO,
         cIvaCre: CONTO_IVA_CREDITO,
+        cBan: CONTO_BANCA,
+        cCas: CONTO_CASSA,
       },
     )
 
     log(`FISCAL_POST_STATUS=${postResult.status}`)
     log(`FISCAL_POST_OK=${postResult.ok}`)
+    log(`FISCAL_POST_PATH=${postResult.path || ''}`)
     log(`FISCAL_POST_ID=${postResult.id || ''}`)
     log(`FISCAL_POST_REQUEST_ID=${postResult.request_id || requestId}`)
     if (postResult.error) log(`FISCAL_POST_ERROR=${postResult.error}`)
@@ -365,14 +440,25 @@ SELECT
   coalesce((SELECT round(sum(coalesce(r.importo_dare,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')||'|'||
   coalesce((SELECT round(sum(coalesce(r.importo_avere,0))::numeric,2)::text FROM public.prima_nota_righe r WHERE r.prima_nota_id='${postResult.id}'::uuid),'0')
 `)
-    const tag = isPassiva ? 'MANUALE_02' : 'MANUALE_03'
-    log(`${tag}_COERENZA=${coerenza}`)
-    const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
-    if (Number(righe) < 3) throw new Error(`${tag}_RIGHE`)
-    if (Number(iva) < 1) throw new Error(`${tag}_IVA`)
-    if (Number(partite) < 1) throw new Error(`${tag}_PARTITE`)
-    if (Number(dare) !== Number(avere)) throw new Error(`${tag}_UNBALANCED ${dare}!=${avere}`)
-    log(`${tag}_COERENZA_RESULT=PASS`)
+    if (isGiroconto) {
+      log(`MANUALE_01_COERENZA=${coerenza}`)
+      const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
+      if (Number(righe) < 2) throw new Error('MANUALE_01_RIGHE')
+      if (Number(iva) !== 0) throw new Error(`MANUALE_01_IVA_UNEXPECTED ${iva}`)
+      if (Number(partite) !== 0) throw new Error(`MANUALE_01_PARTITE_UNEXPECTED ${partite}`)
+      if (Number(dare) !== Number(avere)) throw new Error(`MANUALE_01_UNBALANCED ${dare}!=${avere}`)
+      log('MANUALE_01_COERENZA_RESULT=PASS')
+      log('NOTE=PATH LAB via general-journal-post from Manuale surface; form UI giroconto still operator')
+    } else {
+      const tag = isPassiva ? 'MANUALE_02' : 'MANUALE_03'
+      log(`${tag}_COERENZA=${coerenza}`)
+      const [righe, iva, partite, dare, avere] = String(coerenza || '').split('|')
+      if (Number(righe) < 3) throw new Error(`${tag}_RIGHE`)
+      if (Number(iva) < 1) throw new Error(`${tag}_IVA`)
+      if (Number(partite) < 1) throw new Error(`${tag}_PARTITE`)
+      if (Number(dare) !== Number(avere)) throw new Error(`${tag}_UNBALANCED ${dare}!=${avere}`)
+      log(`${tag}_COERENZA_RESULT=PASS`)
+    }
 
     log(`FISCAL_HTTP_INTERCEPTS=${JSON.stringify(fiscalPosts)}`)
     log('L4_RESULT=PASS')

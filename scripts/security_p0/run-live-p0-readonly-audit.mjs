@@ -175,6 +175,29 @@ LIMIT 50;
   for (const row of broadNames.split('\n').filter(Boolean)) log(`BROAD_POLICY ${row}`)
   log('BROAD_POLICY_DETAIL_END')
 
+  // authenticated / public true policies (A100 residual after anon containment)
+  const broadAuth = psql(db, `
+SELECT count(*)::text
+FROM pg_policies
+WHERE schemaname='public'
+  AND (lower(btrim(coalesce(qual,'')))='true' OR lower(btrim(coalesce(with_check,'')))='true')
+  AND (roles @> ARRAY['public']::name[] OR roles @> ARRAY['authenticated']::name[]);
+`)
+  log(`BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC=${broadAuth}`)
+
+  const broadAuthNames = psql(db, `
+SELECT tablename||'|'||policyname||'|'||cmd||'|'||array_to_string(roles,',')
+FROM pg_policies
+WHERE schemaname='public'
+  AND (lower(btrim(coalesce(qual,'')))='true' OR lower(btrim(coalesce(with_check,'')))='true')
+  AND (roles @> ARRAY['public']::name[] OR roles @> ARRAY['authenticated']::name[])
+ORDER BY 1
+LIMIT 80;
+`)
+  log('BROAD_AUTH_POLICY_DETAIL_BEGIN')
+  for (const row of broadAuthNames.split('\n').filter(Boolean)) log(`BROAD_AUTH_POLICY ${row}`)
+  log('BROAD_AUTH_POLICY_DETAIL_END')
+
   const migration = psql(db, `
 SELECT coalesce(to_regclass('supabase_migrations.schema_migrations')::text, 'ABSENT');
 `)
@@ -184,6 +207,7 @@ SELECT coalesce(to_regclass('supabase_migrations.schema_migrations')::text, 'ABS
   log(`P0_04_CONTAINMENT_NEEDED=${needsContainment}`)
   log(`LIVE_P0_READONLY_RESULT=PASS`)
   log('NEXT=await explicit authorization before any REVOKE/DROP POLICY on LIVE')
+  log('NEXT_A100=replace BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC with tenant-scoped RLS (LAB first)')
 }
 
 try {
