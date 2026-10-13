@@ -3,6 +3,21 @@ import StampaDefinitivaPanel from '../components/stampe/StampaDefinitivaPanel.js
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { buildRegistroIvaRowsModel } from '../application/stampe/buildRegistroIvaRowsModel.js'
 import { buildLibroGiornaleModel } from '../application/stampe/buildLibroGiornaleModel.js'
+import { buildMovimentiPerContoModel } from '../application/stampe/buildMovimentiPerContoModel.js'
+import { buildSaldiPerContoEsercizioModel } from '../application/stampe/buildSaldiPerContoEsercizioModel.js'
+import {
+  buildPartitariStampaModel,
+  isStampaOperativa,
+} from '../application/stampe/buildPartitariStampaModel.js'
+import {
+  AGING_BUCKET_KEYS,
+  buildAgingInsolutiModel,
+} from '../application/stampe/buildAgingInsolutiModel.js'
+import {
+  buildFascicoloClientePeriodo,
+  fascicoloHtmlToBytes,
+} from '../application/stampe/buildFascicoloClientePeriodo.js'
+import { hashStampaContenuto } from '../application/stampe/hashStampaContenuto.js'
 import {
   buildRegistroIvaCsv,
   buildRegistroIvaXlsx,
@@ -346,16 +361,7 @@ const GiornaleEmptyState = ({ periodoInizio, periodoFine }) => (
 
 export default function StampeView({ contTab, societaAttiva, scritture, pianoConti, causaliIva }) {
   if (!societaAttiva) return null
-  if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio', 'liquidazione_iva_periodica'].includes(contTab)) return null
-  // Nessuna scheda fac-simile puo essere presentata come situazione contabile reale.
-  if (['partitari', 'mastrini', 'bilancio'].includes(contTab)) {
-    return (
-      <div className="alert alert-info" role="status">
-        Il prospetto richiesto non è ancora collegato alle scritture canoniche di Prima Nota.
-        Nessun dato di esempio è disponibile: non è possibile generare stampe, saldi o fascicoli da questa schermata.
-      </div>
-    )
-  }
+  if (!['registri_iva', 'partitari', 'aging', 'giornale', 'mastrini', 'bilancio', 'fascicolo', 'liquidazione_iva_periodica'].includes(contTab)) return null
   return (
     <StampeDetailView
       tipoStampa={contTab}
@@ -367,42 +373,28 @@ export default function StampeView({ contTab, societaAttiva, scritture, pianoCon
   )
 }
 
-const partitariMockData = [
-  { id: '1', subject: 'Alfa S.r.l.', type: 'clienti', doc: 'FATPA 45/2024', date: '2024-04-15', due: '2024-05-15', original: 2440.00, paid: 0.00, residual: 2440.00, state: 'aperta', pn_ap: '1/2024', pn_ch: '—' },
-  { id: '2', subject: 'Beta S.p.A.', type: 'clienti', doc: 'FATPA 67/2024', date: '2024-04-30', due: '2024-05-30', original: 5490.00, paid: 2000.00, residual: 3490.00, state: 'parziale', pn_ap: '1/2024', pn_ch: '5/2024' },
-  { id: '3', subject: 'Gamma S.r.l.', type: 'clienti', doc: 'FATPA 81/2024', date: '2024-05-10', due: '2024-06-09', original: 1830.00, paid: 0.00, residual: 1830.00, state: 'aperta', pn_ap: '2/2024', pn_ch: '—' },
-  { id: '4', subject: 'Delta S.r.l.', type: 'clienti', doc: 'FATPA 102/2024', date: '2024-05-28', due: '2024-06-27', original: 3660.00, paid: 3660.00, residual: 0.00, state: 'chiusa', pn_ap: '2/2024', pn_ch: '6/2024' },
-  { id: '5', subject: 'Forniture Italia S.r.l.', type: 'fornitori', doc: 'FATPA 210/2024', date: '2024-04-18', due: '2024-05-18', original: 1220.00, paid: 1220.00, residual: 0.00, state: 'chiusa', pn_ap: '1/2024', pn_ch: '4/2024' },
-  { id: '6', subject: 'Office Point S.p.A.', type: 'fornitori', doc: 'FATPA 233/2024', date: '2024-05-02', due: '2024-06-01', original: 732.00, paid: 300.00, residual: 432.00, state: 'parziale', pn_ap: '2/2024', pn_ch: '6/2024' },
-  { id: '7', subject: 'Energia & Servizi S.p.A.', type: 'fornitori', doc: 'FATPA 255/2024', date: '2024-05-15', due: '2024-06-14', original: 880.00, paid: 0.00, residual: 880.00, state: 'aperta', pn_ap: '2/2024', pn_ch: '—' },
-  { id: '8', subject: 'Tecnologie Avanzate S.r.l.', type: 'fornitori', doc: 'FATPA 289/2024', date: '2024-05-27', due: '2024-06-26', original: 4270.00, paid: 4270.00, residual: 0.00, state: 'chiusa', pn_ap: '2/2024', pn_ch: '7/2024' },
-  { id: '9', subject: 'Rossi Mario', type: 'percipienti', doc: 'RIT. ACC. 12/2024', date: '2024-01-31', due: '2024-01-31', original: 250.00, paid: 250.00, residual: 0.00, state: 'chiusa', pn_ap: '1/2024', pn_ch: '1/2024' },
-  { id: '10', subject: 'Bianchi Laura', type: 'percipienti', doc: 'RIT. ACC. 15/2024', date: '2024-02-29', due: '2024-02-29', original: 180.00, paid: 0.00, residual: 180.00, state: 'aperta', pn_ap: '2/2024', pn_ch: '—' },
-  { id: '11', subject: 'Rossi & Associati', type: 'percipienti', doc: 'RIT. ACC. 18/2024', date: '2024-03-15', due: '2024-03-15', original: 450.00, paid: 450.00, residual: 0.00, state: 'chiusa', pn_ap: '3/2024', pn_ch: '3/2024' },
-  { id: '12', subject: 'Consorzio Stabile', type: 'clienti', doc: 'FATPA 110/2024', date: '2024-06-10', due: '2024-07-10', original: 1500.00, paid: 500.00, residual: 1000.00, state: 'parziale', pn_ap: '3/2024', pn_ch: '8/2024' },
-  { id: '13', subject: 'Ristorante Da Gianni', type: 'fornitori', doc: 'FATPA 310/2024', date: '2024-06-12', due: '2024-07-12', original: 240.00, paid: 240.00, residual: 0.00, state: 'chiusa', pn_ap: '3/2024', pn_ch: '8/2024' },
-  { id: '14', subject: 'Servizi Logistici', type: 'clienti', doc: 'FATPA 115/2024', date: '2024-06-20', due: '2024-07-20', original: 2000.00, paid: 0.00, residual: 2000.00, state: 'aperta', pn_ap: '3/2024', pn_ch: '—' },
-  { id: '15', subject: 'Studio Associato', type: 'percipienti', doc: 'RIT. ACC. 20/2024', date: '2024-04-05', due: '2024-04-05', original: 600.00, paid: 600.00, residual: 0.00, state: 'chiusa', pn_ap: '4/2024', pn_ch: '4/2024' },
-  { id: '16', subject: 'Consulenze Integrate', type: 'fornitori', doc: 'FATPA 320/2024', date: '2024-07-05', due: '2024-08-04', original: 1200.00, paid: 0.00, residual: 1200.00, state: 'aperta', pn_ap: '4/2024', pn_ch: '—' },
-  { id: '17', subject: 'Immobiliare Gialla', type: 'fornitori', doc: 'FATPA 335/2024', date: '2024-07-15', due: '2024-08-14', original: 900.00, paid: 300.00, residual: 600.00, state: 'parziale', pn_ap: '4/2024', pn_ch: '9/2024' },
-  { id: '18', subject: 'Verde S.r.l.', type: 'clienti', doc: 'FATPA 122/2024', date: '2024-08-20', due: '2024-09-19', original: 1100.00, paid: 1100.00, residual: 0.00, state: 'chiusa', pn_ap: '4/2024', pn_ch: '9/2024' }
-];
-
 function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const [loading,setLoading]=useState(false);
   const [periodoInizio,setPeriodoInizio]=useState(new Date().getFullYear()+'-01-01');
   const [periodoFine,setPeriodoFine]=useState(new Date().toISOString().split('T')[0]);
   const [selectedConto,setSelectedConto]=useState('');
   const [registroTipo,setRegistroTipo]=useState('vendite');
-  const [partitarioTipo,setPartitarioTipo]=useState('clienti');
+  const [partitarioTipo,setPartitarioTipo]=useState('tutti');
   const [situazioneTipo,setSituazioneTipo]=useState('patrimoniale');
   const [previewHtml,setPreviewHtml]=useState('');
   const [registroModel,setRegistroModel]=useState(null);
   const [giornaleModel,setGiornaleModel]=useState(null);
+  const [partitariModel,setPartitariModel]=useState(null);
+  const [agingModel,setAgingModel]=useState(null);
+  const [mastriniModel,setMastriniModel]=useState(null);
+  const [bilancioModel,setBilancioModel]=useState(null);
+  const [fascicoloModel,setFascicoloModel]=useState(null);
+  const [fascicoloHash,setFascicoloHash]=useState('');
   const [error,setError]=useState('');
+  const currentYear = String(new Date().getFullYear());
   const [bilancioViewTab,setBilancioViewTab]=useState('verifica');
-  const [bilancioEsercizio,setBilancioEsercizio]=useState('2024');
-  const [bilancioDataSituazione,setBilancioDataSituazione]=useState('2024-12-31');
+  const [bilancioEsercizio,setBilancioEsercizio]=useState(currentYear);
+  const [bilancioDataSituazione,setBilancioDataSituazione]=useState(new Date().toISOString().split('T')[0]);
   const [bilancioTipoProspetto,setBilancioTipoProspetto]=useState('verifica');
   const [bilancioSectionsExpanded,setBilancioSectionsExpanded]=useState({attivo:true,passivo:true,costi:true,ricavi:true});
   const [infoAlert,setInfoAlert]=useState('');
@@ -415,8 +407,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const [partitariTipoSoggetto, setPartitariTipoSoggetto] = useState('tutti');
   const [partitariSoggettoSearch, setPartitariSoggettoSearch] = useState('');
   const [partitariStato, setPartitariStato] = useState('tutti');
-  const [partitariPeriodoDa, setPartitariPeriodoDa] = useState('2024-01-01');
-  const [partitariPeriodoA, setPartitariPeriodoA] = useState('2024-12-31');
+  const [partitariPeriodoDa, setPartitariPeriodoDa] = useState(`${currentYear}-01-01`);
+  const [partitariPeriodoA, setPartitariPeriodoA] = useState(new Date().toISOString().split('T')[0]);
   const [partitariPage, setPartitariPage] = useState(1);
   const [partitariRowsPerPage, setPartitariRowsPerPage] = useState(10);
   const [partitariSortBy, setPartitariSortBy] = useState('date');
@@ -425,17 +417,28 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     tipoSoggetto: 'tutti',
     soggettoSearch: '',
     stato: 'tutti',
-    periodoDa: '2024-01-01',
-    periodoA: '2024-12-31'
+    periodoDa: `${currentYear}-01-01`,
+    periodoA: new Date().toISOString().split('T')[0]
   });
 
 
   const titoli={
     registri_iva:'Registri IVA',
     partitari:'Partitari Clienti/Fornitori',
+    aging:'Aging / insoluti',
     giornale:'Giornale Contabile',
     mastrini:'Mastrini',
-    bilancio:'Bilancio di Verifica'
+    bilancio:'Bilancio di Verifica',
+    fascicolo:'Fascicolo cliente'
+  };
+
+  const agingBucketLabel = {
+    current: 'A scadere',
+    d1_30: '1–30 gg',
+    d31_60: '31–60 gg',
+    d61_90: '61–90 gg',
+    d90_plus: 'Oltre 90 gg',
+    senza_scadenza: 'Senza scadenza',
   };
 
   const handleSort = (col) => {
@@ -551,9 +554,16 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const generaStampa=async()=>{
     setLoading(true);
     setError('');
+    setInfoAlert('');
     setPreviewHtml('');
     setRegistroModel(null);
     setGiornaleModel(null);
+    setPartitariModel(null);
+    setAgingModel(null);
+    setMastriniModel(null);
+    setBilancioModel(null);
+    setFascicoloModel(null);
+    setFascicoloHash('');
     
     try{
       if(tipoStampa==='registri_iva'){
@@ -574,8 +584,163 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
         const timePart = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         setGiornaleUltimoAggiornamento(`Anteprima generata il ${datePart}, ${timePart}`);
       }
-      else if(['partitari', 'mastrini', 'bilancio'].includes(tipoStampa)){
-        setError('Funzione in preparazione.');
+      else if(tipoStampa==='partitari'){
+        const statoFilter = partitariStato && partitariStato !== 'tutti' ? partitariStato : null;
+        const { data: rawRows, error: fetchError } = await contabilitaRepo.getPartitarioBySocieta(societa.id, { stato: statoFilter });
+        if(fetchError) throw fetchError;
+        const model = buildPartitariStampaModel(rawRows || [], {
+          societaId: societa.id,
+          tipo: partitariTipoSoggetto,
+          stato: partitariStato,
+          periodoInizio: partitariPeriodoDa || periodoInizio,
+          periodoFine: partitariPeriodoA || periodoFine,
+        });
+        setPartitariModel(model);
+        setPartitariActiveFilters({
+          tipoSoggetto: partitariTipoSoggetto,
+          soggettoSearch: partitariSoggettoSearch,
+          stato: partitariStato,
+          periodoDa: partitariPeriodoDa,
+          periodoA: partitariPeriodoA,
+        });
+        setPartitariPage(1);
+        if(model.blockers.length){
+          setError(`Partitari: ${model.blockers.join(', ')}`);
+        } else if(model.warnings?.length){
+          setInfoAlert(model.warnings[0]);
+        }
+      }
+      else if(tipoStampa==='aging'){
+        const asOf = periodoFine || new Date().toISOString().split('T')[0];
+        const { data: rawRows, error: fetchError } = await contabilitaRepo.getPartitarioBySocieta(societa.id, {});
+        if(fetchError) throw fetchError;
+        const model = buildAgingInsolutiModel(rawRows || [], {
+          societaId: societa.id,
+          asOf,
+          tipo: partitarioTipo || 'tutti',
+        });
+        setAgingModel(model);
+        if(model.blockers.length){
+          setError(`Aging: ${model.blockers.join(', ')}`);
+        } else if(model.warnings?.length){
+          setInfoAlert(model.warnings[0]);
+        }
+      }
+      else if(tipoStampa==='mastrini'){
+        const { data: rawEntries, error: fetchError } = await contabilitaRepo.getLibroGiornalePerStampa(societa.id, periodoInizio, periodoFine);
+        if(fetchError) throw fetchError;
+        const model = buildMovimentiPerContoModel(rawEntries || [], {
+          societaId: societa.id,
+          periodoInizio,
+          periodoFine,
+        });
+        setMastriniModel(model);
+        if(!selectedConto && model.conti?.length){
+          setSelectedConto(model.conti[0].codice || model.conti[0].contoId || '');
+        }
+        if(model.blockers.length){
+          setError(`Mastrini: ${model.blockers.join(', ')}`);
+        } else if(model.warnings?.length){
+          setInfoAlert(model.warnings[0]);
+        }
+      }
+      else if(tipoStampa==='bilancio'){
+        const year = String(bilancioEsercizio || periodoInizio.slice(0, 4) || new Date().getFullYear());
+        const esercizioInizio = `${year}-01-01`;
+        const dataFine = bilancioDataSituazione || periodoFine;
+        const dataInizio = periodoInizio && periodoInizio.startsWith(year) ? periodoInizio : esercizioInizio;
+        const { data: rawEntries, error: fetchError } = await contabilitaRepo.getLibroGiornalePerStampa(societa.id, esercizioInizio, dataFine);
+        if(fetchError) throw fetchError;
+        let chart = Array.isArray(pianoConti) ? pianoConti : [];
+        if(!chart.length){
+          const { data: chartRows, error: chartError } = await contabilitaRepo.getPianoConti(societa.id);
+          if(chartError) throw chartError;
+          chart = Array.isArray(chartRows) ? chartRows : [];
+        }
+        const model = buildSaldiPerContoEsercizioModel(rawEntries || [], chart, {
+          societaId: societa.id,
+          esercizioInizio,
+          periodoInizio: dataInizio,
+          periodoFine: dataFine,
+        });
+        setBilancioModel(model);
+        if(model.blockers.length){
+          setError(`Bilancio di verifica: ${model.blockers.join(', ')}`);
+        } else if(model.warnings?.length){
+          setInfoAlert(model.warnings[0]);
+        }
+      }
+      else if(tipoStampa==='fascicolo'){
+        const year = String(periodoInizio.slice(0, 4) || new Date().getFullYear());
+        const esercizioInizio = `${year}-01-01`;
+        const [{ data: pnEntries, error: pnError }, partRes] = await Promise.all([
+          contabilitaRepo.getLibroGiornalePerStampa(societa.id, esercizioInizio, periodoFine),
+          contabilitaRepo.getPartitarioBySocieta(societa.id, {}),
+        ]);
+        if(pnError) throw pnError;
+        if(partRes.error) throw partRes.error;
+        let chart = Array.isArray(pianoConti) ? pianoConti : [];
+        if(!chart.length){
+          const { data: chartRows, error: chartError } = await contabilitaRepo.getPianoConti(societa.id);
+          if(chartError) throw chartError;
+          chart = Array.isArray(chartRows) ? chartRows : [];
+        }
+        const giornale = buildLibroGiornaleModel(
+          (pnEntries || []).filter((e) => String(e.data_registrazione || '').slice(0, 10) >= periodoInizio)
+        );
+        const partitari = buildPartitariStampaModel(partRes.data || [], {
+          societaId: societa.id,
+          tipo: 'tutti',
+          stato: 'tutti',
+          periodoInizio,
+          periodoFine,
+        });
+        const mastrini = buildMovimentiPerContoModel(pnEntries || [], {
+          societaId: societa.id,
+          periodoInizio,
+          periodoFine,
+        });
+        const bilancio = buildSaldiPerContoEsercizioModel(pnEntries || [], chart, {
+          societaId: societa.id,
+          esercizioInizio,
+          periodoInizio: periodoInizio.startsWith(year) ? periodoInizio : esercizioInizio,
+          periodoFine,
+        });
+        const fascicolo = buildFascicoloClientePeriodo({
+          societa,
+          periodoInizio,
+          periodoFine,
+          giornaleModel: giornale,
+          partitariModel: partitari,
+          mastriniModel: mastrini,
+          bilancioModel: bilancio,
+        });
+        setGiornaleModel(giornale);
+        setPartitariModel(partitari);
+        setMastriniModel(mastrini);
+        setBilancioModel(bilancio);
+        setFascicoloModel(fascicolo);
+        setPreviewHtml(fascicolo.html || '');
+        if(!fascicolo.ok){
+          setError(`Fascicolo: ${(fascicolo.blockers || []).join(', ') || 'non generabile'}`);
+        } else {
+          const bytes = fascicoloHtmlToBytes(fascicolo.html);
+          try {
+            const digest = await hashStampaContenuto({
+              fileBytes: bytes,
+              mimeType: 'text/html',
+              societaId: societa.id,
+              tipoStampa: 'fascicolo',
+              annoFiscale: year,
+              periodoInizio,
+              periodoFine,
+            });
+            setFascicoloHash(digest);
+            setInfoAlert(`Fascicolo generato (${fascicolo.fileName}). Hash contenuto: ${digest.slice(0, 16)}…`);
+          } catch (hashErr) {
+            setInfoAlert(`Fascicolo generato (${fascicolo.fileName}). Hash non disponibile: ${hashErr.message || hashErr}`);
+          }
+        }
       }
     }catch(err){
       setError(err.message || String(err));
@@ -599,7 +764,8 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;
-    a.download=`${tipoStampa}_${societa?.denominazione||'stampa'}_${periodoFine}.html`;
+    a.download=fascicoloModel?.fileName
+      || `${tipoStampa}_${societa?.denominazione||'stampa'}_${periodoFine}.html`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -608,8 +774,10 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     registri_iva: 'Registri IVA',
     giornale: 'Giornale Contabile',
     partitari: 'Partitari',
+    aging: 'Aging / insoluti',
     mastrini: 'Mastrini',
     bilancio: 'Bilancio',
+    fascicolo: 'Fascicolo cliente',
     liquidazione_iva_periodica: 'Liquidazione IVA Periodica'
   };
 
@@ -617,13 +785,15 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     registri_iva: 'Consulta e genera i registri IVA Acquisti, Vendite e Corrispettivi',
     giornale: 'Consulta e genera il Libro Giornale delle scritture contabili',
     partitari: 'Stampa schede e prospetti partitari per clienti e fornitori',
+    aging: 'Residui partitario aperti per fascia di ritardo rispetto alla data di riferimento',
     mastrini: 'Visualizza le schede di mastro per i singoli conti del piano dei conti',
     bilancio: 'Prospetti di bilancio di verifica, situazione economica e patrimoniale',
+    fascicolo: 'Un unico file di fine periodo da modelli canonici (HTML stampabile / print-to-PDF)',
     liquidazione_iva_periodica: 'Visualizzazione e consolidamento definitivo della Liquidazione IVA del periodo'
   };
 
-  const isOperativo = ['registri_iva', 'giornale', 'liquidazione_iva_periodica'].includes(tipoStampa);
-  const badgeText = isOperativo ? 'Anteprima provvisoria' : 'Fac-simile UX';
+  const isOperativo = isStampaOperativa(tipoStampa);
+  const badgeText = isOperativo ? 'Anteprima provvisoria' : 'Non operativo';
 
   return (
     <div>
@@ -682,6 +852,30 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
               />
             </div>
           </div>
+
+          {tipoStampa === 'aging' && (
+            <div className="fg" style={{ minWidth: 160 }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--mu)', marginBottom: '0.3rem', fontWeight: '500' }}>Tipo soggetto</label>
+              <select
+                value={partitarioTipo}
+                onChange={(e) => setPartitarioTipo(e.target.value)}
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--bd)',
+                  borderRadius: '14px',
+                  color: 'var(--tx)',
+                  height: '42px',
+                  width: '100%',
+                  padding: '0 0.75rem',
+                }}
+              >
+                <option value="tutti">Tutti</option>
+                <option value="clienti">Clienti</option>
+                <option value="fornitori">Fornitori</option>
+                <option value="percipienti">Percipienti</option>
+              </select>
+            </div>
+          )}
 
           {tipoStampa === 'registri_iva' && (
             <div className="fg" style={{ minWidth: 150 }}>
@@ -843,23 +1037,24 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
 
       {/* Barra filtri e placeholder per schede non operative */}
       {tipoStampa === 'partitari' && (() => {
-        const filteredList = partitariMockData.filter(item => {
+        const sourceRows = partitariModel ? (partitariModel.rows || []) : [];
+        const filteredList = sourceRows.filter(item => {
           if (partitariActiveFilters.tipoSoggetto !== 'tutti' && item.type !== partitariActiveFilters.tipoSoggetto) {
             return false;
           }
           if (partitariActiveFilters.soggettoSearch.trim()) {
             const query = partitariActiveFilters.soggettoSearch.toLowerCase();
-            if (!item.subject.toLowerCase().includes(query) && !item.doc.toLowerCase().includes(query)) {
+            if (!String(item.subject || '').toLowerCase().includes(query) && !String(item.doc || '').toLowerCase().includes(query)) {
               return false;
             }
           }
           if (partitariActiveFilters.stato !== 'tutti' && item.state !== partitariActiveFilters.stato) {
             return false;
           }
-          if (partitariActiveFilters.periodoDa) {
+          if (partitariActiveFilters.periodoDa && item.date) {
             if (item.date < partitariActiveFilters.periodoDa) return false;
           }
-          if (partitariActiveFilters.periodoA) {
+          if (partitariActiveFilters.periodoA && item.date) {
             if (item.date > partitariActiveFilters.periodoA) return false;
           }
           return true;
@@ -913,21 +1108,25 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
             periodoA: partitariPeriodoA
           });
           setPartitariPage(1);
-          setInfoAlert('Fac-simile UX — la funzione contabile reale sarà collegata al modulo Partitario/Pagamenti nella fase dedicata.');
+          if (!partitariModel) {
+            setInfoAlert('Clicca "Genera Anteprima" per caricare i partitari da Prima Nota / partitario.');
+          }
         };
 
         const handleReset = () => {
+          const da = `${currentYear}-01-01`;
+          const a = new Date().toISOString().split('T')[0];
           setPartitariTipoSoggetto('tutti');
           setPartitariSoggettoSearch('');
           setPartitariStato('tutti');
-          setPartitariPeriodoDa('2024-01-01');
-          setPartitariPeriodoA('2024-12-31');
+          setPartitariPeriodoDa(da);
+          setPartitariPeriodoA(a);
           setPartitariActiveFilters({
             tipoSoggetto: 'tutti',
             soggettoSearch: '',
             stato: 'tutti',
-            periodoDa: '2024-01-01',
-            periodoA: '2024-12-31'
+            periodoDa: da,
+            periodoA: a
           });
           setPartitariPage(1);
         };
@@ -1159,7 +1358,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
 
                 <ContPreviewCard 
                   title="📋 Elenco Partite" 
-                  badgeText="Fac-simile UX"
+                  badgeText={partitariModel ? 'Anteprima da partitario/PN' : 'In attesa di generazione'}
                   actions={
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <button
@@ -1185,7 +1384,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                       </button>
 
                       <button
-                        onClick={() => setInfoAlert("Disponibile dopo attivazione della funzione contabile reale.")}
+                        onClick={() => setInfoAlert(partitariModel ? 'Export partitari: usare Anteprima / stampa browser nella fase successiva.' : 'Genera prima l’anteprima da partitario/PN.')}
                         style={{
                           background: 'var(--bg-surface)',
                           border: '1px solid var(--bd)',
@@ -1198,7 +1397,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
-                          opacity: 0.5,
+                          opacity: partitariModel ? 1 : 0.5,
                           transition: 'background 0.2s'
                         }}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
@@ -1222,9 +1421,13 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                     Risultati trovati: <strong style={{ color: 'var(--tx)' }}>{totalItems}</strong> {totalItems === 1 ? 'partita' : 'partite'}
                   </div>
 
-                  {paginatedList.length === 0 ? (
+                  {!partitariModel ? (
                     <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--mu)', border: '1px dashed var(--bd)', borderRadius: '8px' }}>
-                      Nessuna partita corrisponde ai criteri di ricerca selezionati.
+                      Seleziona i filtri e clicca &quot;Genera Anteprima&quot; per caricare i partitari reali da Prima Nota.
+                    </div>
+                  ) : paginatedList.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--mu)', border: '1px dashed var(--bd)', borderRadius: '8px' }}>
+                      Nessuna partita nel periodo/filtri selezionati (nessun dato di esempio).
                     </div>
                   ) : (
                     <>
@@ -1403,9 +1606,9 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                         ℹ
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '0.2rem' }}>Fac-simile UX</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '0.2rem' }}>Anteprima partitari</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--mu)', lineHeight: '1.4' }}>
-                          La chiusura partite resterà nei moduli operativi dedicati.
+                          Dati da tabella partitario collegata a Prima Nota. La chiusura partite resta nei moduli operativi.
                         </div>
                       </div>
                     </div>
@@ -1449,41 +1652,52 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
 
 
       {tipoStampa === 'mastrini' && (() => {
-        // ── Costante condivisa del conto fac-simile (usata da filtro, card e KPI) ─────
-        const MOCK_CONTO = { codice: '2.03.08.001', descrizione: 'Fornitore Demo S.r.l.' };
-        const MOCK_CONTO_LABEL = `${MOCK_CONTO.codice} — ${MOCK_CONTO.descrizione}`;
-        const mastriniMockData = [
-          { id: 'INI', date: '2023-12-31', pn: '—', causale: 'SALDO INIZIALE', descrizione: 'Saldo iniziale al 31/12/2023', dare: 0, avere: 12350.00, stato: 'Iniziale' },
-          { id: '1', date: '2024-01-15', pn: '12', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 15 del 15/01/2024', dare: 2800.00, avere: 0, stato: 'Registrata' },
-          { id: '2', date: '2024-01-28', pn: '24', causale: 'PAGAMENTO', descrizione: 'Bonifico n. 125 del 28/01/2024', dare: 0, avere: 2800.00, stato: 'Registrata' },
-          { id: '3', date: '2024-02-10', pn: '27', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 27 del 10/02/2024', dare: 4350.00, avere: 0, stato: 'Registrata' },
-          { id: '4', date: '2024-03-05', pn: '35', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 35 del 05/03/2024', dare: 6200.00, avere: 0, stato: 'Registrata' },
-          { id: '5', date: '2024-03-20', pn: '48', causale: 'NOTA DI CREDITO', descrizione: 'N. 4 del 20/03/2024', dare: 0, avere: 1200.00, stato: 'Registrata' },
-          { id: '6', date: '2024-03-31', pn: '56', causale: 'PAGAMENTO', descrizione: 'Bonifico n. 256 del 31/03/2024', dare: 0, avere: 5000.00, stato: 'Registrata' },
-          { id: '7', date: '2024-04-15', pn: '67', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 67 del 15/04/2024', dare: 3150.00, avere: 0, stato: 'Simulata' },
-          { id: '8', date: '2024-04-30', pn: '74', causale: 'STORNO FATTURA', descrizione: 'Storno fattura n. 67 del 15/04/2024', dare: 0, avere: 3150.00, stato: 'Stornata' },
-          { id: '9', date: '2024-05-15', pn: '82', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 82 del 15/05/2024', dare: 7500.00, avere: 0, stato: 'Registrata' },
-          { id: '10', date: '2024-05-31', pn: '95', causale: 'PAGAMENTO', descrizione: 'Bonifico n. 387 del 31/05/2024', dare: 0, avere: 6000.00, stato: 'Registrata' },
-          { id: '11', date: '2024-06-15', pn: '106', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 106 del 15/06/2024', dare: 4900.00, avere: 0, stato: 'Registrata' },
-          { id: '12', date: '2024-06-30', pn: '118', causale: 'PAGAMENTO', descrizione: 'Bonifico n. 458 del 30/06/2024', dare: 0, avere: 4500.00, stato: 'Registrata' },
-          { id: '13', date: '2024-07-15', pn: '131', causale: 'FATT. ACQ.', descrizione: 'Fattura n. 131 del 15/07/2024', dare: 6000.00, avere: 0, stato: 'Registrata' },
-          { id: '14', date: '2024-07-31', pn: '142', causale: 'PAGAMENTO', descrizione: 'Bonifico n. 512 del 31/07/2024', dare: 0, avere: 7250.00, stato: 'Registrata' },
-          { id: 'FIN', date: '2024-12-31', pn: '—', causale: 'SALDO FINALE', descrizione: 'Saldo finale al 31/12/2024', dare: 0, avere: 0, stato: 'Finale' },
-        ];
-
-        const saldoIniziale = 12350.00;
-        const movimentiDare = mastriniMockData.filter(r => r.stato !== 'Iniziale' && r.stato !== 'Finale').reduce((s, r) => s + r.dare, 0);
-        const movimentiAvere = mastriniMockData.filter(r => r.stato !== 'Iniziale' && r.stato !== 'Finale').reduce((s, r) => s + r.avere, 0);
-
-        let saldoRunning = saldoIniziale;
-        const rowsWithSaldo = mastriniMockData.map(r => {
-          if (r.stato === 'Iniziale') return { ...r, saldo: saldoIniziale };
-          if (r.stato === 'Finale') return { ...r, saldo: saldoRunning };
-          saldoRunning = saldoRunning + r.avere - r.dare;
-          return { ...r, saldo: saldoRunning };
-        });
-        const saldoFinale = saldoRunning;
+        const contiOptions = mastriniModel?.conti?.length
+          ? mastriniModel.conti
+          : (Array.isArray(pianoConti) ? pianoConti.filter(c => Number(c.livello || 0) >= 3 || c.codice).slice(0, 80) : []);
+        const selected = contiOptions.find(c =>
+          String(c.codice || '') === String(selectedConto)
+          || String(c.contoId || c.id || '') === String(selectedConto)
+        ) || contiOptions[0] || null;
+        const selectedKey = selected
+          ? (selected.codice || selected.contoId || selected.id || '')
+          : '';
+        const movimenti = Array.isArray(selected?.movimenti) ? selected.movimenti : [];
+        const mastriniRows = movimenti.map((m, idx) => ({
+          id: String(m.primaNotaId || idx),
+          date: m.dataRegistrazione || '',
+          pn: m.numeroRegistrazione != null ? String(m.numeroRegistrazione) : '—',
+          causale: 'PN',
+          descrizione: m.descrizione || '',
+          dare: Number(m.dare || 0),
+          avere: Number(m.avere || 0),
+          stato: 'Registrata',
+          saldo: Number(m.saldoProgressivoPeriodo ?? 0),
+        }));
+        const saldoIniziale = 0;
+        const movimentiDare = mastriniRows.reduce((s, r) => s + r.dare, 0);
+        const movimentiAvere = mastriniRows.reduce((s, r) => s + r.avere, 0);
+        const rowsWithSaldo = mastriniModel
+          ? [
+              ...(mastriniRows.length ? [{
+                id: 'INI', date: periodoInizio, pn: '—', causale: 'APERTURA PERIODO',
+                descrizione: 'Saldo movimenti periodo (senza riapertura esercizi precedenti)',
+                dare: 0, avere: 0, stato: 'Iniziale', saldo: saldoIniziale,
+              }] : []),
+              ...mastriniRows,
+              ...(mastriniRows.length ? [{
+                id: 'FIN', date: periodoFine, pn: '—', causale: 'SALDO PERIODO',
+                descrizione: 'Saldo movimenti del periodo selezionato',
+                dare: 0, avere: 0, stato: 'Finale',
+                saldo: selected?.saldoMovimentiPeriodo ?? (movimentiDare - movimentiAvere),
+              }] : []),
+            ]
+          : [];
+        const saldoFinale = selected?.saldoMovimentiPeriodo ?? (movimentiDare - movimentiAvere);
         const totalItems = rowsWithSaldo.length;
+        const selectedLabel = selected
+          ? `${selected.codice || '—'} — ${selected.descrizione || ''}`
+          : '—';
 
         const renderMastriniStatoBadge = (stato) => {
           const map = {
@@ -1508,16 +1722,18 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
               <div className="fg" style={{ minWidth: 280 }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--mu)', marginBottom: '0.3rem', fontWeight: '500' }}>Conto</label>
                 <select
-                  value={MOCK_CONTO.codice}
-                  onChange={() => {}}
+                  value={selectedKey || selectedConto || ''}
+                  onChange={(e) => setSelectedConto(e.target.value)}
                   style={{ background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '14px', color: 'var(--tx)', height: '42px', width: '100%', paddingLeft: '1rem' }}
                 >
-                  {(Array.isArray(pianoConti) && pianoConti.length > 0
-                    ? pianoConti.filter(c => Number(c.livello || 0) >= 3).slice(0, 50).map(c => (
-                        <option key={c.id} value={c.codice}>{c.codice} — {c.descrizione}</option>
+                  {contiOptions.length > 0
+                    ? contiOptions.map(c => (
+                        <option key={c.contoId || c.id || c.codice} value={c.codice || c.contoId || c.id}>
+                          {c.codice || '—'} — {c.descrizione || ''}
+                        </option>
                       ))
-                    : [<option key="demo" value={MOCK_CONTO.codice}>{MOCK_CONTO_LABEL}</option>]
-                  )}
+                    : [<option key="empty" value="">Genera anteprima per elencare i conti</option>]
+                  }
                 </select>
               </div>
 
@@ -1525,7 +1741,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                 <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--mu)', marginBottom: '0.3rem', fontWeight: '500' }}>Data inizio</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}><CalendarIcon /></span>
-                  <input type="date" defaultValue="2024-01-01" style={{ paddingLeft: '2.3rem', background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '14px', color: 'var(--tx)', height: '42px', width: '100%' }} />
+                  <input type="date" value={periodoInizio} onChange={e => setPeriodoInizio(e.target.value)} style={{ paddingLeft: '2.3rem', background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '14px', color: 'var(--tx)', height: '42px', width: '100%' }} />
                 </div>
               </div>
 
@@ -1533,37 +1749,19 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                 <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--mu)', marginBottom: '0.3rem', fontWeight: '500' }}>Data fine</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}><CalendarIcon /></span>
-                  <input type="date" defaultValue="2024-12-31" style={{ paddingLeft: '2.3rem', background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '14px', color: 'var(--tx)', height: '42px', width: '100%' }} />
+                  <input type="date" value={periodoFine} onChange={e => setPeriodoFine(e.target.value)} style={{ paddingLeft: '2.3rem', background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '14px', color: 'var(--tx)', height: '42px', width: '100%' }} />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.6rem', marginTop: 'auto', alignItems: 'center' }}>
-                {[
-                  { label: 'Simulate', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.4)', bg: 'rgba(59,130,246,0.08)' },
-                  { label: 'Stornate/Storni', color: '#9ca3af', border: '1px solid rgba(156,163,175,0.4)', bg: 'rgba(156,163,175,0.08)' },
-                ].map(t => (
-                  <button
-                    key={t.label}
-                    type="button"
-                    onClick={() => setInfoAlert(`Filtro "${t.label}" attivo nell'anteprima fac-simile.`)}
-                    style={{ height: '42px', borderRadius: '14px', border: t.border, background: t.bg, color: 'var(--tx)', padding: '0 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500, transition: 'all 0.2s ease', userSelect: 'none' }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
               <button
-                onClick={() => setInfoAlert('Fac-simile UX — la funzione reale sarà collegata ai saldi progressivi dei conti nella fase dedicata.')}
-                style={{ background: 'var(--gold)', color: '#0C1628', border: 'none', borderRadius: '14px', fontWeight: '600', padding: '10px 20px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', height: '42px', marginTop: 'auto', boxShadow: '0 4px 12px rgba(232,146,42,0.15)', transition: 'background 0.2s ease' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--gld2)'}
+                onClick={generaStampa}
+                disabled={loading}
+                style={{ background: 'var(--gold)', color: '#0C1628', border: 'none', borderRadius: '14px', fontWeight: '600', padding: '10px 20px', fontSize: '0.85rem', cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', height: '42px', marginTop: 'auto', boxShadow: '0 4px 12px rgba(232,146,42,0.15)', transition: 'background 0.2s ease', opacity: loading ? 0.7 : 1 }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = 'var(--gld2)' }}
                 onMouseLeave={e => e.currentTarget.style.background = 'var(--gold)'}
               >
                 <SearchDocIcon />
-                Mostra anteprima
+                {loading ? 'Generazione…' : 'Genera Anteprima'}
               </button>
             </ContFilterBar>
 
@@ -1582,15 +1780,15 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                     </div>
                     <div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--mu)', marginBottom: '0.1rem' }}>Conto selezionato</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--tx)' }}>Conto {MOCK_CONTO_LABEL}</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--tx)' }}>Conto {selectedLabel}</div>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1.25rem', borderTop: '1px solid var(--bd)', paddingTop: '1rem' }}>
                     {[
-                      { label: 'Saldo iniziale', value: `${fmt(saldoIniziale)} A`, sub: 'al 31/12/2023', color: 'var(--tx)' },
+                      { label: 'Saldo iniziale periodo', value: fmt(saldoIniziale), sub: 'solo movimenti periodo', color: 'var(--tx)' },
                       { label: 'Movimenti Dare', value: fmt(movimentiDare), sub: 'nel periodo', color: 'var(--petrolio-light)', arrow: 'up' },
                       { label: 'Movimenti Avere', value: fmt(movimentiAvere), sub: 'nel periodo', color: 'var(--gold)', arrow: 'down' },
-                      { label: 'Saldo finale', value: `${fmt(saldoFinale)} A`, sub: 'al 31/12/2024', color: 'var(--gold)', large: true },
+                      { label: 'Saldo periodo', value: fmt(saldoFinale), sub: `${periodoInizio} → ${periodoFine}`, color: 'var(--gold)', large: true },
                       { label: 'Valuta', valueNode: (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700 }}>€</div>
@@ -1620,11 +1818,11 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                 {/* Movimenti table */}
                 <ContPreviewCard
                   title="Movimenti conto"
-                  badgeText="Fac-simile UX"
+                  badgeText={mastriniModel ? 'Anteprima da PN' : 'In attesa di generazione'}
                   actions={
                     <button
-                      onClick={() => setInfoAlert("Disponibile dopo attivazione della funzione contabile reale.")}
-                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '8px', color: 'var(--tx)', padding: '6px 14px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: 0.5, transition: 'background 0.2s' }}
+                      onClick={() => setInfoAlert(mastriniModel ? 'Export mastrini: usare stampa browser nella fase successiva.' : 'Genera prima l’anteprima da Prima Nota.')}
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '8px', color: 'var(--tx)', padding: '6px 14px', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: mastriniModel ? 1 : 0.5, transition: 'background 0.2s' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
                     >
@@ -1641,6 +1839,15 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                     <strong style={{ color: 'var(--tx)' }}>{totalItems}</strong> movimenti trovati
                   </div>
 
+                  {!mastriniModel ? (
+                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--mu)', border: '1px dashed var(--bd)', borderRadius: '8px' }}>
+                      Seleziona periodo e clicca &quot;Genera Anteprima&quot; per i mastrini da Prima Nota.
+                    </div>
+                  ) : rowsWithSaldo.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--mu)', border: '1px dashed var(--bd)', borderRadius: '8px' }}>
+                      Nessun movimento per il conto/periodo selezionato (nessun dato di esempio).
+                    </div>
+                  ) : (
                   <div style={{ overflowX: 'auto', marginBottom: '1rem' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                       <thead>
@@ -1679,8 +1886,10 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                       </tbody>
                     </table>
                   </div>
+                  )}
 
                   {/* Pagination footer */}
+                  {mastriniModel && rowsWithSaldo.length > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--bd)', paddingTop: '0.75rem', fontSize: '0.8rem', color: 'var(--mu)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span>Visualizza</span>
@@ -1696,8 +1905,11 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                     </div>
                     <div>1–{totalItems} di {totalItems}</div>
                   </div>
+                  )}
 
-                  <ContGridFooter text="Mastrino in modalità Fac-simile UX. Il saldo progressivo e i movimenti sono dati dimostrativi coerenti con il piano dei conti. Il mastrino definitivo sarà connesso alle query reali della prima nota." />
+                  <ContGridFooter text={mastriniModel
+                    ? 'Anteprima mastrini da Prima Nota canonica. Saldi di periodo senza riapertura esercizi precedenti; non costituisce stampa definitiva.'
+                    : 'Genera l’anteprima per interrogare i mastrini da Prima Nota.'} />
                 </ContPreviewCard>
               </div>
 
@@ -1706,18 +1918,18 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                 <div style={{ background: 'rgba(232,146,42,0.05)', border: '1px solid rgba(232,146,42,0.2)', borderRadius: '12px', padding: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                   <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(232,146,42,0.1)', color: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1rem', flexShrink: 0 }}>ℹ</div>
                   <div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '0.3rem' }}>Fac-simile UX</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--gold)', marginBottom: '0.3rem' }}>Anteprima provvisoria</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--mu)', lineHeight: '1.5' }}>
-                      Questa schermata è un prototipo di interfaccia utente. I dati mostrati sono a puro scopo illustrativo e non rappresentano informazioni reali.
+                      I mastrini derivano dalle scritture canoniche di Prima Nota del periodo. Non includono saldi di riapertura da esercizi precedenti.
                     </div>
                   </div>
                 </div>
 
                 {[
-                  { label: 'Saldo iniziale', value: `${fmt(saldoIniziale)} €`, sub: 'al 31/12/2023', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#3b82f6', iconSvg: (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>) },
+                  { label: 'Saldo iniziale periodo', value: `${fmt(saldoIniziale)} €`, sub: 'solo movimenti periodo', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#3b82f6', iconSvg: (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>) },
                   { label: 'Movimenti Dare', value: `${fmt(movimentiDare)} €`, sub: 'nel periodo', iconBg: 'rgba(26,168,191,0.1)', iconColor: 'var(--petrolio-light)', iconSvg: (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>) },
                   { label: 'Movimenti Avere', value: `${fmt(movimentiAvere)} €`, sub: 'nel periodo', iconBg: 'rgba(232,146,42,0.1)', iconColor: 'var(--gold)', iconSvg: (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>) },
-                  { label: 'Saldo finale', value: `${fmt(saldoFinale)} €`, sub: 'al 31/12/2024', iconBg: 'rgba(232,146,42,0.1)', iconColor: 'var(--gold)', iconContent: '€' },
+                  { label: 'Saldo periodo', value: `${fmt(saldoFinale)} €`, sub: `${periodoInizio} → ${periodoFine}`, iconBg: 'rgba(232,146,42,0.1)', iconColor: 'var(--gold)', iconContent: '€' },
                 ].map((kpi, i) => (
                   <div key={i} style={{ background: 'var(--bg-card)', border: '1px solid var(--bd)', borderRadius: '12px', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: kpi.iconBg, color: kpi.iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: kpi.iconContent ? '1.2rem' : undefined, fontWeight: kpi.iconContent ? 'bold' : undefined }}>
@@ -1737,37 +1949,46 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
       })()}
 
       {tipoStampa === 'bilancio' && (() => {
-        // ── Mock data from approved mockup ──────────────────────────────
-        const bilancioData = {
-          attivo: [
-            { codice: '10.10.01', descrizione: 'Cassa contanti',             dare: 12540.00,  avere: 0 },
-            { codice: '10.10.02', descrizione: 'Banca c/c',                  dare: 235870.00, avere: 0 },
-            { codice: '10.20.01', descrizione: 'Crediti verso clienti',      dare: 412350.00, avere: 0 },
-            { codice: '10.20.02', descrizione: 'Crediti tributari',          dare: 28640.00,  avere: 0 },
-            { codice: '10.30.01', descrizione: 'Magazzino merci',            dare: 156780.00, avere: 0 },
-            { codice: '10.40.01', descrizione: 'Immobilizzazioni materiali', dare: 398500.00, avere: 0 },
-          ],
-          passivo: [
-            { codice: '20.10.01', descrizione: 'Debiti verso fornitori',             dare: 0, avere: 210430.00 },
-            { codice: '20.10.02', descrizione: 'Debiti tributari',                   dare: 0, avere: 32150.00  },
-            { codice: '20.20.01', descrizione: 'Debiti verso istituti di credito',  dare: 0, avere: 140000.00 },
-            { codice: '20.30.01', descrizione: 'Fondo TFR',                          dare: 0, avere: 48600.00  },
-            { codice: '20.40.01', descrizione: 'Capitale sociale',                   dare: 0, avere: 500000.00 },
-          ],
-          costi: [
-            { codice: '30.10.01', descrizione: 'Acquisti di merci',       dare: 232650.00, avere: 0 },
-            { codice: '30.20.01', descrizione: 'Costi per servizi',       dare: 186420.00, avere: 0 },
-            { codice: '30.30.01', descrizione: 'Costi per il personale', dare: 167300.00, avere: 0 },
-          ],
-          ricavi: [
-            { codice: '40.10.01', descrizione: 'Ricavi delle vendite',    dare: 0, avere: 857170.00 },
-            { codice: '40.10.02', descrizione: 'Altri ricavi e proventi', dare: 0, avere: 42700.00  },
-          ],
+        const mapContoToRow = (c) => ({
+          codice: c.codice || '—',
+          descrizione: c.descrizione || '',
+          dare: Number(c.saldoDare || 0),
+          avere: Number(c.saldoAvere || 0),
+        });
+        const inferSection = (c) => {
+          const natura = String(c.natura || '').toLowerCase();
+          const tipo = String(c.tipo || '').toLowerCase();
+          const code = String(c.codice || '');
+          if (natura === 'attivo') return 'attivo';
+          if (natura === 'passivo') return 'passivo';
+          if (natura === 'costo') return 'costi';
+          if (natura === 'ricavo') return 'ricavi';
+          if (tipo === 'economico') {
+            if (code.startsWith('5') || code.startsWith('6') || code.startsWith('3')) return 'costi';
+            return 'ricavi';
+          }
+          if (Number(c.saldoDare || 0) > 0) return 'attivo';
+          if (Number(c.saldoAvere || 0) > 0) return 'passivo';
+          return 'attivo';
         };
+        const bilancioData = bilancioModel
+          ? { attivo: [], passivo: [], costi: [], ricavi: [] }
+          : { attivo: [], passivo: [], costi: [], ricavi: [] };
+        if (bilancioModel) {
+          for (const c of (bilancioModel.conti || [])) {
+            if (!Number(c.saldoDare) && !Number(c.saldoAvere) && !Number(c.dare) && !Number(c.avere) && !Number(c.saldoFinale)) continue;
+            const section = inferSection(c);
+            bilancioData[section].push(mapContoToRow(c));
+          }
+        }
 
         const allRows = [...bilancioData.attivo, ...bilancioData.passivo, ...bilancioData.costi, ...bilancioData.ricavi];
-        const totDare    = allRows.reduce((s, r) => s + r.dare,  0);
-        const totAvere   = allRows.reduce((s, r) => s + r.avere, 0);
+        const totDare    = bilancioModel?.totali?.saldoDare != null
+          ? Number(bilancioModel.totali.saldoDare)
+          : allRows.reduce((s, r) => s + r.dare,  0);
+        const totAvere   = bilancioModel?.totali?.saldoAvere != null
+          ? Number(bilancioModel.totali.saldoAvere)
+          : allRows.reduce((s, r) => s + r.avere, 0);
         const quadratura = Math.abs(totDare - totAvere);
         const totCosti   = bilancioData.costi.reduce((s, r) => s + r.dare, 0);
         const totRicavi  = bilancioData.ricavi.reduce((s, r) => s + r.avere, 0);
@@ -1817,7 +2038,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                   onChange={e => setBilancioEsercizio(e.target.value)}
                   style={{ background: 'var(--bg-surface)', border: '1px solid var(--bd)', borderRadius: '14px', color: 'var(--tx)', height: '42px', width: '100%', paddingLeft: '1rem' }}
                 >
-                  {['2024','2023','2022','2021'].map(y => <option key={y} value={y}>{y}</option>)}
+                  {[currentYear, String(Number(currentYear) - 1), String(Number(currentYear) - 2), String(Number(currentYear) - 3)].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
 
@@ -1849,18 +2070,31 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
 
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'flex-end', paddingBottom: '0' }}>
                 <button
-                  onClick={() => setInfoAlert('Fac-simile UX — il bilancio reale sarà collegato a mastrini, saldi e chiusure esercizio nella fase dedicata.')}
+                  onClick={generaStampa}
+                  disabled={loading}
                   style={{ background: 'var(--gold)', color: '#0C1628', border: 'none', borderRadius: '14px', height: '42px', padding: '0 1.4rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'filter 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.filter='brightness(1.12)'}
                   onMouseLeave={e => e.currentTarget.style.filter=''}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  Mostra anteprima
+                  {loading ? 'Generazione…' : 'Genera Anteprima'}
                 </button>
               </div>
             </ContFilterBar>
 
+            {!bilancioModel && (
+              <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--mu)', border: '1px dashed var(--bd)', borderRadius: '8px', marginTop: '0.5rem' }}>
+                Seleziona esercizio/data e clicca &quot;Genera Anteprima&quot; per il bilancio di verifica da Prima Nota.
+              </div>
+            )}
+            {bilancioModel && allRows.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--mu)', border: '1px dashed var(--bd)', borderRadius: '8px', marginTop: '0.5rem' }}>
+                Nessun saldo nel periodo selezionato (nessun dato di esempio).
+              </div>
+            )}
+
             {/* ── Main two-panel layout ───────────────────────────────── */}
+            {bilancioModel && allRows.length > 0 && (
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
 
               {/* LEFT SIDEBAR (260px) */}
@@ -2121,12 +2355,13 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
                   <div style={{ borderTop: '1px solid var(--border-subtle)', background: 'rgba(232,146,42,0.04)', padding: '0.8rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     <span style={{ fontSize: '0.76rem', color: 'var(--mu)' }}>
-                      <strong style={{ color: 'var(--gold)' }}>Fac-simile UX</strong> — il bilancio definitivo sarà disponibile dopo il completamento di saldi, mastrini e chiusure esercizio.
+                      <strong style={{ color: 'var(--gold)' }}>Anteprima provvisoria</strong> — saldi da Prima Nota canonica; senza riapertura esercizi precedenti non è un bilancio definitivo.
                     </span>
                   </div>
                 </div>
               </div>
             </div>
+            )}
           </div>
         );
       })()}
@@ -2857,11 +3092,102 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
         );
       })()}
 
+      {tipoStampa === 'aging' && agingModel && (
+        <ContPreviewCard title={`Aging / insoluti — as of ${agingModel.asOf || periodoFine}`}>
+          <ContKpiGrid>
+            <ContKpiCard label="Partite aperte" value={String(agingModel.totali?.count ?? 0)} />
+            <ContKpiCard label="Residuo complessivo" value={`${fmt(agingModel.totali?.residuoComplessivo)} €`} />
+            <ContKpiCard label="Escluse" value={String(agingModel.partiteEscluse ?? 0)} />
+          </ContKpiGrid>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '0.75rem 0 1rem' }}>
+            {AGING_BUCKET_KEYS.map((key) => (
+              <div
+                key={key}
+                style={{
+                  padding: '0.45rem 0.7rem',
+                  borderRadius: '10px',
+                  border: '1px solid var(--bd)',
+                  background: 'var(--bg-surface)',
+                  fontSize: '0.78rem',
+                  color: 'var(--tx)',
+                }}
+              >
+                <span style={{ color: 'var(--mu)' }}>{agingBucketLabel[key] || key}: </span>
+                <strong>{fmt(agingModel.totali?.byBucket?.[key] ?? 0)}</strong>
+              </div>
+            ))}
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--mu)', borderBottom: '1px solid var(--bd)' }}>
+                  <th style={{ padding: '0.45rem' }}>Soggetto</th>
+                  <th style={{ padding: '0.45rem' }}>Doc</th>
+                  <th style={{ padding: '0.45rem' }}>Scadenza</th>
+                  <th style={{ padding: '0.45rem' }}>Fascia</th>
+                  <th style={{ padding: '0.45rem', textAlign: 'right' }}>Residuo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(agingModel.rows || []).slice(0, 200).map((row) => (
+                  <tr key={row.id} style={{ borderBottom: '1px solid var(--bd)' }}>
+                    <td style={{ padding: '0.45rem' }}>{row.subject}</td>
+                    <td style={{ padding: '0.45rem' }}>{row.doc}</td>
+                    <td style={{ padding: '0.45rem' }}>{fmtDate(row.due || row.dueAnchor)}</td>
+                    <td style={{ padding: '0.45rem' }}>{agingBucketLabel[row.bucket] || row.bucket}</td>
+                    <td style={{ padding: '0.45rem', textAlign: 'right' }}>{fmt(row.residual)}</td>
+                  </tr>
+                ))}
+                {!agingModel.rows?.length && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '1rem', color: 'var(--mu)', textAlign: 'center' }}>
+                      Nessuna partita aperta per i filtri selezionati.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <ContGridFooter text="Anteprima provvisoria da residui partitario. Coerenza con mastrini/partitari già verificata in LAB (P3-07)." type="warning" />
+        </ContPreviewCard>
+      )}
+
+      {tipoStampa === 'fascicolo' && fascicoloModel && (
+        <ContPreviewCard title="Fascicolo cliente — file unico di periodo">
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--tx)' }}>
+              File: <strong>{fascicoloModel.fileName}</strong>
+              {fascicoloHash ? <> · hash <code style={{ fontSize: '0.75rem' }}>{fascicoloHash.slice(0, 24)}…</code></> : null}
+            </div>
+            <ul style={{ margin: 0, paddingLeft: '1.1rem', color: 'var(--mu)', fontSize: '0.82rem' }}>
+              {(fascicoloModel.sections || []).map((s) => (
+                <li key={s.id}>{s.title}: {s.included ? `incluso (${s.count})` : `escluso (${s.reason})`}</li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <ContActionButton label="Scarica file unico" onClick={scaricaHTML} disabled={!previewHtml} />
+              <ContActionButton label="Stampa / PDF" onClick={stampaPDF} disabled={!previewHtml} variant="secondary" />
+            </div>
+            <ContGridFooter text="Fascicolo provvisorio da modelli canonici. Print-to-PDF dal browser; non è stampa definitiva server-side." type="warning" />
+          </div>
+        </ContPreviewCard>
+      )}
+
       {/* Spazio per card iniziale quando non è ancora stata generata la stampa per le schede operative */}
-      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !loading && (
+      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !partitariModel && !agingModel && !mastriniModel && !bilancioModel && !fascicoloModel && !loading && !['partitari', 'aging', 'mastrini', 'bilancio', 'fascicolo'].includes(tipoStampa) && (
         <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '.5rem' }}>🖨️</div>
           <div style={{ color: 'var(--mu)' }}>Seleziona il periodo e clicca "Genera Anteprima" per visualizzare il documento</div>
+        </div>
+      )}
+      {isOperativo && tipoStampa === 'aging' && !agingModel && !loading && (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
+          <div style={{ color: 'var(--mu)' }}>Seleziona data fine (as-of) e tipo soggetto, poi genera l’anteprima aging.</div>
+        </div>
+      )}
+      {isOperativo && tipoStampa === 'fascicolo' && !fascicoloModel && !loading && (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
+          <div style={{ color: 'var(--mu)' }}>Seleziona il periodo e genera il fascicolo cliente (file unico fine periodo).</div>
         </div>
       )}
       {tipoStampa === 'liquidazione_iva_periodica' && (

@@ -1,0 +1,37 @@
+# Keep Vercel upload under size limits — never ship LAB/LIVE dumps or local stacks
+REPORT/
+AI_WORKING_AREA_FISCOSIM/
+qa/
+scratch/
+sql/
+scripts/
+*.sql
+.env*
+!.env.example
+node_modules/
+dist/
+.git/
+supabase/
+fiscosim/qa-logs/
+docs/
+*.zip
+LIVE_BACKUP*
+tests/
+src/modules/**/tests/
+
+# Hobby plan ≤12 serverless functions.
+# Ship only auth session (required for login). Stage3W/studio APIs stay LAB-only.
+api/accounting/**
+api/admin/**
+api/contabilita/**
+api/document.js
+api/email.js
+api/ai.js
+api/banking.js
+api/insights/**
+api/prima-nota/**
+api/stampe.js
+api/studio/**
+api/test-scenario/**
+api/auth/users.js
+services/api/

@@ -1,21 +1,22 @@
 # PROJECT_STATE — FiscoSim
 
 ## 1. Stato attuale sintetico
-* **Fase corrente:** Fase 24E-CHECKPOINT — Primo ciclo reale Import demo PN/IVA/Partitario validato.
-* **Ultimo prompt eseguito:** Prompt n. 24E-CHECKPOINT.
-* **Ultimo checkpoint valido:** `eca9fc0` + validazione manuale utente TL-ACQ-02.
+* **Fase corrente:** Sviluppo residuale automatizzabile **CHIUSO**. Prossimo: **sessione collaudi manuali** (`REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md`).
+* **Branch:** `feat/studio-grade-accounting-e2e-20261010`
+* **Deploy:** `dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi` (SPA + `api/auth/session`)
+* **Completamento A100 (stima 2026-10-13):** **~84%**
+  * Automazione P0–P4 + Learning L0–L5 + Manuale PATH #1–13: **~97%**
+  * LIVE sicurezza + deploy: **~95%** (`invii_log` soft)
+  * Collaudi form/visual: **~20%** → sessione operatore ora
+* **Fuori senza ok esplicito:** Hobby API oltre session; migrazione tenant `invii_log` LIVE.
 
-## 2. Roadmap attiva immediata
-* **Completato 24E:** Ciclo core validato su TL-ACQ-02 (Import → Working View → Commit → PN → IVA → Partitario).
-* **Prossimo step:** Commit controllato TL-ACQ-03…10; hardening staging UUID reale; UI Partitario dedicata.
-* **Riconciliazione bancaria:** BLOCCATA.
+## 2. Prossimo passo operativo (verso A100)
+1. **Sessione collaudi** guidata (`A100_OPERATOR_MANUAL_SESSION_GUIDE.md` checklist A–F)
+2. Fix bug/UX emersi → re-smoke mirato
+3. Solo dopo collaudi verdi: dichiarare A100 / Bank live
 
-## 3. Stato moduli Test Lab
-* Società demo: `__TEST__FISCOSIM_DEMO`.
-* Commit: 1 documento per volta da working view (24E).
-* TL-ACQ-01: dato demo sporco pre-fix — non riferimento valido.
-* TL-ACQ-02+: casi validi post-fix.
-
-## 4. Ultimi commit
-* `eca9fc0` — fix(import): persist real supplier ledger in demo commit
-* `59a893e` — checkpoint: import demo commit controllato working view
+## 3. Evidenze chiave
+* `REPORT/STAGE3W_MANUALE_FISCAL_PATH_*` (fiscali + partitario + lock + payload blockers)
+* `REPORT/STAGE3W_L6_REGRESSIONE_P4_02_20261013080119.txt` (L6CORE4)
+* `REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md`
+* `REPORT/LIVE_DEPLOY_SMOKE_POST_CLASS_G_2026-10-13T0226.txt`

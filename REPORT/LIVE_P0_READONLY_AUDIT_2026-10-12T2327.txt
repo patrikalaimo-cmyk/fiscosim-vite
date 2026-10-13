@@ -1,0 +1,102 @@
+LIVE_P0_READONLY_START
+PROJECT_REF=mlydfspmrkaedsocubku
+SUPABASE_URL_HOST_OK=true
+DATABASE_URL_PRESENT=true
+MODE=READ_ONLY
+PUBLIC_TABLES_FUNCS_POLICIES=73|27|141
+ANON_DML_CORE_COUNT=48
+ANON_DML_CORE_DETAIL_BEGIN
+ANON_DML documenti_contabilita|DELETE
+ANON_DML documenti_contabilita|INSERT
+ANON_DML documenti_contabilita|TRUNCATE
+ANON_DML documenti_contabilita|UPDATE
+ANON_DML documenti_import|DELETE
+ANON_DML documenti_import|INSERT
+ANON_DML documenti_import|TRUNCATE
+ANON_DML documenti_import|UPDATE
+ANON_DML liquidazioni_iva|DELETE
+ANON_DML liquidazioni_iva|INSERT
+ANON_DML liquidazioni_iva|TRUNCATE
+ANON_DML liquidazioni_iva|UPDATE
+ANON_DML partitario|DELETE
+ANON_DML partitario|INSERT
+ANON_DML partitario|TRUNCATE
+ANON_DML partitario|UPDATE
+ANON_DML piano_conti|DELETE
+ANON_DML piano_conti|INSERT
+ANON_DML piano_conti|TRUNCATE
+ANON_DML piano_conti|UPDATE
+ANON_DML prima_nota_righe|DELETE
+ANON_DML prima_nota_righe|INSERT
+ANON_DML prima_nota_righe|TRUNCATE
+ANON_DML prima_nota_righe|UPDATE
+ANON_DML prima_nota|DELETE
+ANON_DML prima_nota|INSERT
+ANON_DML prima_nota|TRUNCATE
+ANON_DML prima_nota|UPDATE
+ANON_DML registri_iva|DELETE
+ANON_DML registri_iva|INSERT
+ANON_DML registri_iva|TRUNCATE
+ANON_DML registri_iva|UPDATE
+ANON_DML ritenute_dacconto|DELETE
+ANON_DML ritenute_dacconto|INSERT
+ANON_DML ritenute_dacconto|TRUNCATE
+ANON_DML ritenute_dacconto|UPDATE
+ANON_DML societa|DELETE
+ANON_DML societa|INSERT
+ANON_DML societa|TRUNCATE
+ANON_DML societa|UPDATE
+ANON_DML stampe_definitive|DELETE
+ANON_DML stampe_definitive|INSERT
+ANON_DML stampe_definitive|TRUNCATE
+ANON_DML stampe_definitive|UPDATE
+ANON_DML utenti_studio|DELETE
+ANON_DML utenti_studio|INSERT
+ANON_DML utenti_studio|TRUNCATE
+ANON_DML utenti_studio|UPDATE
+ANON_DML_CORE_DETAIL_END
+ANON_SELECT_CORE_COUNT=7
+SECURITY_DEFINER_ANON_EXECUTE_COUNT=8
+SECURITY_DEFINER_ANON_NAMES_BEGIN
+DEFINER_ANON apply_ai_learning_from_feedback
+DEFINER_ANON consolida_periodo_iva_transazionale
+DEFINER_ANON consolidazione_stampa_definitiva
+DEFINER_ANON precheck_stampa_definitiva
+DEFINER_ANON rpc_annulla_prima_nota_logica
+DEFINER_ANON rpc_get_prima_nota_operation_guards
+DEFINER_ANON rpc_storna_prima_nota_generale
+DEFINER_ANON rpc_update_prima_nota_generale_controllata
+SECURITY_DEFINER_ANON_NAMES_END
+BROAD_ANON_OR_PUBLIC_TRUE_POLICIES=26
+BROAD_POLICY_DETAIL_BEGIN
+BROAD_POLICY adempimenti_clienti|allow_all_adempimenti_clienti|ALL
+BROAD_POLICY adempimenti_template|allow_all_adempimenti|ALL
+BROAD_POLICY avvisi_ade|anon_access_test|ALL
+BROAD_POLICY causali_contabili|causali_contabili_all|ALL
+BROAD_POLICY causali_iva|causali_iva_all|ALL
+BROAD_POLICY coda_import_fatture|allow_all_coda_import|ALL
+BROAD_POLICY coda_import_fatture|allow_all_coda|ALL
+BROAD_POLICY deleghe_uniche|allow_all_deleghe|ALL
+BROAD_POLICY documenti_contabilita|allow_all_doc_cont|ALL
+BROAD_POLICY documenti_import|Allow all operations on documenti_import|ALL
+BROAD_POLICY documenti_import|Allow all|ALL
+BROAD_POLICY documenti_import|allow_all_documenti|ALL
+BROAD_POLICY f24_righe|allow_all_f24_righe|ALL
+BROAD_POLICY f24_scadenze|allow_all_f24_scadenze|ALL
+BROAD_POLICY fatture_xml|allow_all_fatture_xml|ALL
+BROAD_POLICY impostazioni_studio|allow_all_impostazioni|ALL
+BROAD_POLICY impostazioni_studio|allow_all|ALL
+BROAD_POLICY invii_log|allow_all_log|ALL
+BROAD_POLICY invii_schedulati|allow_all_invii|ALL
+BROAD_POLICY liquidazioni_iva|allow_all_liq|ALL
+BROAD_POLICY prima_nota_righe|allow_all_pn_righe|ALL
+BROAD_POLICY richieste_fatture|allow_all_richieste_fatture|ALL
+BROAD_POLICY test_cases|allow_all_test_cases|ALL
+BROAD_POLICY test_datasets|allow_all_test_datasets|ALL
+BROAD_POLICY test_runs|allow_all_test_runs|ALL
+BROAD_POLICY utenti_studio|public_access|ALL
+BROAD_POLICY_DETAIL_END
+MIGRATION_HISTORY=ABSENT
+P0_04_CONTAINMENT_NEEDED=true
+LIVE_P0_READONLY_RESULT=PASS
+NEXT=await explicit authorization before any REVOKE/DROP POLICY on LIVE

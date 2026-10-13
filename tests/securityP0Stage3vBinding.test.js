@@ -81,8 +81,12 @@ test('Stage3V signed JWT runner requires explicit opt-in before any Auth login o
 test('Stage3V accepts clean pinned detached worktree without switching mio-branch',()=>{
  const userProfile=join('user','patri')
  const lab=join(userProfile,'FiscoSim-P0-Stage3V-ReadOnly')
+ const studioGrade=join(userProfile,'FiscoSim-StudioGrade-E2E-20261010')
  assert.equal(isStage3vAllowedCheckout({
   root:lab,branch:'',userProfile,
+ }),true)
+ assert.equal(isStage3vAllowedCheckout({
+  root:studioGrade,branch:'',userProfile,
  }),true)
  assert.equal(isStage3vAllowedCheckout({
   root:join(userProfile,'fiscosim-viteBACKUPAntigravity'),
@@ -95,8 +99,14 @@ test('Stage3V accepts clean pinned detached worktree without switching mio-branc
   root:join(userProfile,'original'),
   branch:'security/p0-isolated-hardening-20261008',userProfile,
  }),true)
+ assert.equal(isStage3vAllowedCheckout({
+  root:join(userProfile,'original'),
+  branch:'feat/studio-grade-accounting-e2e-20261010',userProfile,
+ }),true)
  const binding=readFileSync(new URL('../scripts/security_p0/stage3v-lab-binding.mjs',import.meta.url),'utf8')
  assert.match(binding,/STAGE3V_DIRTY_WORKTREE/)
  assert.match(binding,/STAGE3V_REQUIRES_PINNED_SHA/)
  assert.match(binding,/rev-parse','HEAD/)
+ assert.match(binding,/feat\/studio-grade-accounting-e2e-20261010/)
+ assert.match(binding,/FiscoSim-StudioGrade-E2E-20261010/)
 })

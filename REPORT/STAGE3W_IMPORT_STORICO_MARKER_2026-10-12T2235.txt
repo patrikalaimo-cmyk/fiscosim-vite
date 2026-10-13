@@ -1,0 +1,16 @@
+FIXTURE_SUPPLIER=2.10|01378570350
+UPDATE 1
+FIXTURE_COST_ALT=INSERT 0 0
+PRIOR_PN_QA2026001=1
+IMPORT_04_START
+NAV={"steps":["hub:DOCUMENT HUB","item:Import Contabilità"],"hasFile":false,"snippet":"⚪ AI standby 📋 Log pipeline (0) FiscoSim V6 Professional AI AGENT STUDIO Dashboard Clienti Import Excel Utenti Studio Impostazioni Studio Impostazioni Procedure Deleghe Uniche DOCUMENT HUB Import Con"}
+SHELL={"hasImport":true,"hasFile":true}
+UPLOAD_FILE=PASS
+AVVIA_1={"ok":true}
+AFTER_AVVIA={"hasWorkingView":true,"hasMarker":true,"hasL1Storico":true,"snippet":"na riga selezionata Scrittura proposta CONTO DESCRIZIONE CONTO DARE AVERE NOTE AZIONI 5.01 · Costi SG-E2E-A ⌄ Costi SG"}
+STORICO_MARKER={"hasMarker":true,"snippet":"na riga selezionata Scrittura proposta CONTO DESCRIZIONE CONTO DARE AVERE NOTE AZIONI 5.01 · Costi SG-E2E-A ⌄ Costi SG"}
+OVERRIDE_OPEN={"opened":true,"before":"5.01 · Costi SG-E2E-A⌄"}
+OVERRIDE_PICK={"ok":true,"label":"5.02Costi alt SG-E2E-A","optionCount":1}
+OVERRIDE_AFTER={"contoLabel":"5.02 · Costi alt SG-E2E-A⌄","stillHasMarker":false}
+OVERRIDE_RESULT=PASS
+IMPORT_04_RESULT=PASS

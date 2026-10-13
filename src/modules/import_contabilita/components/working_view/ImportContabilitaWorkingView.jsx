@@ -19,6 +19,7 @@ import {
   resolveImportWorkingViewStandardCausaleIvaId,
 } from '../../domain/importContabilitaWorkingViewIvaDraft.js'
 import { normalizeImportVatRows } from '../../domain/importContabilitaVatRowNormalization.js'
+import { resolveImportContabilitaWorkingViewVatRowSuggestion } from '../../application/suggestion/importContabilitaL1SuggestionResolver.js'
 
 let workingViewIvaDraftSequence = 0
 
@@ -310,6 +311,14 @@ export function ImportContabilitaWorkingView({
     causaliIva,
     isDemoSocieta,
   })
+  const resolveVatRowSuggestionL1 = (source) => resolveImportContabilitaWorkingViewVatRowSuggestion({
+    vatHistoryIndex,
+    source,
+    counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
+    parsedDocument: activeWorkingViewModel?.parsedDocument,
+    causaliIva,
+    isDemoSocieta,
+  })
   const [ivaDraftRows, setIvaDraftRows] = useState(() => rebuildImportWorkingViewIvaDraftRows({
     parsedDocument: activeWorkingViewModel?.parsedDocument,
     previousRows: [],
@@ -318,6 +327,7 @@ export function ImportContabilitaWorkingView({
     isDemoSocieta,
     causaliIvaById,
     vatHistoryIndex,
+    resolveVatRowSuggestion: resolveVatRowSuggestionL1,
     createRowId: nextWorkingViewIvaDraftId,
   }))
   const effectiveIvaDraftRows = useMemo(
@@ -608,6 +618,14 @@ export function ImportContabilitaWorkingView({
       isDemoSocieta,
       causaliIvaById,
       vatHistoryIndex,
+      resolveVatRowSuggestion: (source) => resolveImportContabilitaWorkingViewVatRowSuggestion({
+        vatHistoryIndex,
+        source,
+        counterpartyAccount: activeWorkingViewModel?.counterpartyAccount || null,
+        parsedDocument: activeWorkingViewModel?.parsedDocument,
+        causaliIva,
+        isDemoSocieta,
+      }),
       createRowId: nextWorkingViewIvaDraftId,
     }))
     setSelectedIvaDraftRowId(null)
@@ -1251,6 +1269,22 @@ export function ImportContabilitaWorkingView({
                               ) : row.causaleIvaSuggestionSource === 'history' && !row.causaleIvaManual ? (
                                 <div style={{ marginTop: '.04rem', fontSize: '.58rem', lineHeight: 1.2, color: '#a9c8ec' }}>
                                   Suggerita dallo storico controparte
+                                </div>
+                              ) : row.causaleIvaSuggestionSource === 'standard' && !row.causaleIvaManual ? (
+                                <div style={{ marginTop: '.04rem', fontSize: '.58rem', lineHeight: 1.2, color: '#a9c8ec' }}>
+                                  Causale standard Studio
+                                </div>
+                              ) : null}
+                              {!row.causaleIvaManual && Array.isArray(row.suggestionExplanation?.explanation)
+                                && row.suggestionExplanation.explanation.length ? (
+                                <div style={{ marginTop: '.04rem', fontSize: '.56rem', lineHeight: 1.25, color: 'rgba(188,204,226,.78)' }}>
+                                  {row.suggestionExplanation.explanation.slice(0, 2).join(' · ')}
+                                </div>
+                              ) : null}
+                              {!row.causaleIvaManual && Array.isArray(row.suggestionExplanation?.conflicts)
+                                && row.suggestionExplanation.conflicts.length ? (
+                                <div style={{ marginTop: '.02rem', fontSize: '.56rem', lineHeight: 1.25, color: '#ffcf70' }}>
+                                  Conflitto spiegato · verifica prima del commit
                                 </div>
                               ) : null}
                             </td>

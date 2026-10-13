@@ -3,8 +3,10 @@
  */
 
 import { isDemoCompany } from '../../test_mode/demoCompanyGuard.js'
+import { isFiscalJournalPersistEnabled } from '../../contabilita/application/fiscalJournal/isFiscalJournalPersistEnabled.js'
 
 const DOCUMENTI_IMPORT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SG_E2E_SOCIETA_CODE_RE = /^sg-e2e/i
 
 export const REAL_IMPORT_STAGING_ID_BLOCKER = 'Documento import reale senza ID staging valido: impossibile aggiornare lo stato import. Riaprire il documento dalla lista import reale o verificare il mapping staging.'
 
@@ -47,18 +49,39 @@ export function getImportCommitLogTag(flowKind) {
 }
 
 /**
+ * LAB-only: SG-E2E browser upload builds ephemeral `ic-*` staging ids (no documenti_import row yet).
+ * Allow fiscal commit when Stage3W persist LAB flag is on; never for ordinary companies.
+ * @param {object|null|undefined} societa
+ * @param {boolean} [labPersistOverride]
+ * @returns {boolean}
+ */
+export function isLabEphemeralImportStagingBypassEnabled(societa = null, labPersistOverride) {
+  const codice = String(societa?.codice || '').trim()
+  if (!SG_E2E_SOCIETA_CODE_RE.test(codice)) return false
+  return isFiscalJournalPersistEnabled(labPersistOverride)
+}
+
+/**
  * @param {object} [params]
  * @param {object|null} [params.societa]
  * @param {string} [params.documentId]
- * @returns {{ allowed: boolean, flowKind: 'test_lab'|'real_import', blockingIssue?: string }}
+ * @param {boolean} [params.labPersistOverride]
+ * @returns {{ allowed: boolean, flowKind: 'test_lab'|'real_import', blockingIssue?: string, labStagingBypass?: boolean }}
  */
-export function evaluateRealImportStagingIdGuard({ societa = null, documentId = '' } = {}) {
+export function evaluateRealImportStagingIdGuard({
+  societa = null,
+  documentId = '',
+  labPersistOverride,
+} = {}) {
   const flowKind = resolveImportCommitFlowKind({ societa, documentId })
   if (flowKind !== 'real_import') {
     return { allowed: true, flowKind }
   }
   if (isDocumentiImportStagingUuid(documentId)) {
     return { allowed: true, flowKind }
+  }
+  if (isLabEphemeralImportStagingBypassEnabled(societa, labPersistOverride)) {
+    return { allowed: true, flowKind, labStagingBypass: true }
   }
   return {
     allowed: false,

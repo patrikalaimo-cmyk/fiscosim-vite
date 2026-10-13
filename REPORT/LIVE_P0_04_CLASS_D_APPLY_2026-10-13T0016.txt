@@ -1,0 +1,25 @@
+LIVE_P0_04_CLASS_D_START
+PROJECT_REF=mlydfspmrkaedsocubku
+AUTHORIZATION=operator approvo continua 2026-10-13
+BACKUP_HINT=REPORT/LIVE_BACKUP_schema_public_20261013.sql
+BACKUP_PRESENT=true
+TEST_TRUE_POLICIES_BEFORE=3
+BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC_BEFORE=31
+SQL_WRITTEN=C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010\sql\security_p0\66_p0_04_class_d_LIVE_mlydfspmrkaedsocubku.sql
+PSQL BEGIN
+PSQL DROP POLICY
+PSQL DROP POLICY
+PSQL DROP POLICY
+PSQL DO
+PSQL DO
+PSQL COMMIT
+TEST_TRUE_POLICIES_AFTER=0
+BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC_AFTER=28
+TEST_POLICY_DETAIL_BEGIN
+TEST_POLICY test_cases|test_cases_deny_authenticated|false
+TEST_POLICY test_datasets|test_datasets_deny_authenticated|false
+TEST_POLICY test_runs|test_runs_deny_authenticated|false
+TEST_POLICY_DETAIL_END
+ANON_DML_CORE_AFTER=0
+LIVE_P0_04_CLASS_D_RESULT=PASS
+NEXT=prepare LIVE class E/B safe drops or tenant fiscal policies after LAB rehearsal

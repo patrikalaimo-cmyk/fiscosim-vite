@@ -20,12 +20,14 @@ export default defineConfig({
       // - Run your local API server on :3001 (e.g. `npm run dev:api`)
       // - Then Vite will forward /api/* calls to that backend.
       '/api': {
-        target: 'http://localhost:3001',
+        // Prefer 127.0.0.1 over localhost: on Windows, localhost often resolves to ::1
+        // and a second listener / IPv6-only hang breaks the Vite proxy (socket hang up).
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
       // POST /prima-nota/bulk-update (stesso backend di dev-api)
       '/prima-nota': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
     },

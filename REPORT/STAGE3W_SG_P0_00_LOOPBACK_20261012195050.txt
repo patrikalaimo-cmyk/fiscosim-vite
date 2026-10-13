@@ -1,0 +1,22 @@
+P0_00_VERIFY_AFTER_REBIND_AND_KONG_RESTORE
+VOLUME_OK=true
+PORTS=
+supabase_analytics_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55327->4000/tcp
+supabase_inbucket_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55324->8025/tcp
+supabase_studio_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55323->3000/tcp
+supabase_db_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55322->5432/tcp
+supabase_kong_FiscoSim-P0-LAB-20261008-164658 127.0.0.1:55321->8000/tcp
+supabase_pg_meta_FiscoSim-P0-LAB-20261008-164658 8080/tcp
+supabase_storage_FiscoSim-P0-LAB-20261008-164658 5000/tcp
+supabase_rest_FiscoSim-P0-LAB-20261008-164658 3000/tcp
+supabase_realtime_FiscoSim-P0-LAB-20261008-164658 4000/tcp
+supabase_auth_FiscoSim-P0-LAB-20261008-164658 9999/tcp
+supabase_vector_FiscoSim-P0-LAB-20261008-164658
+STAGE3V_READY=true
+STAGE3V_LOOPBACK=true
+STAGE3V_NETWORK=true
+STAGE3V_GATEWAY=true
+STAGE3U_W_RPC=true|true
+BACKUP_ROOT=C:\Users\patri\FiscoSim-P0-LAB-BACKUP-20261012130159
+NOTE=Kong /home/kong restored (crt/key + kong.yml LAB names); script snapshots ephemeral on rebind
+P0_00_RESULT=PASS

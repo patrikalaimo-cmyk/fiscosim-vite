@@ -1,0 +1,9 @@
+L4_IMPORT_START puppeteer Import Contabilità smoke
+UI=http://127.0.0.1:5173
+LOGIN_UI=PASS
+NAV=["hub:DOCUMENT HUB","item:Import Contabilità"]
+IMPORT_UI={"hasImportTitle":true,"hasUpload":true,"hasWorking":true,"hasErrorCrash":false}
+MUTATING_API_COUNT=2
+MUTATING_SAMPLE=[{"method":"POST","url":"http://127.0.0.1:5173/api/ai"},{"method":"POST","url":"http://127.0.0.1:5173/api/ai"}]
+FISCAL_WRITE_COUNT=0
+L4_IMPORT_RESULT=PASS

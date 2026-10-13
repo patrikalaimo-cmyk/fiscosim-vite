@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { fmtCurrency } from '../../ui/formatters.js'
 import { getRiconciliazioneMatchingFixtures } from './riconciliazioneMatchingFixtures.js'
 import { runRiconciliazioneMatchForMovement } from './runRiconciliazioneMatchForMovement.js'
+import { buildBankDecisionFeedbackEvents } from '../../application/learning/buildBankDecisionFeedbackEvents.js'
+import { appendDecisionFeedbackEvents } from '../../application/learning/decisionFeedbackLabStore.js'
 import { buildReconciliationDecisionFromProposal } from './buildReconciliationDecisionFromProposal.js'
 import { applyReconciliationDecisionAction } from './applyReconciliationDecisionAction.js'
 import { validateReconciliationDecision } from './validateReconciliationDecision.js'
@@ -114,16 +116,20 @@ export default function RiconciliazioneMovementWorkingView({
     return runRiconciliazioneMatchForMovement({ movement: demoFixtureMovement, partiteAperte: fixtures.partiteAperte })
   }, [demoFixtureMovement, fixtures.partiteAperte])
 
-  const activeMovement = demoMode ? demoFixtureMovement : workingContext?.fixtureMovement || movement || null
+  const activeMovement = demoMode
+    ? demoFixtureMovement
+    : workingContext?.fixtureMovement || movement || null
   const decisionProposal = demoMode ? demoDecisionProposal : workingContext?.decisionProposal || null
   const activeCase = demoMode ? demoFixtureCase : workingContext?.fixtureCase || null
   const isFixtureMatched = Boolean(!demoMode && workingContext?.available && decisionProposal)
   const decisionSourceMessage =
     demoMode
       ? 'Modalita demo R7B attiva - nessun effetto reale'
-      : workingContext?.available
-        ? 'Contesto R7A/R7B disponibile per il movimento selezionato'
-        : workingContext?.message || 'Decisione non disponibile - movimento reale non presente nel dataset mock'
+      : workingContext?.source === 'live_partitario'
+        ? workingContext.message || 'Match su partitario aperto società'
+        : workingContext?.available
+          ? 'Contesto R7A/R7B disponibile per il movimento selezionato'
+          : workingContext?.message || 'Decisione non disponibile — import estratto + partitario, oppure demo R7B'
 
   const builtDecision = useMemo(() => {
     if (!decisionProposal) return null
@@ -161,6 +167,29 @@ export default function RiconciliazioneMovementWorkingView({
     if (!next.ok) return next
     setDecisionDraft(next.decision)
     setLocalDecisionState(next.decision.status)
+    // SG-L2 LAB: learn confirmed partita matches (not in isolated R7B demo mode).
+    if (
+      !demoMode
+      && action === RECONCILIATION_DECISION_OPERATOR_ACTION.ACCEPT_PROPOSAL
+      && workingContext?.societaId
+    ) {
+      try {
+        const events = buildBankDecisionFeedbackEvents({
+          societaId: workingContext.societaId,
+          decision: {
+            ...next.decision,
+            selectedPartitaId: next.decision?.selectedMatch?.partitaId
+              || decisionProposal?.selectedCandidate?.partitaId
+              || '',
+          },
+          movement: activeMovement,
+          decisionProposal,
+        })
+        appendDecisionFeedbackEvents(workingContext.societaId, events)
+      } catch {
+        /* feedback locale best-effort */
+      }
+    }
     return next
   }
 

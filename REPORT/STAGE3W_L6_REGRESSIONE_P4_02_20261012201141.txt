@@ -1,0 +1,52 @@
+P4_02_START L6 LAB regressione core pack
+PACK_ID=l6_lab_core_v3
+STEP_COUNT=11
+STEP_IDS=P0_00,P4_03,P1_01,P1_05,P3_02,P2_06,P2_07,P3_01,P3_03,P3_07,P4_01
+STEP_START=P0_00 script=scripts/security_p0/verify-sg-p0-00-loopback.mjs
+STEP_END=P0_00 status=PASS exit=0 ms=4174
+STEP_DETAIL=P0_00_RESULT=PASS
+STEP_START=P4_03 script=scripts/security_p0/run-stage3w-p4-03-legacy-isolation.mjs
+STEP_END=P4_03 status=PASS exit=0 ms=966
+STEP_DETAIL=P4_03_RESULT=PASS
+STEP_START=P1_01 script=scripts/security_p0/run-stage3w-import-fp22-commit.mjs
+STEP_END=P1_01 status=PASS exit=0 ms=2606
+STEP_DETAIL=P1_01_RESULT=PASS
+STEP_START=P1_05 script=scripts/security_p0/run-stage3w-import-vs-manuale-equiv.mjs
+STEP_END=P1_05 status=PASS exit=0 ms=2976
+STEP_DETAIL=P1_05_RESULT=PASS
+STEP_START=P3_02 script=scripts/security_p0/run-stage3w-import-cronologia-hash.mjs
+STEP_END=P3_02 status=PASS exit=0 ms=2644
+STEP_DETAIL=P3_02_RESULT=PASS
+STEP_START=P2_06 script=scripts/security_p0/run-stage3w-ritenute-f24-control.mjs
+STEP_END=P2_06 status=PASS exit=0 ms=1685
+STEP_DETAIL=P2_06_RESULT=PASS
+STEP_START=P2_07 script=scripts/security_p0/run-stage3w-p2-07-liquidazione-definitiva-block.mjs
+STEP_END=P2_07 status=PASS exit=0 ms=2787
+STEP_DETAIL=P2_07_RESULT=PASS
+STEP_START=P3_01 script=scripts/security_p0/run-stage3w-bank-commit-lab.mjs
+STEP_END=P3_01 status=PASS exit=0 ms=1474
+STEP_DETAIL=P3_01_RESULT=PASS
+STEP_START=P3_03 script=scripts/security_p0/run-stage3w-stampe-partitari-mastrini-bilancio.mjs
+STEP_END=P3_03 status=PASS exit=0 ms=1290
+STEP_DETAIL=P3_03_RESULT=PASS
+STEP_START=P3_07 script=scripts/security_p0/run-stage3w-aging-insoluti.mjs
+STEP_END=P3_07 status=PASS exit=0 ms=1343
+STEP_DETAIL=P3_07_RESULT=PASS
+STEP_START=P4_01 script=scripts/security_p0/run-stage3w-l5-multi-periodo.mjs
+STEP_END=P4_01 status=PASS exit=0 ms=1694
+STEP_DETAIL=P4_01_RESULT=PASS
+ROW=P0_00|PASS|req=true|exit=0|ms=4174
+ROW=P4_03|PASS|req=true|exit=0|ms=966
+ROW=P1_01|PASS|req=true|exit=0|ms=2606
+ROW=P1_05|PASS|req=true|exit=0|ms=2976
+ROW=P3_02|PASS|req=true|exit=0|ms=2644
+ROW=P2_06|PASS|req=true|exit=0|ms=1685
+ROW=P2_07|PASS|req=true|exit=0|ms=2787
+ROW=P3_01|PASS|req=true|exit=0|ms=1474
+ROW=P3_03|PASS|req=true|exit=0|ms=1290
+ROW=P3_07|PASS|req=true|exit=0|ms=1343
+ROW=P4_01|PASS|req=true|exit=0|ms=1694
+FINGERPRINT=L6CORE3|P0_00:PASS;P4_03:PASS;P1_01:PASS;P1_05:PASS;P3_02:PASS;P2_06:PASS;P2_07:PASS;P3_01:PASS;P3_03:PASS;P3_07:PASS;P4_01:PASS
+FAILED=-
+MISSING=-
+P4_02_RESULT=PASS

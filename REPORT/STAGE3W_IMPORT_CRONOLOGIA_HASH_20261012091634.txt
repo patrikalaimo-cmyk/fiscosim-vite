@@ -1,0 +1,28 @@
+P3_02_START Import cronologia + file hash via Stage3W claim
+STAGING_ID=8a539923-54ce-447c-9c02-d30f96f7c9d2
+DOC_NUM=SG-E2E-IMP-P302-12091634
+FILE_HASH=ae60dcd63843e01a
+FISCAL_PERSIST_LAB=true
+FISCAL_RPC_NAME=fiscosim_post_fiscal_journal(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,text)
+FISCAL_RPC=PRESENT
+LOGIN_JWT=PASS
+COMMIT_SUCCESS=true
+PN_ID=2d8ea84a-511a-4989-ac2a-453cad3791a8
+PN_TOTALS=1220.00/1220.00
+PN_NUMERO_DOCUMENTO=SG-E2E-IMP-P302-12091634
+PN_DOCUMENTO_IMPORT_ID=(null-rpc-gap)
+VAT_ROWS=1
+PARTITA_RESIDUO=1220.00
+CLAIM_SOURCE_MODULE=import_contabilita
+CLAIM_CONTRACT_KIND=fattura_passiva
+CLAIM_MOTIVAZIONE=LAB Stage3W atomic fiscal post (fattura_passiva) fileHash=ae60dcd63843e01a file=SG-E2E-IMP-P302-12091634.xml
+CLAIM_REQUEST_ID=8a539923-54ce-447c-9c02-d30f96f7c9d2
+CLAIM_FILE_HASH=ae60dcd63843e01a
+CLAIM_FILE_NAME=SG-E2E-IMP-P302-12091634.xml
+HISTORY_COUNT=18
+HISTORY_HIT={"societaId":"72000000-0000-4000-8000-000000000001","sourceFileName":"SG-E2E-IMP-P302-12091634.xml","sourceHash":"ae60dcd63843e01a","esito":"committed","primaNotaId":"2d8ea84a-511a-4989-ac2a-453cad3791a8","requestId":"8a539923-54ce-447c-9c02-d30f96f7c9d2","numeroDocumento":"SG-E2E-IMP-P302-12091634","dataRegistrazione":"2026-04-12","createdAt":"2026-10-12 09:16:35.640084+00","contractKind":"fattura_passiva","interrogabile":true}
+UI_CRONOLOGIA_COUNT=1
+UI_CRONOLOGIA_HASH=ae60dcd63843e01a
+SOCIETA_B_PN=0
+STAGING_STATO=processed
+P3_02_RESULT=PASS

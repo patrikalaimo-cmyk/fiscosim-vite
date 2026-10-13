@@ -602,6 +602,7 @@ export async function runImportWorkflow(files = [], options = {}) {
 
 import { resolveSplitPaymentAccountDb as resolveSplitPaymentAccount } from '../../contabilita/domain/registrazione/resolveSplitPaymentAccount.js'
 import { isCespiteAccount } from '../../contabilita/domain/registrazione/resolveCespiteAccount.js'
+import { bridgeCespiteFromExistingPrimaNota } from '../../contabilita/application/cespiti/bridgeCespiteFromExistingPrimaNota.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { validateCanonicalAccountingPayload } from '../../contabilita/canonical/validateCanonicalAccountingPayload.js'
 import { getStampeDefinitiveValide } from '../../contabilita/data/contabilitaRepo.js'
@@ -609,6 +610,7 @@ import { persistPrimaNotaDraft, sanitizeUuidOrNull } from '../../contabilita/app
 import { sb } from '../../../lib/supabase.js'
 import { buildCausaleContabilePolicy } from '../../contabilita/domain/causali/buildCausaleContabilePolicy.js'
 import {
+  evaluateRealImportStagingIdGuard,
   getImportCommitLogTag,
   isDocumentiImportStagingUuid,
   REAL_IMPORT_STAGING_ID_BLOCKER,
@@ -655,7 +657,13 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
   const commitLogTag = getImportCommitLogTag(flowKind)
 
   if (flowKind === 'real_import' && documentId && !isDocumentiImportStagingUuid(documentId)) {
-    return { success: false, blockingReasons: [REAL_IMPORT_STAGING_ID_BLOCKER] }
+    const stagingGuard = evaluateRealImportStagingIdGuard({ societa, documentId })
+    if (!stagingGuard.allowed) {
+      return { success: false, blockingReasons: [REAL_IMPORT_STAGING_ID_BLOCKER] }
+    }
+    if (stagingGuard.labStagingBypass) {
+      console.log(`[${commitLogTag}_STAGING_UUID_BYPASS_LAB] documentId=${documentId} societa=${societa?.codice || ''}`)
+    }
   }
 
   if (documentId) {
@@ -914,6 +922,19 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
       scope: {
         source_row_key: documentId || null,
         documento: canonicalPayload.document?.numeroDocumento || 'TL-ACQ-01',
+        source_file_name: normalizeText(
+          canonicalPayload.attachments?.sourceFile
+            || commitPayload?.payload?.handoff?.sourceFileName
+            || commitPayload?.handoff?.sourceFileName
+            || ''
+        ) || null,
+        source_file_hash: normalizeText(
+          canonicalPayload.attachments?.hash
+            || commitPayload?.payload?.handoff?.sourceHash
+            || commitPayload?.handoff?.sourceHash
+            || commitPayload?.sourceHash
+            || ''
+        ) || null,
       },
     },
     righePayload: finalRows,
@@ -977,6 +998,10 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
         const finalAmount = (isSplit && !isAcquisti) || (isReverse && isAcquisti)
           ? imponibileTotal
           : r.amount
+        const isCloseRow =
+          canonicalPayload.ledger?.mode === 'close' ||
+          String(r.action || '').toLowerCase() === 'close'
+        const openItemId = String(r.openItemId || r.partitaId || r.id || '').trim()
         return {
           riga: r.rowNumber || index + 1,
           soggettoId: canonicalPayload.ledger?.subjectId || primarySubject.anagraficaId || canonicalPayload.ledger?.accountId || '',
@@ -988,6 +1013,14 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
           dataScadenza: r.dueDate,
           dataDocumento: canonicalPayload.document?.dataDocumento || dataRegistrazione,
           numeroDocumento: r.documentRef || canonicalPayload.document?.numeroDocumento || '',
+          // Closure path: persistPrimaNotaDraft requires selected + importoChiusura + id (partita UUID).
+          ...(isCloseRow && openItemId
+            ? {
+                id: openItemId,
+                selected: true,
+                importoChiusura: Math.abs(Number(finalAmount) || 0),
+              }
+            : {}),
         }
       })
     },
@@ -1016,64 +1049,49 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
 
   const primaNotaId = persistResult.data?.prima_nota_id || (persistResult.pn && persistResult.pn.id) || null
 
-  // FASE 16: Se la prima nota ha successo, verifichiamo se ci sono righe cespite per generare la scheda
+  // SG-P3-05 / FASE 16: bridge scheda cespite → existing PN (no second acquisition PN)
   if (primaNotaId) {
     for (const r of finalRows) {
       if (isCespiteAccount(r)) {
         const costo = r.dare || r.avere || 0
         if (costo > 0) {
           try {
-            // Controlla se esiste già per evitare duplicazioni
-            const { data: existingBene } = await db
-              .from('beni_ammortizzabili')
-              .select('id')
-              .ilike('note', `%ID prima nota: ${primaNotaId}%`)
+            let resolvedClienteId = societaId
+            let resolvedClienteNome = ''
+            const { data: socData } = await db
+              .from('societa')
+              .select('id, denominazione, ragione_sociale, partita_iva, codice_fiscale')
+              .eq('id', societaId)
               .maybeSingle()
-            
-            if (!existingBene) {
-              // Risolvi il cliente della societa
-              let resolvedClienteId = societaId
-              let resolvedClienteNome = ''
-              const { data: socData } = await db
-                .from('societa')
-                .select('id, denominazione, ragione_sociale, partita_iva, codice_fiscale')
-                .eq('id', societaId)
+
+            if (socData) {
+              resolvedClienteNome = socData.denominazione || socData.ragione_sociale || ''
+              const { data: matchedCliente } = await db
+                .from('clienti')
+                .select('id, ragione_sociale, nome, cognome')
+                .eq('partita_iva', socData.partita_iva || '')
                 .maybeSingle()
-              
-              if (socData) {
-                resolvedClienteNome = socData.denominazione || socData.ragione_sociale || ''
-                const { data: matchedCliente } = await db
-                  .from('clienti')
-                  .select('id, ragione_sociale, nome, cognome')
-                  .eq('partita_iva', socData.partita_iva || '')
-                  .maybeSingle()
-                if (matchedCliente) {
-                  resolvedClienteId = matchedCliente.id
-                  resolvedClienteNome = matchedCliente.ragione_sociale || `${matchedCliente.nome} ${matchedCliente.cognome}`.trim()
-                }
+              if (matchedCliente) {
+                resolvedClienteId = matchedCliente.id
+                resolvedClienteNome = matchedCliente.ragione_sociale || `${matchedCliente.nome} ${matchedCliente.cognome}`.trim()
               }
-
-              const aliquota = 20
-              const anni = Math.ceil(100 / aliquota)
-              const newCespite = {
-                cliente_id: resolvedClienteId,
-                cliente_nome: resolvedClienteNome,
-                descrizione: r.descrizione_riga || r.conto_descrizione || 'Cespite da Import',
-                categoria: 'Attrezzatura',
-                data_acquisto: dataRegistrazione,
-                costo_storico: costo,
-                aliquota_ammortamento: aliquota,
-                fondo_ammortamento: 0,
-                valore_residuo: costo,
-                anni_vita_utile: anni,
-                note: `Cespite inserito automaticamente da Import Contabilità. ID prima nota: ${primaNotaId}`,
-                attivo: true
-              }
-
-              await db.from('beni_ammortizzabili').insert([newCespite])
             }
+
+            await bridgeCespiteFromExistingPrimaNota({
+              db,
+              primaNotaId,
+              source: 'Import Contabilità',
+              descrizione: r.descrizione_riga || r.conto_descrizione || 'Cespite da Import',
+              categoria: 'Attrezzatura',
+              dataAcquisto: dataRegistrazione,
+              costoStorico: costo,
+              aliquotaAmmortamento: 20,
+              clienteId: resolvedClienteId,
+              clienteNome: resolvedClienteNome,
+              proposeQuotes: true,
+            })
           } catch (e) {
-            console.warn('[Cespite creation error in import commit workflow]', e)
+            console.warn('[Cespite bridge error in import commit workflow]', e)
           }
         }
       }
@@ -1095,10 +1113,18 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     if (!isDocumentIdUuid && flowKind === 'test_lab') {
       console.log('motivo=documento Test Lab senza ID staging reale (non UUID)')
     }
+    const labStagingBypass = flowKind === 'real_import'
+      && !isDocumentIdUuid
+      && evaluateRealImportStagingIdGuard({ societa, documentId }).labStagingBypass
+    if (labStagingBypass) {
+      console.log('motivo=SG-E2E LAB ephemeral staging id (documenti_import update skipped)')
+    }
 
     if (!isDocumentIdUuid) {
-      if (flowKind === 'test_lab') {
-        stagingUpdateWarning = 'Commit Test Lab riuscito. Aggiornamento staging import saltato: documento demo senza ID staging reale.'
+      if (flowKind === 'test_lab' || labStagingBypass) {
+        stagingUpdateWarning = labStagingBypass
+          ? 'Commit LAB SG-E2E riuscito. Aggiornamento staging import saltato: id ephemeral senza documenti_import.'
+          : 'Commit Test Lab riuscito. Aggiornamento staging import saltato: documento demo senza ID staging reale.'
         console.log(`[${commitLogTag}_STAGING_UPDATE_RESULT]`)
         console.log('esito=skipped')
         console.log('contabile_mantenuto=true')
@@ -1228,6 +1254,10 @@ export async function runCommitWorkflow(commitPayload, options = {}) {
     totaleDare: persistResult.data?.totale_dare || 0,
     totaleAvere: persistResult.data?.totale_avere || 0,
     isBalanced: persistResult.data?.isBalanced || false,
+    request_id: persistResult.request_id || null,
+    contract_kind: persistResult.contract_kind || null,
+    sourceFileName: draftBundle.pnPayload?.scope?.source_file_name || null,
+    sourceHash: draftBundle.pnPayload?.scope?.source_file_hash || null,
   }
 }
 

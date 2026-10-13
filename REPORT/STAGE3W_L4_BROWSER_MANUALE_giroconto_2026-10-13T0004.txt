@@ -1,0 +1,19 @@
+L4_START puppeteer Manuale LAB
+MODE=giroconto
+UI=http://127.0.0.1:5173
+LOGIN_UI=PASS
+NAV_SECTION=["section:CONTABILITÀ"]
+NAV_PRIMA={"ok":true,"label":"Prima Nota"}
+MANUALE_UI=PASS
+FISCAL_FLAG_PAGE=EVAL_UNAVAILABLE
+FISCAL_POST_STATUS=201
+FISCAL_POST_OK=true
+FISCAL_POST_PATH=general-journal-post
+FISCAL_POST_ID=6e77ae2e-a782-46e8-bc50-e952dbf13ddf
+FISCAL_POST_REQUEST_ID=74646910-91c1-4aaa-a308-aa5a4c627814
+PN_DB_COUNT=1
+MANUALE_01_COERENZA=2|0|0|100.00|100.00
+MANUALE_01_COERENZA_RESULT=PASS
+NOTE=PATH LAB via general-journal-post from Manuale surface; form UI giroconto still operator
+FISCAL_HTTP_INTERCEPTS=[{"status":201,"url":"http://127.0.0.1:5173/api/studio/general-journal-post"}]
+L4_RESULT=PASS

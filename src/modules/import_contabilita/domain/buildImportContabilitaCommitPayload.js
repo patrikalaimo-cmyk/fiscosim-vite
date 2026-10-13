@@ -471,6 +471,7 @@ export function buildImportContabilitaCommitPayload(input = {}) {
       sourceBatchId: normalizeText(input?.sourceBatchId) || null,
       sourceRowKey: normalizeText(input?.sourceRowKey) || null,
       sourceFileName: normalizeText(sourceRow?.filename || sourceRow?.name || parsedDocument?.filename) || null,
+      sourceHash: normalizeText(sourceRow?.sourceHash || parsedDocument?.sourceHash || input?.sourceHash) || null,
       operatorId: normalizeText(input?.operatorId) || null,
       createdAt: nowIso,
     },

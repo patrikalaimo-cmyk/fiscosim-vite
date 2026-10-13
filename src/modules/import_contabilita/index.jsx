@@ -31,17 +31,28 @@ import {
   normalizeAnagraficaText,
   paginateWorkingTableRows,
 } from './domain/importContabilitaPerformanceIndexes.js'
-import { buildImportContabilitaVatHistoryIndex } from './domain/importContabilitaVatHistory.js'
+import { decorateImportAccountingHistorySuggestion } from './domain/importContabilitaAccountingHistory.js'
 import {
-  buildImportContabilitaAccountingHistoryIndex,
-  decorateImportAccountingHistorySuggestion,
-  resolveImportContabilitaAccountingHistorySuggestion,
-} from './domain/importContabilitaAccountingHistory.js'
+  buildImportContabilitaL1HistoryIndexes,
+  resolveImportContabilitaStagingAccountingHistorySuggestions,
+} from './application/suggestion/importContabilitaL1SuggestionResolver.js'
+import { buildImportSuggestionContextKey } from './application/suggestion/buildImportSuggestionContextKey.js'
+import { buildImportDecisionFeedbackEvents } from '../contabilita/application/learning/buildImportDecisionFeedbackEvents.js'
+import { appendDecisionFeedbackEvents } from '../contabilita/application/learning/decisionFeedbackLabStore.js'
 import { sb } from '../../lib/supabase.js'
 import { mapImportContabilitaCommitPayloadToCanonical } from '../contabilita/canonical/mappers/mapImportContabilitaCommitPayloadToCanonical.js'
 import { ImportContabilitaHeader } from './components/ImportContabilitaHeader.jsx'
 import { ImportContabilitaAnagraficheDetail } from './components/ImportContabilitaAnagraficheDetail.jsx'
 import { ImportContabilitaKpiBar } from './components/ImportContabilitaKpiBar.jsx'
+import { ImportCronologiaPanel } from './components/ImportCronologiaPanel.jsx'
+import {
+  appendImportCronologiaEntry,
+  loadImportCronologiaEntries,
+  mergeImportCronologiaEntries,
+  saveImportCronologiaEntries,
+} from './application/cronologia/importCronologiaStore.js'
+import { normalizeImportFiscalCommitHistoryRows } from './application/cronologia/listImportFiscalCommitHistory.js'
+import { fetchFiscalJournalCommitHistory } from '../contabilita/application/fiscalJournal/fetchFiscalJournalCommitHistory.js'
 import { ImportContabilitaOverviewCards } from './components/ImportContabilitaOverviewCards.jsx'
 import { ImportContabilitaReportDetail } from './components/ImportContabilitaReportDetail.jsx'
 import { ImportContabilitaPreviewDrawer } from './components/ImportContabilitaPreviewDrawer.jsx'
@@ -2658,6 +2669,11 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const [demoCommitBusy, setDemoCommitBusy] = useState(false)
   const [demoCommitReport, setDemoCommitReport] = useState(null)
   const [showToolsMenu, setShowToolsMenu] = useState(false)
+  const [cronologiaOpen, setCronologiaOpen] = useState(false)
+  const [cronologiaEntries, setCronologiaEntries] = useState([])
+  const [cronologiaLoading, setCronologiaLoading] = useState(false)
+  const [cronologiaError, setCronologiaError] = useState('')
+  const [cronologiaSourceNote, setCronologiaSourceNote] = useState('')
   const columnFilterMenuRef = useRef(null)
 
   const filesLabel = useMemo(() => {
@@ -2695,9 +2711,14 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
     [causaliIvaIndexes],
   )
 
-  const vatHistoryIndex = useMemo(
-    () => buildImportContabilitaVatHistoryIndex(vatHistoryRows),
-    [vatHistoryRows],
+  const { vatHistoryIndex, accountingHistoryIndex } = useMemo(
+    () => buildImportContabilitaL1HistoryIndexes({
+      vatHistoryRows,
+      accountingHistoryBundle,
+      pianoConti,
+      causaliContabili,
+    }),
+    [vatHistoryRows, accountingHistoryBundle, pianoConti, causaliContabili],
   )
 
   const pianoContiById = useMemo(
@@ -2708,17 +2729,6 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
   const causaliContabiliIndexes = useMemo(
     () => buildCausaliContabiliByIdMap(causaliContabili),
     [causaliContabili],
-  )
-
-  const accountingHistoryIndex = useMemo(
-    () => buildImportContabilitaAccountingHistoryIndex({
-      documents: accountingHistoryBundle?.documents || [],
-      headers: accountingHistoryBundle?.headers || [],
-      rows: accountingHistoryBundle?.rows || [],
-      pianoConti,
-      causaliContabili,
-    }),
-    [accountingHistoryBundle, pianoConti, causaliContabili],
   )
 
   const counterpartyAccountByRowId = useMemo(() => {
@@ -3614,38 +3624,31 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       const preferredCounterparty = getPreferredCounterparty(parsedDocument)
       const role = normalizeText(preferredCounterparty?.role || '').toLowerCase()
       const direction = role === 'cliente' ? 'vendita' : role === 'fornitore' ? 'acquisto' : ''
-      const suggestion = resolveImportContabilitaAccountingHistorySuggestion({
+      const resolved = resolveImportContabilitaStagingAccountingHistorySuggestions({
         historyIndex: accountingHistoryIndex,
         parsedDocument,
         counterpartyAccount: counterpartyAccountByRowId[rowKey] || null,
         direction,
         pianoContiById,
         causaliContabiliById: causaliContabiliIndexes.byId,
+        hasManualAccount: Object.prototype.hasOwnProperty.call(nextAccounts, rowKey),
+        hasManualCausale: Object.prototype.hasOwnProperty.call(nextCausali, rowKey),
+        societaId: selectedSocietaId,
       })
-      if (!suggestion) return
+      if (!resolved) return
 
-      if (!Object.prototype.hasOwnProperty.call(nextAccounts, rowKey) && suggestion.costRevenueAccount) {
+      if (resolved.account) {
         nextAccounts[rowKey] = decorateImportAccountingHistorySuggestion(
-          suggestion.costRevenueAccount,
-          {
-            kind: 'account',
-            sampleCount: suggestion.accountSampleCount,
-            totalSamples: suggestion.sampleCount,
-            lastSeenAt: suggestion.lastSeenAt,
-          },
+          resolved.account.value,
+          resolved.account.decorateParams,
         )
         accountChanged = true
       }
 
-      if (!Object.prototype.hasOwnProperty.call(nextCausali, rowKey) && suggestion.causaleContabile) {
+      if (resolved.causale) {
         nextCausali[rowKey] = decorateImportAccountingHistorySuggestion(
-          suggestion.causaleContabile,
-          {
-            kind: 'causale',
-            sampleCount: suggestion.causaleSampleCount,
-            totalSamples: suggestion.sampleCount,
-            lastSeenAt: suggestion.lastSeenAt,
-          },
+          resolved.causale.value,
+          resolved.causale.decorateParams,
         )
         causaleChanged = true
       }
@@ -5059,6 +5062,78 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
       })
       persistRowsChange(nextRows, selectedRowIds)
 
+      const cronologiaSocietaId = selectedSocietaId || selectedSocietaForDemo?.id || ''
+      if (cronologiaSocietaId && commitResult.primaNotaId) {
+        try {
+          const feedbackDirection = (
+            activeWorkingViewModel?.counterpartyAccount?.isCliente
+            || activeWorkingViewModel?.counterpartyAccount?.is_cliente
+          ) ? 'vendita' : 'acquisto'
+          const feedbackContextKey = buildImportSuggestionContextKey({
+            counterpartyPiva: activeWorkingViewModel?.counterpartyAccount?.partitaIva
+              || activeWorkingViewModel?.parsedDocument?.fornitore?.partitaIva
+              || activeWorkingViewModel?.parsedDocument?.cedente?.partitaIva
+              || '',
+            counterpartyName: activeWorkingViewModel?.counterpartyAccount?.descrizione
+              || activeWorkingViewModel?.parsedDocument?.fornitore?.denominazione
+              || '',
+            direction: feedbackDirection,
+            parsedDocument: activeWorkingViewModel?.parsedDocument || null,
+          })
+          const feedbackEvents = buildImportDecisionFeedbackEvents({
+            societaId: cronologiaSocietaId,
+            commitResult,
+            workingViewModel: activeWorkingViewModel,
+            selectedAccount: activeWorkingViewModel?.account || null,
+            selectedCausale: activeWorkingViewModel?.causale || null,
+            proposedAccount: manualAccountByRowId?.[committedKey] || null,
+            proposedCausale: manualCausaleByRowId?.[committedKey] || null,
+            ivaDraftRows: activeWorkingViewModel?.ivaDraftRows || [],
+            contextKey: feedbackContextKey,
+            direction: feedbackDirection,
+            dryRun: false,
+          })
+          appendDecisionFeedbackEvents(cronologiaSocietaId, feedbackEvents)
+        } catch {
+          /* DecisionFeedback LAB best-effort */
+        }
+        const nextCronologia = appendImportCronologiaEntry(cronologiaSocietaId, {
+          sourceFileName: activeWorkingViewModel?.parsedDocument?.filename
+            || activeWorkingViewModel?.sourceFileName
+            || '',
+          sourceHash: activeWorkingViewModel?.sourceHash
+            || activeWorkingViewModel?.parsedDocument?.sourceHash
+            || '',
+          esito: 'committed',
+          primaNotaId: commitResult.primaNotaId,
+          requestId: commitResult.requestId || commitResult.request_id || '',
+          numeroDocumento: activeWorkingViewModel?.parsedDocument?.numeroDocumento || '',
+          dataRegistrazione: activeWorkingViewModel?.registrationDate || '',
+          createdAt: new Date().toISOString(),
+          contractKind: commitResult.contract_kind || '',
+        })
+        setCronologiaEntries(nextCronologia)
+        // Best-effort sync from server claim history (LAB).
+        void fetchFiscalJournalCommitHistory({
+          societaId: cronologiaSocietaId,
+          sourceModule: 'import_contabilita',
+          limit: 100,
+          db: sb,
+        }).then((remote) => {
+          if (!remote.ok) return
+          const serverRows = normalizeImportFiscalCommitHistoryRows(remote.rows, {
+            societaId: cronologiaSocietaId,
+          })
+          const merged = mergeImportCronologiaEntries(
+            serverRows,
+            loadImportCronologiaEntries(cronologiaSocietaId),
+            { societaId: cronologiaSocietaId },
+          )
+          saveImportCronologiaEntries(cronologiaSocietaId, merged)
+          setCronologiaEntries(merged)
+        }).catch(() => null)
+      }
+
       const reportText = formatDemoWorkingViewCommitReport(commitResult, {
         numeroDocumento: activeWorkingViewModel?.parsedDocument?.numeroDocumento,
         unselectedCount: Math.max(0, stagingRows.length - 1),
@@ -5223,6 +5298,45 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
 
   const onPlaceholderAction = (label = 'Azione') => {
     showActionBanner('neutral', `${label} non ancora disponibile in questa fase.`)
+  }
+
+  const openCronologiaImport = async () => {
+    const societaId = selectedSocietaId || ''
+    const local = loadImportCronologiaEntries(societaId)
+    setCronologiaEntries(local)
+    setCronologiaError('')
+    setCronologiaSourceNote(local.length ? 'Cache locale' : '')
+    setCronologiaOpen(true)
+    if (!societaId) return
+    setCronologiaLoading(true)
+    try {
+      const remote = await fetchFiscalJournalCommitHistory({
+        societaId,
+        sourceModule: 'import_contabilita',
+        limit: 100,
+        db: sb,
+      })
+      if (!remote.ok) {
+        setCronologiaSourceNote(local.length
+          ? 'Cache locale (server non disponibile)'
+          : 'Solo locale')
+        setCronologiaError(remote.error === 'FISCAL_JOURNAL_LAB_ONLY_DISABLED'
+          || remote.status === 503
+          ? 'Storico server disponibile solo in LAB fiscal.'
+          : `Storico server non caricato (${remote.error}).`)
+        return
+      }
+      const serverRows = normalizeImportFiscalCommitHistoryRows(remote.rows, { societaId })
+      const merged = mergeImportCronologiaEntries(serverRows, local, { societaId })
+      saveImportCronologiaEntries(societaId, merged)
+      setCronologiaEntries(merged)
+      setCronologiaSourceNote(`Server LAB ∪ locale · ${merged.length} voci`)
+      setCronologiaError('')
+    } catch (err) {
+      setCronologiaError(err?.message || 'Errore caricamento cronologia')
+    } finally {
+      setCronologiaLoading(false)
+    }
   }
 
   const handleGoToSelection = (target) => {
@@ -5856,7 +5970,15 @@ export function ModuloImportContabilita({ onNavigate } = {}) {
         complete={headerMetrics.complete}
         incomplete={headerMetrics.incomplete}
         ultimoImport={headerMetrics.ultimoImport}
-        onCronologiaImport={() => onPlaceholderAction('Cronologia import')}
+        onCronologiaImport={openCronologiaImport}
+      />
+      <ImportCronologiaPanel
+        open={cronologiaOpen}
+        entries={cronologiaEntries}
+        loading={cronologiaLoading}
+        error={cronologiaError}
+        sourceNote={cronologiaSourceNote}
+        onClose={() => setCronologiaOpen(false)}
       />
 
       <section

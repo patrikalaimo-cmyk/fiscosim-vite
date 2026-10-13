@@ -1,0 +1,31 @@
+LIVE_P0_04_CLASS_G_START
+AUTHORIZATION=operator smoke Contabilità OK + prior approvo continua
+COLS_BEGIN
+COL coda_import_fatture|true
+COL corrispettivi_giornalieri|true
+COL fatture_xml|true
+COL intrastat_operazioni|true
+COL invii_log|false
+COL liquidazioni_iva_societa|true
+COL revisioni_dichiarativi|false
+COLS_END
+BROAD_BEFORE=8
+SQL_PATH=C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010\sql\security_p0\71_p0_04_class_g_LIVE_mlydfspmrkaedsocubku.sql
+PSQL BEGIN
+PSQL DO
+PSQL DO
+PSQL COMMIT
+BROAD_AFTER=0
+RLS_SMOKE_BEGIN
+RLS BEGIN
+RLS 80eb7418-4ca8-46b1-9dec-f6ce815956fd
+RLS {"sub":"80eb7418-4ca8-46b1-9dec-f6ce815956fd","role":"authenticated"}
+RLS SET
+RLS US=4
+RLS PN=250
+RLS CAUSALI=106
+RLS ROLLBACK
+RLS_SMOKE_END
+RLS_SMOKE=PASS
+DEFINER_ANON_EXECUTE=0
+LIVE_P0_04_CLASS_G_RESULT=PASS

@@ -2,6 +2,11 @@ import { commitCanonicalAccountingPayload } from '../../../../../services/canoni
 import { buildReconciliationCommitInput } from '../../canonical/buildReconciliationCommitInput.js'
 import { buildReconciliationCommitPreview } from './buildReconciliationCommitPreview.js'
 import { validateReconciliationCommitPayload } from './validateReconciliationCommitPayload.js'
+import { isBankFiscalCommitLabEnabled } from '../../application/riconciliazione/isBankFiscalCommitLabEnabled.js'
+import { commitBankReconciliationFiscalLab } from '../../application/riconciliazione/commitBankReconciliationFiscalLab.js'
+import { appendBankCronologiaEntry } from '../../application/riconciliazione/bankCronologiaStore.js'
+import { buildBankDecisionFeedbackEvents } from '../../application/learning/buildBankDecisionFeedbackEvents.js'
+import { appendDecisionFeedbackEvents } from '../../application/learning/decisionFeedbackLabStore.js'
 
 function uniqueList(value) {
   return Array.from(new Set((Array.isArray(value) ? value : []).filter((item) => item != null)))
@@ -67,15 +72,69 @@ function normalizeBlockedResult(payload, context, validation) {
 }
 
 export async function commitReconciliationCanonicalPayload(payload = {}, context = {}, repo = null) {
+  const accessToken = context.accessToken || context.token || null
+  // LAB real commit only when flags ON and caller supplies a JWT (E2E/script).
+  // Without token, keep dry-run even if flags leak into the process env.
+  const labCommit = isBankFiscalCommitLabEnabled() && Boolean(accessToken)
   const validation = validateReconciliationCommitPayload(payload, {
     ...context,
-    allowRealCommit: false,
-    adapterTransactional: false,
-    adapterSupportsIdempotency: false,
+    allowRealCommit: labCommit,
+    adapterTransactional: labCommit,
+    adapterSupportsIdempotency: labCommit,
   })
 
   if (validation.blockers.length > 0) {
     return normalizeBlockedResult(payload, context, validation)
+  }
+
+  if (labCommit) {
+    const labResult = await commitBankReconciliationFiscalLab({
+      payload,
+      context,
+      accessToken,
+    })
+    const normalized = normalizeResult(labResult)
+    if (normalized.committed && context.societaId) {
+      try {
+        appendBankCronologiaEntry(context.societaId, {
+          sourceFileName: context.sourceFileName || payload.sourceFileName || '',
+          sourceHash: context.sourceFileHash || context.sourceHash || payload.sourceFileHash || '',
+          esito: 'committed',
+          primaNotaId: normalized.primaNotaId || normalized.createdIds?.primaNotaId || '',
+          requestId: normalized.requestId || normalized.audit?.requestId || '',
+          numeroDocumento: payload.primaNota?.numeroDocumento || '',
+          dataRegistrazione: context.registrationDate || '',
+          createdAt: new Date().toISOString(),
+          contractKind: 'pagamento',
+          descrizione: payload.primaNota?.descrizione || payload.description || '',
+          movementId: payload.movementId || context.movementId || '',
+        })
+      } catch {
+        /* cronologia locale best-effort */
+      }
+      try {
+        const feedbackEvents = buildBankDecisionFeedbackEvents({
+          societaId: context.societaId,
+          decision: {
+            selectedPartitaId: payload.selectedPartitaId
+              || payload.partitarioMovements?.[0]?.partitaId
+              || '',
+          },
+          movement: {
+            movementId: payload.movementId || context.movementId || '',
+            amount: payload.amount,
+            counterpartyName: payload.counterpartyName || '',
+            direction: payload.direction || '',
+          },
+          commitResult: normalized,
+          dryRun: false,
+        })
+        appendDecisionFeedbackEvents(context.societaId, feedbackEvents)
+      } catch {
+        /* DecisionFeedback LAB best-effort */
+      }
+    }
+    return normalized
   }
 
   const commitInput = buildReconciliationCommitInput({ canonicalPayload: payload, context })

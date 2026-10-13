@@ -1,0 +1,12 @@
+SG_P0_03_04_CUTOVER_START
+CUTOVER_PERSIST_ENABLED=true
+LEGACY_FALLBACK=false
+STAGE3W_RPC=fiscosim_post_fiscal_journal(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,jsonb,text)
+P0_03_RECENT_PN_AUDIT=5|5
+P0_03_PERIOD_GUARD_IN_RPC=true
+P0_04_SQL_APPLY=PASS
+P0_04_ANON_CORE_DML=0
+P0_04_ANON_ACCESS_TEST_POLICY=0
+P0_03_STAMPA_UI_GATE=PASS
+LIVE_NOTE=no cloud credentials in active LAB env; LIVE GRANT/REVOKE not applied (containment SQL LAB-only)
+SG_P0_03_04_CUTOVER_RESULT=PASS

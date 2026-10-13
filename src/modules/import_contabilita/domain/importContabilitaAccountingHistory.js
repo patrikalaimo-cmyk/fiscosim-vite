@@ -11,6 +11,10 @@ import {
   normalizeImportVatHistoryName,
   normalizeImportVatHistoryPiva,
 } from './importContabilitaVatHistory.js'
+import {
+  extractImportDescriptionToken,
+  tokenizeImportDescription,
+} from './importContabilitaDescriptionToken.js'
 
 function normalizeText(value) {
   return String(value || '').trim()
@@ -117,13 +121,25 @@ function getCurrentCounterparty(parsedDocument = {}, counterpartyAccount = null,
   return {}
 }
 
-function buildBucketKeys(counterparty, direction) {
+function buildBucketKeys(counterparty, direction, descriptionToken = '') {
   const piva = normalizeImportVatHistoryPiva(counterparty?.partitaIva || counterparty?.partita_iva)
   const name = normalizeImportVatHistoryName(counterparty?.denominazione || counterparty?.ragione_sociale || counterparty?.nome)
+  const desc = tokenizeImportDescription(descriptionToken)
   const keys = []
+  // Prefer contextual keys first at resolve-time; index stores both.
+  if (piva && desc) keys.push(`piva:${piva}|${direction}|desc:${desc}`)
+  if (name && desc) keys.push(`name:${name}|${direction}|desc:${desc}`)
   if (piva) keys.push(`piva:${piva}|${direction}`)
   if (name) keys.push(`name:${name}|${direction}`)
   return keys
+}
+
+function resolveMatchType(key = '') {
+  const text = normalizeText(key)
+  if (text.includes('|desc:')) return text.startsWith('piva:') ? 'piva_desc' : 'name_desc'
+  if (text.startsWith('piva:')) return 'piva'
+  if (text.startsWith('name:')) return 'name'
+  return 'unknown'
 }
 
 function createAccumulator() {
@@ -157,7 +173,14 @@ function chooseMode(map) {
     if (right.lastSeenTimestamp !== left.lastSeenTimestamp) return right.lastSeenTimestamp - left.lastSeenTimestamp
     return String(left.value).localeCompare(String(right.value), 'it')
   })
-  return values[0]
+  const top = values[0]
+  const second = values[1] || null
+  return {
+    value: top.value,
+    count: top.count,
+    ambiguous: Boolean(second && second.count === top.count),
+    distinctCount: values.length,
+  }
 }
 
 function selectDocumentEconomicAccount(rows, header, pianoContiById) {
@@ -225,8 +248,6 @@ export function buildImportContabilitaAccountingHistoryIndex({
     if (!direction) return
 
     const counterparty = getHistoryCounterparty(documentRow, header, pianoContiById)
-    const keys = buildBucketKeys(counterparty, direction)
-    if (!keys.length) return
 
     const timestamp = parseTimestamp(
       documentRow?.registered_at || documentRow?.created_at || header?.data_registrazione || header?.created_at,
@@ -253,6 +274,16 @@ export function buildImportContabilitaAccountingHistoryIndex({
 
     if (!causaleId && !accountId) return
 
+    const descriptionToken = extractImportDescriptionToken({
+      descrizione: documentRow?.descrizione || documentRow?.oggetto || header?.descrizione || '',
+      oggetto: documentRow?.oggetto || '',
+      note: documentRow?.note || '',
+      righe: documentRow?.righe || documentRow?.linee || [],
+    }) || tokenizeImportDescription(selectedAccount?.account?.descrizione || '')
+
+    const keys = buildBucketKeys(counterparty, direction, descriptionToken)
+    if (!keys.length) return
+
     keys.forEach((key) => {
       const acc = accumulators.get(key) || createAccumulator()
       acc.sampleCount += 1
@@ -274,8 +305,10 @@ export function buildImportContabilitaAccountingHistoryIndex({
       sampleCount: acc.sampleCount,
       costRevenueAccountId: normalizeText(accountMode?.value),
       accountSampleCount: Number(accountMode?.count || 0),
+      accountAmbiguous: Boolean(accountMode?.ambiguous),
       causaleContabileId: normalizeText(causaleMode?.value),
       causaleSampleCount: Number(causaleMode?.count || 0),
+      causaleAmbiguous: Boolean(causaleMode?.ambiguous),
       lastSeenAt: acc.lastSeenAt,
     })
   })
@@ -302,7 +335,8 @@ export function resolveImportContabilitaAccountingHistorySuggestion({
   if (!normalizedDirection) return null
 
   const counterparty = getCurrentCounterparty(parsedDocument || {}, counterpartyAccount, normalizedDirection)
-  const keys = buildBucketKeys(counterparty, normalizedDirection)
+  const descriptionToken = extractImportDescriptionToken(parsedDocument || {})
+  const keys = buildBucketKeys(counterparty, normalizedDirection, descriptionToken)
 
   for (const key of keys) {
     const historical = index.get(key)
@@ -316,13 +350,31 @@ export function resolveImportContabilitaAccountingHistorySuggestion({
       : null
 
     if (!account && !causale) continue
+    const conflicts = []
+    if (historical.accountAmbiguous) {
+      conflicts.push({
+        kind: 'history_ambiguous',
+        field: 'account',
+        message: 'Storico controparte ambiguo su conto costo/ricavo: verificare prima della contabilizzazione.',
+      })
+    }
+    if (historical.causaleAmbiguous) {
+      conflicts.push({
+        kind: 'history_ambiguous',
+        field: 'causale',
+        message: 'Storico controparte ambiguo su causale: verificare prima della contabilizzazione.',
+      })
+    }
     return {
       ...historical,
       matchKey: key,
-      matchType: key.startsWith('piva:') ? 'piva' : 'name',
+      matchType: resolveMatchType(key),
       direction: normalizedDirection,
       costRevenueAccount: account,
       causaleContabile: causale,
+      descriptionToken,
+      conflicts,
+      requiresConfirmation: conflicts.length > 0,
     }
   }
 
@@ -334,11 +386,15 @@ export function decorateImportAccountingHistorySuggestion(value, {
   sampleCount = 0,
   totalSamples = 0,
   lastSeenAt = '',
+  source = 'history',
 } = {}) {
   if (!value || typeof value !== 'object') return value || null
+  const suggestionSource = normalizeText(source) || 'history'
   return {
     ...value,
     _importHistorySuggested: true,
+    _importSuggestionSource: suggestionSource,
+    _importFeedbackSuggested: suggestionSource === 'feedback',
     _importHistoryKind: normalizeText(kind),
     _importHistorySampleCount: Number(sampleCount || 0),
     _importHistoryTotalSamples: Number(totalSamples || 0),

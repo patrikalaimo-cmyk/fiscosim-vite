@@ -38,6 +38,7 @@ test('Stage3T exact routing includes existing users plus every new Studio endpoi
   '/api/auth/users','/api/studio/fiscal-read',
   '/api/studio/client-create','/api/studio/client-update',
   '/api/studio/agecon-write','/api/studio/revision-archive',
+  '/api/studio/general-journal-post','/api/studio/fiscal-journal-post',
  ]) assert.equal(matchesStudioRoute(path),true,path)
  for(const path of [
   '/api/studio/fiscal-read/other','/api/studio/new',

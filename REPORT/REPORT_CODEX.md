@@ -1,6 +1,6 @@
+﻿
 
-
-## 2026-10-07 — IVA-REGISTRI-LIQUIDAZIONE / code gate verde e formalizzazione freeze
+## 2026-10-07 ? IVA-REGISTRI-LIQUIDAZIONE / code gate verde e formalizzazione freeze
 
 - Commit hardening dati: `e612ca03e75ae6aa11ff9b5b09686ce6cfc4826a`.
 - Commit gate test: `583d7d6b4cf3e3f24ba105ba321cf49ed10a6184`.
@@ -11,24 +11,24 @@
 - Stato del blocco dopo CI documentale: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 - Prossimo blocco previsto: `SPLIT-SIMPLE`.
 - Riconciliazione Bancaria resta BLOCCATA.
-- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a societ? reali.
 - Stato del commit documentale: **CI PENDENTE**.
 
 
-## 2026-10-08 — SPLIT-SIMPLE / audit e hardening segni nota credito
+## 2026-10-08 ? SPLIT-SIMPLE / audit e hardening segni nota credito
 
-- Audit avviato dal gate IVA già verde sul branch `mio-branch`.
+- Audit avviato dal gate IVA gi? verde sul branch `mio-branch`.
 - Confermata la catena principale split: flag controparte/documento -> draft Manuale -> conto tecnico configurato -> partitario al solo imponibile -> registro IVA con flag split -> esclusione dal debito effettivo in liquidazione.
 - Individuata divergenza reale Manuale/Import: il workflow Import preservava il lato Dare/Avere della controparte, mentre `buildSplitPaymentRows` nel Manuale forzava sempre la controparte in Dare.
 - Correzione applicata: la controparte split mantiene il lato contabile originario; fattura attiva resta in Dare, nota credito attiva resta in Avere.
 - Aggiunta regressione specifica per nota credito attiva split, con quadratura delle righe e rimozione della riga IVA ordinaria.
 - Introdotto profilo dedicato `test:split` e step CI Windows/Linux.
-- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a societ? reali.
 - Riconciliazione Bancaria resta BLOCCATA.
 - Stato: **CI PENDENTE**.
 
 
-## 2026-10-08 — SPLIT-SIMPLE / freeze automatico verde
+## 2026-10-08 ? SPLIT-SIMPLE / freeze automatico verde
 
 - Commit codice: `91d2365a2efa9a19f099bde61fc12a95a1bd162d`.
 - GitHub Actions run `37695652369`: **SUCCESS** su Ubuntu e Windows.
@@ -39,11 +39,11 @@
 - Stato del blocco: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 - Prossimo blocco: `RITENUTE-SCADENZARIO`.
 - Riconciliazione Bancaria resta BLOCCATA.
-- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a societ? reali.
 - Stato commit documentale: **CI PENDENTE**.
 
 
-## 2026-10-08 — RITENUTE-SCADENZARIO / audit e hardening architetturale
+## 2026-10-08 ? RITENUTE-SCADENZARIO / audit e hardening architetturale
 
 - Verificato gate documentale SPLIT-SIMPLE: CI `37695914834` verde su Ubuntu e Windows.
 - Il percorso canonico Manuale gestisce parcella, pagamento integrale, chiusura partitario, maturazione ritenuta, debito Erario, scadenza e link PN.
@@ -56,7 +56,7 @@
 - Stato: **CI PENDENTE**.
 
 
-### 2026-10-08 — RITENUTE-SCADENZARIO / triage CI aliquota
+### 2026-10-08 ? RITENUTE-SCADENZARIO / triage CI aliquota
 
 - CI `37696964818`: Import PASS; Manual falliva su 4 regressioni ritenute.
 - Diagnosi: il draft puo contenere `aliquotaRitenuta = 0`; una selezione con nullish coalescing fermava la priorita prima dell'aliquota positiva configurata sul percipiente.
@@ -64,7 +64,7 @@
 - Stato: nuova CI pendente.
 
 
-## 2026-10-08 — RITENUTE-SCADENZARIO / freeze automatico verde
+## 2026-10-08 ? RITENUTE-SCADENZARIO / freeze automatico verde
 
 - Commit hardening: `56b173b05ae9b2d84f0993318ba91d382ecee642`.
 - Commit fix aliquota configurata: `9fb3b04782a7dc41d8846022a69746e15e530130`.
@@ -77,46 +77,46 @@
 - Stato del blocco: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 - Prossimo blocco: `STAMPE-EXPORT-FASCICOLO`.
 - Riconciliazione Bancaria resta BLOCCATA.
-- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a società reali.
+- Nessuna migration applicata; nessuna modifica auth/RLS/policy/env; nessun accesso a societ? reali.
 - Stato commit documentale: **CI PENDENTE**.
 
 
-## 2026-10-08 — STAMPE-EXPORT-FASCICOLO / audit iniziale e hardening di sicurezza
+## 2026-10-08 ? STAMPE-EXPORT-FASCICOLO / audit iniziale e hardening di sicurezza
 
 - Base di partenza: RITENUTE-SCADENZARIO document gate `37697581159` SUCCESS su Ubuntu e Windows.
 - Audit codice: `StampeView` conserva ancora pannelli fac-simile per Partitari, Mastrini e Bilancio. Intercettata la navigazione ai tre tab per mostrare stato non operativo, senza esporre valori campione come situazioni contabili.
-- Audit registri: letture principali tenant-scoped, ma arricchimento `causali_iva` e classificazione `prima_nota` non applicavano esplicitamente il filtro società. Hardening con scoping e fail-closed quando manca una relazione necessaria.
+- Audit registri: letture principali tenant-scoped, ma arricchimento `causali_iva` e classificazione `prima_nota` non applicavano esplicitamente il filtro societ?. Hardening con scoping e fail-closed quando manca una relazione necessaria.
 - Export potenzialmente troncato dal limite predefinito Supabase di 1000 righe: inserito blocco esplicito conservativo su libri/registri a soglia, in attesa di paginazione integrale.
 - Rimossa la dicitura ingannevole "Pagina 1 di 1" dagli HTML provvisori, non compatibile con stampe multipagina.
 - Aggiunto gate `test:stampe` in CI Linux/Windows e guard dedicato.
-- Non è stato generato il fascicolo cliente PDF unico; non è stato implementato il bilancio/mastrino canonico né la lettura paginata oltre soglia; restano aperti.
-- Ulteriore criticità documentale: il checksum di stampa definitiva oggi calcola hash di metadati/timestamp, non delle righe effettivamente stampate. Non dichiarare garanzia d'inalterabilità del contenuto finché non sarà corretto/validato.
-- Stato blocco: **IN CORSO — NON FREEZE**. Nessuna migration, modifica auth/RLS/policy/env, società reale o Bank.
+- Non ? stato generato il fascicolo cliente PDF unico; non ? stato implementato il bilancio/mastrino canonico n? la lettura paginata oltre soglia; restano aperti.
+- Ulteriore criticit? documentale: il checksum di stampa definitiva oggi calcola hash di metadati/timestamp, non delle righe effettivamente stampate. Non dichiarare garanzia d'inalterabilit? del contenuto finch? non sar? corretto/validato.
+- Stato blocco: **IN CORSO ? NON FREEZE**. Nessuna migration, modifica auth/RLS/policy/env, societ? reale o Bank.
 - CI del commit codice: **PENDENTE**.
 
 
-### 2026-10-08 — Stampe / triage CI Windows
+### 2026-10-08 ? Stampe / triage CI Windows
 
 - Run `37699566213`: Ubuntu PASS completo; Windows `test:stampe` 36/37 per confronto test che usava un newline LF letterale, convertito in CRLF da checkout Windows.
 - Fix confinato al test: confronto dell'ordine tra guard e dettaglio tramite regex whitespace-agnostic.
 - Nessuna regola fiscale/contabile alterata. CI successiva pendente.
 
 
-## 2026-10-08 — STAMPE-EXPORT-FASCICOLO / code gate verde (non freeze)
+## 2026-10-08 ? STAMPE-EXPORT-FASCICOLO / code gate verde (non freeze)
 
 - Commit hardening: `74e5cd1748222131134b17b7d880aee2c40d694b`.
-- Commit test portabilità: `a2e2a4ec258091cd22b6a0d3da887f4490b76de4`.
+- Commit test portabilit?: `a2e2a4ec258091cd22b6a0d3da887f4490b76de4`.
 - GitHub Actions run `37699787767`: **SUCCESS** su Ubuntu e Windows per tutti i profili e build.
 - Nuovo profilo `test:stampe`: **5 file / 37 test PASS**.
-- Gate certifica solo l'hardening: niente fac-simile presentato come reale, arricchimenti per società, abort su join fallite, no export potenzialmente troncato, no contatore pagine fittizio.
+- Gate certifica solo l'hardening: niente fac-simile presentato come reale, arricchimenti per societ?, abort su join fallite, no export potenzialmente troncato, no contatore pagine fittizio.
 - Audit in `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`, matrice e debito collaudo aggiornati.
 - Gap ancora aperti: PDF unico del fascicolo, Partitari/Mastrini/Bilancio canonici, paginazione grande volume, hash sul contenuto, eliminazione codice demo, QA browser/PDF.
 - **STAMPE-EXPORT-FASCICOLO resta IN CORSO / NON FREEZE**. Non avanzare al blocco LOCK-PERIODO-AUDIT prima di un gate completo.
-- Riconciliazione Bancaria resta BLOCCATA. Nessuna migration/env/auth/RLS/policy/società reale.
+- Riconciliazione Bancaria resta BLOCCATA. Nessuna migration/env/auth/RLS/policy/societ? reale.
 - Stato CI del commit documentale: pendente.
 
 
-## 2026-10-08 — BANK-DEV / sviluppo sbloccato e primo hardening
+## 2026-10-08 ? BANK-DEV / sviluppo sbloccato e primo hardening
 
 - Autorizzazione esplicita utente: proseguire Stampe/Export in parallelo allo sviluppo della Riconciliazione Bancaria, **senza** sbloccare scritture bancarie reali o rilascio.
 - HEAD audit: `c97291ebb32e618e6caac604b4cd3c6b86a8689b`, CI `37700006171` success Ubuntu+Windows.
@@ -130,23 +130,23 @@
 - Stato: **CI PENDENTE**.
 
 
-## 2026-10-08 — BANK-DEV / gate automatico verde
+## 2026-10-08 ? BANK-DEV / gate automatico verde
 
 - Commit `31219e6ae10ece1660dc194d6a621e4c19cb101b`; CI `37701343937`: SUCCESS Ubuntu e Windows.
 - `test:bank`: 7 test PASS. Incluse fixture R8 e R9A, 16 casi ciascuna.
 - Sviluppo Bank autorizzato in parallelo a Stampe, non attivazione del commit reale.
 
-## 2026-10-08 — STAMPE / paginazione completa in implementazione
+## 2026-10-08 ? STAMPE / paginazione completa in implementazione
 
 - Creato helper `fetchAllStampeRows` con pagine da 500, ID stabili e abort su errori/duplicati/risposte anomale.
-- Registri IVA: paginazione di tutte le righe, join IVA e PN in batch da 100, scope società mantenuto.
+- Registri IVA: paginazione di tutte le righe, join IVA e PN in batch da 100, scope societ? mantenuto.
 - Giornale: paginazione testate e righe in batch, fail-closed su PN priva di righe.
 - Test oltre 1000 righe sintetiche; aggiornati test sicurezza preesistenti.
 - Mancano ancora fascicolo PDF unico, stampe canoniche di Mastrini/Bilancio/Partitari, hash contenuto e collaudo E2E. Nessun freeze dichiarato.
-- Nessuna modifica env/auth/RLS, nessuna migration o scrittura su società reali. Stato CI codice: PENDENTE.
+- Nessuna modifica env/auth/RLS, nessuna migration o scrittura su societ? reali. Stato CI codice: PENDENTE.
 
 
-## 2026-10-08 — STAMPE / gate paginazione verde
+## 2026-10-08 ? STAMPE / gate paginazione verde
 
 - Commit codice `286f0fd156957cf9ea2b77b3546ac9daa17e63b6`.
 - GitHub Actions run `37701699556`: **SUCCESS** su Ubuntu e Windows.
@@ -156,22 +156,22 @@
 - Blocco di sicurezza temporaneo >1000 righe sostituito da paginazione completa e batch join con abort su incongruenze.
 - **Stampe non ancora freeze**: PDF unico del fascicolo, mastrini/bilancio/partitari canonici, hash dei contenuti e QA reali restano aperti.
 - **BANK-DEV sbloccato**; il commit reale rimane vietato fino a RPC atomica, audit/idempotenza, tenant scope e collaudi.
-- Nessuna migration/env/auth/RLS/policy o società reale interessata.
+- Nessuna migration/env/auth/RLS/policy o societ? reale interessata.
 - CI documentale: pendente.
 
 
-## 2026-10-08 — BANK-DEV / identificazione sorgente e validazione commit
+## 2026-10-08 ? BANK-DEV / identificazione sorgente e validazione commit
 
 - Audit su `mio-branch` dal commit `312058e8b6f699cb2ea13e1fbad2849507cd43e4` (CI precedente verde).
 - Identificato rischio di aggancio errato: `buildReconciliationCommitInput` usava come `sourceDocumentId` l'ID dell'estratto conto prima dell'ID movimento.
-- Corretto il riferimento: priorità al `movementId` del payload bancario, così l'identità del singolo movimento non viene sostituita da quella del file.
-- Rafforzato gate commit: obbligatori `movementId` e `decisionId`, verifica mismatch fra contesto e payload su società/esercizio/conto, blocker su sezione PN diversa da Dare/Avere.
+- Corretto il riferimento: priorit? al `movementId` del payload bancario, cos? l'identit? del singolo movimento non viene sostituita da quella del file.
+- Rafforzato gate commit: obbligatori `movementId` e `decisionId`, verifica mismatch fra contesto e payload su societ?/esercizio/conto, blocker su sezione PN diversa da Dare/Avere.
 - Test automatici di regressione aggiunti al profilo Bank; nessun commit contabile reale abilitato.
 - Nessuna migration, modifica auth/RLS/env o scrittura su dati reali.
 - Stato: **CI PENDENTE**.
 
 
-## 2026-10-08 — STAMPE / neutralizzazione formule CSV
+## 2026-10-08 ? STAMPE / neutralizzazione formule CSV
 
 - Audit: `escapeCsv` quotava separatori e virgolette ma non impediva a Excel/LibreOffice di interpretare celle descrittive che iniziano con `=`, `+`, `-` o `@` come formule.
 - Correzione in `exportStampeProvvisorie.js`: neutralizzazione con apostrofo iniziale anche in presenza di spazi/tab/caratteri invisibili, mantenendo escaping CSV RFC-style per separatori.
@@ -180,125 +180,125 @@
 - CI codice Stampe: **PENDENTE**.
 
 
-## 2026-10-08 — STAMPE / base deterministica movimenti per conto
+## 2026-10-08 ? STAMPE / base deterministica movimenti per conto
 
 - Introduzione di `buildMovimentiPerContoModel` nel layer application Stampe, alimentato esclusivamente da testate/righe di Prima Nota canonica (senza mock nel modello).
-- Controlli fail-closed su società, periodo, stati contabilizzati, identificativi duplicati, conto mancante, importi non validi e quadratura testata/righe.
-- Aggregazione Dare/Avere, saldi di movimentazione per conto, movimento analitico e saldo progressivo nel periodo con unità monetaria in centesimi.
+- Controlli fail-closed su societ?, periodo, stati contabilizzati, identificativi duplicati, conto mancante, importi non validi e quadratura testata/righe.
+- Aggregazione Dare/Avere, saldi di movimentazione per conto, movimento analitico e saldo progressivo nel periodo con unit? monetaria in centesimi.
 - Righe simulate, bozze, annullate e stornate escluse dal prospetto del periodo con evidenza esplicita; stato sconosciuto produce blocker.
-- Questa è una **base di dominio**, non una stampa definitiva: i saldi iniziali e i movimenti di esercizi precedenti non sono ricostruiti e la UI Stampe attende ancora integrazione.
+- Questa ? una **base di dominio**, non una stampa definitiva: i saldi iniziali e i movimenti di esercizi precedenti non sono ricostruiti e la UI Stampe attende ancora integrazione.
 - Aggiunta suite Node dedicata nel profilo `test:stampe`, fixture sintetiche.
 - Fascicolo unico e PDF definitivo ancora aperti; Bank commit reale ancora vietato.
 - Stato: **CI codice PENDENTE**.
 
 
-## 2026-10-08 — BANK-DEV e STAMPE / checkpoint CI finale
+## 2026-10-08 ? BANK-DEV e STAMPE / checkpoint CI finale
 
-- Bank input `ad773a5bdf37c0afdd59ba50e6a8569042295697`: run `37737965871` **SUCCESS** Windows e Ubuntu. sourceDocumentId punta al movimento; identità e tenant del commit validate; nessun write reale abilitato.
+- Bank input `ad773a5bdf37c0afdd59ba50e6a8569042295697`: run `37737965871` **SUCCESS** Windows e Ubuntu. sourceDocumentId punta al movimento; identit? e tenant del commit validate; nessun write reale abilitato.
 - Stampe CSV `d0bb3ed7214a4f609a3a20b1ea9570411517f190`: run `37738239233` **SUCCESS** Windows e Ubuntu. Formula injection mitigata su campi testuali CSV Registro IVA/Giornale.
-- Stampe movimenti per conto `552470928f41276bf1e169779d1f3b15e9799f6f`: run `37738561308` **SUCCESS** Windows e Ubuntu. Helper pure JS dalla PN canonica, controlli saldo, quadratura, periodo, società, conti e stati; regressioni sintetiche aggiunte a `test:stampe`.
+- Stampe movimenti per conto `552470928f41276bf1e169779d1f3b15e9799f6f`: run `37738561308` **SUCCESS** Windows e Ubuntu. Helper pure JS dalla PN canonica, controlli saldo, quadratura, periodo, societ?, conti e stati; regressioni sintetiche aggiunte a `test:stampe`.
 - Aggiornati `REPORT/STAMPE_EXPORT_FASCICOLO_AUDIT.md`, roadmap A100, matrice test, debito collaudi.
 - Nessun freeze A100: mancano saldi iniziali/classificazione per bilancio, UI stampa canonica, fascicolo PDF unico, hash dei contenuti, snapshot, QA browser, RPC Bank atomica/idempotente e collaudi.
-- Nessuna migration, env, auth/RLS/policy, scrittura su società reali.
+- Nessuna migration, env, auth/RLS/policy, scrittura su societ? reali.
 - Stato commit documentale: **CI PENDENTE**.
 
 
-## 2026-10-08 — STAMPE / saldo precedente e classificazione conto (P1 parziale)
+## 2026-10-08 ? STAMPE / saldo precedente e classificazione conto (P1 parziale)
 
-- Audit: `buildMovimentiPerContoModel` forniva solo movimenti di periodo e progressivi, senza saldi precedenti né classificazione; individuato inoltre stato canonico `storno` non previsto fra le esclusioni.
+- Audit: `buildMovimentiPerContoModel` forniva solo movimenti di periodo e progressivi, senza saldi precedenti n? classificazione; individuato inoltre stato canonico `storno` non previsto fra le esclusioni.
 - Creato `src/modules/contabilita/application/stampe/buildSaldiPerContoEsercizioModel.js`: saldo precedente da PN dal giorno iniziale esercizio al giorno prima del periodo, movimentazione del periodo, progressivo e saldo finale; classificazione e conto di dettaglio da piano conti canonico con controlli tenant, ID/codice, gerarchia, anno, date e quadratura in centesimi.
 - Corretto `src/modules/contabilita/application/stampe/buildMovimentiPerContoModel.js` per escludere il movimento `storno` insieme alla scrittura `stornata`, senza alterare saldi del periodo.
 - Aggiunti `tests/stampeSaldiPerContoEsercizioModel.test.js` e profilo dedicato in `scripts/run-node-tests.mjs`. Fixture esclusivamente fittizie: conto patrimoniale/economico, nota credito, Dare/Avere, saldo precedente, zero movimenti, data invalida, cambio esercizio, tenant, doppioni, gerarchia, classificazione e stati di storno.
 - Guardrail: il modello non usa `piano_conti.saldo_iniziale` come riapertura verificata, non attraversa anni e non si presenta come bilancio definitivo. Mancano copertura della riapertura da anno precedente, letture complete/snapshot, UX e PDF. Il blocco Stampe resta IN CORSO / NON FREEZE.
-- Sicurezza: nessuna modifica a .env, auth, RLS, migrazioni, DB live o società reali; Bank commit non abilitato. Modifiche GitHub limitate ai file del sottoblocco, working tree remoto non applicabile.
+- Sicurezza: nessuna modifica a .env, auth, RLS, migrazioni, DB live o societ? reali; Bank commit non abilitato. Modifiche GitHub limitate ai file del sottoblocco, working tree remoto non applicabile.
 - Test/CI: PENDENTI all'apertura del commit. Prossimo intervento: saldi di riapertura da Prima Nota e verifica chiusura dell'esercizio precedente.
 
 
-## 2026-10-08 — STAMPE / certificazione CI saldo precedente intraesercizio
+## 2026-10-08 ? STAMPE / certificazione CI saldo precedente intraesercizio
 
 - Commit codice+regressioni: `1ec940caf9fe70539e8a5bf80c1a8267074d0965`.
 - GitHub Actions `37766190172`: **SUCCESS** Ubuntu e Windows, build produzione compresa.
 - Profili su ciascuna piattaforma: `test:stampe` **61/61**, `test:bank` **11/11**, `test:core` **629/629**, `test:all` **1004/1004**; zero falliti.
 - **Gate automatico del sottoblocco verde; STAMPE-EXPORT-FASCICOLO ancora NON FREEZE**. Riapertura dai precedenti esercizi, service letture complete, snapshot, UI, mastrini/bilancio definitivi, fascicolo unico e QA manuale ancora aperti.
-- Nessuna scrittura su società reali, Supabase live, migration, auth/RLS o file env. Prossimo: saldi di riapertura e corrispondenza documentabile con anno precedente.
+- Nessuna scrittura su societ? reali, Supabase live, migration, auth/RLS o file env. Prossimo: saldi di riapertura e corrispondenza documentabile con anno precedente.
 
-## 2026-10-08 — STAMPE / controllo chiusura-riapertura e ordinamento progressivi
+## 2026-10-08 ? STAMPE / controllo chiusura-riapertura e ordinamento progressivi
 
-- Implementato audit read-only `auditRaccordoEserciziModel` su dataset canonici (precedente esercizio intero, chiusure patrimoniali selezionate con ID, apertura corrente, piano conti e causali per ID/tipo/società). Nessuna deduzione della causale da testo e nessun utilizzo di `saldo_iniziale`.
-- Controllo anno/società/stato, chiusura precedente a zero, mastri patrimoniali chiusi/riaperti a segno opposto, economici assenti nei movimenti patrimoniali; nessun effetto contabile.
+- Implementato audit read-only `auditRaccordoEserciziModel` su dataset canonici (precedente esercizio intero, chiusure patrimoniali selezionate con ID, apertura corrente, piano conti e causali per ID/tipo/societ?). Nessuna deduzione della causale da testo e nessun utilizzo di `saldo_iniziale`.
+- Controllo anno/societ?/stato, chiusura precedente a zero, mastri patrimoniali chiusi/riaperti a segno opposto, economici assenti nei movimenti patrimoniali; nessun effetto contabile.
 - Correzione `buildSaldiPerContoEsercizioModel`: account identificato tramite `conto_id` e account via `conto_codice` ora confluiscono in unico flusso cronologico prima del calcolo del progressivo.
 - Nuovi test sintetici di raccordo, fail-closed e cronologia mista; registrati in `test:stampe`.
 - Esito sempre NON definitivo anche se localmente `valid`: completezza PN, closing storico, snapshot e lettura DB non certificati. Nessuna UI abilitata e nessuna migrazione, auth/RLS/env o modifica dati reali.
 - CI: DA VERIFICARE dopo commit.
 
-## Fix CI 2026-10-08 — conto per solo codice in PN storiche
+## Fix CI 2026-10-08 ? conto per solo codice in PN storiche
 
-La prima CI ha rilevato `anagrafica_conto_non_coerente` su più righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.
+La prima CI ha rilevato `anagrafica_conto_non_coerente` su pi? righe senza `conto_id`: il controllo del modello base confrontava `null` e stringa vuota. Corretto il confronto normalizzando valori assenti; aggiunta regressione in `stampeMovimentiPerContoModel.test.js`, oltre al test cronologico ID/codice. CI del fix da verificare; nessun nuovo freeze.
 
-## 2026-10-08 — Raccordo / read-only loader e regressioni
+## 2026-10-08 ? Raccordo / read-only loader e regressioni
 
 - CI fix `73578a3`: run `37775668769` SUCCESS Windows e Ubuntu (stampe e baseline).
-- `loadAuditRaccordoEsercizi` legge da `prima_nota`, `prima_nota_righe`, `piano_conti`, `causali_contabili` con `fetchAllStampeRows` e batch, senza filtro `attivo` nei metadati storici. Identità di chiusure/riaperture espressa da ID, no euristiche testo.
+- `loadAuditRaccordoEsercizi` legge da `prima_nota`, `prima_nota_righe`, `piano_conti`, `causali_contabili` con `fetchAllStampeRows` e batch, senza filtro `attivo` nei metadati storici. Identit? di chiusure/riaperture espressa da ID, no euristiche testo.
 - Wrapper in repository `getAuditRaccordoEserciziPerStampa` usa `sb` soltanto in lettura. `auditRaccordoEserciziModel` continua a bloccare risultati incoerenti.
 - Nuovi test query-builder mock testano processo completo (non DB reale), righe mancanti, dati >500, metadata inattivi, ID di altro tenant, errori lettura. CI PENDENTE.
 - Snapshot atomico e completezza temporale non attestati; output sempre `definitive:false`, UI e PDF finale ancora non abilitati.
 
-## 2026-10-08 — STAMPE / digest byte effettivi (non ancora definitivo)
+## 2026-10-08 ? STAMPE / digest byte effettivi (non ancora definitivo)
 
 - Loader evidence `dc282af` PASS CI `37776049729` su Windows/Ubuntu.
 - Nuova utility `hashStampaContenuto` basata esclusivamente su WebCrypto SHA-256: file reale binario obbligatorio, metadati identificativi incorporati con separazione dominio, nessun fallback hash debole.
-- Regressioni aggiunte per modifica byte singolo, contesto/periodo, dati invalidi, SHA non disponibile. Non modificato l'attuale flusso RPC di consolidamento, che resta NON certificato perché usa il vecchio checksum metadata-only.
-- Per il gate definitivo: prima generare e verificare file esportato da snapshot coerente, poi collegare checksum e audit con verifica server-side nella stessa operazione di lock. Non eseguire ancora su società reali.
+- Regressioni aggiunte per modifica byte singolo, contesto/periodo, dati invalidi, SHA non disponibile. Non modificato l'attuale flusso RPC di consolidamento, che resta NON certificato perch? usa il vecchio checksum metadata-only.
+- Per il gate definitivo: prima generare e verificare file esportato da snapshot coerente, poi collegare checksum e audit con verifica server-side nella stessa operazione di lock. Non eseguire ancora su societ? reali.
 - CI PENDENTE.
 
-## 2026-10-08 — protezione UI del consolidamento non certificato
+## 2026-10-08 ? protezione UI del consolidamento non certificato
 
 - Hash byte effettivi `d147b43` SUCCESS Windows/Ubuntu `37776465805`.
-- Individuata criticità: `StampaDefinitivaPanel` passa digest di soli metadati a `consolidazione_stampa_definitiva`, senza verifica del documento esportato; le dichiarazioni "definitiva" e "pagine" non erano supportate da prova file reale.
+- Individuata criticit?: `StampaDefinitivaPanel` passa digest di soli metadati a `consolidazione_stampa_definitiva`, senza verifica del documento esportato; le dichiarazioni "definitiva" e "pagine" non erano supportate da prova file reale.
 - Implementato `validateStampaDefinitivaEvidence`: precheck fiscale non basta; obbligatori snapshot, file archiviato, digest content SHA-256, dimensione e verifica server. In assenza (RPC attuale) la UI mostra blocker e non espone il consolidamento.
-- UI non genera più checksum da timestamp/rowsCount. Vecchio helper rimane per compatibilità test storici ma non costituisce prova. Test di gate e percorso Panel aggiornati.
-- Attenzione: la RPC corrente non valida la veridicità del checksum ricevuto, quindi il gate è **solo client-side**. Nessuna migration applicata né rilascio dichiarato.
+- UI non genera pi? checksum da timestamp/rowsCount. Vecchio helper rimane per compatibilit? test storici ma non costituisce prova. Test di gate e percorso Panel aggiornati.
+- Attenzione: la RPC corrente non valida la veridicit? del checksum ricevuto, quindi il gate ? **solo client-side**. Nessuna migration applicata n? rilascio dichiarato.
 - CI PENDENTE.
 
-## 2026-10-08 — binding delle attestazioni di stampa al contesto reale
+## 2026-10-08 ? binding delle attestazioni di stampa al contesto reale
 
-- Gating `validateStampaDefinitivaEvidence(precheck,expected)` esteso a società, tipo e periodo: nessun riuso cross-tenant/cross-period di un attestato apparentemente valido.
+- Gating `validateStampaDefinitivaEvidence(precheck,expected)` esteso a societ?, tipo e periodo: nessun riuso cross-tenant/cross-period di un attestato apparentemente valido.
 - `StampaDefinitivaPanel` resetta il precheck al cambio `societa?.id` e ricontrolla i campi del contesto sia dopo il precheck sia prima del consolidamento. Test puri e assert strutturali aggiunti.
 - La RPC attuale non restituisce la prova di file/snapshot e resta da indurire lato server, quindi UI fail-closed. CI pendente.
 
-## CI 2026-10-08 — aggiornamento test gating al nuovo binding
+## CI 2026-10-08 ? aggiornamento test gating al nuovo binding
 
 La prima CI dopo l'estensione tenant/periodo ha segnalato una sola asserzione strutturale obsoleta: cercava `validateStampaDefinitivaEvidence(data)` mentre la chiamata ora deve ricevere anche il contesto. Aggiornate entrambe le regex senza rimuovere i controlli sostanziali. CI del fix pendente.
 
-## Gate 2026-10-08 — audit raccordo, SHA-256 contenuto e blocco definitiva non attestata
+## Gate 2026-10-08 ? audit raccordo, SHA-256 contenuto e blocco definitiva non attestata
 
-Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o società reali.
+Checkpoint codice `0b04bfd3c93648e0f333b6fef9ad4da059ee68b4`. GitHub Actions `37777207489` **SUCCESS Windows e Ubuntu**, build produzione PASS. Per ciascuna piattaforma: `test:stampe` **90/90**, `test:bank` **11/11**, `test:core` **658/658**, `test:all` **1033/1033**. Non modificati database, migrations, env, auth/RLS o societ? reali.
 
-La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI è volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e può essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
+La certificazione riguarda i test automatici del codice, NON lo stato funzionale A100: il consolidamento UI ? volutamente bloccato senza attestazioni server, mentre la RPC esistente non prova i byte PDF e pu? essere invocata aggirando la UI. Rimangono obbligatori un database di test isolato e migrazione server-side approvata per snapshot, hash file, lock e audit; test browser e verifica PDF. Bank live sempre bloccata.
 
-## 2026-10-08 — Estensione gate stampa definitiva al service e audit DB non raggiungibile
+## 2026-10-08 ? Estensione gate stampa definitiva al service e audit DB non raggiungibile
 
 - Supabase plugin connesso, progetto con nome "Fiscosim v4p" INACTIVE e senza branch; timeout su lettura schema/migrations. Nessun accesso DB dati, alterazioni o riattivazione. Appartenenza del progetto al deployment corrente NON verificata.
-- Da migrazioni versionate: `precheck_stampa_definitiva` / `consolidazione_stampa_definitiva` `SECURITY DEFINER`; non dimostrata autorizzazione auth.uid→p_societa_id, conferma p_creato_by né hash byte file. Annotati rilievi, verifiche necessarie e rischi in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.
-- Defense-in-depth nel wrapper `motoreStampaDefinitiva.js`: prima della RPC ricontrolla precheck e attestazioni, anno/periodo/società/tipo, checksum contenuto coincidente e 64 hex; un precheck success senza prove non può più avviare il consolidamento anche bypassando il pannello.
-- Nella suite fake DB le attestazioni positive sono chiaramente simulative: non fingono un server reale certificato. Test di assenza di RPC in caso di evidenza mancante, checksum divergente, società estranea e anno divergente.
+- Da migrazioni versionate: `precheck_stampa_definitiva` / `consolidazione_stampa_definitiva` `SECURITY DEFINER`; non dimostrata autorizzazione auth.uid?p_societa_id, conferma p_creato_by n? hash byte file. Annotati rilievi, verifiche necessarie e rischi in `REPORT/FISCOSIM_RPC_STAMPA_SERVER_SECURITY_AUDIT.md`.
+- Defense-in-depth nel wrapper `motoreStampaDefinitiva.js`: prima della RPC ricontrolla precheck e attestazioni, anno/periodo/societ?/tipo, checksum contenuto coincidente e 64 hex; un precheck success senza prove non pu? pi? avviare il consolidamento anche bypassando il pannello.
+- Nella suite fake DB le attestazioni positive sono chiaramente simulative: non fingono un server reale certificato. Test di assenza di RPC in caso di evidenza mancante, checksum divergente, societ? estranea e anno divergente.
 - Nessuna migration applicata, nessun auth/RLS/env/DB reale o Bank commit. CI nuovo blocco pendente.
 
-## Checkpoint 2026-10-08 — Fiscosim Supabase / gate RPC Stampe (CI certificata)
+## Checkpoint 2026-10-08 ? Fiscosim Supabase / gate RPC Stampe (CI certificata)
 
 Codice: `a0b2480ab556492b77f4748428dc6686d838362f`. GitHub Actions `37781154980`: **SUCCESS Windows + Ubuntu**, build Vite PASS. Su entrambe le piattaforme: `test:stampe` **93/93**, `test:bank` **11/11**, `test:core` **661/661**, `test:all` **1036/1036**. Suite import 231/231, manuale 414/414, consultazione 38/38, IVA 148/148, split 25/25, ritenute 27/27.
 
-Il consolidamento resta **NON FREEZE / NON PRONTO** nonostante la CI verde: il nuovo gate al service è solo difesa in profondità. Le funzioni SQL SECURITY DEFINER e il reale checksum server/snapshot non sono state verificate sul database. Supabase connesso; unico progetto nominativamente FiscoSim rilevato `Fiscosim v4p`, INACTIVE e senza branch; timeout su tabelle/migrazioni. Nessuna modifica DB, nessuna riattivazione o applicazione migration. L'utente deve scegliere/confermare un ambiente di test isolato e accessibile prima del collaudo SQL/E2E.
+Il consolidamento resta **NON FREEZE / NON PRONTO** nonostante la CI verde: il nuovo gate al service ? solo difesa in profondit?. Le funzioni SQL SECURITY DEFINER e il reale checksum server/snapshot non sono state verificate sul database. Supabase connesso; unico progetto nominativamente FiscoSim rilevato `Fiscosim v4p`, INACTIVE e senza branch; timeout su tabelle/migrazioni. Nessuna modifica DB, nessuna riattivazione o applicazione migration. L'utente deve scegliere/confermare un ambiente di test isolato e accessibile prima del collaudo SQL/E2E.
 
-## 2026-10-08 — SUPABASE LIVE RIPRISTINATO: P0 SICUREZZA (read-only)
+## 2026-10-08 ? SUPABASE LIVE RIPRISTINATO: P0 SICUREZZA (read-only)
 
-Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) è tornato `ACTIVE_HEALTHY`. Durante `COMING_UP` i cataloghi risultavano temporaneamente vuoti, poi sono riapparse **73 tabelle public, 27 funzioni, 141 policy**. `prima_nota`, `piano_conti` e `stampe_definitive` esistono. `list_migrations` resta vuoto e la relazione di tracking `supabase_migrations.schema_migrations` non risulta presente: vietata applicazione indiscriminata delle 72 migrations repository.
+Il progetto Fiscosim v4p (endpoint coincidente con `.env.example`) ? tornato `ACTIVE_HEALTHY`. Durante `COMING_UP` i cataloghi risultavano temporaneamente vuoti, poi sono riapparse **73 tabelle public, 27 funzioni, 141 policy**. `prima_nota`, `piano_conti` e `stampe_definitive` esistono. `list_migrations` resta vuoto e la relazione di tracking `supabase_migrations.schema_migrations` non risulta presente: vietata applicazione indiscriminata delle 72 migrations repository.
 
-**P0 confermato via introspezione:** 8 funzioni `SECURITY DEFINER` eseguibili da anon; due RPC stampa owner postgres senza controlli `auth.uid`/società; **22 tabelle con policy permissiva per anon/PUBLIC e grants anon SELECT/INSERT/UPDATE/DELETE**, incluse `prima_nota_righe` e `utenti_studio`. `get_advisors(security)` senza lint ma non risolve il rischio. Non è stato tentato accesso anon via HTTP o letto dato di cliente.
+**P0 confermato via introspezione:** 8 funzioni `SECURITY DEFINER` eseguibili da anon; due RPC stampa owner postgres senza controlli `auth.uid`/societ?; **22 tabelle con policy permissiva per anon/PUBLIC e grants anon SELECT/INSERT/UPDATE/DELETE**, incluse `prima_nota_righe` e `utenti_studio`. `get_advisors(security)` senza lint ma non risolve il rischio. Non ? stato tentato accesso anon via HTTP o letto dato di cliente.
 
-Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalità operative.
+Dettaglio verifiche e piano in `REPORT/FISCOSIM_SUPABASE_LIVE_SECURITY_AUDIT_20261008.md`; query riutilizzabili in `sql/audit_supabase_exposure_read_only.sql`. Stato Fiscosim **BLOCKER SICUREZZA**, freeze STAMPE e Bank live NON autorizzati. Prima di qualsiasi correzione GRANT/REVOKE/policy/RPC su database attuale occorre consenso esplicito, backup e collaudo su clone schema-only fedele con dati fittizi, valutando impatto sulle funzionalit? operative.
 
-## 2026-10-08 — P0: preparazione hardening in branch Git isolato (NON APPLICATO)
+## 2026-10-08 ? P0: preparazione hardening in branch Git isolato (NON APPLICATO)
 
 Obiettivo: contenimento degli accessi `anon` e rimozione selettiva delle policy `true` che annullano policy tenant gia presenti, senza perdere il riferimento reale. Target `mio-branch` SHA `38bfbc7`; branch di lavoro `security/p0-isolated-hardening-20261008`. Nessuna modifica a Supabase live, Vercel, segreti, auth o dati contabili.
 
@@ -306,25 +306,25 @@ Audit schema live in sola lettura: 73 tabelle, 27 funzioni, 141 policy; 22 tabel
 
 Candidato SQL SOLO STAGING: `sql/security_p0/01_containment_STAGING_ONLY.sql`. Contiene transazione, precondizioni catalogo e opt-in di sessione `fiscosim.p0_isolated_approval`; revoca DML anon solo su 26 tabelle P0, revoca EXECUTE PUBLIC/anon su 8 RPC, sospende `authenticated` per tre RPC prive di guardie caller/tenant, rimuove override TRUE solo sulle sei tabelle con alternative scoped. I controlli `sql/security_p0/02_verify_READ_ONLY.sql` misurano il contenimento ma NON certificano isolation degli utenti autenticati (P0 residuale). Test statici `tests/securityP0Containment.test.js` guardano le invarianti SQL, non sostituiscono un test PostgreSQL.
 
-Costo branch Supabase identificato: 0.01344 USD/ora, da confermare esplicitamente dall'utente prima della creazione. Nessun clone DB presente. ATTENZIONE: `supabase_migrations.schema_migrations` assente sul reale benché il repo contenga 72 files migration; non ricreare da sole migrations.
+Costo branch Supabase identificato: 0.01344 USD/ora, da confermare esplicitamente dall'utente prima della creazione. Nessun clone DB presente. ATTENZIONE: `supabase_migrations.schema_migrations` assente sul reale bench? il repo contenga 72 files migration; non ricreare da sole migrations.
 Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-membro/anon, snapshot schema, verifica integrale API e UX, piano rollback e autorizzazione specifica. Nessuna modifica al database reale approvata o eseguita in questa fase.
 
 
-## 2026-10-08 — P0 STAGE3G / regressione ACL rafforzata (branch isolato)
-- HEAD Stage3G `4673d395` già presente su PR #2 Draft; baseline CI run `37838912768` PASS Linux/Windows. Test PostgreSQL Stage3G **NON ESEGUITO**.
+## 2026-10-08 ? P0 STAGE3G / regressione ACL rafforzata (branch isolato)
+- HEAD Stage3G `4673d395` gi? presente su PR #2 Draft; baseline CI run `37838912768` PASS Linux/Windows. Test PostgreSQL Stage3G **NON ESEGUITO**.
 - LAB ONLY: esclusa concessione DELETE diretta da `utenti_studio` (la UI disattiva logicamente), SELECT/INSERT/UPDATE limitati a colonne esplicite; postcondition conserva service_role per il provisioning server.
 - TEST ONLY: prove SQL transazionali zero-row per INSERT/UPDATE `password_hash` e `auth_user_id`, DELETE e SELECT *; `ROLLBACK` obbligatorio. Verifica PostgreSQL reale pendente.
-- Test statico: assert espliciti per DML vietato, visibilità segreti, service_role.
+- Test statico: assert espliciti per DML vietato, visibilit? segreti, service_role.
 - Debito applicativo: legacy `login` browser legge password_hash quando bypass abilitato; `utenti` usa SELECT * e credenziali dal client. API `/api/auth/users` adotta Supabase Auth e service_role ma richiede audit di segregazione inter-studio prima del collegamento UI.
 - Nessun merge, deploy, intervento DB live, modifica `mio-branch`, env o Docker remoto. P0 rimane aperto.
 
 
-## 2026-10-08 — P0 STAGE3G / COLLLaUDO POSTGRESQL IN DOCKER ISOLATO
+## 2026-10-08 ? P0 STAGE3G / COLLLaUDO POSTGRESQL IN DOCKER ISOLATO
 - L'operatore ha eseguito `24_stage3g_staff_secret_acl_LAB_ONLY.sql`, `25_stage3g_staff_secret_acl_TEST_ONLY.sql`, `23_stage3f_role_only_READ_ONLY.sql` e `04_residuals_READ_ONLY.sql` nel container `supabase_db_FiscoSim-P0-LAB-20261008-164658`, con esito finale `STAGE 3G - SQL ESEGUITO SENZA ERRORI`.
 - Report `04_residuals`: `RESIDUAL_AUTH_TRUE_POLICY_TABLES=8`; tutti gli altri sette indicatori principali a zero. Il dettaglio delle notice Stage3G e l'indicatore `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH` non sono inclusi nell'estratto trasmesso.
-- **Stage3G PostgreSQL PASS come esecuzione script/test; JWT/API browser e login E2E ancora NON TESTATI**. Non ripetere il laboratorio o le Stage 1–3F.
+- **Stage3G PostgreSQL PASS come esecuzione script/test; JWT/API browser e login E2E ancora NON TESTATI**. Non ripetere il laboratorio o le Stage 1?3F.
 
-## 2026-10-08 — P0 STAGE3H / LOGIN AUTH CLIENT SICURO
+## 2026-10-08 ? P0 STAGE3H / LOGIN AUTH CLIENT SICURO
 - Solo branch `security/p0-isolated-hardening-20261008`: `src/modules/login/index.jsx` rimuove il bypass con confronto password locale; usa `signInWithPassword` e `fetchSessionProfile` per profilo operativo autorizzato. Sessioni create con profilo mancante vengono disconnesse.
 - `src/lib/auth.js` rimuove `isLocalAuthDisabled` e la soppressione dell'Authorization Bearer nelle chiamate API. `src/App.jsx` effettua `signOutSession` prima di azzerare lo stato UI.
 - Aggiunto `tests/securityP0Stage3hAuthClient.test.js` per bloccare regressioni sul bypass e logout.
@@ -334,60 +334,60 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Nessun merge, deploy, modifica a `mio-branch`, `.env`, Supabase live o dati clienti. P0 rimane APERTO.
 
 
-## 2026-10-08 — P0 STAGE3I / audit FK, RLS e relazioni studio (solo metadata)
+## 2026-10-08 ? P0 STAGE3I / audit FK, RLS e relazioni studio (solo metadata)
 - Creato `sql/security_p0/27_stage3i_studio_mapping_READ_ONLY.sql`: elenca colonne, vincoli FK, policy, ACL e definizioni delle funzioni di contesto per `utenti_studio`, `utenti_studio_societa`, `societa`, `studios`, `users`, `clients`, `clienti`, `f24_scadenze`, `f24_righe`, `liquidazioni_iva`.
 - Creato `tests/securityP0Stage3iStudioMap.test.js`: assicurazione statica che il nuovo controllo non introduca DML.
 - **Non applicata nessuna RLS**: i riferimenti studio/cliente e `studio_id` nullable restano da determinare tramite output del LAB. Non dedurre relazioni dal nome delle tabelle.
-- Il controllo sarà eseguito esclusivamente nel Docker P0 già esistente e non interroga righe cliente. CI e verifica PostgreSQL Stage3I pendenti al commit tecnico `a9c9a7d37d502cb737eb06c2cde47b1e50c24ce7`.
+- Il controllo sar? eseguito esclusivamente nel Docker P0 gi? esistente e non interroga righe cliente. CI e verifica PostgreSQL Stage3I pendenti al commit tecnico `a9c9a7d37d502cb737eb06c2cde47b1e50c24ce7`.
 - Nessun accesso write al progetto Supabase reale; `mio-branch`, .env e produzione invariati.
 
 
-## 2026-10-08 — P0 STAGE3I ANALYZED / legacy studios security boundary
+## 2026-10-08 ? P0 STAGE3I ANALYZED / legacy studios security boundary
 - L'operatore ha caricato il report `STAGE3I_RELATIONSHIP_AUDIT.txt`: `STAGE3I READ-ONLY PASS`, 370 righe, transazione terminata con `ROLLBACK`.
 - Verificato: `f24_righe`, `f24_scadenze`, `liquidazioni_iva` appartengono al sottoschema legacy `studios/users/clients` (FK studio_id->studios.id; cliente_id->clients.id); hanno studio_id nullable. Nessun FK documentato che renda automaticamente equivalente `studios.id` a `societa.id` o `users.id` a `utenti_studio.id`.
 - RLS: `Allow authenticated` per `studios/users/clients` e tabelle fiscali; `allow_all_*` policy TRUE per 3 tabelle; authenticated aveva SELECT/INSERT/UPDATE/DELETE a livello tabella per le sei. `user_has_societa_access` restituisce TRUE agli owner/admin senza membership target.
-- BUG applicativi CONFERMATI STATICAMENTE: `src/modules/f24/index.jsx` popola clienti dalla tabella `clienti` e salva su `f24_righe` usando `client_id`, campo assente (schema contiene `cliente_id` FK verso `clients`); crea `f24_scadenze` senza studio_id. `src/modules/iva/index.jsx` invia `trimestre`, `iva_saldo`, `iva_dovuta` e ordina per `trimestre`, colonne assenti nello schema `liquidazioni_iva`; usa `clienti` anziché `clients`. L'AI agent/test_mode legacy interroga campi `societa_id` / `importo` incoerenti con le medesime tabelle.
+- BUG applicativi CONFERMATI STATICAMENTE: `src/modules/f24/index.jsx` popola clienti dalla tabella `clienti` e salva su `f24_righe` usando `client_id`, campo assente (schema contiene `cliente_id` FK verso `clients`); crea `f24_scadenze` senza studio_id. `src/modules/iva/index.jsx` invia `trimestre`, `iva_saldo`, `iva_dovuta` e ordina per `trimestre`, colonne assenti nello schema `liquidazioni_iva`; usa `clienti` anzich? `clients`. L'AI agent/test_mode legacy interroga campi `societa_id` / `importo` incoerenti con le medesime tabelle.
 - Nessuna correttezza funzionale F24/IVA deducibile dai PASS SQL di sicurezza; sono necessari redesign e test E2E prima dello sblocco di questi moduli.
 
-## 2026-10-08 — P0 STAGE3J PREPARED / laboratorio-only quarantine legacy
+## 2026-10-08 ? P0 STAGE3J PREPARED / laboratorio-only quarantine legacy
 - Predisposti `sql/security_p0/28_stage3j_legacy_quarantine_LAB_ONLY.sql`, `29_stage3j_legacy_quarantine_TEST_ONLY.sql`, `30_stage3j_rollback_TEST_ONLY.sql` e `tests/securityP0Stage3jLegacyQuarantine.test.js`.
-- Patch gated/atomica: `REVOKE ALL` browser anon/authenticated/PUBLIC sulle sei tabelle `studios/users/clients/f24_scadenze/f24_righe/liquidazioni_iva`, con guard FK studio, nullable legacy e postcheck service_role + column grants; non migra dati né altera nullable/FK/policy o società principale.
-- Esito deliberatamente **fail closed**: i browser user non possono più leggere/scrivere in quei sei endpoint legacy; **i vecchi moduli F24/IVA rimangono BLOCCATI** e non sono considerati funzionalmente sistemati. Server service_role deve mantenere accesso (pre/post condition).
+- Patch gated/atomica: `REVOKE ALL` browser anon/authenticated/PUBLIC sulle sei tabelle `studios/users/clients/f24_scadenze/f24_righe/liquidazioni_iva`, con guard FK studio, nullable legacy e postcheck service_role + column grants; non migra dati n? altera nullable/FK/policy o societ? principale.
+- Esito deliberatamente **fail closed**: i browser user non possono pi? leggere/scrivere in quei sei endpoint legacy; **i vecchi moduli F24/IVA rimangono BLOCCATI** e non sono considerati funzionalmente sistemati. Server service_role deve mantenere accesso (pre/post condition).
 - TEST_ONLY usa SQL a zero righe con `SET LOCAL ROLE authenticated` e ROLLBACK, senza dati fiscali. Rollback pericoloso solo con opt-in esplicito LAB.
 - Stato: codice/staging preparato ma **NON APPLICATO al laboratorio Docker**, nessun test SQL reale Stage3J; CI del commit finale da verificare. Supabase reale `mlydfspmrkaedsocubku` read-only; `mio-branch`, produzione, .env e PR Draft immutati.
 - Successivi P0: protezione dell'API `/api/auth/users` da modifiche tra studi, rimozione owner/admin fallback globale, altre policy TRUE/auth-only, JWT E2E; poi flusso contabile XML->staging->PN->IVA->stampe e test fiscali.
 
 
-## 2026-10-08 — P0 STAGE3J LAB PASS / residui dopo quarantena
+## 2026-10-08 ? P0 STAGE3J LAB PASS / residui dopo quarantena
 - L'operatore ha eseguito il comando Stage3J sul solo container Docker `supabase_db_FiscoSim-P0-LAB-20261008-164658`; il comando ha raggiunto la generazione di `STAGE3J_RESULT.txt`, senza errori segnalati.
 - Output `23_stage3f_role_only_READ_ONLY.sql` riportato: `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH=0`; `RISK_NULLABLE_LEGACY_FISCAL_STUDIO_IDS=3`; `RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK=1`; `RISK_ROLE_ONLY_AUTHENTICATED_TABLES=3`; `RISK_TRUE_POLICY_AUTH_TABLES=5`.
-- Quarantena Stage3J confermata tramite calo contatori 9→3 role-only e 8→5 true-policy visibili al browser; report completo non allegato e JWT/API E2E non testati. RLS true legacy rimane catalogata e non deve essere riabilitata con futuri GRANT.
+- Quarantena Stage3J confermata tramite calo contatori 9?3 role-only e 8?5 true-policy visibili al browser; report completo non allegato e JWT/API E2E non testati. RLS true legacy rimane catalogata e non deve essere riabilitata con futuri GRANT.
 
-## 2026-10-08 — P0 STAGE3K PREP / owner-admin global company fallback
-- Patch candidata **SOLO LAB**: `31_stage3k_explicit_company_membership_LAB_ONLY.sql` sostituisce `user_has_societa_access(uuid)` in modalità `SECURITY INVOKER` con `EXISTS` su membership + utente attivo e uguaglianza esatta di entrambe le identità auth; rimuove ramo owner/admin `RETURN TRUE` globale.
-- `32_stage3k_company_membership_TEST_ONLY.sql`: test reale RLS SQL su due società sintetiche e cinque identità (owner, admin, collaboratore, disabilitato, esterno), verifica positiva accesso società A e negativa B, lettura e aggiornamento transazionale, con ROLLBACK.
+## 2026-10-08 ? P0 STAGE3K PREP / owner-admin global company fallback
+- Patch candidata **SOLO LAB**: `31_stage3k_explicit_company_membership_LAB_ONLY.sql` sostituisce `user_has_societa_access(uuid)` in modalit? `SECURITY INVOKER` con `EXISTS` su membership + utente attivo e uguaglianza esatta di entrambe le identit? auth; rimuove ramo owner/admin `RETURN TRUE` globale.
+- `32_stage3k_company_membership_TEST_ONLY.sql`: test reale RLS SQL su due societ? sintetiche e cinque identit? (owner, admin, collaboratore, disabilitato, esterno), verifica positiva accesso societ? A e negativa B, lettura e aggiornamento transazionale, con ROLLBACK.
 - `33_stage3k_rollback_TEST_ONLY.sql`: ripristino esplicitamente **insicuro**, LAB ONLY con GUC opt-in, mai produzione.
 - `tests/securityP0Stage3kCompanyMembership.test.js`: static regressions. CI e PostgreSQL Stage3K pendenti.
-- Comportamento desiderato: utenti owner/admin privi di assegnazioni esplicite non vedono i dati società; non si ricostruiscono né si inferiscono membership dai ruoli. Potenziale regressione applicativa fino a provisioning esplicito delle assegnazioni da collaudare; NON si attiva su Supabase reale.
-- Permangono criticità P0 separate: altre 3 role-only table, 5 TRUE policy con grants legacy attualmente revocati, API `/api/auth/users` con service_role e scoping assente, 3 `studio_id` legacy nullable, end-to-end Auth e fiscali non eseguiti.
+- Comportamento desiderato: utenti owner/admin privi di assegnazioni esplicite non vedono i dati societ?; non si ricostruiscono n? si inferiscono membership dai ruoli. Potenziale regressione applicativa fino a provisioning esplicito delle assegnazioni da collaudare; NON si attiva su Supabase reale.
+- Permangono criticit? P0 separate: altre 3 role-only table, 5 TRUE policy con grants legacy attualmente revocati, API `/api/auth/users` con service_role e scoping assente, 3 `studio_id` legacy nullable, end-to-end Auth e fiscali non eseguiti.
 - Nessuna applicazione al Docker, nessuna scrittura a Supabase reale, nessun cambiamento su `mio-branch`, .env, PR o deploy.
 
 
-## 2026-10-08 — P0 STAGE3K LAB PASS + residui catalogati
+## 2026-10-08 ? P0 STAGE3K LAB PASS + residui catalogati
 - Ricevuto file operatore `STAGE3K_RESULT.txt`: `STAGE3K LAB SQL PASS` su commit `a4fc89f513664fa718f9f3a929729704929491f3`; eseguiti `31_stage3k_explicit_company_membership_LAB_ONLY.sql` (`CREATE FUNCTION` + `COMMIT`) e `32_stage3k_company_membership_TEST_ONLY.sql` (fixture A/B, 5 auth users, 4 staff, 4 membership, 2 movimenti; test zero errori + `ROLLBACK`).
 - Rischi Stage3F: `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH=0`, `RISK_NULLABLE_LEGACY_FISCAL_STUDIO_IDS=3`, `RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK=0`, `RISK_ROLE_ONLY_AUTHENTICATED_TABLES=3`, `RISK_TRUE_POLICY_AUTH_TABLES=5`.
 - I residui ATTUALMENTE rilevanti (esposizione authenticated, non solo policy nel catalogo) sono 3 role-only: `avvisi_ade`, `client_modules`, `client_responsabili`; 5 true-policy: `invii_log`, `revisioni_dichiarativi`, `test_cases`, `test_datasets`, `test_runs`. Le policy residue legacy 3J sono ancora catalogate ma prive di grant browser.
-- Conclusione: Stage3K SQL lab PASS; non ancora E2E Supabase Auth JWT/REST né cicli fiscali reali.
+- Conclusione: Stage3K SQL lab PASS; non ancora E2E Supabase Auth JWT/REST n? cicli fiscali reali.
 - Nessuna modifica al database reale, nessun merge su `mio-branch`.
 
-## 2026-10-08 — P0 STAGE3L READ ONLY PREP
+## 2026-10-08 ? P0 STAGE3L READ ONLY PREP
 - Predisposto `sql/security_p0/34_stage3l_remaining_access_READ_ONLY.sql`: query esclusivamente dei cataloghi PostgreSQL per le otto tabelle con rischio residuo autenticato (RLS, column schema, policy, FK, grants, indici).
 - Predisposto `tests/securityP0Stage3lRemainingAccess.test.js`: guardia statica su sole query catalogo e copertura di otto tabelle.
 - Nessun DDL/DML, nessuna fixture, nessuna scrittura al LAB; output serve per decidere patch selettive senza rompere `avvisi_ade` e `revisioni_dichiarativi` usati dall'applicazione.
 - Stage3L CI e audit SQL Docker pendenti. Nessuna azione su Supabase reale, ambiente .env, deploy, produzione o `mio-branch`.
 
 
-## 2026-10-09 — P0 STAGE3L LAB PASS / eight-table residual ACL findings
+## 2026-10-09 ? P0 STAGE3L LAB PASS / eight-table residual ACL findings
 - User file `STAGE3L_REMAINING_ACCESS.txt` ends with `ROLLBACK`. Confirmed metadata for eight tables, no SQL mutations.
 - `avvisi_ade`: RLS on, `anon` no SELECT table grant, but authenticated has all table privileges; permissive `full_access_authenticated` policy `auth.role()='authenticated'` and residual `anon_access_test` policy (anon role true), no verified studio mapping. FK cliente_id -> `clienti`; AgeCon and import_unificato use this table.
 - `revisioni_dichiarativi`: authenticated TRUE ALL policy; anon table DML grants (RLS denies anon according to role-specific policy, not equivalent to ACL denial); FK cliente_id -> `clienti`; nullable `tenant_id`/`company_id`/`owner_user_id`; review UI directly uses it.
@@ -397,7 +397,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Not safe** to apply a generic company_id filter to avvisi/revisioni: `clienti` lacks verified company FK and revisions company_id is nullable; no invented mapping/backfill.
 - Distinction: anon table grants are material attack surface but row-level policies may still deny the role. JWT/API E2E remains outstanding.
 
-## 2026-10-09 — P0 STAGE3M PREP / segregated six-table browser quarantine
+## 2026-10-09 ? P0 STAGE3M PREP / segregated six-table browser quarantine
 - Added `sql/security_p0/35_stage3m_six_browser_quarantine_LAB_ONLY.sql`: gated transaction removing anon/authenticated/PUBLIC browser ACL from `client_modules`, `client_responsabili`, `invii_log`, `test_cases`, `test_datasets`, `test_runs`. Verifies RLS, exact expected policies, baseline ACL, post-revocation column ACL, preserved service_role privileges.
 - Added `36_stage3m_six_browser_quarantine_TEST_ONLY.sql`: SQL negative probes with `SET LOCAL ROLE authenticated` and `anon`, SELECT LIMIT 0 + INSERT/UPDATE/DELETE WHERE false, then ROLLBACK. Added `37_stage3m_rollback_TEST_ONLY.sql`: explicitly unsafe legacy grants restoration, restricted by session opt-in.
 - Added `tests/securityP0Stage3mSixBrowserQuarantine.test.js`, enforce table scope and SQL guard. Candidate patch has NOT been applied to Docker; CI pending.
@@ -408,41 +408,41 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Added PowerShell 5.1 runner `scripts/security_p0/run-stage3m.ps1` with pinned commit check, dedicated Docker lab selection and fail-closed result reporting. Expected after Stage3M: role-only=1, TRUE-policy reachable=1, password ACL=0, global owner fallback=0, legacy nullable=3. Stage3M is not yet executed in Docker.
 
  
-## 2026-10-09 — P0 STAGE3M LAB PASS / Stage3N API and staff ACL
+## 2026-10-09 ? P0 STAGE3M LAB PASS / Stage3N API and staff ACL
 - Operatore ha allegato `STAGE3M_RESULT.txt`. PostgreSQL LAB `COMMIT` + negative tests `ROLLBACK`, status PASS; metriche residue: auth staff password hash=0; fallback owner/admin globale=0; role-only=1; true policy raggiungibili=1; nullable studio_id legacy=3.
-- Stage3N API: `lib/tenantUserManagement.js` definisce filtri fail-closed sulle società del manager con profilo Auth verificato; `api/auth/users.js` GET filtra profili interamente entro l'ambito verificato e con auth_user_id congruente, POST richiede assegnazione esplicita a subset e rifiuta email già associate, PATCH/DELETE confrontano tutte le membership esistenti e il corrispondente auth_user_id prima delle operazioni privilegiate.
+- Stage3N API: `lib/tenantUserManagement.js` definisce filtri fail-closed sulle societ? del manager con profilo Auth verificato; `api/auth/users.js` GET filtra profili interamente entro l'ambito verificato e con auth_user_id congruente, POST richiede assegnazione esplicita a subset e rifiuta email gi? associate, PATCH/DELETE confrontano tutte le membership esistenti e il corrispondente auth_user_id prima delle operazioni privilegiate.
 - Stage3N session: `lib/authMembership.js` impedisce login tramite semplice fallback email senza auth link e membership valide; rifiuta fallback membership su solo utente_id; disabilita implicit all-active company provisioning e fallback da user_metadata/ruolo globale. Il vecchio `resolveUserSocietaScope` va ripulito e testato E2E prima di rilascio.
 - Code tests: `tests/securityP0Stage3nTenantUserManagement.test.js`, `tests/securityP0Stage3nAuthMembershipRuntime.test.js` con fake DB, `tests/securityP0Stage3nStaffAcl.test.js`. Sono unit/static/mock: nessuna API reale con JWT firmato verificata.
 - App bypass complementare identificato: Stage3G preservava `authenticated` INSERT/UPDATE columns su `utenti_studio`, rendendo bypassabile la API `/api/auth/users`. Stage3N propone `38_stage3n_staff_write_acl_LAB_ONLY.sql` per revocare SOLO tali grants colonnari, conservare lettura specifica e `service_role`; `39_stage3n_staff_write_acl_TEST_ONLY.sql` prove SQL authenticated a zero righe con ROLLBACK; `40_stage3n_staff_write_rollback_TEST_ONLY.sql` rollback esplicitamente pericoloso con opt-in; `scripts/security_p0/run-stage3n.ps1` esecutore Windows PS5.1 e commit pin.
-- Stage3N SQL non ancora applicato a Docker. Non certificare P0 globale: RLS SELECT di `utenti_studio` per owner/admin globale, policy `avvisi_ade` e `revisioni_dichiarativi`, client-scope `clienti` e mapping studio, compatibilità UI gestione utenti, JWT/API/browser E2E e cicli fiscali reali rimangono aperti.
+- Stage3N SQL non ancora applicato a Docker. Non certificare P0 globale: RLS SELECT di `utenti_studio` per owner/admin globale, policy `avvisi_ade` e `revisioni_dichiarativi`, client-scope `clienti` e mapping studio, compatibilit? UI gestione utenti, JWT/API/browser E2E e cicli fiscali reali rimangono aperti.
 - Nessun merge sulla PR #2 (Draft), nessuna scrittura a Supabase reale, nessun intervento su `mio-branch`, nessun deploy.
 
 
-## 2026-10-09 — STAGE3N PostgreSQL LAB PASS (operatore)
+## 2026-10-09 ? STAGE3N PostgreSQL LAB PASS (operatore)
 - Allegato `STAGE3N_RESULT.txt`, commit `ace0a8cf235b1ad864fe982b66f3b087c7048625`.
 - `38_stage3n_staff_write_acl_LAB_ONLY.sql`: `REVOKE`, `COMMIT`; `39_stage3n_staff_write_acl_TEST_ONLY.sql`: transazione `ROLLBACK`, senza errori.
 - Inventario residuo `23_stage3f_role_only_READ_ONLY.sql`: `RISK_AUTH_CAN_SELECT_STAFF_PASSWORD_HASH=0`, `RISK_NULLABLE_LEGACY_FISCAL_STUDIO_IDS=3`, `RISK_OWNER_ADMIN_GLOBAL_COMPANY_FALLBACK=0`, `RISK_ROLE_ONLY_AUTHENTICATED_TABLES=1`, `RISK_TRUE_POLICY_AUTH_TABLES=1`.
 - Questo PASS certifica il comportamento di privilegi Postgres nel laboratorio, NON l'E2E JWT/API/UI e NON la chiusura P0.
 
-## 2026-10-09 — STAGE3O user UI -> scoped API (candidate)
-- Audit statico rileva: `src/modules/utenti/index.jsx` precedente scriveva/leggeva direttamente `public.utenti_studio` e gestiva `password_hash` nel browser; comportamento incompatibile con Stage3N. Inoltre non permetteva scelta esplicita delle società, richiesta dalla nuova API `api/auth/users.js`.
-- Patch solo su branch P0: ModuloUtenti usa `apiFetch('/api/auth/users')` per GET/POST/PATCH/DELETE, invia `password` attraverso Auth server invece di `password_hash`, riceve il profilo sessione da `App.jsx`, visualizza soltanto le società assegnate al responsabile, richiede almeno un'assegnazione esplicita, gestisce errori delle operazioni. Aggiunti guard statici `tests/securityP0Stage3oUserUiApi.test.js`.
-- Funzione `clienti` ancora da isolare per studio: il form ha una query diretta di elenco clienti in modalità «solo assegnati»; la API server accetta `clienti_assegnati` senza verifica di appartenenza a una società, per assenza mapping autorevole `clienti` -> `societa`. **Non certificare controllo tenant completo; client permissions and AgeCon/revision remain P0 pending.**
+## 2026-10-09 ? STAGE3O user UI -> scoped API (candidate)
+- Audit statico rileva: `src/modules/utenti/index.jsx` precedente scriveva/leggeva direttamente `public.utenti_studio` e gestiva `password_hash` nel browser; comportamento incompatibile con Stage3N. Inoltre non permetteva scelta esplicita delle societ?, richiesta dalla nuova API `api/auth/users.js`.
+- Patch solo su branch P0: ModuloUtenti usa `apiFetch('/api/auth/users')` per GET/POST/PATCH/DELETE, invia `password` attraverso Auth server invece di `password_hash`, riceve il profilo sessione da `App.jsx`, visualizza soltanto le societ? assegnate al responsabile, richiede almeno un'assegnazione esplicita, gestisce errori delle operazioni. Aggiunti guard statici `tests/securityP0Stage3oUserUiApi.test.js`.
+- Funzione `clienti` ancora da isolare per studio: il form ha una query diretta di elenco clienti in modalit? ?solo assegnati?; la API server accetta `clienti_assegnati` senza verifica di appartenenza a una societ?, per assenza mapping autorevole `clienti` -> `societa`. **Non certificare controllo tenant completo; client permissions and AgeCon/revision remain P0 pending.**
 - Nessun deploy, nessuna esecuzione nel Docker dell'interfaccia o API con JWT; nessuna scrittura a Supabase reale e nessun merge.
 
 
-## 2026-10-09 — P0 STAGE3N RE-RUN FIX / STAGE3P OWNERSHIP CONTRACT
-- **Provenienza:** operatore ha allegato `STAGE3N_RESULT.txt` con `STAGE3N LAB SQL PASS` (`COMMIT`, role SQL tests `ROLLBACK`, valori risk: password_hash=0, owner fallback=0, role-only reachable=1, true-policy reachable=1, legacy nullable=3). Un secondo tentativo ha dato `Stage3N unexpected Stage3G staff-ACL baseline`, **coerente con applicazione già completata**: nessuna seconda applicazione SQL né mutazione DB in quel tentativo.
-- **Fix idempotenza candidato**: `sql/security_p0/38_stage3n_staff_write_acl_LAB_ONLY.sql` riconosce le coppie coerenti dei grant Stage3G (da revocare) e Stage3N già revocati. Rifiuta situazioni parziali e verifica tutte le colonne e i privilegi `service_role` prima del `COMMIT`. `REVOKE` può essere eseguito più volte senza alterare altre policy.
-- **Preservazione prove**: `scripts/security_p0/run-stage3n.ps1` non sovrascrive più `STAGE3N_RESULT.txt` precedente; eventuale recheck salvato a parte, con protezione da collisioni. Aggiornato `tests/securityP0Stage3nStaffAcl.test.js`. **Questa revisione dello script non è stata eseguita nel Docker**; precedente Stage3N SQL LAB resta PASS.
-- **Audit connessioni clienti**: `clienti` è anagrafica CRM senza FK o campo `societa_id`; `avvisi_ade.cliente_id` e `revisioni_dichiarativi.cliente_id` riferiscono `clienti`, non la società; `revisioni_dichiarativi.company_id` nullable non è una ownership verificata. Clienti, AgeCon, revisioni, e assegnazione `clienti_assegnati` condividono percorso browser diretto. Nessuna prova autorizza mapping per CF/PIVA/nome o per legacy `studios`.
-- **Stage3P specifica candidata**: `docs/security_p0/CLIENTI_SOCIETA_OWNERSHIP_CONTRACT.md` definisce l'isolamento canonico, vincoli su record sensibili, gestione conservativa degli orfani, esclusione dei fallback e matrice TEN-01..TEN-14 da collaudare **con JWT e API effettivi**. Documento di progetto: non contiene migration né backfill.
-- **Stato P0**: Stage3N privilegi Docker PASS; Stage3O frontend/API test CI sul codice sì, E2E runtime no; AgeCon/revisioni/cliente-ownership restano aperte e non sicure per rilascio, come anche scope `clienti_assegnati`/client list. Non ridurre i residui P0 tramite sole revoche che interrompano silenziosamente i flussi professionali. 
+## 2026-10-09 ? P0 STAGE3N RE-RUN FIX / STAGE3P OWNERSHIP CONTRACT
+- **Provenienza:** operatore ha allegato `STAGE3N_RESULT.txt` con `STAGE3N LAB SQL PASS` (`COMMIT`, role SQL tests `ROLLBACK`, valori risk: password_hash=0, owner fallback=0, role-only reachable=1, true-policy reachable=1, legacy nullable=3). Un secondo tentativo ha dato `Stage3N unexpected Stage3G staff-ACL baseline`, **coerente con applicazione gi? completata**: nessuna seconda applicazione SQL n? mutazione DB in quel tentativo.
+- **Fix idempotenza candidato**: `sql/security_p0/38_stage3n_staff_write_acl_LAB_ONLY.sql` riconosce le coppie coerenti dei grant Stage3G (da revocare) e Stage3N gi? revocati. Rifiuta situazioni parziali e verifica tutte le colonne e i privilegi `service_role` prima del `COMMIT`. `REVOKE` pu? essere eseguito pi? volte senza alterare altre policy.
+- **Preservazione prove**: `scripts/security_p0/run-stage3n.ps1` non sovrascrive pi? `STAGE3N_RESULT.txt` precedente; eventuale recheck salvato a parte, con protezione da collisioni. Aggiornato `tests/securityP0Stage3nStaffAcl.test.js`. **Questa revisione dello script non ? stata eseguita nel Docker**; precedente Stage3N SQL LAB resta PASS.
+- **Audit connessioni clienti**: `clienti` ? anagrafica CRM senza FK o campo `societa_id`; `avvisi_ade.cliente_id` e `revisioni_dichiarativi.cliente_id` riferiscono `clienti`, non la societ?; `revisioni_dichiarativi.company_id` nullable non ? una ownership verificata. Clienti, AgeCon, revisioni, e assegnazione `clienti_assegnati` condividono percorso browser diretto. Nessuna prova autorizza mapping per CF/PIVA/nome o per legacy `studios`.
+- **Stage3P specifica candidata**: `docs/security_p0/CLIENTI_SOCIETA_OWNERSHIP_CONTRACT.md` definisce l'isolamento canonico, vincoli su record sensibili, gestione conservativa degli orfani, esclusione dei fallback e matrice TEN-01..TEN-14 da collaudare **con JWT e API effettivi**. Documento di progetto: non contiene migration n? backfill.
+- **Stato P0**: Stage3N privilegi Docker PASS; Stage3O frontend/API test CI sul codice s?, E2E runtime no; AgeCon/revisioni/cliente-ownership restano aperte e non sicure per rilascio, come anche scope `clienti_assegnati`/client list. Non ridurre i residui P0 tramite sole revoche che interrompano silenziosamente i flussi professionali. 
 - **Perimetro rispettato**: soltanto branch `security/p0-isolated-hardening-20261008`, PR #2 Draft e non mergiata; nessun comando eseguito sul Docker dell'utente, nessun Supabase LIVE write, nessun deploy, .env immutati. CI commit finale ancora da verificare.
 - **Prossimo**: definire tenancy canonica e piano di migrazione LAB (non automatica), quindi isolamento completo clienti/AgeCon/revisioni e E2E JWT multi-company; separatamente avviare test operativi reali del ciclo contabile italiano come in roadmap Studio-Grade.
 
 
-## 2026-10-09 — Stage3P OWNERSHIP IMPLEMENTATION PREPARED, NOT DEPLOYED
+## 2026-10-09 ? Stage3P OWNERSHIP IMPLEMENTATION PREPARED, NOT DEPLOYED
 - Read-only preflight: `sql/security_p0/41_stage3p_ownership_preflight_READ_ONLY.sql` extracts only PostgreSQL columns, FK/check constraints, policies, exposed grants, auth helper metadata and anonymized aggregate counts for clienti/societa/avvisi/revisioni; `scripts/security_p0/run-stage3p-preflight.ps1` pins exact Git SHA, checks dedicated Docker container, uses `BEGIN READ ONLY`/`ROLLBACK`, and never overwrites prior reports.
 - Candidate LAB-only schema foundation: `sql/security_p0/42_stage3p_empty_crm_link_LAB_ONLY.sql` adds `public.crm_cliente_societa_link` (UUID pair PK, FKs to `clienti`, `societa`, `auth.users`, reviewer and reason obligatory), enables RLS without policies, revokes ALL anon/authenticated/PUBLIC, permits service_role SELECT/INSERT only. No row backfill, no change to existing CRM/tax tables/policies. Rerun guards recognize only empty structurally verified link.
 - Negative SQL-role test `43_stage3p_empty_crm_link_TEST_ONLY.sql`: authenticated and anon DML denied even with zero-row statements, service SELECT and zero-row INSERT allowed, ROLLBACK. `tests/securityP0Stage3pCrmCompanyScope.test.js` adds static regressions.
@@ -452,7 +452,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - No write to live Supabase, no local Docker changes from ChatGPT, no merge to `mio-branch`, PR #2 remains DRAFT.
 
 
-## 2026-10-09 — Stage3P preflight PostgreSQL `text || "char"` fix
+## 2026-10-09 ? Stage3P preflight PostgreSQL `text || "char"` fix
 - User ran `scripts/security_p0/run-stage3p-preflight.ps1` on isolated LAB and received `ERROR: operator is not unique: text || "char"`. This happened inside a `BEGIN READ ONLY` preflight query: no DB data or schema modifications.
 - Root cause: the catalog query `3P_FUNCTION` concatenated `pg_proc.provolatile` (PostgreSQL internal `"char"`) without a cast. Exact fix: `';volatility='||p.provolatile::text AS details` in `41_stage3p_ownership_preflight_READ_ONLY.sql`.
 - Added regression assertion to `tests/securityP0Stage3pCrmCompanyScope.test.js` requiring explicit cast and denying uncast concatenation. CI validates static/test suite; a real LAB `3P READ-ONLY PASS` report is still needed and **must not** be inferred from CI.
@@ -460,7 +460,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Do not rerun previously closed SQL Stage3N/Stage3M. Keep PR #2 Draft/unmerged; no changes to `mio-branch` or live Supabase.
 
 
-## 2026-10-09 — Stage3P preflight VERIFIED, ownership foundation install prepared
+## 2026-10-09 ? Stage3P preflight VERIFIED, ownership foundation install prepared
 - User supplied `STAGE3P_OWNERSHIP_PREFLIGHT.txt`: `STAGE3P READ-ONLY PASS`, commit `858acc82c8c96d6e4095e482616455cef07e4770`, `ROLLBACK`. Verified isolated PostgreSQL schema: `clienti.id`, `societa.id`, `auth.users` are eligible for guarded link foundation; direct FK `avvisi_ade.cliente_id` and `revisioni_dichiarativi.cliente_id` point to CRM `clienti`, not `societa`.
 - Counts in local LAB: `clienti=0`, `avvisi_ade=0`, `revisioni_dichiarativi=0`, `utenti_studio_societa=0`; no customer orphan records yet. This is an **empty test DB for the affected tables** and cannot prove real-data compatibility.
 - Policies still unsafe: `clienti` multiple permissive owner/admin and assigned-client policies; `avvisi_ade` generic `auth.role()='authenticated'` plus anon TRUE policy (no anon table grant observed previously); `revisioni_dichiarativi` policy authenticated ALL TRUE; `utenti_studio_societa` owner ALL and owner/admin global SELECT remain open. `current_utente_ruolo()` was catalogued as `SECURITY DEFINER`; review of function body/execute ACLs pending.
@@ -471,7 +471,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Foundation not applied yet in Docker**. No Supabase LIVE actions, no merge, no changes to `mio-branch`, no deploy. Even after SQL PASS, P0 remains OPEN until CRM/avvisi/revisioni/staff ACL corrected and real Auth/JWT + user workflows E2E pass.
 
 
-## 2026-10-09 — Stage3P LAB SQL PASS; Stage3Q ownership candidate and API filter
+## 2026-10-09 ? Stage3P LAB SQL PASS; Stage3Q ownership candidate and API filter
 - VERIFIED user artifact `STAGE3P_FOUNDATION_RESULT.txt`: `STAGE3P LAB FOUNDATION PASS`, tested commit `4b8ebea66956d8493499bca92d2f36deec5c00c2`, `42` CREATE/GRANT/COMMIT, `43` SQL roles ROLLBACK, `44` real synthetic SQL A/B/cliente/auth transaction ROLLBACK; final `3P_VERIFY|0|0|true` = 0 links, 0 policies, RLS enabled. Stage3P foundation Docker PASS; no real JWT E2E.
 - Stage3Q **CANDIDATE, NOT APPLIED**, `sql/security_p0/45_stage3q_fiscal_owner_rls_LAB_ONLY.sql`: only empty lab guard. Adds fiscal `societa_id NOT NULL` to `avvisi_ade` and `revisioni_dichiarativi`, composite FK to explicitly assigned CRM/customer bridge, restrictive RLS for both and `clienti`; requires active caller membership and customer scope; direct browser CRM mutations are revoked to avoid global shared-customer edits until transactional server API exists. Shared CRM A/B does not imply shared tax record. Null-linked declarations only seen by owner/admin of relevant company or record creator. Both fiscal customer/company ownership immutable by trigger.
 - Stage3Q `sql/security_p0/46_stage3q_two_company_fiscal_TEST_ONLY.sql`: real PostgreSQL (but simulated auth role/JWT claim, not signed JWT) fixture across owner A, owner B, collaborator B, outsider, customers A/B/shared, notices and declarations; SQL rollback. Tests are **not executed in Docker** and cannot be marked PASS. Static guards `tests/securityP0Stage3qFiscalOwnership.test.js`.
@@ -480,7 +480,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - PR #2 remains Draft/unmerged; all changes on `security/p0-isolated-hardening-20261008` only; no deployment, no LIVE Supabase writes, no change on `mio-branch`. CI should be verified against commit SHA after final changes; CI is unit/static/build, not Docker SQL or JWT E2E.
 
 
-## 2026-10-09 — Stage3R real fiscal read APIs and atomic CRM create PREPARED (not deployed)
+## 2026-10-09 ? Stage3R real fiscal read APIs and atomic CRM create PREPARED (not deployed)
 - Scope: GitHub security feature branch / PR #2 Draft only, no Supabase LIVE writes or Docker mutation, no merge to `mio-branch`.
 - `lib/fiscalReadScope.js` reads explicit membership/link rows from admin server client and intersects verified `auth_user_id`, active status, module-read permission, company membership and optional assigned-client list. A fiscal record shared through CRM remains visible only to its *single* explicit `societa_id`; unarchived revision with `cliente_id NULL` is limited to owner/admin of company or its creator.
 - `api/studio/fiscal-read.js` GET-only with verified Supabase Auth token, server-side service role check and response no-store; endpoints for `clienti`, `avvisi_ade`, `revisioni_dichiarativi`, and minimal `utenti` selector. `codice_fiscale` filtered in DB after company restriction for revision comparison. Routes fail closed on absent configuration or incomplete company/client mappings.
@@ -500,7 +500,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Latest CI must be verified against exact Git commit; manual QA on Docker/Auth is separate.
 
 
-## 2026-10-09 — Stage3S CRM/AgeCon/Revision atomic mutations — CODE CANDIDATE ONLY
+## 2026-10-09 ? Stage3S CRM/AgeCon/Revision atomic mutations ? CODE CANDIDATE ONLY
 - Implemented `sql/security_p0/49_stage3s_shared_crm_update_LAB_ONLY.sql` and `api/studio/client-update.js`: global CRM edit, modules and deactivation require active caller plus **owner/admin membership of each linked accounting company**, checking all links under client `FOR UPDATE` lock. `fiscosim_operational_audit` is append-only to browser, service-role-only INSERT/SELECT; each changed CRM record is audited separately for each linked company with actor and reason.
 - Implemented `50_stage3s_agecon_write_LAB_ONLY.sql` + `api/studio/agecon-write.js`: audited create/update/close with explicit company and client membership; foreign company ID denied; fiscal record customer/company immutable; "delete" UI becomes `esito='chiuso'` without physically deleting. Sequence `fiscosim_agecon_codice_seq` lives server-side and **nextval is NOT transactionally rolled back**; local QA fixture may advance it even if fixture rows roll back.
 - Implemented `51_stage3s_declaration_archive_LAB_ONLY.sql` + `api/studio/revision-archive.js`: archived revision and optional customer+link insertion within **one** PostgreSQL procedure transaction (nested call to Stage3R atomic-create). Rejects missing ownership, invalid report, inactive customer, out-of-scope membership. `created_by` assigned server-side.
@@ -510,20 +510,20 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - `sql/security_p0/52_stage3s_mutation_matrix_TEST_ONLY.sql` staged: real PG A/B, shared customer, denied single-company edits, auditable notice lifecycle, existing/new declaration, forced failure and rollback; no signed JWT and no local execution yet. Unit/static tests `tests/securityP0Stage3sWritePaths.test.js` and updated earlier suites. CI may pass but **MUST NOT be described as Docker PostgreSQL/JWT E2E**.
 - OPEN: Stage3Q/3R/3S migrations **NOT INSTALLED**. SQL syntax/constraints, API signed JWT, UI, importer, email queue, batch updates, production data remapping, paging and audit retention remain to verify. Stage3P SQL Docker PASS remains intact; no further user-local instructions issued. `mio-branch`, Supabase LIVE and deployments are untouched, PR #2 Draft/unmerged.
 
-- Preparato runner unico `scripts/security_p0/run-stage3s-full-lab.ps1` (non eseguito): SHA immutabile, nome container/lab verificati, preflight 0/0/0/0, installa in ordine SQL 45 → test 46 → 47 → test 48 → 49 → 50 → 51 → test 52 e postflight in READ ONLY. Conserva report precedenti senza sovrascrivere; sul solo Docker le installazioni DDL sono persistenti. Fixture SQL annullate, salvo possibile avanzamento sequenza AgeCon PostgreSQL.
+- Preparato runner unico `scripts/security_p0/run-stage3s-full-lab.ps1` (non eseguito): SHA immutabile, nome container/lab verificati, preflight 0/0/0/0, installa in ordine SQL 45 ? test 46 ? 47 ? test 48 ? 49 ? 50 ? 51 ? test 52 e postflight in READ ONLY. Conserva report precedenti senza sovrascrivere; sul solo Docker le installazioni DDL sono persistenti. Fixture SQL annullate, salvo possibile avanzamento sequenza AgeCon PostgreSQL.
 - Controllo sintattico PowerShell della nuova procedura aggiunto alla CI Windows, guardie statiche in `tests/securityP0Stage3sWritePaths.test.js`. **Non interpretare l'eventuale CI PASS come Stage3S SQL PASS**: le migrazioni devono ancora essere eseguite e testate sull'istanza PostgreSQL dell'operatore; JWT/API/UI E2E necessitano Auth/PostgREST reali.
 
 
-## 2026-10-09 — Stage3S prima esecuzione LAB BLOCCATA nel preflight Stage3Q; fix anon ACL candidato
-- Operatore ha eseguito `run-stage3s-full-lab.ps1` sull'isolato `supabase_db_FiscoSim-P0-LAB-20261008-164658` con commit precedente `a85485397a8ea830ff10f30f9cd37f780c239545`. Errore reale PostgreSQL: `ERROR: Stage3Q unexpected anonymous table-wide SELECT grant`. La guardia Stage3Q si trovava nel suo `BEGIN` iniziale prima di ogni DDL: **nessuna Stage3Q/Stage3R/Stage3S risulta applicata da questa esecuzione**; fondazione Stage3P conservata. Non è ancora noto da quella sola stringa quale delle tre tabelle esponga il grant.
-- Root cause nel codice: Stage3Q pretendeva che il baseline non avesse `SELECT` per `anon` su `public.clienti`, `public.avvisi_ade`, `public.revisioni_dichiarativi`, anziché neutralizzare esplicitamente eventuali ACL Supabase legacy all'interno della stessa transazione.
-- Fix candidato `45_stage3q_fiscal_owner_rls_LAB_ONLY.sql`: revoca mirata dei SELECT tabellari `PUBLIC`/`anon` e delle concessioni a livello colonna, `GRANT SELECT` esplicito a `authenticated` (letture controllate da RLS), verifica **post-revoke** delle ACL effettive `anon`/colonne/`authenticated`/`service_role`. Le altre guardie RLS restano invarianti; non è una rimozione del controllo di sicurezza.
+## 2026-10-09 ? Stage3S prima esecuzione LAB BLOCCATA nel preflight Stage3Q; fix anon ACL candidato
+- Operatore ha eseguito `run-stage3s-full-lab.ps1` sull'isolato `supabase_db_FiscoSim-P0-LAB-20261008-164658` con commit precedente `a85485397a8ea830ff10f30f9cd37f780c239545`. Errore reale PostgreSQL: `ERROR: Stage3Q unexpected anonymous table-wide SELECT grant`. La guardia Stage3Q si trovava nel suo `BEGIN` iniziale prima di ogni DDL: **nessuna Stage3Q/Stage3R/Stage3S risulta applicata da questa esecuzione**; fondazione Stage3P conservata. Non ? ancora noto da quella sola stringa quale delle tre tabelle esponga il grant.
+- Root cause nel codice: Stage3Q pretendeva che il baseline non avesse `SELECT` per `anon` su `public.clienti`, `public.avvisi_ade`, `public.revisioni_dichiarativi`, anzich? neutralizzare esplicitamente eventuali ACL Supabase legacy all'interno della stessa transazione.
+- Fix candidato `45_stage3q_fiscal_owner_rls_LAB_ONLY.sql`: revoca mirata dei SELECT tabellari `PUBLIC`/`anon` e delle concessioni a livello colonna, `GRANT SELECT` esplicito a `authenticated` (letture controllate da RLS), verifica **post-revoke** delle ACL effettive `anon`/colonne/`authenticated`/`service_role`. Le altre guardie RLS restano invarianti; non ? una rimozione del controllo di sicurezza.
 - `46_stage3q_two_company_fiscal_TEST_ONLY.sql`: ora verifica concretamente come ruolo `anon` il rifiuto di SELECT su ciascuna delle tre tabelle.
 - Runner migliorato per salvare nel report gli stderr di `psql` che Windows PowerShell 5.1 altrimenti trasformava in eccezione nativa senza log; aggiunte evidenze `3S_ACL_BEFORE` e `3S_ACL_AFTER` e obbligo di tripla prova `anon_select=false|authenticated_select=true|service_select=true`.
-- **Stato attuale NON PASS PostgreSQL**: patch sul branch isolato, nessun nuovo comando né nuova esecuzione LAB; riprovare solo con SHA esatto del commit finale dopo CI Windows/Ubuntu. Non accedere né scrivere a Supabase LIVE o a `mio-branch`. Test JWT/API/UI ancora pendenti.
+- **Stato attuale NON PASS PostgreSQL**: patch sul branch isolato, nessun nuovo comando n? nuova esecuzione LAB; riprovare solo con SHA esatto del commit finale dopo CI Windows/Ubuntu. Non accedere n? scrivere a Supabase LIVE o a `mio-branch`. Test JWT/API/UI ancora pendenti.
 
 
-## 2026-10-09 — Stage3S FULL POSTGRESQL LAB PASS (evidenza successiva e prevalente)
+## 2026-10-09 ? Stage3S FULL POSTGRESQL LAB PASS (evidenza successiva e prevalente)
 - **Prova primaria:** file operatore `STAGE3S_FULL_LAB_RESULT_20261009-171254-583.txt`. Header testuale esatto `STAGE3S FULL LAB PASS`, commit immutabile `7c42086d7687bcd59ad29b86fe56fc07a184cb08`, container isolato `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
 - Baseline in sola lettura PASS; ACL legacy rilevati **prima** della patch: `anon_select avvisi_ade=false`, `clienti=true`, `revisioni_dichiarativi=true`. Il precedente blocco iniziale anon non era falso positivo: due tabelle avevano davvero SELECT anon. Correzione Stage3Q applicata e ricontrollata.
 - SQL `45_stage3q_fiscal_owner_rls_LAB_ONLY.sql`: `COMMIT` PASS; `46_stage3q_two_company_fiscal_TEST_ONLY.sql`: `ROLLBACK` PASS.
@@ -531,54 +531,54 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - SQL `49_stage3s_shared_crm_update_LAB_ONLY.sql`, `50_stage3s_agecon_write_LAB_ONLY.sql`, `51_stage3s_declaration_archive_LAB_ONLY.sql`: tutti `COMMIT` PASS; `52_stage3s_mutation_matrix_TEST_ONLY.sql`: `NOTICE: Stage3S SQL transactional write matrix PASS`, `ROLLBACK` PASS.
 - Postflight `BEGIN READ ONLY`: `3S_FINAL|0|0|0|0|0|3` = zero righe di prova in clienti, avvisi, revisioni, CRM bridge e registro audit; tre policy RESTRICTIVE; `ROLLBACK` finale.
 - Post-ACL effettivi **su tutte e tre le tabelle**: `anon_select=false|authenticated_select=true|service_select=true`. Il test SQL role-based verifica l'assenza di accesso anonimo, non sostituisce Auth firmato.
-- **Conclusione di questo blocco:** Stage3Q/Stage3R/Stage3S SQL e test PostgreSQL role-based **PASS nel LAB Docker**; schema e funzioni della patch sono persistenti soltanto nel LAB. Il precedente report "NON PASS PostgreSQL" descriveva un tentativo antecedente e **non rappresenta lo stato attuale**. La sequenza AgeCon può essere avanzata anche con fixture in ROLLBACK.
-- **P0 generale ancora APERTO:** test HTTP con JWT Auth firmati e API reali, UI integrata, vincoli import unificato→AgeCon, email/notification queue, update moduli batch, test massivi/legacy non vuoti, eventuali privilege/RLS su altre tabelle, regression fiscale-contabile Studio Grade. CI statica/build e test SQL non certificano da soli il rilascio.
-- **Perimetro:** nessun merge; PR #2 Draft/Open, base `mio-branch`, HEAD di test `7c42086d7687bcd59ad29b86fe56fc07a184cb08`. Nessuna modifica al Supabase live, nessun deploy. Non far ripetere le Stage già superate.
+- **Conclusione di questo blocco:** Stage3Q/Stage3R/Stage3S SQL e test PostgreSQL role-based **PASS nel LAB Docker**; schema e funzioni della patch sono persistenti soltanto nel LAB. Il precedente report "NON PASS PostgreSQL" descriveva un tentativo antecedente e **non rappresenta lo stato attuale**. La sequenza AgeCon pu? essere avanzata anche con fixture in ROLLBACK.
+- **P0 generale ancora APERTO:** test HTTP con JWT Auth firmati e API reali, UI integrata, vincoli import unificato?AgeCon, email/notification queue, update moduli batch, test massivi/legacy non vuoti, eventuali privilege/RLS su altre tabelle, regression fiscale-contabile Studio Grade. CI statica/build e test SQL non certificano da soli il rilascio.
+- **Perimetro:** nessun merge; PR #2 Draft/Open, base `mio-branch`, HEAD di test `7c42086d7687bcd59ad29b86fe56fc07a184cb08`. Nessuna modifica al Supabase live, nessun deploy. Non far ripetere le Stage gi? superate.
 
 
-## 2026-10-09 — Stage3T local Auth/HTTP E2E enablement (code prepared, signed-JWT E2E NOT EXECUTED)
+## 2026-10-09 ? Stage3T local Auth/HTTP E2E enablement (code prepared, signed-JWT E2E NOT EXECUTED)
 - Ground truth from operator file `STAGE3S_FULL_LAB_RESULT_20261009-171254-583.txt`: `STAGE3S FULL LAB PASS` on pinned SHA `7c42086d7687bcd59ad29b86fe56fc07a184cb08`, Docker `supabase_db_FiscoSim-P0-LAB-20261008-164658`. Before ACL: `anon_select=true` on clienti+revisioni and `false` on avvisi. All three after migration: `anon_select=false|authenticated_select=true|service_select=true`. SQL migrations 45/47/49/50/51 committed; SQL negative matrix 46/48/52 rolled back; final `3S_FINAL|0|0|0|0|0|3`. The LAB has no retained synthetic fiscal rows. This supersedes any earlier note that Stage3S remained untested in PostgreSQL.
 - Found local runtime integration gap: `scripts/dev-api.mjs` returned HTTP 404 for ALL new `/api/studio/*` routes and `/api/auth/users`; Vite proxy uses that local server. Added `lib/devStudioHttp.js` and specific route mapping in the existing dev server, adapting Node HTTP request/response to the **actual** API handler contracts without forging JWTs or substituting mocks.
 - Safety gate: protected local studio routes run only if `FISCOSIM_ISOLATED_LAB_API=true`, `SUPABASE_URL` points to `http://localhost` or `http://127.0.0.1` (or loopback IPv6), `VITE_SUPABASE_URL` is also loopback if present, and `SUPABASE_SERVICE_ROLE_KEY` is present. Dev server binds to `127.0.0.1` in isolated mode. Without ALL conditions protected routes return HTTP 503; foreign origins 403; missing bearer 401; invalid JSON 400; oversized JSON 413.
 - Removed privileged server key fallback in `lib/db.js`: `getSupabaseAdmin()` requires `SUPABASE_SERVICE_ROLE_KEY` (not `VITE_SUPABASE_SERVICE_ROLE_KEY` and not anon). `lib/auth.js` `getSessionProfileReader` no longer falls back to a user-scoped client for privileged profile lookup; context requires Auth verification and deterministic server-side membership reading.
 - `tests/securityP0Stage3tHttpAuthBoundary.test.js`: real Node HTTP requests against handler adapter, local environment gates, denied origin, missing Auth, malformed/oversized bodies and OPTIONS; these tests run in CI but **do not issue or verify genuine JWTs**. Any prior CI failure due to expecting JSON on empty valid OPTIONS response was fixed.
 - `scripts/security_p0/stage3t-signed-jwt-read-e2e.mjs` is a separately gated **real JWT** test harness requiring a complete isolated local GoTrue Auth+PostgREST setup, two real Auth-issued A/B tokens plus seeded customer/notice/revision records, then comparing company visibility and shared CRM separation over HTTP; the script is read-only, does not create users and never prints tokens. **NOT EXECUTED** because only isolated PostgreSQL Docker is currently evidenced, not a running local GoTrue Auth stack or seeded signed-JWT fixtures.
-- Remaining P0: set up/verify a genuinely isolated Auth+PostgREST lab connected to the Stage3S Docker DB; provision synthetic identities and customer/company/notice/revision fixtures with controlled cleanup, then execute the signed JWT harness and full authenticated write/UI E2E. Resolve legacy import unificato→AgeCon, staff/member remaining exposure and other general fiscal Studio Grade tests. No merge/deploy/LIVE write or prompt to repeat Stage3S.
+- Remaining P0: set up/verify a genuinely isolated Auth+PostgREST lab connected to the Stage3S Docker DB; provision synthetic identities and customer/company/notice/revision fixtures with controlled cleanup, then execute the signed JWT harness and full authenticated write/UI E2E. Resolve legacy import unificato?AgeCon, staff/member remaining exposure and other general fiscal Studio Grade tests. No merge/deploy/LIVE write or prompt to repeat Stage3S.
 
 
-## 2026-10-09 — Audit reale dell'intero ciclo contabile (non confondere CI e accounting E2E)
+## 2026-10-09 ? Audit reale dell'intero ciclo contabile (non confondere CI e accounting E2E)
 - Richiesta utente: stato complessivo FiscoSim e dei test **reali di contabilizzazione e intero ciclo contabile**.
-- Eseguito confronto fra roadmap Studio Grade caricata (in particolare fasi 13–27 e test finali), matrice ufficiale `REPORT/FISCOSIM_TEST_MATRIX.md`, debito manuale, audit Import/Manuale/IVA/Stampe, storico `REPORT/REPORT_CODEX.md` e ultima CI.
-- Ultima CI già verificata `37952121059` (HEAD precedente `3657094a0144e50de29f05b39caa8218f88a8b41`): Ubuntu e Windows PASS, ciascuno Import 231, Manuale 414, Consultazione 38, IVA 148, Split 25, Ritenute 27, Stampe 93, Bank 11, Core 775, `test:all` 1150, build Vite PASS. Test profilati sovrapposti; **non** equivalgono a 1150 cicli integrali o a test PostgreSQL con scritture.
-- Rilevazione fondamentale: nessuna evidenza versionata di un **ciclo contabile integrale SQL/HTTP/UI** passato, dalla fattura Import/Manuale a PN canonica, registro IVA, partitario, saldo bancario, liquidazione, bilancio, chiusura/riapertura. `Stage3S FULL LAB PASS` certifica solo SQL transazioni sicurezza e CRM/AgeCon/Revisione, non posting canonico della contabilità.
-- Implementato nuovo report `REPORT/FISCOSIM_REAL_ACCOUNTING_CYCLE_GATE_20261009.md`: stato analitico per funzione, 9 gate contabili sequenziali con criteri e prova richiesta, `PASS/FAIL/BLOCKED/NOT_IMPLEMENTED/NOT_EXECUTED`, divieto di percentuali prive di evidenza. Percorso prioritario: PN registrata→fatture+IVA→incassi/partitario→liquidazione→mastrini/chiusura; banca commit ancora bloccato.
+- Eseguito confronto fra roadmap Studio Grade caricata (in particolare fasi 13?27 e test finali), matrice ufficiale `REPORT/FISCOSIM_TEST_MATRIX.md`, debito manuale, audit Import/Manuale/IVA/Stampe, storico `REPORT/REPORT_CODEX.md` e ultima CI.
+- Ultima CI gi? verificata `37952121059` (HEAD precedente `3657094a0144e50de29f05b39caa8218f88a8b41`): Ubuntu e Windows PASS, ciascuno Import 231, Manuale 414, Consultazione 38, IVA 148, Split 25, Ritenute 27, Stampe 93, Bank 11, Core 775, `test:all` 1150, build Vite PASS. Test profilati sovrapposti; **non** equivalgono a 1150 cicli integrali o a test PostgreSQL con scritture.
+- Rilevazione fondamentale: nessuna evidenza versionata di un **ciclo contabile integrale SQL/HTTP/UI** passato, dalla fattura Import/Manuale a PN canonica, registro IVA, partitario, saldo bancario, liquidazione, bilancio, chiusura/riapertura. `Stage3S FULL LAB PASS` certifica solo SQL transazioni sicurezza e CRM/AgeCon/Revisione, non posting canonico della contabilit?.
+- Implementato nuovo report `REPORT/FISCOSIM_REAL_ACCOUNTING_CYCLE_GATE_20261009.md`: stato analitico per funzione, 9 gate contabili sequenziali con criteri e prova richiesta, `PASS/FAIL/BLOCKED/NOT_IMPLEMENTED/NOT_EXECUTED`, divieto di percentuali prive di evidenza. Percorso prioritario: PN registrata?fatture+IVA?incassi/partitario?liquidazione?mastrini/chiusura; banca commit ancora bloccato.
 - Aggiunto SQL `sql/security_p0/53_accounting_cycle_inventory_READ_ONLY.sql`: preflight catalogo locale `BEGIN READ ONLY` e `ROLLBACK`, gate locale esplicito, inventario tabelle/colonne/funzioni. **Non eseguito in Docker**, non modifica DB, non prova posting.
 - Aggiunto test guard `tests/securityP0AccountingCycleEvidenceGate.test.js`: tutela il carattere read-only e segnala il divieto di presentare risultati CI come accounting-E2E. CI del nuovo commit ancora da confermare.
 - Gap prioritari reali: nessun JWT Auth locale certificato; commit PN canonico completamente atomico e audit end-to-end non certificati; Import XML/ZIP persistente non collaudato; Bank dry-run senza write; ritenuta parziale non supportata; registro/bilancio/stampe/snapshot/chiusure non freeze. Nessun merge/deploy, nessuna scrittura Supabase live, nessuna ripetizione test Stage3S.
 
-- **Rilievo P0 contabile confermato nel sorgente:** `persistPrimaNotaDraft` chiama `createPrimaNotaCompleta` di `services/primaNotaService.js`, che effettua INSERT sequenziali su `prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`, `ritenute_dacconto` e UPDATE su partite/ritenute esistenti. `cleanupPrimaNotaCompleta` è best-effort: elimina le righe associate a PN ma non ripristina tutte le UPDATE a record preesistenti. Manca commit canonico singolo ACID e idempotenza server certificati. P0 tecnico del ciclo contabile, da risolvere prima di autorizzare PASS del GATE 1 e scritture E2E.
+- **Rilievo P0 contabile confermato nel sorgente:** `persistPrimaNotaDraft` chiama `createPrimaNotaCompleta` di `services/primaNotaService.js`, che effettua INSERT sequenziali su `prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`, `ritenute_dacconto` e UPDATE su partite/ritenute esistenti. `cleanupPrimaNotaCompleta` ? best-effort: elimina le righe associate a PN ma non ripristina tutte le UPDATE a record preesistenti. Manca commit canonico singolo ACID e idempotenza server certificati. P0 tecnico del ciclo contabile, da risolvere prima di autorizzare PASS del GATE 1 e scritture E2E.
 - Evidenza test: `tests/accountingPersistenceAdapter.test.js` usa `FakeDb`; `tests/ivaOrdinariaEndToEndLiquidazione.test.js` usa `MockDbClient`; `tests/persistPrimaNotaDraft.test.js` usa `MockDbClient`. La parola `EndToEnd` nei nomi non implica DB PostgreSQL reale. Aggiornato `REPORT/FISCOSIM_REAL_ACCOUNTING_CYCLE_GATE_20261009.md` con questo rilievo tecnico.
 
 
-## 2026-10-09 — Stage3U General Journal atomic candidate, branch-only
-- Priorità confermata da audit sorgente: `services/primaNotaService.js.createPrimaNotaCompleta` usa INSERT/UPDATE multipli e cleanup best-effort. Nessuna prova di atomicità integrale PN/IVA/partitario/ritenute su PostgreSQL; non dichiarare conto/test fiscale E2E PASS.
-- Nuova candidata SQL `54_stage3u_general_journal_atomic_LAB_ONLY.sql`: solo **movimento generale senza IVA, partite, ritenute o import**; `SECURITY INVOKER`, `service_role` only; conti della società verificati, profilo+membership owner/admin verificati, quadratura ai centesimi; INSERT claim idempotente, testata, righe e audit in un unico statement/transaction. Preflight vincolato a LAB con tabelle PN/audit/piano conti vuote, non idempotente su DDL; NON applicata.
-- `55_stage3u_general_journal_matrix_TEST_ONLY.sql`: fixture A/B e due conti A+uno B, richiesta ripetuta stesso ID senza duplicati, ID riutilizzato con payload differente rifiutato, foreign user/account, squadratura, ruoli anon/authenticated senza EXECUTE né claim, guasto forzato su audit dopo inserimenti per verificare rollback integrale. Contiene `ROLLBACK`; **NON eseguita**.
+## 2026-10-09 ? Stage3U General Journal atomic candidate, branch-only
+- Priorit? confermata da audit sorgente: `services/primaNotaService.js.createPrimaNotaCompleta` usa INSERT/UPDATE multipli e cleanup best-effort. Nessuna prova di atomicit? integrale PN/IVA/partitario/ritenute su PostgreSQL; non dichiarare conto/test fiscale E2E PASS.
+- Nuova candidata SQL `54_stage3u_general_journal_atomic_LAB_ONLY.sql`: solo **movimento generale senza IVA, partite, ritenute o import**; `SECURITY INVOKER`, `service_role` only; conti della societ? verificati, profilo+membership owner/admin verificati, quadratura ai centesimi; INSERT claim idempotente, testata, righe e audit in un unico statement/transaction. Preflight vincolato a LAB con tabelle PN/audit/piano conti vuote, non idempotente su DDL; NON applicata.
+- `55_stage3u_general_journal_matrix_TEST_ONLY.sql`: fixture A/B e due conti A+uno B, richiesta ripetuta stesso ID senza duplicati, ID riutilizzato con payload differente rifiutato, foreign user/account, squadratura, ruoli anon/authenticated senza EXECUTE n? claim, guasto forzato su audit dopo inserimenti per verificare rollback integrale. Contiene `ROLLBACK`; **NON eseguita**.
 - `api/studio/general-journal-post.js`: valida esclusivamente dati per movimento generale, cifra/centesimi/UUID/date, motiva, sessione Auth/ruoli; API `503` salvo opt-in con `FISCOSIM_ISOLATED_LAB_API=true` e `FISCOSIM_GENERAL_JOURNAL_POST_LAB_ENABLED=true`, chiave server-only e Supabase loopback. Nessuna UI reindirizzata e nessun commit fiscale o produzione abilitato.
-- `lib/isolatedStudioLab.js` condivide il gate loopback precedentemente in `lib/devStudioHttp.js`; adattatore sviluppatore instrada esattamente la nuova route ma ne rifiuta l'uso in condizioni ordinarie. Nuove suite Node `tests/securityP0Stage3uGeneralJournalAtomic.test.js` e test HTTP 503. È copertura logica, **non** esecuzione SQL.
+- `lib/isolatedStudioLab.js` condivide il gate loopback precedentemente in `lib/devStudioHttp.js`; adattatore sviluppatore instrada esattamente la nuova route ma ne rifiuta l'uso in condizioni ordinarie. Nuove suite Node `tests/securityP0Stage3uGeneralJournalAtomic.test.js` e test HTTP 503. ? copertura logica, **non** esecuzione SQL.
 - `56_stage3u_accounting_preflight_READ_ONLY.sql` + `scripts/security_p0/run-stage3u-accounting-preflight.ps1`: inventario reali requisiti schema, colonne e grants, zero PN/audit/conti; singolo runner SHA-pinned sul container P0, solo `BEGIN READ ONLY` e `ROLLBACK`, file evidenza preservato. CI Windows parse PowerShell configurata; **nessun preflight ancora eseguito nel Docker dell'operatore**.
 - Stato `STAGE3U SQL_CANDIDATE / PRECHECK_NOT_EXECUTED / MIGRATION_NOT_APPLIED / SQL_E2E_NOT_EXECUTED / SIGNED_JWT_NOT_EXECUTED`. Restano necessari lock esercizio, progressivi, tutti gli effetti fiscali e piena transazione dell'attuale percorso; non confondere il caso generale candidato con l'intero ciclo contabile.
 - PR #2 Draft e base `mio-branch`; Supabase LIVE invariato; nessun merge/deploy. CI corrente da verificare contro SHA finale.
 
 
-## 2026-10-09 — STAGE3U PREFLIGHT BLOCKED, PostgreSQL cause not yet retrieved
+## 2026-10-09 ? STAGE3U PREFLIGHT BLOCKED, PostgreSQL cause not yet retrieved
 - Operator executed the SHA-pinned `run-stage3u-accounting-preflight.ps1` on isolated container `supabase_db_FiscoSim-P0-LAB-20261008-164658` at approximately 21:55 Europe/Rome. Runner returned: `Stage3U preflight BLOCKED` and wrote local report `STAGE3U_ACCOUNTING_PREFLIGHT_20261009-215552-053.txt` under the P0 LAB folder.
 - The error pasted into chat is the runner's summary, **not the underlying psql output**. Exact failing prerequisite (table, column, privilege, or nonempty legacy accounting data) is **UNKNOWN until the report contents are inspected**. Do not presume a missing audit table or auto-add grants. The user has not supplied the report bytes to the container.
 - Script SQL 56 runs `BEGIN READ ONLY` and terminates with `ROLLBACK`; therefore no Stage3U SQL 54/55 migration or accounting write was performed by this run. Stage3S FULL LAB PASS remains independently valid.
 - Improved `scripts/security_p0/run-stage3u-accounting-preflight.ps1` on security branch: failed future preflights will print recognized PostgreSQL diagnostics while preserving report, but **do not ask user to rerun**. Next step is to read the report already produced and diagnose its exact SQL failure; no production action, no further tests or schema mutation until then.
 
 
-## 2026-10-09 21:55 — Stage3U first isolated accounting preflight BLOCKED: missing line societa_id
+## 2026-10-09 21:55 ? Stage3U first isolated accounting preflight BLOCKED: missing line societa_id
 - Verified operator-uploaded `STAGE3U_ACCOUNTING_PREFLIGHT_20261009-215552-053.txt` from Docker `supabase_db_FiscoSim-P0-LAB-20261008-164658`; pinned tested SHA `cbea41949b6380c913613fac6626f3b685b7e4fa`. PostgreSQL explicit error: `Stage3U accounting columns MISSING: {prima_nota_righe.societa_id}`. Stage3U preflight used `BEGIN READ ONLY`, no DDL or accounting INSERT was executed. **Never mislabel this as Stage3U PASS**.
 - Source investigation: bootstrap `supabase/migrations/20260404190000_prima_nota_base_bootstrap.sql` has the denormalized `prima_nota_righe.societa_id`, while the **actual Docker LAB lacks it**. This is a factual **schema drift**, not an accounting balance error or evidence of data corruption.
 - Remediation on isolated branch: `56_stage3u_accounting_preflight_READ_ONLY.sql` stops requiring the optional denormalized field, but **requires the FK from lines to parent `prima_nota`**, checks all other canonical columns/grants and prints `STAGE3U_LINE_TENANT_SCOPE|PARENT_ONLY_COMPANY` or `PARENT_AND_LINE_COMPANY`. The SQL posting candidate 54 also requires FK and populates the line company only when that column exists; without it, the transaction uses parent `prima_nota.societa_id` as the canonical tenant boundary. No `ALTER TABLE`, no artificial schema patch.
@@ -587,7 +587,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - **Still NOT EXECUTED**: Stage3U 54 install, SQL fixture 55, general journal posting, Auth-signed JWT E2E, full fiscal cycle. Stage3S remains PASS; no LIVE Supabase access, deployment or merge.
 
 
-## 2026-10-09 — Stage3U accurate preflight PASS, reversible atomic PN rehearsal prepared
+## 2026-10-09 ? Stage3U accurate preflight PASS, reversible atomic PN rehearsal prepared
 - Received signed operator evidence `STAGE3U_ACCOUNTING_PREFLIGHT_20261009-221413-923.txt`: pinned `COMMIT=1f8ed64ce924a1b774fd3f95bfe5d046bd78fcec`, container `supabase_db_FiscoSim-P0-LAB-20261008-164658`, PostgreSQL `17.11`, `STAGE3U_PREFLIGHT|READ_ONLY_PASS|NO_ACCOUNTING_POST`, `STAGE3U_LINE_TENANT_SCOPE|PARENT_ONLY_COMPANY`, `STAGE3U_PN_COUNT|0`, `STAGE3U_AUDIT_COUNT|0`, final `ROLLBACK`.
 - This newer PASS supersedes earlier failed preflight `STAGE3U_ACCOUNTING_PREFLIGHT_20261009-215552-053.txt` at older SHA `cbea419...`, which rejected missing `prima_nota_righe.societa_id`. Canonical ownership is through FK to `prima_nota.societa_id`; migration 54 now conditionally inserts per-line `societa_id` only if it exists. **DO NOT add duplicate tenant column to the passing LAB schema.**
 - Stage3U SQL `54` and its A/B PostgreSQL matrix `55` remain **NOT EXECUTED**. A read-only schema preflight does **not** prove posting, rollback, or idempotency.
@@ -596,7 +596,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - PR #2 still Draft on isolated security branch. No changes to live Supabase, production, or `mio-branch`.
 
 
-## 2026-10-09 22:54 — STAGE3U_POSTGRESQL_REHEARSAL PASS (reversible, no persistent journal)
+## 2026-10-09 22:54 ? STAGE3U_POSTGRESQL_REHEARSAL PASS (reversible, no persistent journal)
 - **Verified user-supplied evidence:** `STAGE3U_REHEARSAL_20261009-225419-200.txt`; exact tested SHA `65f9b6738a2e0be8ac4d677289f3544a3bb10805`, isolated Docker `supabase_db_FiscoSim-P0-LAB-20261008-164658`. Script assertion `SINGLE_TRANSACTION_ROLLBACK=true`, `NO_REAL_JWT_OR_UI_TEST=true`.
 - PostgreSQL ran Stage3U candidate schema 54 within one temporary transaction (`CREATE TABLE`, `CREATE FUNCTION`, grants) and executed the **real role-based** SQL A/B fixture 55. Evidence: `NOTICE: Stage3U general journal balance / owner / idempotency matrix PASS`, `NOTICE: Stage3U late failure rollback PASS`, `STAGE3U_LAB_MATRIX|PASS|FIXTURE_ROLLBACK`. Assertions include balanced ordinary journal, scope A/B and foreign chart accounts, replay exactly once, reused idempotency key with altered data denied, and rollback after audit INSERT privilege failure.
 - Full transaction then executed `ROLLBACK`. Independent postflight output: `STAGE3U_ROLLBACK_VERIFIED|NO_SCHEMA_OR_ACCOUNTING_ROWS_PERSISTED`. Therefore **no RPC, claim table, account fixture, journal header/lines, or audit row from Stage3U persists**. PostgreSQL sequences may nevertheless advance under `nextval` despite the rollback; this is explicitly stated in the evidence.
@@ -608,7 +608,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Windows CI syntax parse and Node guard `tests/securityP0Stage3uPersistentInstallGate.test.js` added. This installer remains **only a candidate in GitHub, not run**, and does not certify Auth-signed JWT, browser/manual UI, IVA/partitario/ritenute, or financial-close lifecycle.
 
 
-## 2026-10-09 23:26 — STAGE3U PERSISTENT LAB INSTALL PASS (primary operator evidence)
+## 2026-10-09 23:26 ? STAGE3U PERSISTENT LAB INSTALL PASS (primary operator evidence)
 - **Primary uploaded operator report:** `STAGE3U_PERSISTENT_LAB_INSTALL_20261009-232611-790.txt`, exact `STAGE3U_PERSISTENT_LAB_INSTALL_PASS`, verified code commit `1434acf59bc53449b81b2411dbfeaaffa24b26d6`, fixed Docker container `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
 - Database baseline `3U_INSTALL_BASELINE|EMPTY|NO_EXISTING_RPC` PASS; SQL 54 installed the immutable claim table, RLS/ACL and `fiscosim_post_general_journal` RPC with actual `COMMIT`.
 - Real PostgreSQL role-based SQL 55 matrix PASS with `Stage3U general journal balance / owner / idempotency matrix PASS` and `Stage3U late failure rollback PASS`. Synthetic fixtures deliberately `ROLLBACK`; the postflight reads `3U_PERSISTENT_INSTALL|SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS`.
@@ -617,15 +617,15 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - The previous `Stage3U SQL NOT INSTALLED` descriptions were historical; this newer evidence supersedes them. **Do not repeat preflight, rehearsal, installer or matrix** on the already-passing Docker.
 
 
-## 2026-10-09 — Stage3V read-only local Auth/PostgREST readiness probe (CODE ONLY)
-- The canonical Stage3U source and the actual private operator report already support **STAGE3U PERSISTENT LAB INSTALL PASS** on `1434acf59bc53449b81b2411dbfeaaffa24b26d6`: do not repeat the earlier missing `prima_nota_righe.societa_id` preflight, reversible 54/55 rehearsal, or persistent installation. Ownership of lines is verified through the FK `prima_nota_righe.prima_nota_id → prima_nota.societa_id`; the SQL candidate handles line-company column conditionally without adding it.
-- Next remaining gate: a **REAL signed Auth JWT → HTTP endpoint → PostgREST → LAB PostgreSQL commit**, with synthetic two-company fixtures. `scripts/security_p0/stage3v-signed-jwt-general-journal-e2e.mjs` already exists but **NOT RUN**. It deliberately requires a locally provisioned GoTrue/Auth+PostgREST instance and separate opt-in before persisting entries; passing CI is not actual JWT proof.
+## 2026-10-09 ? Stage3V read-only local Auth/PostgREST readiness probe (CODE ONLY)
+- The canonical Stage3U source and the actual private operator report already support **STAGE3U PERSISTENT LAB INSTALL PASS** on `1434acf59bc53449b81b2411dbfeaaffa24b26d6`: do not repeat the earlier missing `prima_nota_righe.societa_id` preflight, reversible 54/55 rehearsal, or persistent installation. Ownership of lines is verified through the FK `prima_nota_righe.prima_nota_id ? prima_nota.societa_id`; the SQL candidate handles line-company column conditionally without adding it.
+- Next remaining gate: a **REAL signed Auth JWT ? HTTP endpoint ? PostgREST ? LAB PostgreSQL commit**, with synthetic two-company fixtures. `scripts/security_p0/stage3v-signed-jwt-general-journal-e2e.mjs` already exists but **NOT RUN**. It deliberately requires a locally provisioned GoTrue/Auth+PostgREST instance and separate opt-in before persisting entries; passing CI is not actual JWT proof.
 - Implemented `scripts/security_p0/stage3v-local-auth-readiness.mjs` for **read-only** inspection of the exact pinned P0 Docker container, Stage3U installed-RPC/RLS, container network overlap with Auth/PostgREST, loopback-only host port 54321, and unauthenticated localhost health/gateway HTTP statuses. It does not receive or log tokens/keys, create identities, connect to any public URL, change DB rows or initiate signed JWT tests. It writes only a timestamped local diagnostic report.
 - Crucial distinction: detecting containers on the same Docker network does **not** prove their internal database configuration points to the verified accounting LAB. Readiness is diagnostic, not `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS`; no installed Auth-stack evidence is currently available. New Node regression guard `tests/securityP0Stage3vLocalReadiness.test.js`.
 - PR #2 remains Draft, base `mio-branch`, no merge/deploy/live Supabase writes. Do not claim the end-to-end fiscal accounting cycle completed: IVA, partitario, ritenute, F24, liquidazione, bilancio, annual closure remain open.
 
 
-## 2026-10-09 — STAGE3V PINNED LAB / HTTP FIXTURE PARITY GATE (CODE HARDENING ONLY)
+## 2026-10-09 ? STAGE3V PINNED LAB / HTTP FIXTURE PARITY GATE (CODE HARDENING ONLY)
 - Baseline verified before edits: GitHub PR #2 Draft/Open, base `mio-branch`, HEAD `7e7dc41923e98e6de3485441bc667bd1479b8c36`, Actions `37994794464` Ubuntu PASS / Windows PASS. Stage3S FULL LAB PASS and Stage3U PERSISTENT LAB INSTALL PASS are established by the earlier PRIMARY operator evidence; no Stage3S/3U SQL/rehearsal/install rerun.
 - New `scripts/security_p0/stage3v-lab-binding.mjs`: fail-closed Windows-only, exact HEAD/branch, clean working tree, pinned LAB path, historical Stage3U installation evidence, fixed Docker container running; READ-ONLY PostgreSQL SQL checks installed RPC/RLS/service_role privilege, company codes, account ownership, and (after Auth login) signed-user IDs in `auth.users` with explicit owner/admin membership A/B. Independently compares exact synthetic company/chart rows from pinned Docker and PostgREST HTTP service-role queries. Network overlap alone is NEVER accepted as DB proof. Does not capture or output secrets; byte-identical DB clones are outside the discriminatory power of row-parity comparison.
 - Hardened `scripts/security_p0/stage3v-signed-jwt-general-journal-e2e.mjs`: requires `--expected-commit`; invokes pinned LAB/HTTP row-parity check BEFORE Auth login and HTTP POST; when `FISCOSIM_STAGE3V_PERSISTENT_WRITE_APPROVAL` absent, exits after READ-ONLY fixture checks (no login/HTTP POST). With opt-in only, verifies signed Auth identity appears in pinned PostgreSQL and explicit A/B memberships BEFORE negative HTTP requests or journal COMMIT. Prior test-only negative POST requests are no longer sent without explicit write approval, because negative-path regressions might otherwise persist data. Stage3U SQL 54/55 untouched.
@@ -633,7 +633,7 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Unchanged: no Supabase LIVE DB/Auth/RLS/environment writes; no LAB PostgreSQL INSERT/DDL or signed JWT execution; no deploy/merge; no mock substituted for persistent PostgreSQL. Source-code edits confined to isolated P0 branch. No actual access to operator's Windows Docker in this session. `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS` remains **NOT_EXECUTED** and full fiscal accounting lifecycle remains **NOT_CERTIFIED**.
 - Next: perform existing Stage3V READ-ONLY infrastructure probe ONCE on operator Windows with exact commit, assess whether GoTrue/PostgREST exist and connect to pinned Stage3U Docker, reusing any already installed services. Synthetic Auth A/B provisioning and persistent journal scenario require separate local-only opt-in; do not build duplicate Auth stack before identifying existing infrastructure.
 
-## 2026-10-10 — Stage3V operator readiness evidence, isolated worktree compatibility, gateway forensics (P0 ONLY)
+## 2026-10-10 ? Stage3V operator readiness evidence, isolated worktree compatibility, gateway forensics (P0 ONLY)
 - Operator verified the pinned commit `aa3e97d601e5228d11f0088e374d9c94b0017420` in an isolated Windows detached worktree `FiscoSim-P0-Stage3V-ReadOnly`; the original repository remained on `mio-branch`. Initial operator command had incorrectly assumed original checkout on P0 and stopped harmlessly; the isolated worktree avoids switching the main branch.
 - Primary real read-only output: `STAGE3V_INFRA_DISCOVERY_20261009T222100-371Z.txt`. `DB_RPC_INSTALLED=true`, `AUTH_CONTAINER_ON_DB_NETWORK=true`, `POSTGREST_CONTAINER_ON_DB_NETWORK=true`, `AUTH_LOCAL_HEALTH_HTTP=200`, `REST_LOCAL_GATEWAY_HTTP=200`, **`GATEWAY_54321_BOUND_ONLY_TO_LOOPBACK=false`**. This indicates a genuine unfulfilled security gate (possibly wildcard Docker binding or absent binding on inspected network), not an Auth/PostgREST absence. The read-only probe alone does not establish service-to-specific-LAB database identity. Signed JWT and accounting POST remain **NOT_EXECUTED**.
 - `scripts/security_p0/stage3v-lab-binding.mjs`: allow the exact clean detached worktree ONLY at the pinned `%USERPROFILE%\\FiscoSim-P0-Stage3V-ReadOnly` path, in addition to the historical named P0 branch, while preserving immutable `--expected-commit`, Stage3U persisted-install proof and pinned Docker checks. This corrects a real gate bug: `git branch --show-current` is empty in detached worktrees. Predicate exported and covered by positive/negative regression tests.
@@ -642,11 +642,667 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - No production Supabase/Neon writes, no Docker network/container changes, no LAB database mutation, no PR merge, no deployment. Original `mio-branch` preserved. Stage3S and Stage3U remain PASS and are not rerun.
 - Next: operator runs the updated **read-only** Stage3V gateway diagnostic once after advancing ONLY the detached worktree to a pinned new commit; inspect actual bind. Do not bypass `0.0.0.0` exposure, and do not execute signed-JWT persistent writes without independent LAB binding proof, synthetic A/B fixtures and explicit consent. Fiscal cycle E2E remains NOT_CERTIFIED.
 
-## 2026-10-10 — Stage3V TWO DISTINCT LOCAL SUPABASE STACKS identified; P0 only correction
+## 2026-10-10 ? Stage3V TWO DISTINCT LOCAL SUPABASE STACKS identified; P0 only correction
 - **Primary operator evidence**: `docker ps --format '{{.Names}} | RETI={{.Networks}} | PORTE={{.Ports}}'` shows TWO non-interchangeable local Supabase service graphs. `supabase_network_fiscosim-local` has `supabase_kong_fiscosim-local` on 0.0.0.0/[::]:54321 and DB 54322; separate pinned `fiscosim-p0-loopback` has `supabase_kong_FiscoSim-P0-LAB-20261008-164658` on **0.0.0.0/[::]:55321**, pinned PostgreSQL `supabase_db_FiscoSim-P0-LAB-20261008-164658` on **55322**, plus Studio 55323, Inbucket 55324, Analytics 55327, ALL host-published on 0.0.0.0/[::]. P0 and regular stack are **separate Docker networks**. P0 PostgreSQL volume remains `supabase_db_FiscoSim-P0-LAB-20261008-164658` at `/var/lib/postgresql/data`. Both GoTrue/Auth and PostgREST have named containers within the P0 network.
 - Critical correction to earlier Stage3V operator probe: the old script used **127.0.0.1:54321** and therefore HTTP 200 for Auth and REST belonged to **the unrelated regular `fiscosim-local` stack**. Those statuses were NOT HTTP evidence of P0 LAB Auth/PostgREST. Prior read-only RPC detection was on correct pinned P0 DB, so Stage3U persisted installation remains PASS. Prior network detection came from P0 services, but old script mixed two different stacks; old gateway loopback false happened to be true for wrong stack and cannot certify P0. Retracted any characterization of previous 54321 HTTP checks as P0 evidence.
 - Added `scripts/security_p0/stage3v-local-stack.mjs`: immutable LAB suffix, mandatory exact DB/Kong/Auth/Rest containers, exclusive `fiscosim-p0-loopback` network, P0 gateway origin `http://127.0.0.1:55321`, checks all host-published LAB ports are loopback-bound (not only Kong), and rejects extraneous Kong host-port publications. Pure evaluation helper tested against wrong 54321, wildcard 0.0.0.0/::, exposed 55322 even if 55321 safe, unexpected 55323 publication, absent/mis-networked P0 services.
 - Rewrote `scripts/security_p0/stage3v-local-auth-readiness.mjs` read-only diagnostic to query ONLY P0 55321, exact P0 Docker graph and all LAB published port bindings, with explicit report markers and no login/SQL writing/container lifecycle calls. Updated `scripts/security_p0/stage3v-lab-binding.mjs` to call the same real P0 topology/isolation gate before any service-role fixture reads. Updated signed-JWT `stage3v-signed-jwt-general-journal-e2e.mjs` to reject an Auth `SUPABASE_URL` that differs from `http://127.0.0.1:55321`, regardless of other loopback origin. The dedicated local API handler origin remains independently loopback-gated.
 - Updated `tests/securityP0Stage3vLocalReadiness.test.js`; new `tests/securityP0Stage3vLabTopology.test.js` covers fail-closed scenarios and mocked **Docker inspection only**, never fake Auth JWT or PostgreSQL. GitHub Actions **run 38076639585, candidate commit `6f2885e93512f068304bedf1875df0fddbc27663`**: safe-node-baseline **Ubuntu PASS and Windows PASS**, all suites + build per workflow.
-- Real security finding: despite Docker network default host binding option being `127.0.0.1`, actual P0 containers explicitly publish host ports on **0.0.0.0 and [::]**, including direct database port 55322. Actual mappings prevail; Stage3V remains **BLOCKED_UNSAFE_PUBLISHED_PORTS**. A safe future remediation needs a carefully reviewed CLI/Compose recreate with persistent volume preservation and backup/checks; **do not use ordinary `supabase/config.toml` as the P0 deployment definition** since it currently has `project_id = fiscosim-local` and ports 54321–54323. No `docker stop`/`rm`/`restart`, `supabase stop/start`, credential operations, or unattended network changes performed.
+- Real security finding: despite Docker network default host binding option being `127.0.0.1`, actual P0 containers explicitly publish host ports on **0.0.0.0 and [::]**, including direct database port 55322. Actual mappings prevail; Stage3V remains **BLOCKED_UNSAFE_PUBLISHED_PORTS**. A safe future remediation needs a carefully reviewed CLI/Compose recreate with persistent volume preservation and backup/checks; **do not use ordinary `supabase/config.toml` as the P0 deployment definition** since it currently has `project_id = fiscosim-local` and ports 54321?54323. No `docker stop`/`rm`/`restart`, `supabase stop/start`, credential operations, or unattended network changes performed.
 - **Scope and evidence:** Code/documentation ONLY on isolated P0 branch, PR #2 remains Draft. Neither `mio-branch` nor live Supabase/database changed. Stage3S and Stage3U prior real LAB PASS preserved, not rerun. No JWT A/B sign-in, no persistent journal/IVA/partitario commit; signed JWT Stage3V and fiscal end-to-end remain NOT_EXECUTED/NOT_CERTIFIED.
+
+
+## 2026-10-10 ? Studio Grade E2E: audit integrale, matrice, roadmap (branch isolato)
+
+- **Ambiente Cloud Agent:** repository `patrikalaimo-cmyk/fiscosim-vite`. Percorso Windows storico `C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity` non presente; lavoro in worktree isolato `/home/ubuntu/FiscoSim-StudioGrade-E2E-20261010` (equivalente proposto PC: `%USERPROFILE%\FiscoSim-StudioGrade-E2E-20261010`).
+- **Git:** partenza da `security/p0-isolated-hardening-20261008` @ `ceac722f9d8f100c6844c3f5e4ec655a064bf06e` (allineato a `origin`, CI SUCCESS es. `38076788699`). Creato branch `feat/studio-grade-accounting-e2e-20261010` via `git worktree add`. `mio-branch` @ `38bfbc7` non modificato. Nessun merge, reset, force-push, deploy.
+- **Documentazione letta:** `AI_WORKING_AREA_FISCOSIM/00?08`, `REPORT/ROADMAP_FISCOSIM_STUDIO_GRADE.md`, gate ciclo reale 20261009, test matrix, debito manuale, coda `REPORT_CODEX`, audit P0/RPC.
+- **Audit codice (prevalente):** `persistPrimaNotaDraft` ? `createPrimaNotaCompleta` esegue INSERT/UPDATE multipli su `prima_nota`, `prima_nota_righe`, `registri_iva`, `partitario`, `ritenute_dacconto` con `cleanupPrimaNotaCompleta` best-effort. Cleanup non ripristina UPDATE su partite/ritenute preesistenti; assenza idempotenza sul path produttivo. Stage3U `fiscosim_post_general_journal` resta ACID solo per movimento generale (senza IVA/partitario/ritenute) e non ? collegato alla UI. Canonical commit RPC reale ancora TODO/disabled. Bank commit dry-run bloccato.
+- **Moduli censiti (15 aree):** Manuale/Consultazione/IVA dominio avanzati con freeze L1; Import PARTIAL (cronologia UI placeholder); Bank BLOCKED commit; Stampe PARTIAL (fascicolo MISSING; definitiva senza attestazioni server); Chiusura esercizio NOT_IMPLEMENTED come procedura; Auth/P0 avanzato ma Stage3V JWT NOT_EXECUTED e porte LAB `0.0.0.0`.
+- **Documenti prodotti:** `REPORT/AUDIT_STUDIO_GRADE_20261010.md`, `REPORT/MATRICE_TEST_CONTABILI_E2E.md`, `REPORT/ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`. Aggiornati `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, note prevalenti in `02_STATO_ATTUALE.md` e `05_ROADMAP_ATTIVA.md`.
+- **Harness Stage3V (sicuro):** `scripts/security_p0/stage3v-lab-binding.mjs` accetta anche branch `feat/studio-grade-accounting-e2e-20261010` e worktree `FiscoSim-StudioGrade-E2E-20261010`, oltre al P0 storico; SHA pin, dirty tree, rete, host e stack 55321 restano fail-closed. Test `securityP0Stage3vBinding.test.js` 4/4 PASS.
+- **Test baseline sessione (no DB write, no 3S/3U):** `npm ci`; `npm run test:all` ? **1183 pass / 0 fail**; `npm run build` ? PASS. Non ripetuti Stage 3S/3U. Nessuna migration/RLS/env/LIVE.
+- **Prossimo intervento:** **SG-P0-01** RPC commit fiscale ACID completa in LAB (rehearsal ROLLBACK ? install su approvazione). Prerequisito infra **SG-P0-00** (porte LAB loopback) richiede approvazione esplicita. Stage3V write solo dopo porte sicure + opt-in.
+
+
+## 2026-10-10 ? SG-P0-01 Stage3W fiscal atomic commit candidate (no LAB PostgreSQL execution)
+
+- Continuazione da PR #3 / checkpoint `f6c874a` su `feat/studio-grade-accounting-e2e-20261010` (worktree Cloud `/home/ubuntu/FiscoSim-StudioGrade-E2E-20261010`). `mio-branch` non toccato. Stage 3S/3U non rieseguiti.
+- **Contratto:** `REPORT/FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md` ? riconciliazione payload Manuale/Import ? colonne PG; `contract_kind` distinti; claim `fiscosim_fiscal_journal_claim` separato da Stage3U; drift `prima_nota_righe.societa_id` e assenza `esercizio` in migration documentati.
+- **Scenari indipendenti:** `domain/fiscalAtomicCommit/independentExpectedScenarios.js` (FA22, FP22, NCA22, pagamento parziale 500/1220?720, parcella+ritenuta, split). Nessun import di mappers/servizi Manuale.
+- **Candidata SQL LAB-only:** `57_stage3w_fiscal_journal_atomic_LAB_ONLY.sql` (`fiscosim_post_fiscal_journal`), matrix `58_?_TEST_ONLY.sql` (fattura+idempotenza+A/B+residuo+overpay+late audit ROLLBACK), preflight READ ONLY `59_?`. Runner Windows `run-stage3w-fiscal-preflight.ps1` / `run-stage3w-fiscal-rehearsal-rollback.ps1`. Stage3U RPC non DROP/REPLACE.
+- **API:** `api/studio/fiscal-journal-post.js` + `lib/fiscalJournalRequest.js`; route in `lib/devStudioHttp.js`; 503 salvo LAB flags. **Non collegata** a `persistPrimaNotaDraft` / Import.
+- **CI:** workflow `fiscosim-test-baseline.yml` ora include push/PR su `security/p0-isolated-hardening-20261008` e `feat/studio-grade-accounting-e2e-20261010` (prima solo `mio-branch` ? PR #3 non partiva).
+- **Test Cloud (no DB):** `npm run test:all` ? **1192/1192 PASS**; build PASS; Stage3W suite 9/9. **PostgreSQL LAB: NOT_EXECUTED** (ambiente Cloud senza Docker P0 Windows).
+- **Stop obbligatorio:** prima operazione che richiede LAB = rehearsal ROLLBACK Stage3W su container P0; proposta rischi/ripristino nel contratto ?7. Nessuna install persistente/UI wire senza ulteriore consenso.
+
+
+## 2026-10-10 ? CI GitHub PASS su PR #3 / Stage3W (dopo fix trigger)
+
+- Causa storica: workflow `fiscosim-test-baseline.yml` ascoltava solo `mio-branch`; PR #3 verso P0 non partiva.
+- Fix verificato: push `d6b1c0d` e pull_request su `feat/studio-grade-accounting-e2e-20261010` (base P0) hanno eseguito **FiscoSim Test Baseline**.
+- Evidenza: Actions `38084334961` (push) e `38084339341` (PR) ? **Ubuntu PASS + Windows PASS**. Nessuna scrittura LAB/DB.
+- Stato invariato: Stage3W candidata codice-only; rehearsal PostgreSQL Windows ancora in attesa di approvazione.
+
+
+## 2026-10-10 ? SG-P0-01: approvazione rehearsal + runbook Windows + matrix ampliata
+
+- Operatore: ?ok procedi? = approvazione prove LAB Stage3W. Cloud Agent **senza Docker**: impossibile eseguire preflight/rehearsal qui.
+- Preparato `REPORT/STAGE3W_WINDOWS_LAB_RUNBOOK_20261010.md` con comandi pin SHA/container e criteri PASS.
+- Matrix SQL 58 ampliata: nota credito attiva (?1220), split (partita 1000 + flag), parcella (netto 1068.80, ritenuta 200/1040), oltre FA22/pagamento/overpay/late-audit.
+- Script install persistente `run-stage3w-fiscal-persistent-lab-install.ps1` gated da `-ApproveLabSchemaInstall` + prova rehearsal + blob hash SQL; **non eseguito**. Stage3U preservato nel postcheck.
+- Test Cloud: `test:all` **1193/1193 PASS**, build PASS. PostgreSQL LAB ancora NOT_EXECUTED in Cloud.
+- Prossimo: operatore esegue preflight + rehearsal sul PC e allega report; install persistente richiede nuova approvazione esplicita.
+
+
+## 2026-10-10 ? CI PASS su e9b253e (runbook Stage3W / matrix ampliata)
+
+- Actions `38084732523` (push) e `38084735208` (PR): Ubuntu + Windows **PASS**.
+- HEAD collaudato CI: `e9b253ecdac33da26d45206c4ea09b063a498c89`.
+- Prossimo gate: rehearsal LAB Windows operatore (Cloud senza Docker).
+
+
+## 2026-10-10 ? Fix Stage3W preflight/rehearsal marker matching (Windows BLOCKED)
+
+- Operatore: `STAGE3W PREFLIGHT BLOCKED` + `STAGE3W REHEARSAL BLOCKED` su container P0 LAB.
+- Causa: SQL 59/58 emettevano `RAISE NOTICE` per i marker PASS; i runner PowerShell cercavano riga esatta come Stage3U (`SELECT ? AS result` + `psql -t`). Con `NOTICE:  PREFIX` il `-contains` falliva anche se PostgreSQL era OK.
+- Fix: preflight 59 e matrix 58 usano `SELECT 'STAGE3W_?' AS result;`; PS1 usano match substring + dump diagnostico `ERROR/DETAIL/HINT` su BLOCKED; blob pin install 58 aggiornato a `988e3396d2477d65140e70f6635cab2c5dfe560a`.
+- Test Stage3W: **11/11 PASS**. Nessuna esecuzione PostgreSQL da Cloud. Operatore deve `git pull` e rieseguire preflight + rehearsal con nuovo SHA.
+
+
+## 2026-10-10 ? Stage3W rehearsal ancora BLOCKED: diagnostica nel throw + colonne/ledger
+
+- CI marker-fix: Actions push/PR su `3315094` **PASS** (es. `38085572534` / `38085575040`).
+- Operatore: rehearsal ancora BLOCKED (`STAGE3W_FISCAL_REHEARSAL_20261010-225457-529.txt`) senza testo ERROR incollato.
+- Mitigazioni: (1) PS1 includono diagnostica PostgreSQL nel `throw`; (2) preflight 59 elenca colonne usate da RPC; (3) SQL 57 eccezione empty-ledger con conteggi `pn/lines/vat/part/wh`; (4) insert partitario tollera assenza `iva_per_cassa`. Blob pin 57 ? `4d4a765eb6b146fdf3343706b54330cb51ba7783`.
+
+
+## 2026-10-10 ? Stage3W late-audit REVOKE sotto service_role (no-op)
+
+- Preflight READ-ONLY **PASS** su `c1c373f`. Rehearsal BLOCKED: `SECURITY FAILURE: fiscal post succeeded without audit privilege`.
+- Root cause: matrix 58 eseguiva `REVOKE INSERT ? FROM service_role` dentro `SET LOCAL ROLE service_role` ? PG warning `no privileges could be revoked` ? post audit ancora permesso.
+- Fix: allineato a Stage3U 55 ? `RESET ROLE` ? `REVOKE` come postgres ? `SET LOCAL ROLE service_role` ? `$audit_failure$` ? `RESET ROLE` ? `GRANT`. Blob 58 ? `f74d51369aab9a1d2bfc883a920b771fbf0b16d4`.
+
+
+## 2026-10-10 ? Stage3W LAB Windows: preflight + rehearsal ROLLBACK PASS
+
+- Container: `supabase_db_FiscoSim-P0-LAB-20261008-164658`.
+- Preflight: `STAGE3W_FISCAL_PREFLIGHT_20261010-230343-598.txt` ? **READ-ONLY PASS**.
+- Rehearsal: `STAGE3W_FISCAL_REHEARSAL_20261010-230345-944.txt` ? **ROLLBACK PASS** (matrix + schema Stage3W non persistiti; Stage3U untouched; no LIVE).
+- Gate SG-P0-01 reversible: **GREEN**. Prossimo solo su approvazione esplicita: install persistente LAB (`run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall`). Nessun wire UI/Manuale/Import.
+
+
+## 2026-10-10 ? Approvazione install persistente Stage3W LAB
+
+- Operatore: ?approvo? = consenso esplicito a `run-stage3w-fiscal-persistent-lab-install.ps1 -ApproveLabSchemaInstall` sul solo container P0 LAB.
+- Cloud Agent non esegue Docker: install a carico operatore Windows. Se matrix 58 fallisce dopo COMMIT di 57: **non rieseguire** automaticamente; allegare report.
+- Fuori scope: UI Manuale/Import, LIVE Supabase, Stage3V JWT.
+
+
+## 2026-10-10 ? Fix pin blob Stage3W 58 per install persistente
+
+- Operatore: `Stage3W unreviewed SQL content detected: 58_?`. Pin install aveva OID stale `f74d5136?`; blob commitato reale `59b9b746?`.
+- Fix: pin corretto + check via `git rev-parse HEAD:path` (blob commitato, immune ad autocrlf Windows). Nessuna DDL eseguita nel tentativo fallito.
+
+
+## 2026-10-10 ? Stage3W persistent LAB install PASS
+
+- Report: `STAGE3W_PERSISTENT_LAB_INSTALL_20261010-231404-750.txt` su container `supabase_db_FiscoSim-P0-LAB-20261008-164658`, commit `fe21da0`.
+- Esito: `STAGE3W_PERSISTENT_LAB_INSTALL_PASS` ? DDL 57 COMMIT; matrix 58 PASS + fixture ROLLBACK; postflight `SCHEMA_PRESENT|NO_FIXTURE_ROWS|ACL_PASS|STAGE3U_OK`.
+- RPC `fiscosim_post_fiscal_journal` presente in LAB; claim table vuota; Stage3U preservato; no LIVE; no UI wire.
+- SG-P0-01 L2 LAB schema: **GREEN**. Prossimi solo su nuovo consenso: wire Manuale/Import (cut-over), L3 JWT (bloccato porte), o altri item roadmap.
+
+
+## 2026-10-10 ? Stage3W LAB-gated Manuale/Import persist wire (default OFF)
+
+- Operatore: ?ok procedi? dopo install persistente PASS.
+- Aggiunto percorso opzionale in `persistPrimaNotaDraft`: se `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED` / `VITE_FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB=true`, mappa piano DB ? POST `/api/studio/fiscal-journal-post` (richiede anche flag endpoint LAB).
+- Moduli: `fiscalJournal/isFiscalJournalPersistLabEnabled.js`, `resolveFiscalContractKind.js`, `mapPersistencePlanToFiscalJournalRequest.js`, `postFiscalJournalAtomicViaStudioApi.js`.
+- Default invariato: `createPrimaNotaCompleta`. Nessun nome RPC in `persistPrimaNotaDraft.js`. JWT L3 non eseguito (porte).
+
+
+## 2026-10-10 ? Stage3W LAB UI stack launcher + HTTP smoke
+
+- Operatore: procedere in autonomia, meno micro-gate.
+- Script: `start-stage3w-lab-ui-stack.ps1` (env da cartella P0 LAB ? `.env.stage3w.lab.local`, avvio API+Vite) e `smoke-stage3w-fiscal-lab-http.ps1` (atteso 401/403).
+- Fix CI precedente `333ca03`: client LAB senza import `auth.js`.
+
+## 2026-10-10 ? Refresh Windows: worktree Studio Grade, audit, baseline 1199
+
+- **Ambiente:** PC Windows. Repo storico C:\Users\patri\Desktop\fiscosim-viteBACKUPAntigravity su mio-branch @ `3af07b4` (working tree con untracked; **non modificato**). Worktree isolato gia presente `C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010`.
+- **Git:** `git fetch` P0 + Studio Grade. P0 tip = `ceac722` (checkpoint storico). Fast-forward worktree `2e1a2bd` ? `53e1f8e` (`origin/feat/studio-grade-accounting-e2e-20261010`). Merge-base con P0 = `ceac722`; branch Studio Grade 26 commit ahead. Nessun merge, reset, force-push, touch `mio-branch`.
+- **Agent root:** spostato sul worktree Studio Grade.
+- **Documentazione riletta:** `AI_WORKING_AREA_FISCOSIM/00?08`, roadmap/audit/matrice 20261010, gate ciclo reale 20261009, contratto Stage3W, coda `REPORT_CODEX`, install report `?231404-750.txt`.
+- **Audit codice riconfermato:** `createPrimaNotaCompleta` multi-step + `cleanupPrimaNotaCompleta` best-effort (UPDATE partite/ritenute non ripristinate). Path LAB opzionale in `persistPrimaNotaDraft` dietro flag (default OFF) ? `fiscosim_post_fiscal_journal`. Bank `allowRealCommit:false`. Import `Cronologia import` ancora placeholder.
+- **Documenti aggiornati (append/refresh, no riscrittura cieca):** `REPORT/AUDIT_STUDIO_GRADE_20261010.md`, `MATRICE_TEST_CONTABILI_E2E.md` (riga A10 Stage3W), `ROADMAP_COMPLETAMENTO_STUDIO_GRADE.md`, `FISCOSIM_FISCAL_ATOMIC_COMMIT_CONTRACT_20261010.md` (checklist allineata a PASS install), `AI_WORKING_AREA_FISCOSIM/PROJECT_STATE.md`, `02_STATO_ATTUALE.md`, `05_ROADMAP_ATTIVA.md`.
+- **Infrastruttura:** Docker Desktop **non in esecuzione** ? topologia porte LAB e smoke Stage3W **NOT_EXECUTED** in questa sessione. Stage 3S/3U/3W-install **non rieseguiti**.
+- **Test baseline sicuri:** `npm ci`; `npm run test:all` ? **1199 pass / 0 fail**; `npm run build` ? PASS. Nessuna migration/RLS/env/LIVE/scrittura fiscale.
+- **Prossimo intervento concreto:** avviare Docker Desktop ? verifica READ-ONLY container/volume Stage3W ? `smoke-stage3w-fiscal-lab-http.ps1`. Scritture fiscali flag ON e SG-P0-00 porte solo con nuovo consenso. Default produttivo resta `createPrimaNotaCompleta`.
+
+
+## 2026-10-11 ? Push + Docker LAB + Stage3W HTTP smoke PASS
+
+- Push: `3433ead` ? `origin/feat/studio-grade-accounting-e2e-20261010`.
+- Docker Desktop avviato; stack P0 LAB presente (DB/Kong/Auth healthy). Porte ancora `0.0.0.0:55321/55322/...` (SG-P0-00 non applicato).
+- READ-ONLY PG: `fiscosim_post_fiscal_journal` + `fiscosim_post_general_journal` presenti; `fiscosim_fiscal_journal_claim` rows=0; `ROLLBACK`.
+- Fix encoding Windows: em-dash Unicode in `start-stage3w-lab-ui-stack.ps1` / `smoke-stage3w-fiscal-lab-http.ps1` ? ASCII `-` (PowerShell parse fail senza BOM UTF-8).
+- Avvio stack UI LAB + smoke: report `STAGE3W_LAB_HTTP_SMOKE_20261011-000132-906.txt` ? **HTTP 401 PASS** (endpoint fiscale LAB abilitato). Nessuna scrittura fiscale.
+- Fuori scope senza nuovo consenso: flag persist write Manuale/Import, SG-P0-00 recreate porte, Stage3V JWT.
+
+
+## 2026-10-11 ? Stage3W synthetic persist FA22 PASS (LAB L2, no JWT/UI)
+
+- Blocco: LAB P0 era **vuoto** (0 societa/auth/conti). UI login impossibile senza seed Auth.
+- Aggiunti `sql/security_p0/60_stage3w_fiscal_synthetic_persist_FA22_LAB_ONLY.sql` + `scripts/security_p0/run-stage3w-fiscal-synthetic-persist.ps1` (`-ApproveSyntheticPersist`).
+- Eseguito su `supabase_db_FiscoSim-P0-LAB-20261008-164658` @ SHA `53b6a77`: seed `SG-E2E-A/B` + RPC `fiscosim_post_fiscal_journal` FA22 (imponibile 1000 / IVA 220 / totale 1220) + replay idempotente + rifiuto cross-company.
+- Report: `REPORT/STAGE3W_SYNTHETIC_PERSIST_FA22_20261011-000427-220.txt` ? PN `0afbcb06-18e5-49de-883a-38c6fcf89d8c`; partita residuo 1220; societa B PN=0; Stage3U OK.
+- **Non** e JWT firmato ne UI Manuale/Import. Path default `createPrimaNotaCompleta` invariato. Porte ancora `0.0.0.0`. Nessun LIVE.
+
+
+## 2026-10-11 ? Stage3W synthetic persist MATRIX PASS (pay/NC/split/parcella/FP22)
+
+- Estensione L2 su LAB P0 dopo FA22: `sql/60` seed riusato; nuovo `sql/61` + `run-stage3w-fiscal-synthetic-persist-matrix.ps1`.
+- Esito report `STAGE3W_SYNTHETIC_PERSIST_MATRIX_20261011-000635-684.txt` @ SHA `9240b04`:
+  - FA22 residuo **720** dopo incasso 500
+  - NC attiva residuo **-1220**, IVA -220
+  - Split partita **1000**, `split_payment=true`
+  - Parcella residuo **1068.80**, ritenuta **200** codice **1040**
+  - FP22 fornitore residuo **1220**, registro acquisto
+  - PN societa A=6, B=0; Stage3U OK; overpay rifiutato
+- Non JWT/UI. Path default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 ? Liquidazione IVA L2 da registri SG-E2E PASS
+
+- Script `scripts/security_p0/run-stage3w-liquidazione-from-sge2e.mjs`: legge `registri_iva` reali LAB, calcola con `calcoloLiquidazioneIvaDefinitiva`, confronta attesi indipendenti, persiste `liquidazione_iva` con `FISCOSIM_SG_E2E_LIQ_PERSIST=APPROVED`.
+- Periodo mensile 2026-03: vendite lorde **448.80**, split esclusa **220**, debito effettivo **228.80**, acquisti detraibili **220**, saldo **8.80**, F24 dovuto **0** (sotto soglia 25.82), societa B isolata.
+- Persist id `86b346d6-3560-4c9b-b903-287a5d779d78`; report `REPORT/STAGE3W_LIQUIDAZIONE_SGE2E_20261011-000936.txt`.
+- Non JWT/UI; non RPC consolidamento ufficiale (tabella diretta LAB). Path default Manuale invariato.
+
+
+## 2026-10-11 ? Consolidamento IVA RPC ufficiale su SG-E2E PASS
+
+- Script `scripts/security_p0/run-stage3w-liquidazione-consolidamento-sge2e.mjs`: `consolida_periodo_iva_transazionale` su LAB P0 con payload da `calcoloLiquidazioneIvaDefinitiva` sui registri SG-E2E.
+- Esiti: consolidamento **provvisorio** PASS; **riconsolidamento** sostituisce riga precedente PASS; lock `[stato:definitiva]` in note ? RPC rifiuta riconsolidamento PASS.
+- Snapshot finale `a9e136d3-93b6-4fba-b962-3124d993b26c`: iva_debito **448.80** (lordo RPC da `ivaVenditeLorda`), credito **220**, saldo **8.80**.
+- Report: `REPORT/STAGE3W_LIQUIDAZIONE_CONSOLIDAMENTO_SGE2E_20261011.txt`.
+- Gap documentato: nello schema LAB allineato non esiste RPC dedicata `mark definitiva`; il blocco usa marker in `note`. Non JWT/UI.
+
+
+## 2026-10-11 ? JWT firmato ? HTTP fiscal-journal-post ? PG PASS (L3 parziale)
+
+- Script `scripts/security_p0/run-stage3w-jwt-fiscal-fa22.mjs`: ripara stub Auth SG-E2E (password bcrypt, identities, instance, token stringhe vuote per GoTrue), login A/B, POST `/api/studio/fiscal-journal-post` con JWT.
+- Esiti: HTTP **201**, PN `3af7c706-cdf2-420f-8d18-954e5a728367` (`SG-E2E-JWT-FA22-001` 1220/1220, IVA 220, partita 1220), replay stesso `request_id` ? stesso UUID, cross-company B?A **403**.
+- Report: `REPORT/STAGE3W_JWT_FISCAL_FA22_20261011.txt`. Token/password non stampati.
+- Limite: harness Stage3V formale resta bloccato dalle porte `0.0.0.0`; questa prova usa URL loopback espliciti 55321/3001. UI browser Manuale non eseguita. Default `createPrimaNotaCompleta` invariato.
+
+
+## 2026-10-11 - L4 browser Puppeteer Manuale + fiscal post PASS
+
+- Blocco Cursor browser MCP (`Aborted`) aggirato con Puppeteer headless: `scripts/security_p0/run-stage3w-l4-browser-manuale.mjs`.
+- Fix sbloccanti stack UI: route `/api/auth/session` in `lib/devStudioHttp.js`; Vite proxy `127.0.0.1:3001` (conflitto `open-webui` su `:3001`).
+- Esito evidence `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-11T1939.txt`:
+  - LOGIN_UI=PASS (`sg-e2e-a@example.invalid`)
+  - NAV CONTABILITA -> Prima Nota -> Registrazione manuale = PASS
+  - same-origin POST `/api/studio/fiscal-journal-post` via Vite proxy **201**
+  - PN `d24cbc82-adc3-4ad8-900f-fe3bdb8617fb` presente in DB (count=1)
+- Nota: post fiscal eseguito con JWT sessione browser sulla superficie Manuale (non fill completo form F10). Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-01 Import Contabilita FP22 commit LAB PASS
+
+- Script `scripts/security_p0/run-stage3w-import-fp22-commit.mjs`: staging `documenti_import` + JWT SG-E2E-A + `runCommitWorkflow` con `FISCOSIM_FISCAL_JOURNAL_PERSIST_LAB_ENABLED=true` (fetch `/api` riscritto su `127.0.0.1:3001`).
+- Evidence `REPORT/STAGE3W_IMPORT_FP22_COMMIT_20261011195558.txt`:
+  - PN `aa84ee9b-52fd-4647-a74f-5d5223815360` (`SG-E2E-IMP-FP22-11195558`) 1220/1220
+  - `registri_iva` acquisto 1000/220; partita fornitore residuo 1220; societa B isolata
+  - claim `source_module=import_contabilita`, `contract_kind=fattura_passiva`; staging `processed`
+- Gap noto: RPC fiscale non persiste `documento_import_id` su `prima_nota` (provenienza via claim + staging). Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-02 Import Contabilita NC attiva 22 PASS
+
+- Script `scripts/security_p0/run-stage3w-import-nc22-commit.mjs`: staging + JWT + `runCommitWorkflow` fiscal LAB; causale con `operazioneGestita='Nota credito attiva'` (label bare `notacredito` non attiva `notaCredito` in policy).
+- Evidence `REPORT/STAGE3W_IMPORT_NC22_COMMIT_20261011200317.txt`:
+  - PN `07652403-a8c2-4b0c-a922-28e7ce802214` (`SG-E2E-IMP-NC22-11200317`) 1220/1220
+  - IVA vendita **-1000/-220**; partita cliente residuo **-1220**
+  - claim `source_module=import_contabilita`, `contract_kind=nota_credito_attiva`; staging `processed`; societa B isolata
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-03 Import Contabilita multi-aliquota 22+10 PASS
+
+- Script `scripts/security_p0/run-stage3w-import-multi2210-commit.mjs`: prune placeholder IVA 0/0 via `normalizeImportVatRows`, poi `runCommitWorkflow` fiscal LAB.
+- Evidence `REPORT/STAGE3W_IMPORT_MULTI2210_COMMIT_20261011200447.txt`:
+  - PN `dd01bdca-db42-4830-85e3-a9cf4599252c` (`SG-E2E-IMP-M2210-11200447`) 1770/1770
+  - `registri_iva` count=2 (22%: 1000/220; 10%: 500/50); zero-rows=0; partita fornitore 1770
+  - claim `import_contabilita` / `fattura_passiva` con 2 vat rows; staging `processed`
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+
+## 2026-10-11 - SG-P1-04 Import Contabilita incasso parziale PASS
+
+- Fix: `importContabilitaWorkflow` mappa `ledger.rows[].openItemId` in chiusura su `id`/`selected`/`importoChiusura` (prima le chiusure Import non arrivavano a persist).
+- Script `scripts/security_p0/run-stage3w-import-pay-partial-commit.mjs`: open FA Import 1220 + pay 500 + overpay rejected.
+- Evidence `REPORT/STAGE3W_IMPORT_PAY_PARTIAL_COMMIT_20261011210147.txt`:
+  - Open PN `59b4b052-?`, partita `d120dd17-?` 1220 -> after pay PN `4aecae78-?` residuo **720**
+  - claim pay `import_contabilita` / `pagamento`; overpay `success=false` residuo invariato 720
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P1-05 Equivalenza Import vs Manuale PASS
+
+- Script `scripts/security_p0/run-stage3w-import-vs-manuale-equiv.mjs`: stesso draft FP22 via Import Contabilita e via Manuale (fiscal LAB), fingerprint SHA256 effetti PG (dare/avere, VAT, partita, rows, contract_kind; **esclude** `source_module`).
+- Evidence `REPORT/STAGE3W_IMPORT_VS_MANUALE_EQUIV_20261011210322.txt`:
+  - Import PN `180491a6-b632-41da-b4e8-b16776013565` source `import_contabilita`
+  - Manuale PN `f301965b-cfbc-4a4e-93f7-2b43cc182158` source `registrazione_manual`
+  - Kind entrambi `fattura_passiva`; hash identico `a6a392c3b58a892278564d6f63919090df5601e09e83e4173d8c597ed2c36d14`
+  - Effetti: dare/avere 1220, VAT acquisto 22/1000/220, partita fornitore 1220, stesse 3 righe conti
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P1-06 Consultazione L4 read-only PASS
+
+- Script `scripts/security_p0/run-stage3w-l4-browser-consultazione.mjs` (Puppeteer): seed fiscal LAB FP22 ? Contabilit?/Prima Nota/Consultazione ? off Demo DEV ? filtro numero documento hit/miss ? sidebar read-only.
+- Evidence `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-11T2110.txt`:
+  - Seed PN `c7a18d0f-cee2-4281-848c-1745ad16496e` doc `SG-E2E-P106-1T2110` dare/avere 1220
+  - Filter hit visible; miss ? `Nessun movimento trovato`
+  - Detail: banner read-only, Modifica disabled, zero mutating HTTP in fase consult; `updated_at` invariato
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P2-01 Import split payment + liquidazione exclude PASS
+
+- Script `scripts/security_p0/run-stage3w-import-split-commit.mjs`: Import Contabilita vendita split con `conto_iva_split_payment` tecnico ? fiscal LAB ? assert PG + `calcoloLiquidazioneIvaDefinitiva` (periodo 2026-05 isolato).
+- Evidence `REPORT/STAGE3W_IMPORT_SPLIT_COMMIT_20261011214946.txt`:
+  - PN `654c7b14-0044-4a6b-a8e8-9fe5f1867e88` bilanciata 1220; partita residuo **1000** (imponibile)
+  - Cliente dare 1000; righe tecniche split 2?220; VAT `split_payment=true` vendita 220
+  - Claim `split_attiva` / `import_contabilita`
+  - Liquidazione doc: lorda 220, split esclusa 220, debito effettivo **0**
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-11 - SG-P2-02 Import IVA per cassa + rilascio su incasso PASS
+
+- Script `scripts/security_p0/run-stage3w-import-iva-cassa-commit.mjs`: open FA vendita `docivaesigdifferita` (giu) + incasso parziale 500 (lug) via fiscal LAB; liquidazione domain per periodo.
+- Evidence `REPORT/STAGE3W_IMPORT_IVA_CASSA_COMMIT_20261011215836.txt`:
+  - Open PN `f380df58-d953-4e47-8026-a7505867200a`: VAT `differita` 220, partita `iva_per_cassa=true` residuo 1220
+  - Giugno: debito effettivo **0**, differita vendite 220 (esclusa)
+  - Pay PN `a743eac2-7a28-474a-bbcd-ca04db4392cf`: rilascio IVA **90.16** / imponibile 409.84; partita residuo 720
+  - Luglio: debito effettivo **90.16** (= quota rilasciata); claim `pagamento` / `import_contabilita`
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-03 Import reverse/estero autofattura PASS
+
+- Script `scripts/security_p0/run-stage3w-import-reverse-estero-commit.mjs`: Import acquisto `autofattura` + reverse ? fiscal LAB (ago 2026).
+- Evidence `REPORT/STAGE3W_IMPORT_REVERSE_ESTERO_COMMIT_20261012081416.txt`:
+  - PN `e17ed2c9-9d0b-4874-ae22-79ff12f091a7` 1220/1220, **4** righe (costo+forn imponibile + doppia IVA 220)
+  - Partita fornitore residuo **1000**; VAT `acquisto:220` + `vendita:220`
+  - Liquidazione: debito 220, credito 220, saldo **0** (neutralit?)
+  - Claim source `import_contabilita` (contract_kind inferito `fattura_attiva` per dual VAT ? gap documentato, effetti PG OK)
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-04 Import parcella + ritenuta 1040 + scadenzario/CU PASS
+
+- Script `scripts/security_p0/run-stage3w-import-parcella-ritenuta-commit.mjs`: Import open `parcella_documento` (compenso 1000 + cassa 40 + IVA 228.80 + rit 200) ? JWT `pagamento` matura ritenuta `da_versare` ? scadenzario + CU readiness.
+- Fix LAB RPC: `57` withholding UPDATE non deve settare `ritenute_dacconto.updated_at` (colonna assente ? PG `42703`). Hotfix gi?-installati: `57a_stage3w_fiscal_journal_ritenute_update_fix_LAB_ONLY.sql`.
+- Evidence `REPORT/STAGE3W_IMPORT_PARCELLA_RITENUTA_COMMIT_20261012083354.txt`:
+  - Open PN `4a9165fc-0c7a-4680-ad98-726962975827` 1268.80/1268.80; partita cliente residuo **1068.80**; rit `404c34a2-?` 200/1040/`aperta`; claim `parcella_documento|import_contabilita`; VAT vendita 1040/228.80
+  - Pay PN `8690fa36-e639-4cd6-9923-33521d649ce0`: rit `da_versare` + `prima_nota_pagamento_id`; partita residuo **0**
+  - Scadenzario 1 riga tributo 1040 importo 200; **CU_READY=true**
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-05 Import pagamento parziale con ritenuta pro-quota PASS
+
+- Domain `calculateRitenutaPartialMaturation` + maturazione plan (residual `aperta` + insert slice `da_versare`); validator Manuale non blocca piu il parziale se pro-quota coerente.
+- Stage3W RPC `pagamento`: UPDATE residuo (importi, stato aperta) + INSERT maturata con `prima_nota_pagamento_id`; WH keys HTTP estese.
+- Script `scripts/security_p0/run-stage3w-import-parcella-ritenuta-partial-commit.mjs`.
+- Evidence `REPORT/STAGE3W_IMPORT_PARCELLA_RITENUTA_PARTIAL_COMMIT_20261012084308.txt`:
+  - Open PN `b4d0519f-4484-4797-a249-e3afef586a23`; rit open 200/aperta
+  - Pay PN `79f3b404-d7d2-4c1d-9f6c-50cfbe58a567` incasso **534.40**: partita residuo **534.40**; rit residual `ccbfa014-...` 100/aperta; rit matured `c9d6189f-...` 100/da_versare/1040
+  - Scadenzario 1 riga importo **100**; **CU_READY=true**
+- Default `createPrimaNotaCompleta` invariato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-06 Controllo F24 importato vs maturato (verde/giallo/rosso) PASS
+
+- Domain `resolveRitenutaF24ControlStatus` + `buildRitenuteF24ControlRows` (match 1040 + periodo, allocazione FIFO).
+- Non e un compilatore F24: confronta ritenute `da_versare` con righe `public.f24` importate.
+- Script `scripts/security_p0/run-stage3w-ritenute-f24-control.mjs`.
+- Evidence `REPORT/STAGE3W_RITENUTE_F24_CONTROL_20261012085311.txt`:
+  - Verde: maturato 200 / versato 200 on-time (10<=16 ott)
+  - Giallo: maturato 150 / versato 150 late (20>16 set)
+  - Rosso: maturato 100 / versato 40 residual 60
+  - SUMMARY verde=1 giallo=1 rosso=1
+- Unit `tests/ritenuteF24Control.test.js`. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P2-07 Liquidazione da PN reali + blocco definitiva PASS
+
+- Script `scripts/security_p0/run-stage3w-p2-07-liquidazione-definitiva-block.mjs`: JWT FA+FP periodo **2026-12** ? `registri_iva` reali ? domain calc saldo 0 ? RPC `consolida_periodo_iva_transazionale`.
+- Evidence `REPORT/STAGE3W_P2_07_LIQUIDAZIONE_DEFINITIVA_20261012085609.txt`:
+  - FA PN `6d7317ba-...` / FP PN `7f479050-...`; VAT 2 righe; debito 220 / credito 220 / saldo **0**
+  - Provvisorio `502f33f9-...`; riconsolidamento sostituisce ? `1e3f0bf0-...` (1 riga periodo)
+  - Lock `[stato:definitiva]` ? terzo consolida **rifiutato** (`Periodo bloccato...definitiva`)
+- Gap noto: marker definitiva via note (no RPC mark dedicata). Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-01 Bank RPC atomica + storico server PASS
+
+- Path LAB: `commitReconciliationCanonicalPayload` ? `commitBankReconciliationFiscalLab` ? Stage3W `fiscosim_post_fiscal_journal` (`source_module=riconciliazione_bancaria`, `contract_kind=pagamento` + ledger close). Default resta dry-run senza flag+JWT.
+- Gate: `FISCOSIM_ISOLATED_LAB_API` + `FISCOSIM_FISCAL_JOURNAL_POST_LAB_ENABLED` + `FISCOSIM_BANK_COMMIT_LAB_ENABLED` + Bearer token.
+- SQL 57: `source_module` ammette `riconciliazione_bancaria`. Storico claim via `listBankFiscalCommitHistory`.
+- Script `scripts/security_p0/run-stage3w-bank-commit-lab.mjs`. Evidence `REPORT/STAGE3W_BANK_COMMIT_LAB_20261012091055.txt`:
+  - FA open PN `d1a98b58-...` partita 1220 ? bank close PN `08c3f3f8-...` residuo **0**
+  - Claim `riconciliazione_bancaria|pagamento|08c3f3f8-...`; history hit; replay stesso body ? **201** stesso PN
+- Unit: `bankFiscalCommitLab` 3/3 + `riconciliazioneBankSafety` 11/11. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-02 Cronologia Import UI + hash file PASS
+
+- UI: `ImportCronologiaPanel` sostituisce placeholder; store locale interrogabile (`importCronologiaStore`) con file/hash/esito/PN.
+- Claim Stage3W: motivazione (`reason`) include `fileHash=` + `file=` da `scope.source_file_*` (workflow ? persist LAB mapper).
+- Script `scripts/security_p0/run-stage3w-import-cronologia-hash.mjs`. Evidence `REPORT/STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012091634.txt`:
+  - PN `2d8ea84a-...`; claim `import_contabilita` + `fileHash=ae60dcd63843e01a` + file XML
+  - History query hit; UI store 1 riga stesso hash
+- Unit `importCronologiaHash` 4/4. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-04 Fascicolo cliente PDF (file unico periodo) PASS
+
+- Builder `buildFascicoloClientePeriodo`: un HTML stampabile (print-to-PDF) da giornale+partitari+mastrini+bilancio canonici; `definitive:false`; hash SHA-256 sul file (`hashStampaContenuto`).
+- UI: tab Stampe `fascicolo` operativo; genera/scarica/stampa file unico.
+- Script `scripts/security_p0/run-stage3w-fascicolo-cliente-periodo.mjs`. Evidence:
+  - `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.txt` PASS
+  - file unico `REPORT/STAGE3W_FASCICOLO_P3_04_20261012113815.html` (49118 bytes, hash `3df9c797?`)
+  - sezioni: giornale|partitari|mastrini|bilancio; no mock amounts
+- Unit `fascicoloClientePeriodo` 3/3. Gap: non definitiva server-side / non puppeteer PDF byte nativo; print-to-PDF browser. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-03 Stampe Partitari/Mastrini/Bilancio da PN PASS
+
+- UI `StampeView`: `isOperativo` include `partitari` / `mastrini` / `bilancio`; rimossa gate fac-simile; `generaStampa` carica partitario + PN + piano conti.
+- Modelli: `buildPartitariStampaModel` (nuovo); mastrini = `buildMovimentiPerContoModel`; bilancio verifica = `buildSaldiPerContoEsercizioModel`.
+- Anteprima da dati reali; empty state se nessun risultato (no importi mock tipo 235870/Alfa S.r.l.).
+- Script `scripts/security_p0/run-stage3w-stampe-partitari-mastrini-bilancio.mjs`. Evidence `REPORT/STAGE3W_STAMPE_P3_03_20261012092814.txt`:
+  - FA PN `17263f40-...` + partita; PARTITARI/MASTRINI/BILANCIO `valid=true` da PN LAB
+  - `P3_03_RESULT=PASS`
+- Unit `stampePartitariMastriniBilancio` 4/4. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-05 Cespiti operativi + quote PASS
+
+- Domain: `calculatePianoAmmortamento` / `proposeQuotaAmmortamento` + link note `ID prima nota:`.
+- Application: `bridgeCespiteFromExistingPrimaNota` collega `beni_ammortizzabili` a PN gia postata (Import/Manuale); dedupe per PN; `pnCreated=false` sempre; quote proponibili (+ opz. persist `quote_ammortamento`) senza seconda PN di acquisizione.
+- Manuale/Import riusano il bridge (`createCespiteFromPrimaNota`, `importContabilitaWorkflow`).
+- Script `scripts/security_p0/run-stage3w-cespiti-p3-05.mjs`. Evidence `REPORT/STAGE3W_CESPITI_P3_05_20261012114529.txt`:
+  - FP acquisition PN `0f8e4dcb-...`; bridge create + re-bridge dedupe; PN count stabile (51); `BENE_LINKED_COUNT=1`; `QUOTE_ROWS=5`; quota 2026=500
+  - `P3_05_RESULT=PASS` ? acceptance Bridge non duplica PN
+- Unit `cespitiOperativiQuote` 4/4 + createCespiteFromPrimaNota 4/4. Gap: no colonna dedicata `prima_nota_id` (link via note); no scrittura PN automatica quote fine anno; piano conti LAB senza conto 1.02 dedicato. Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-06 Chiusura/riapertura esercizio PASS
+
+- Builders puri: `buildChiusuraRiaperturaPlans` (close-CE, close-SP, reopen-SP) + `postGeneralJournalLab` mapper Stage3U.
+- Path LAB: vendita 2025 via `fiscosim_post_general_journal` (docker/psql) ? chiusura CE 2025-12-30 ? chiusura SP 2025-12-31 ? riapertura SP 2026-01-02; causali `tipo=chiusura/apertura` seedate LAB.
+- Audit: `auditRaccordoEserciziModel` su PN reali ? `valid=true`; continuity cliente chiusura ?1000 / riapertura +1000.
+- Lock: `periodo_chiuso_lock=true` su PN 2025; guards warning `nero`; `stampe_definitive` libro_giornale 2025 ? fiscal write 2025-07-01 ? **409** `FISCAL_ATOMIC_POST_FAILED`.
+- Script `scripts/security_p0/run-stage3w-chiusura-riapertura-esercizio.mjs`. Evidence `REPORT/STAGE3W_CHIUSURA_RIAPERTURA_P3_06_20261012121059.txt` `P3_06_RESULT=PASS`.
+- Unit `chiusuraRiaperturaEsercizio` 4/4. Gap: no UI procedura chiusura; general-journal HTTP flag non richiesto (RPC docker); owner/service_role puo ancora forzare annulla (warning non always-block). Nessun LIVE / SG-P0-00.
+
+## 2026-10-12 - SG-P3-07 Aging / insoluti PASS
+
+- Model: `buildAgingInsolutiModel` (bucket current / 1-30 / 31-60 / 61-90 / 90+ / senza_scadenza da residui partitario aperti vs `asOf`) + `checkAgingMastriniCoherence` (mode `partitario` | `ledger`).
+- Equivalence accettata: `aging.residuoComplessivo` ? `partitari.totaleAperto`; apertura partita presente in mastrini (dare/avere = originale sul conto cliente/fornitore). `isStampaOperativa('aging')`.
+- Script `scripts/security_p0/run-stage3w-aging-insoluti.mjs`. Evidence `REPORT/STAGE3W_AGING_INSOLUTI_P3_07_20261012125302.txt`:
+  - FA open PN `c6628f41-...` partita 1220 due 2026-04-01 ? bucket `d90_plus` (105g) asOf 2026-07-15
+  - `AGING_RESIDUO=49252` ? `PARTITARI_APERTO`; mastrini apertura FA dare=1220
+  - `P3_07_RESULT=PASS` ? ledger probe CLI nota divergenza (riapertura SP / movimenti non partitario)
+- Unit `agingInsoluti` 4/4. Gap: no tab UI dedicata; mode `ledger` strict non richiesto su LAB sporco. Nessun LIVE / SG-P0-00. P3 chiusa (01..07).
+
+## 2026-10-12 - SG-P4-01 Suite L5 dataset multi-periodo sintetico PASS
+
+- Helper puro: `buildL5MultiPeriodDatasetPlan` (seed 2 anni / 2 periodi, expected summaries, fingerprint `L5MP1`, `assertL5MultiPeriodInvariants`).
+- Path LAB: JWT + `fiscal-journal-post` FA+FP su **2024-11** e **2026-02** (2025 escluso: lock `stampe_definitive` libro_giornale da P3-06); doc unici `SG-E2E-P401-*`.
+- Invarianti: PN bilanciate, VAT rows per periodo, liquidazione (debito/credito/saldo), partitario lordo, fingerprint match.
+- Script `scripts/security_p0/run-stage3w-l5-multi-periodo.mjs`. Evidence `REPORT/STAGE3W_L5_MULTI_PERIODO_P4_01_20261012130502.txt` `P4_01_RESULT=PASS`.
+- Unit `l5MultiPeriodDataset` 4/4. Gap: non consolida liquidazione_iva; non attraversa chiusura esercizio; UI/L6 non in scope. Nota: Auth Kong 55321 down ~60s mid-P0-00 ? retry OK. Nessun LIVE / no touch porte Docker P0.
+
+## 2026-10-12 - SG-P0-00 Contenimento porte LAB loopback PASS
+
+- Approvazione operatore esplicita (?autorizzo tutto?). Backup volume+dump in `C:\Users\patri\FiscoSim-P0-LAB-BACKUP-20261012130159`.
+- Recreate surgical publish `127.0.0.1:host:container` per Kong/DB/Studio/Inbucket/Analytics; volume `supabase_db_FiscoSim-P0-LAB-20261008-164658` preservato (no `rm -v`).
+- Kong ephemeral `/home/kong` (localhost.crt/key + kong.yml) ripristinato post-recreate; script ora snapshot/restore automatico.
+- Stage3V `ready=true` / `allLabPortsLoopback=true`; Stage3U+W RPC presenti; stack `fiscosim-local`/54321 non toccato.
+- Scripts: `run-sg-p0-00-loopback-rebind.mjs`, `verify-sg-p0-00-loopback.mjs`. Evidence `REPORT/STAGE3W_SG_P0_00_LOOPBACK_20261012130553.txt` `P0_00_RESULT=PASS`.
+- Prossimo: SG-P4-02 L6 regressione LAB.
+
+## 2026-10-12 - SG-P4-02 L6 regressione LAB ripetibile PASS
+
+- Catalogo puro `buildL6LabRegressionSuite` (pack `l6_lab_core_v1`): P0_00, P2_06, P2_07, P3_01, P3_03, P3_07, P4_01.
+- Orchestrator `run-stage3w-l6-lab-regression.mjs`; unit `l6LabRegressionSuite` 4/4.
+- P2-07 reso L6-ripetibile: auto-pick mese IVA vuoto 2027+ (niente cleanup fixture).
+- Evidence `REPORT/STAGE3W_L6_REGRESSIONE_P4_02_20261012131055.txt` fingerprint `L6CORE1|?all PASS` `P4_02_RESULT=PASS`.
+- Prossimo: SG-P4-03..07.
+
+## 2026-10-12 - SG-P4-03..07 stabilizzazione LAB PASS
+
+- **P4-03:** policy `legacyIsolationPolicy` + test scan (no import `DISUSO/`; path fiscali canonici senza `accounting_entries`; allowlist 14 consumer legacy). Evidence `STAGE3W_P4_03_LEGACY_ISOLATION_20261012131320.txt`.
+- **P4-04:** baseline perf LAB (L6 core ~11.5s; stampe empty build <5ms). 500+ doc resta debito manuale. Evidence `STAGE3W_P4_04_PERF_BASELINE_20261012131432.txt`.
+- **P4-05:** append `FISCOSIM_MANUAL_TEST_DEBT.md` ? cross-ref LAB vs browser (nessuna chiusura silente).
+- **P4-06:** `REPORT/LAB_BACKUP_RESTORE_OPERATIVA.md` (dump/tar P0-00 + verify Stage3V/L6).
+- **P4-07:** completeness gate evidence inventory PASS `STAGE3W_P4_07_COMPLETENESS_20261012131449.txt`.
+- Perimetro Studio Grade **automatismi LAB** chiuso; collaudi UI ancora aperti.
+
+## 2026-10-12 - SG-P4-03 harden allowlist + anti-reintro (follow-up)
+
+- Completata allowlist AE (19 path: AI/sync/workflow/qa mancanti).
+- `assertAccountingEntriesOnlyOnAllowlist`: nuovo `.from('accounting_entries')` / `insertAccountingEntry` fuori allowlist = FAIL.
+- Freeze audit `REPORT/LEGACY_DISUSO_ACCOUNTING_ENTRIES_FREEZE_AUDIT.md`; `DISUSO/README.md`.
+- Fingerprint `P403ISO2|?allowlist=19`; evidence `STAGE3W_P4_03_LEGACY_ISOLATION_20261012131719.txt`; unit 6/6.
+
+## 2026-10-12 - SG-P0-02 gate + L6 v2
+
+- Stage3V readiness READ-ONLY: `STAGE3V_PINNED_LAB_NETWORK_HTTP_DISCOVERED_NOT_JWT_VERIFIED` (post P0-00 loopback).
+- Fiscal JWT FA22 L3 PASS su SG-E2E (API :3001 riavviata). Gate `run-sg-p0-02-stage3v-jwt-gate.mjs` ? `P0_02_RESULT=PASS` con `GENERAL_JOURNAL_STAGE3V_HARNESS=SKIP_NO_STAGE3V_FIXTURES`.
+- L6 pack `l6_lab_core_v2` aggiunge P4-03 isolation; fingerprint `L6CORE2|?all PASS`. Evidence `STAGE3W_L6_REGRESSIONE_P4_02_20261012195227.txt`.
+
+## 2026-10-12 - SG-P0-02 CHIUSO ? Stage3V general-journal JWT persistente
+
+- Provision LAB `STAGE3V-A/B` (UUID `73000000-?`), conti cassa/banca, Auth + membership owner.
+- Harness `stage3v-signed-jwt-general-journal-e2e.mjs` con `LAB_SYNTHETIC_WRITE_APPROVED` ? `STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS` (A 100.25 / B 205.10; replay idempotente; cross-company 403).
+- Runner `run-stage3v-general-journal-write.mjs` (park untracked per dirty-tree gate). Evidence `REPORT/STAGE3W_SG_P0_02_GENERAL_JOURNAL_20261012195555.txt`.
+- Nota: societ? STAGE3V non pi? vuote ? re-run vietato senza review/cleanup esplicito.
+
+## 2026-10-12 - L4 browser LAB Consultazione + Manuale PASS
+
+- Vite :5173 + API :3001 LAB; password browser SG-E2E-A impostata solo in Auth LAB.
+- `run-stage3w-l4-browser-consultazione.mjs` ? `P1_06_RESULT=PASS` (filter/detail read-only; 0 write in consult).
+- `run-stage3w-l4-browser-manuale.mjs` ? `L4_RESULT=PASS` (fiscal-journal-post 201 via UI path).
+- Evidence `REPORT/STAGE3W_L4_BROWSER_CONSULTAZIONE_2026-10-12T1956.txt`, `?MANUALE_2026-10-12T1957.txt`.
+
+## 2026-10-12 - L6 v3 Import pack + L4 Import UI smoke
+
+- L6 pack `l6_lab_core_v3`: aggiunti P1_01 FP22, P1_05 Import?Manuale, P3_02 cronologia hash. Fingerprint `L6CORE3|?all PASS`. Evidence `STAGE3W_L6_REGRESSIONE_P4_02_20261012201141.txt`.
+- L4 browser Import Contabilit? smoke (nav + shell upload, 0 fiscal write): `L4_IMPORT_RESULT=PASS` ? `STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2011.txt`.
+- Debito A100: upload/commit XML in UI e Tax Compliance browser restano aperti.
+
+## 2026-10-12 - Storico automatismo Import + Bank (verso A100)
+
+- API LAB GET `/api/studio/fiscal-journal-history` (claim Stage3W, scoped, flag fiscal LAB).
+- Import Cronologia: merge server U+222A localStorage; L4 panel smoke PASS.
+- Bank: fileHash marker in motivazione, bankCronologiaStore + BankCronologiaPanel, HISTORY_API=PASS.
+- Evidence: `STAGE3W_IMPORT_CRONOLOGIA_HASH_20261012204548.txt`, `STAGE3W_BANK_COMMIT_LAB_20261012204552.txt`, `STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2045.txt`; P4-07 include SG-P3-02.
+- Unit 13/13 (history API + cronologia merge + bank hash). No LIVE / no prod cutover.
+
+## 2026-10-12 - Fase A Learning Engine (audit only)
+
+- HEAD `46c60ab` = origin `feat/studio-grade-accounting-e2e-20261010` (oltre `54e883a`).
+- Prodotti: `REPORT/AUDIT_LEARNING_ENGINE.md`, `ARCHITETTURA_LEARNING_ENGINE.md`, `MATRICE_TEST_LEARNING_ENGINE.md`; roadmap P5 SG-L0..L7.
+- Esito audit: Import Contabilita ha storico proposte mode (conto/causale/IVA) societa-scoped + priorita IVA standard>storico; manca feedback conferma e contesto multi-prodotto; `ai_learning` e path parallelo scollegato; Bank match euristico senza memoria decisioni; cronologia commit LAB distinta dal learning.
+- Nessuna migration / nessun intervento persistenza. Stop per revisione architetturale.
+
+## 2026-10-12 - SG-L1 + Bank wire (verso A100, no migration)
+
+- SG-L1: `importContabilitaL1SuggestionResolver.js` facade; wire staging (`index.jsx`) + Working View IVA (`resolveVatRowSuggestion`); explanation/conflicts DTO; UNIT 3/3 PASS.
+- Bank: mock ids `demo-bm-*` (LE-B0X PASS); `RiconciliazioneBancariaView` carica `getPartitarioAperto` e lancia matcher su movimenti importati (`live_partitario`); `BankingView` passa `societaId`.
+- Evidence: `REPORT/STAGE3W_SG_L1_BANK_WIRE_20261012225849.txt`; bank profile 16/16 PASS.
+- Residuo A100: browser manuale Import/IVA/Bank; SG-L2 schema; memoria match Bank; P0-03/04 LIVE; cutover prod solo con consenso.
+- Nota preesistente: `importContabilitaWorkflow.test.js` staging-update assertions ancora FAIL (non regressione L1).
+
+## 2026-10-12 - SG-L2 DecisionFeedback LAB localStorage + Bank memory
+
+- Contratto eventi `buildDecisionFeedbackEvent` (no dry-run; dedup societa+anchor+field); store `fiscosim.decision_feedback.lab.v1.*`.
+- Wire: Import post-commit; Bank ACCEPT non-demo; Bank fiscal LAB commit; matcher boost `match_memory_confirmed`.
+- **Nessuna migration DB** ? interim fino ad approvazione schema.
+- Evidence: `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_LAB_*.txt`; bank profile 22/22 PASS.
+- Residuo: schema DB DecisionFeedback; browser A100; LIVE/cutover gated.
+
+## 2026-10-12 - SG-L3 context keys + SG-L6 explanation UI (LAB)
+
+- `buildImportSuggestionContextKey` / `lookupImportDecisionFeedback`: stesso fornitore, prodotti diversi ? conti diversi da feedback.
+- L1 staging: feedback contestuale > storico mode; DTO conflicts `feedback_vs_history`.
+- Working View IVA: linee explanation + badge conflitto.
+- L4 browser Import re-smoke PASS (`STAGE3W_L4_BROWSER_IMPORT_2026-10-12T2108.txt`).
+- Evidence: `REPORT/STAGE3W_SG_L3_L6_CONTEXT_FEEDBACK_20261012230832.txt`; UNIT L3 3/3 + L1 3/3.
+- Residuo: history adapter multi-prodotto nativo; mass-confirm Bank; schema DB; browser A100 dettagliato.
+
+## 2026-10-12 - SG-L3 history nativo + SG-L6 mass-confirm gate
+
+- Accounting history: bucket `piva|dir|desc:*` preferiti; fallback generico; `history_ambiguous` su mode pari.
+- Bank: `massConfirmEligibility` (?0.85, no ambiguous/review); `confirmSelected` conferma solo eligible + feedback LAB.
+- Evidence: `REPORT/STAGE3W_SG_L3_HISTORY_L6_MASS_CONFIRM_20261012232650.txt`; bank 26/26 PASS.
+- Residuo A100: browser upload/commit Import+IVA+Bank; schema DB; LIVE/cutover.
+
+## 2026-10-12 - SG-L4 studio rules + L4 browser IVA/Bank
+
+- `resolveStudioRuleToSocietaTargets`: vietati UUID alieni; resolve per codice/natura nella societ? target; L1 fallback opzionale.
+- L4 IVA re-smoke PASS; nuovo `run-stage3w-l4-browser-bank.mjs` PASS (shell riconciliazione, 0 fiscal write).
+- Evidence: `REPORT/STAGE3W_SG_L4_BROWSER_BANK_IVA_20261012234942.txt`, `STAGE3W_L4_BROWSER_IVA_2026-10-12T2148.txt`, `STAGE3W_L4_BROWSER_BANK_2026-10-12T2149.txt`; bank UNIT 29/29.
+- Residuo A100: Import upload/commit XML browser; schema DB; LIVE/cutover.
+
+## 2026-10-12 - L4 Import upload/commit XML browser LAB
+
+- Nuovo `scripts/security_p0/run-stage3w-l4-browser-import-upload.mjs`: login ? upload `qa/fixtures/IT01378570350.xml` ? staging ? conto/causale ? WV ? fix IVA 2.02 ? Contabilizza.
+- Seed LAB: P.IVA fornitore su 2.10, causale IVA `SG-IVA22`, SG-ORD `docivanormale`/`fattura_fornitore`.
+- Bypass staging UUID ephemeral (`ic-*`) solo SG-E2E + flag persist LAB (`isLabEphemeralImportStagingBypassEnabled`).
+- Evidence: `REPORT/STAGE3W_L4_BROWSER_IMPORT_UPLOAD_2026-10-12T2210.txt` ? `FISCAL_WRITE_COUNT=1`, PN `fe421feb-e3bf-43e0-9135-d17c3b3aa5d8` (3 righe).
+- Stop operatore: schema DecisionFeedback DB; P0-03/04 LIVE; cutover prod; debito manuale A100.
+
+## 2026-10-12 - SG-L2 DecisionFeedback DB LAB + LE-S01
+
+- SQL LAB-only `sql/security_p0/61_contabile_decision_feedback_LAB_ONLY.sql` su volume P0 pinato: RLS on, grants solo `service_role` SELECT/INSERT.
+- API `/api/studio/decision-feedback` (GET/POST) gated `FISCOSIM_DECISION_FEEDBACK_DB_LAB_ENABLED`; dual-write da `appendDecisionFeedbackEvents`.
+- Smoke: `scripts/security_p0/run-sg-l2-decision-feedback-db-lab.mjs` ? POST A 201, GET A 200, GET/POST B 403 `SOCIETA_NON_AUTORIZZATA` (LE-S01).
+- Evidence: `REPORT/STAGE3W_SG_L2_DECISION_FEEDBACK_DB_2026-10-12T2217.txt`; UNIT `tests/decisionFeedbackApi.test.js` + store 10/10.
+- Non eseguito: P0-03/04 LIVE, cutover prod `createPrimaNotaCompleta`.
+
+## 2026-10-12 - SG-P0-03/04 LAB + cutover Stage3W
+
+- Cutover: `isFiscalJournalPersistEnabled` (LAB flags + `FISCOSIM_FISCAL_JOURNAL_PERSIST_ENABLED` + stack isolato); legacy solo con `FISCOSIM_FISCAL_JOURNAL_LEGACY_FALLBACK`.
+- P0-03: audit su recent PN Stage3W; period guard in RPC; audit append su `createPrimaNotaCompleta`; stampa UI evidence gate.
+- P0-04 LAB: `62_p0_04_anon_containment_LAB_ONLY.sql` ? anon DML core=0; drop `anon_access_test`. LIVE cloud non applicato (no credenziali attive).
+- Evidence: `REPORT/STAGE3W_SG_P0_03_04_CUTOVER_2026-10-12T2221.txt`; UNIT cutover/persist 19/19.
+
+## 2026-10-12 - Manual debt LAB gate (Import #2/#9/#10)
+
+- Script `scripts/security_p0/run-stage3w-manual-debt-lab-gate.mjs`: ZIP upload browser staging PASS; DB coerenza PN/IVA/partitario `QA-2026-001` (3/1/1, Dare=Avere 122); anti-doppio claim PK PASS; inventory L4 Manuale/Consultazione/IVA/Bank/Import 7/7.
+- Debito aggiornato: Import **MANUALE PARZIALE** (1/2/3/8/9/10 LAB); Manuale/IVA/Consultazione shell LAB OK, casi fiscali ancora operatore.
+- Evidence: `REPORT/STAGE3W_MANUAL_DEBT_LAB_GATE_2026-10-12T2226.txt`.
+- Stop operatore: LIVE cloud containment; Import #4/#6/#7/#11; collaudi fiscali Manuale/IVA/Consultazione.
+
+## 2026-10-12 - Import #4 storico marker + Stage3W history fallback
+
+- Root cause: `loadImportContabilitaAccountingHistoryBySocieta` leggeva solo `documenti_contabilita` (0 righe sul path Stage3W) ? nessun marker ?Proposta da storico?.
+- Fix: fallback read-only da `prima_nota`/`prima_nota_righe` + meta claim (`fiscosim_fiscal_journal_claim`) per P.IVA/tipo.
+- Smoke: `run-stage3w-import-storico-marker-lab.mjs` ? marker PASS + override conto 5.02 PASS.
+- Evidence: `REPORT/STAGE3W_IMPORT_STORICO_MARKER_2026-10-12T2235.txt`; UNIT history 8/8.
+- Residuo Import: #6/#7/#11; Manuale/IVA casi fiscali; LIVE cloud.
+
+## 2026-10-12 - Manuale #3 LAB coerenza PN/IVA/partitario
+
+- Esteso `run-stage3w-l4-browser-manuale.mjs`: post fattura attiva da sessione browser Manuale + check 3 righe / 1 IVA / 1 partita / Dare=Avere.
+- Evidence: `REPORT/STAGE3W_L4_BROWSER_MANUALE_2026-10-12T2236.txt` (`MANUALE_03_COERENZA_RESULT=PASS`).
+- Non chiude preview/form UI completa (debito #3 resta PATH LAB + form operatore).
+
+## 2026-10-12 - Import #7 UNIT + Manuale #2 passiva LAB
+
+- Import #7: UNIT IMPORT-25A-HISTORY-1 PASS; gate `STAGE3W_IMPORT_07_STUDIO_VS_STORICO_2026-10-12T2254.txt` (browser warning UI soft-fail; acceptance via UNIT/LE-I03).
+- Manuale #2: `run-stage3w-l4-browser-manuale.mjs --mode=passiva` FISCAL 201 + coerenza 3/1/1 (`STAGE3W_L4_BROWSER_MANUALE_passiva_2026-10-12T2253.txt`).
+- Fix launcher: Vite `--host 127.0.0.1` (era solo [::1]).
+
+## 2026-10-13 - LIVE P0-04 tranche 1 applied (mlydfspmrkaedsocubku)
+
+- Pre-audit: `LIVE_P0_READONLY_AUDIT_2026-10-12T2327.txt` (anon DML core=48, definer anon EXECUTE=8, broad policies=26).
+- Applied `sql/security_p0/63_p0_04_anon_containment_LIVE_mlydfspmrkaedsocubku.sql`: REVOKE ALL FROM anon on 13 core tables; DROP POLICY anon_access_test on avvisi_ade.
+- Verify: anon DML core 48→0; policy gone; authenticated prima_nota DML grants still 3.
+- Evidence: `REPORT/LIVE_P0_04_CONTAINMENT_APPLY_2026-10-12T2331.txt`.
+- Residual LIVE: 8 SECURITY DEFINER callable by anon; remaining broad TRUE policies (non-core tranche).
+
+## 2026-10-13 - LIVE P0-04 tranche 2 applied (mlydfspmrkaedsocubku)
+
+- SECURITY DEFINER anon EXECUTE: 8→0; authenticated EXECUTE retained (8/8).
+- anon table privileges public: 325→0.
+- Broad allow_all TRUE policies for authenticated/public NOT dropped (31 remain) — replacing them is a tenant-RLS migration, not a safe night hotpatch.
+- Evidence: `REPORT/LIVE_P0_04_TRANCHE2_APPLY_2026-10-12T2340.txt`; SQL `sql/security_p0/64_p0_04_tranche2_LIVE_mlydfspmrkaedsocubku.sql`.
+
+## 2026-10-13 - LIVE smoke post tranche 2
+
+- Operatore: login + Prima Nota su sito LIVE esistente dopo P0-04 T2 → **smoke T2 ok**.
+
+## 2026-10-13 - Deploy production fiscosim-v6 (Studio Grade SPA)
+
+- Target ufficiale: `https://fiscosim-v6.vercel.app` (progetto Vercel `fiscosim-v6`; `fiscosim-v5` lasciato invariato).
+- Hobby plan: `api/` esclusa dal deploy (≤12 serverless) — SPA + Supabase anon/RLS; Stage3W HTTP APIs restano LAB-only.
+- `.vercelignore` + `vercel.json` (Vite `dist` + SPA rewrite).
+- Production alias OK; smoke HTTP homepage da verificare operatore (login LIVE).
+
+## 2026-10-13 - Fix login prod (session API Hobby)
+
+- Causa: SPA-only deploy → `/api/auth/session` riscritto a `index.html` → client vede profilo vuoto → «Profilo utente incompleto» (membership LIVE ok).
+- Fix: whitelist `api/auth/session.js` (1 function); rewrite SPA esclude `api/`; redeploy `dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi`.
+- Verifica: `GET /api/auth/session` → `401` JSON `Missing bearer token` (non HTML).
+- Operatore: rilogin su https://fiscosim-v6.vercel.app → **PASS** («sono live»).
+- Evidence: `REPORT/LIVE_DEPLOY_SMOKE_LOGIN_2026-10-13T0200.txt`.
+
+## 2026-10-13 - Post-deploy LAB advance (no LIVE mutations)
+
+- LIVE readonly audit: anon containment still 0; `BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC=31` (`LIVE_P0_READONLY_AUDIT_2026-10-13T0004.txt`).
+- Piano RLS: `REPORT/P0_04_RLS_TENANT_REDESIGN_PLAN.md`.
+- LAB class D: `65_p0_04_drop_test_allow_all_LAB_ONLY.sql` applicato (test_* deny); LIVE non toccato.
+- Manuale #1 giroconto **LAB PATH** PASS (`STAGE3W_L4_BROWSER_MANUALE_giroconto_*`); form UI ancora operatore.
+- L6 core pack PASS (`STAGE3W_L6_REGRESSIONE_P4_02_20261013000521.txt`).
+
+## 2026-10-13 - LIVE P0-04 class D/E/F (autorizzato «approvo continua»)
+
+- Backup: `REPORT/LIVE_BACKUP_schema_public_20261013.sql` presente.
+- Class D: drop `test_*` allow_all → broad 31→28 (`LIVE_P0_04_CLASS_D_APPLY_*`).
+- Class E: drop allow_all ridondanti su fiscal/core con twin scoped → 28→19; smoke RLS fallito (ricorsione `current_utente_ruolo` / `utenti_studio`).
+- Hotfix E: SECURITY DEFINER + `row_security=off` su helper RLS → smoke PASS (US/CAUSALI/PN_RIGHE) (`68_*`, `LIVE_P0_04_CLASS_E_HOTFIX_*`).
+- Class F: drop TRUE policies con twin non-true (adempimenti/deleghe/f24/invii/impostazioni/…) → **19→8** (`LIVE_P0_04_CLASS_F_APPLY_*`).
+- Operatore Contabilità post-F: **PASS** («funziona tutto») — `LIVE_DEPLOY_SMOKE_CONTABILITA_POST_RLS_2026-10-13T0224.txt`.
+- Class G: residuali 8 → **0** TRUE auth/public (`71_*`, `LIVE_P0_04_CLASS_G_APPLY_*`); RLS smoke DB PASS; `invii_log`/`revisioni_dichiarativi` con policy uid (no `societa_id` su LIVE).
+- Operatore re-smoke post-G: **PASS** («ok funziona») — `LIVE_DEPLOY_SMOKE_POST_CLASS_G_2026-10-13T0226.txt`.
+- Gate sicurezza allow_all TRUE: **chiuso** (0). Stop A100: collaudi manuali in `FISCOSIM_MANUAL_TEST_DEBT.md`.
+
+## 2026-10-13 - Manuale NC/split PATH LAB + guida operatore
+
+- L4 Manuale `--mode=nc_attiva|nc_passiva|split` PASS (PATH API da superficie Manuale; form UI ancora operatore).
+- Guida sessione: `REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md` (io = LAB auto; tu = form/visual su società test).
+- Operatore: collaudi manuali **a fine sviluppo**; sviluppo continuo con CI/LAB verdi.
+- L4 Manuale `--mode=multi2210` PASS (2 IVA 22+10, no collapse).
+
+## 2026-10-13 - Bank L5 match memory DB + Manuale PATH iva_cassa/reverse/parcella
+
+- Bank L5: `lookupBankMatchMemory` accetta `events` precaricati; View preload merge localStorage + `fetchDecisionFeedbackEventsFromDb`; unit SG-L5 DB-only PASS.
+- Manuale PATH JWT LAB: `run-stage3w-manuale-fiscal-path-lab.mjs` — iva_cassa (differita+rilascio), reverse (doppia IVA + liq 0), parcella 1040 + maturazione — `STAGE3W_MANUALE_FISCAL_PATH_*` RESULT=PASS; source_module `registrazione_manual`.
+- Debito Manuale #7/#8/#9 aggiornato a LAB PATH (form UI ancora operatore).
+
+## 2026-10-13 - L6 core pack v4 (fascicolo + Manuale PATH)
+
+- `l6_lab_core_v4`: aggiunti step required `P1_06` (Manuale fiscal PATH) e `P3_04` (fascicolo cliente); fingerprint `L6CORE4|…`.
+- Fascicolo LAB re-run PASS (`STAGE3W_FASCICOLO_P3_04_20261013080109.txt`, hash contenuto + HTML unico).
+
+## 2026-10-13 - Stampe Aging tab UI + debito P2-05
+
+- Tab Stampe `aging`: genera anteprima da `buildAgingInsolutiModel` (KPI fasce + tabella residui); modello già P3-07 LAB.
+- Debito ritenute #13 aggiornato: pagamento parziale pro-quota **LAB PASS** (SG-P2-05), non più blocker esplicito di prodotto.
+
+## 2026-10-13 - Manuale PATH #10/#11 + stima A100 ~82%
+
+- `run-stage3w-manuale-fiscal-path-lab.mjs`: + partitario FA + pay parziale residuo 720; + deny scrittura su `stampe_definitive` (HTTP 409).
+- Debito Manuale PATH API #1–11+#13 LAB; #12 + form UI restano operatore.
+- Stima release A100 ~82% (automazione ~96%; collaudi form ~20%).
+
+## 2026-10-13 - Solo-dev chiuso; ready collaudi (~84%)
+
+- Manuale PATH #12: payload incompleto/sbilanciato → `FISCAL_PAYLOAD_INVALIDO` 400, 0 PN.
+- Stampe: badge `Non operativo` (no Fac-simile UX).
+- Guida sessione riscritta checklist A–F; fase sviluppo auto chiusa.

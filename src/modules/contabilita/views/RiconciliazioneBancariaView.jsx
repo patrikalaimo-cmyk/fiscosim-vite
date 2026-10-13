@@ -2,6 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtCurrency } from '../ui/formatters.js'
 import { RICONCILIAZIONE_MOCK_DATA } from '../components/riconciliazione/mockRiconciliazioneData.js'
 import RiconciliazioneHeader from '../components/riconciliazione/RiconciliazioneHeader.jsx'
+import { BankCronologiaPanel } from '../components/riconciliazione/BankCronologiaPanel.jsx'
+import {
+  loadBankCronologiaEntries,
+  mergeBankCronologiaEntries,
+  saveBankCronologiaEntries,
+} from '../application/riconciliazione/bankCronologiaStore.js'
+import { normalizeBankFiscalCommitHistoryRows } from '../application/riconciliazione/listBankFiscalCommitHistory.js'
+import { fetchFiscalJournalCommitHistory } from '../application/fiscalJournal/fetchFiscalJournalCommitHistory.js'
+import { sb } from '../../../lib/supabase.js'
 import RiconciliazioneKpiStrip from '../components/riconciliazione/RiconciliazioneKpiStrip.jsx'
 import RiconciliazioneSummaryCards from '../components/riconciliazione/RiconciliazioneSummaryCards.jsx'
 import RiconciliazioneFilters from '../components/riconciliazione/RiconciliazioneFilters.jsx'
@@ -18,6 +27,24 @@ import RiconciliazioneTableJumpControls from '../components/riconciliazione/Rico
 import { getRiconciliazioneMatchingFixtures } from '../components/riconciliazione/riconciliazioneMatchingFixtures.js'
 import { runRiconciliazioneMatchForMovement } from '../components/riconciliazione/runRiconciliazioneMatchForMovement.js'
 import { mapBankStatementMovementToWorkingRow } from '../components/riconciliazione/mapBankStatementMovementToWorkingRow.js'
+import {
+  buildMatcherMovementFromWorkingRow,
+  mapPartitarioRowsToMatchCandidates,
+} from '../application/riconciliazione/mapPartitarioRowToMatchCandidate.js'
+import {
+  evaluateMassConfirmEligibility,
+  partitionMassConfirmCandidates,
+} from '../application/riconciliazione/massConfirmEligibility.js'
+import { buildBankDecisionFeedbackEvents } from '../application/learning/buildBankDecisionFeedbackEvents.js'
+import {
+  appendDecisionFeedbackEvents,
+  loadDecisionFeedbackEvents,
+} from '../application/learning/decisionFeedbackLabStore.js'
+import {
+  fetchDecisionFeedbackEventsFromDb,
+  mergeDecisionFeedbackEventLists,
+} from '../application/learning/decisionFeedbackDbClient.js'
+import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { applyBankMovementCorrection } from '../components/riconciliazione/applyBankMovementCorrection.js'
 import { buildReconciliationStorageKey } from '../components/riconciliazione/buildReconciliationStorageKey.js'
 import {
@@ -89,9 +116,13 @@ function buildImportIdentifier({ file, importDraft }) {
   return `${fileName}-${fileSize}-${lastModified}`
 }
 
-export default function RiconciliazioneBancariaView() {
+export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
   const [mode, setMode] = useState('demo')
   const [selectedId, setSelectedId] = useState(RICONCILIAZIONE_MOCK_DATA.movements[0]?.id)
+  const [livePartiteCandidates, setLivePartiteCandidates] = useState([])
+  const [livePartiteError, setLivePartiteError] = useState('')
+  const [livePartiteLoading, setLivePartiteLoading] = useState(false)
+  const [matchMemoryEvents, setMatchMemoryEvents] = useState([])
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   const [detailCollapsed, setDetailCollapsed] = useState(false)
   const [summaryCollapsed, setSummaryCollapsed] = useState({ ...DEFAULT_RECONCILIATION_SUMMARY_COLLAPSED })
@@ -115,6 +146,11 @@ export default function RiconciliazioneBancariaView() {
     const [guidedFlowOpen, setGuidedFlowOpen] = useState(false)
   const [guidedFlowTemplateMatch, setGuidedFlowTemplateMatch] = useState(null)
   const [reconciliationContext, setReconciliationContext] = useState(MOCK_STORAGE_CONTEXT)
+  const [bankCronologiaOpen, setBankCronologiaOpen] = useState(false)
+  const [bankCronologiaEntries, setBankCronologiaEntries] = useState([])
+  const [bankCronologiaLoading, setBankCronologiaLoading] = useState(false)
+  const [bankCronologiaError, setBankCronologiaError] = useState('')
+  const [bankCronologiaSourceNote, setBankCronologiaSourceNote] = useState('')
   const [lastTableScrollPosition, setLastTableScrollPosition] = useState(null)
   const fileInputRef = useRef(null)
   const tableViewportRef = useRef(null)
@@ -191,23 +227,127 @@ export default function RiconciliazioneBancariaView() {
     )
   }, [filteredMovements, selectedId, sourceMovements])
 
+  useEffect(() => {
+    const sid = String(societaId || '').trim()
+    if (!sid) {
+      setLivePartiteCandidates([])
+      setLivePartiteError('')
+      setLivePartiteLoading(false)
+      setMatchMemoryEvents([])
+      return undefined
+    }
+    let cancelled = false
+    setLivePartiteLoading(true)
+    setLivePartiteError('')
+    const localEvents = loadDecisionFeedbackEvents(sid)
+    setMatchMemoryEvents(localEvents)
+    Promise.resolve(contabilitaRepo.getPartitarioAperto(sid))
+      .then((result) => {
+        if (cancelled) return
+        if (result?.error) {
+          setLivePartiteCandidates([])
+          setLivePartiteError(String(result.error.message || result.error))
+          return
+        }
+        setLivePartiteCandidates(mapPartitarioRowsToMatchCandidates(result?.data || []))
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setLivePartiteCandidates([])
+        setLivePartiteError(String(error?.message || error || 'Errore caricamento partitario'))
+      })
+      .finally(() => {
+        if (!cancelled) setLivePartiteLoading(false)
+      })
+    void fetchDecisionFeedbackEventsFromDb({
+      societaId: sid,
+      sourceModule: 'riconciliazione_bancaria',
+      limit: 200,
+    })
+      .then((remote) => {
+        if (cancelled) return
+        setMatchMemoryEvents(mergeDecisionFeedbackEventLists(localEvents, remote))
+      })
+      .catch(() => {
+        if (!cancelled) setMatchMemoryEvents(localEvents)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [societaId])
+
   const workingContext = useMemo(() => {
     const fixtures = getRiconciliazioneMatchingFixtures()
     const selectedMovementId = selectedMovement?.movementId || selectedMovement?.id || ''
+
+    if (hasImportedStatement && selectedMovement && livePartiteCandidates.length > 0) {
+      const matcherMovement = buildMatcherMovementFromWorkingRow(selectedMovement, bankStatement)
+      const decisionProposal = runRiconciliazioneMatchForMovement({
+        movement: matcherMovement,
+        partiteAperte: livePartiteCandidates,
+        options: { societaId, matchMemoryEvents },
+      })
+      const memoryNote = decisionProposal?.matchMemoryHits
+        ? ` · memoria match LAB ${decisionProposal.matchMemoryHits}`
+        : ''
+      return {
+        fixtures,
+        available: true,
+        source: 'live_partitario',
+        message: `Match su partitario aperto società (${livePartiteCandidates.length} partite${livePartiteLoading ? ', reload…' : ''})${memoryNote}`,
+        movement: selectedMovement,
+        fixtureMovement: matcherMovement,
+        fixtureCase: null,
+        decisionProposal,
+        livePartiteCount: livePartiteCandidates.length,
+        livePartiteError,
+        societaId,
+      }
+    }
+
+    if (hasImportedStatement && selectedMovement && societaId) {
+      return {
+        fixtures,
+        available: false,
+        source: 'live_partitario_empty',
+        message: livePartiteError
+          ? `Partitario non disponibile: ${livePartiteError}`
+          : livePartiteLoading
+            ? 'Caricamento partitario aperto…'
+            : 'Nessuna partita aperta sul partitario società — match non eseguibile',
+        movement: selectedMovement,
+        fixtureMovement: buildMatcherMovementFromWorkingRow(selectedMovement, bankStatement),
+        fixtureCase: null,
+        decisionProposal: null,
+        livePartiteCount: 0,
+        livePartiteError,
+        societaId,
+      }
+    }
+
     const fixtureMovement = fixtures.movements.find((item) => item.movementId === selectedMovementId) || null
     if (!fixtureMovement) {
       return {
         fixtures,
         available: false,
         source: 'fallback',
-        message: 'Decisione non disponibile - movimento reale non presente nel dataset mock',
+        message: 'Decisione non disponibile — usa import estratto + partitario società, oppure demo R7B',
         movement: selectedMovement,
         fixtureMovement: null,
         fixtureCase: null,
         decisionProposal: null,
+        societaId,
       }
     }
-    const decisionProposal = runRiconciliazioneMatchForMovement({ movement: fixtureMovement, partiteAperte: fixtures.partiteAperte })
+    const decisionProposal = runRiconciliazioneMatchForMovement({
+      movement: fixtureMovement,
+      partiteAperte: fixtures.partiteAperte,
+      options: {
+        societaId,
+        applyMatchMemory: Boolean(societaId),
+        matchMemoryEvents,
+      },
+    })
     const fixtureCase = fixtures.expectedCases.find((item) => item.movementId === fixtureMovement.movementId) || null
     return {
       fixtures,
@@ -218,8 +358,18 @@ export default function RiconciliazioneBancariaView() {
       fixtureMovement,
       fixtureCase,
       decisionProposal,
+      societaId,
     }
-  }, [selectedMovement])
+  }, [
+    selectedMovement,
+    hasImportedStatement,
+    livePartiteCandidates,
+    livePartiteLoading,
+    livePartiteError,
+    bankStatement,
+    societaId,
+    matchMemoryEvents,
+  ])
 
   const visibleSelectableIds = useMemo(
     () => filteredMovements.filter(isMovementSelectableForMassActions).map((movement) => movement.id),
@@ -231,7 +381,33 @@ export default function RiconciliazioneBancariaView() {
     () => sourceMovements.filter((movement) => selectedIds.includes(movement.id)),
     [selectedIds, sourceMovements]
   )
-  const confirmableSelectedCount = selectedMovements.filter(isMovementSelectableForMassActions).length
+  const massConfirmPartition = useMemo(() => {
+    return partitionMassConfirmCandidates(selectedMovements, {
+      evaluate: (movement) => {
+        if (hasImportedStatement && livePartiteCandidates.length > 0) {
+          const proposal = runRiconciliazioneMatchForMovement({
+            movement: buildMatcherMovementFromWorkingRow(movement, bankStatement),
+            partiteAperte: livePartiteCandidates,
+            options: { societaId, matchMemoryEvents },
+          })
+          return evaluateMassConfirmEligibility(movement, {
+            confidence: proposal?.selectedCandidate?.confidence,
+            matchType: proposal?.selectedCandidate?.matchType || '',
+          })
+        }
+        return evaluateMassConfirmEligibility(movement)
+      },
+    })
+  }, [
+    selectedMovements,
+    hasImportedStatement,
+    livePartiteCandidates,
+    bankStatement,
+    societaId,
+    matchMemoryEvents,
+  ])
+  const confirmableSelectedCount = massConfirmPartition.eligible.length
+  const massConfirmSkippedCount = massConfirmPartition.skipped.length
   const effectiveDetailCollapsed = detailCollapsed || filteredMovements.length === 0
   const activeSourceFileName = bankStatement?.sourceFileName || ''
   const activeSourceFileType = bankStatement?.sourceFileType || ''
@@ -720,12 +896,56 @@ export default function RiconciliazioneBancariaView() {
   }
 
   const confirmSelected = () => {
-    if (!confirmableSelectedCount) return
+    if (!confirmableSelectedCount) {
+      setActionNote(
+        massConfirmSkippedCount
+          ? `Conferma massiva bloccata: ${massConfirmSkippedCount} selezionati sotto soglia high-confidence / ambigui`
+          : 'Nessun movimento high-confidence selezionato',
+      )
+      return
+    }
     if (!statementAllowsConfirm) {
       setActionNote(bankStatement?.confirmationBlockedReason || 'Audit non quadrato: conferma bloccata')
       return
     }
-    setActionNote(`Mock: conferma simulata su ${confirmableSelectedCount} movimenti pronti`)
+    if (societaId) {
+      try {
+        for (const row of massConfirmPartition.eligible) {
+          const movement = row.movement
+          const matcherMovement = hasImportedStatement
+            ? buildMatcherMovementFromWorkingRow(movement, bankStatement)
+            : null
+          const proposal = matcherMovement && livePartiteCandidates.length
+            ? runRiconciliazioneMatchForMovement({
+              movement: matcherMovement,
+              partiteAperte: livePartiteCandidates,
+              options: { societaId, matchMemoryEvents },
+            })
+            : null
+          const events = buildBankDecisionFeedbackEvents({
+            societaId,
+            decision: {
+              selectedPartitaId: proposal?.selectedCandidate?.partitaId || '',
+            },
+            movement: matcherMovement || {
+              movementId: movement.id,
+              amount: Math.abs(Number(movement.entrata || movement.uscita || 0)),
+              counterpartyName: movement.counterparty || '',
+              direction: Number(movement.entrata || 0) > 0 ? 'in' : 'out',
+            },
+            decisionProposal: proposal,
+          })
+          const stored = appendDecisionFeedbackEvents(societaId, events)
+          setMatchMemoryEvents(stored)
+        }
+      } catch {
+        /* feedback LAB best-effort */
+      }
+    }
+    setActionNote(
+      `Conferma massiva LAB: ${confirmableSelectedCount} high-confidence`
+      + (massConfirmSkippedCount ? `, ${massConfirmSkippedCount} esclusi` : ''),
+    )
   }
 
   const handleStatementFile = async (event) => {
@@ -959,6 +1179,49 @@ export default function RiconciliazioneBancariaView() {
     summaryCollapsed,
   ])
 
+  const openCronologiaBank = async () => {
+    const societaId = String(reconciliationContext?.societaId || '').trim()
+    const local = societaId && societaId !== 'societa-demo'
+      ? loadBankCronologiaEntries(societaId)
+      : []
+    setBankCronologiaEntries(local)
+    setBankCronologiaError('')
+    setBankCronologiaSourceNote(local.length ? 'Cache locale' : '')
+    setBankCronologiaOpen(true)
+    if (!societaId || societaId === 'societa-demo') {
+      setBankCronologiaSourceNote('Demo — seleziona società LAB per storico server')
+      return
+    }
+    setBankCronologiaLoading(true)
+    try {
+      const remote = await fetchFiscalJournalCommitHistory({
+        societaId,
+        sourceModule: 'riconciliazione_bancaria',
+        limit: 100,
+        db: sb,
+      })
+      if (!remote.ok) {
+        setBankCronologiaSourceNote(local.length
+          ? 'Cache locale (server non disponibile)'
+          : 'Solo locale')
+        setBankCronologiaError(remote.status === 503
+          ? 'Storico server disponibile solo in LAB fiscal.'
+          : `Storico server non caricato (${remote.error}).`)
+        return
+      }
+      const serverRows = normalizeBankFiscalCommitHistoryRows(remote.rows, { societaId })
+      const merged = mergeBankCronologiaEntries(serverRows, local, { societaId })
+      saveBankCronologiaEntries(societaId, merged)
+      setBankCronologiaEntries(merged)
+      setBankCronologiaSourceNote(`Server LAB ∪ locale · ${merged.length} voci`)
+      setBankCronologiaError('')
+    } catch (err) {
+      setBankCronologiaError(err?.message || 'Errore caricamento cronologia')
+    } finally {
+      setBankCronologiaLoading(false)
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: '.28rem', color: '#eef6ff' }}>
       <RiconciliazioneHeader
@@ -977,10 +1240,19 @@ export default function RiconciliazioneBancariaView() {
         onRestoreDemo={restoreDemoData}
         onCancelImport={cancelImport}
         onClearStaging={handleClearStaging}
+        onCronologiaBank={openCronologiaBank}
         stagingBadge={bankStatement ? 'Staging salvato' : stagingStatus.hasStoredDraft ? 'Staging locale presente' : ''}
         stagingSavedAt={stagingStatus.lastSavedAt}
         stagingNotice={stagingStatus.notice}
         stagingWarning={stagingStatus.warning}
+      />
+      <BankCronologiaPanel
+        open={bankCronologiaOpen}
+        entries={bankCronologiaEntries}
+        loading={bankCronologiaLoading}
+        error={bankCronologiaError}
+        sourceNote={bankCronologiaSourceNote}
+        onClose={() => setBankCronologiaOpen(false)}
       />
 
       <RiconciliazioneKpiStrip kpis={filteredKpis} />

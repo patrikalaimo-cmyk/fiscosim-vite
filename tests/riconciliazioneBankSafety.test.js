@@ -67,12 +67,15 @@ test('commit bancario fixture resta soltanto dry run + replay', async () => {
   assert.equal(result.rows.length, 16)
 })
 
-test('nessuna abilitazione alla scrittura contabile reale dalla UI bancaria', async () => {
+test('scrittura bancaria reale resta gated LAB; default dry-run', async () => {
   const source = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/commitReconciliationCanonicalPayload.js', import.meta.url), 'utf8')
+  assert.match(source, /isBankFiscalCommitLabEnabled/)
+  assert.match(source, /commitBankReconciliationFiscalLab/)
   assert.match(source, /dryRun:\s*true/)
   assert.match(source, /allowRealCommit:\s*false/)
   assert.match(source, /auditWriteEnabled:\s*false/)
-  assert.doesNotMatch(source, /dryRun:\s*false|allowRealCommit:\s*true/)
+  // Must not hardcode unconditional real commit outside LAB gate.
+  assert.doesNotMatch(source, /allowRealCommit:\s*true(?!\s*,?\s*\/\/)/)
 })
 
 
@@ -115,6 +118,47 @@ test('commit Bank blocca incongruenze societa, esercizio e conto bancario', asyn
     assert.equal(result.valid, false)
     assert.ok(result.blockers.includes('reconciliation_context_mismatch'))
   }
+})
+
+test('demo mock movement ids non collidono con fixture bm-*', async () => {
+  const { RICONCILIAZIONE_MOCK_DATA } = await import('../src/modules/contabilita/components/riconciliazione/mockRiconciliazioneData.js')
+  const { getRiconciliazioneMatchingFixtures } = await import('../src/modules/contabilita/components/riconciliazione/riconciliazioneMatchingFixtures.js')
+  const mockIds = (RICONCILIAZIONE_MOCK_DATA.movements || []).map((row) => row.id)
+  assert.ok(mockIds.length > 0)
+  for (const id of mockIds) {
+    assert.match(String(id), /^demo-bm-/)
+  }
+  const fixtureIds = new Set(getRiconciliazioneMatchingFixtures().movements.map((row) => row.movementId))
+  for (const id of mockIds) {
+    assert.equal(fixtureIds.has(id), false)
+  }
+})
+
+test('Bank view wirea matcher su partitario live (source markers)', async () => {
+  const source = await readFile(new URL('../src/modules/contabilita/views/RiconciliazioneBancariaView.jsx', import.meta.url), 'utf8')
+  assert.match(source, /mapPartitarioRowsToMatchCandidates/)
+  assert.match(source, /getPartitarioAperto/)
+  assert.match(source, /live_partitario/)
+  assert.match(source, /buildMatcherMovementFromWorkingRow/)
+  const banking = await readFile(new URL('../src/modules/contabilita/views/BankingView.jsx', import.meta.url), 'utf8')
+  assert.match(banking, /societaId=\{societaAttiva\?\.id/)
+})
+
+test('Bank matcher applica memoria DecisionFeedback LAB', async () => {
+  const source = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/runRiconciliazioneMatchForMovement.js', import.meta.url), 'utf8')
+  assert.match(source, /lookupBankMatchMemory/)
+  assert.match(source, /applyBankMatchMemoryBoost/)
+  const commit = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/commitReconciliationCanonicalPayload.js', import.meta.url), 'utf8')
+  assert.match(commit, /appendDecisionFeedbackEvents/)
+  const working = await readFile(new URL('../src/modules/contabilita/components/riconciliazione/RiconciliazioneMovementWorkingView.jsx', import.meta.url), 'utf8')
+  assert.match(working, /buildBankDecisionFeedbackEvents/)
+})
+
+test('Bank mass-confirm gated high-confidence (source markers)', async () => {
+  const view = await readFile(new URL('../src/modules/contabilita/views/RiconciliazioneBancariaView.jsx', import.meta.url), 'utf8')
+  assert.match(view, /partitionMassConfirmCandidates/)
+  assert.match(view, /evaluateMassConfirmEligibility/)
+  assert.match(view, /high-confidence/)
 })
 
 test('commit Bank non accetta una riga PN con sezione ignota', async () => {

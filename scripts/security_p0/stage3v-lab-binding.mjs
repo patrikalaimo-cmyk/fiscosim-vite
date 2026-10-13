@@ -12,7 +12,14 @@ import {fileURLToPath} from 'node:url'
 import { STAGE3V_LAB,assertStage3vLocalStackIsolated } from './stage3v-local-stack.mjs'
 
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../..')
-const BRANCH='security/p0-isolated-hardening-20261008'
+const BRANCHES=new Set([
+ 'security/p0-isolated-hardening-20261008',
+ 'feat/studio-grade-accounting-e2e-20261010',
+])
+const ALLOWED_DETACHED_WORKTREES=[
+ 'FiscoSim-P0-Stage3V-ReadOnly',
+ 'FiscoSim-StudioGrade-E2E-20261010',
+]
 const CONTAINER=STAGE3V_LAB.db
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const SHA=/^[0-9a-f]{40}$/i
@@ -23,9 +30,12 @@ const run=(command,args,options={})=>execFileSync(command,args,{
 const asUUID=(v)=>{assert.match(String(v||''),UUID);return String(v).toLowerCase()}
 
 export function isStage3vAllowedCheckout({root,branch,userProfile}) {
- if(branch===BRANCH)return true
- return branch==='' && resolve(root).toLowerCase()===
-  resolve(join(userProfile,'FiscoSim-P0-Stage3V-ReadOnly')).toLowerCase()
+ if(BRANCHES.has(branch))return true
+ if(branch!=='')return false
+ const resolvedRoot=resolve(root).toLowerCase()
+ return ALLOWED_DETACHED_WORKTREES.some((name)=>
+  resolvedRoot===resolve(join(userProfile,name)).toLowerCase()
+ )
 }
 
 

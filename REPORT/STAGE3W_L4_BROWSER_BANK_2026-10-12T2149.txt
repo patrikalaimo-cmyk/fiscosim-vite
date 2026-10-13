@@ -1,0 +1,12 @@
+L4_BANK_START puppeteer Riconciliazione bancaria smoke
+UI=http://127.0.0.1:5173
+LOGIN_UI=PASS
+NAV_SECTION=["section:CONTABILITÀ"]
+NAV_PRIMA={"ok":true,"label":"Prima Nota"}
+SOCIETA_UI={"ok":true,"value":"72000000-0000-4000-8000-000000000001","label":"SG E2E synthetic company A"}
+NAV_BANK={"ok":true,"label":"Riconciliazione bancaria"}
+BANK_UI={"hasTitle":true,"hasMovimenti":true,"hasImportOrDemo":true,"hasErrorCrash":false}
+MUTATING_API_COUNT=2
+MUTATING_SAMPLE=[{"method":"POST","url":"http://127.0.0.1:5173/api/ai"},{"method":"POST","url":"http://127.0.0.1:5173/api/ai"}]
+FISCAL_WRITE_COUNT=0
+L4_BANK_RESULT=PASS

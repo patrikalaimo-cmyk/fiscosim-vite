@@ -197,11 +197,15 @@ export async function createPrimaNotaCompleta({
 
   if (Array.isArray(ritenutaEntries) && ritenutaEntries.length > 0) {
     const openedPartitarioId = Array.isArray(partIns?.data) ? partIns.data[0]?.id || null : null
-    const linkedEntries = ritenutaEntries.map((entry) => ({
-      ...entry,
-      prima_nota_id: primaNotaId,
-      partitario_id: entry.partitario_id || openedPartitarioId,
-    }))
+    const linkedEntries = ritenutaEntries.map((entry) => {
+      const matured = String(entry?.stato || '').trim().toLowerCase() === 'da_versare'
+      return {
+        ...entry,
+        prima_nota_id: entry.prima_nota_id || primaNotaId,
+        partitario_id: entry.partitario_id || openedPartitarioId,
+        ...(matured ? { prima_nota_pagamento_id: primaNotaId } : {}),
+      }
+    })
     const query = db.from('ritenute_dacconto').insert(linkedEntries)
     ritenuteIns = await (ritenutaSelect ? query.select(ritenutaSelect) : query.select())
     if (ritenuteIns.error) {
@@ -220,13 +224,17 @@ export async function createPrimaNotaCompleta({
         return { data: null, error, pn, righeIns, vatIns, partIns, ritenuteIns, ritenuteUpd }
       }
       const { id: _id, ...updates } = entry
+      const keepOpen = String(updates.stato || '').trim().toLowerCase() === 'aperta'
+      const payload = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }
+      if (!keepOpen) {
+        payload.prima_nota_pagamento_id = primaNotaId
+      }
       const query = db
         .from('ritenute_dacconto')
-        .update({
-          ...updates,
-          prima_nota_pagamento_id: primaNotaId,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', id)
         .select(ritenutaSelect || '*')
       const result = await query
@@ -238,6 +246,30 @@ export async function createPrimaNotaCompleta({
       updatedRows.push(result.data[0])
     }
     ritenuteUpd = { data: updatedRows, error: null }
+  }
+
+  // SG-P0-03: every successful fiscal commit must leave an audit_contabile row.
+  // Best-effort on legacy multi-step path (Stage3W already inserts audit in-RPC).
+  try {
+    const societaId = pnPayload?.societa_id || pn?.societa_id || null
+    if (societaId && primaNotaId) {
+      await db.from('audit_contabile').insert([{
+        societa_id: societaId,
+        entity_type: 'prima_nota',
+        entity_id: primaNotaId,
+        operation_type: 'INSERT',
+        operation_reason: String(pnPayload?.motivazione || pnPayload?.descrizione || 'createPrimaNotaCompleta').slice(0, 500),
+        after_data: {
+          path: 'createPrimaNotaCompleta',
+          numero_documento: pnPayload?.numero_documento || pn?.numero_documento || null,
+          data_registrazione: pnPayload?.data_registrazione || pn?.data_registrazione || null,
+        },
+        performed_by: pnPayload?.created_by || pnPayload?.operatore_id || null,
+        source_module: pnPayload?.documento_import_id ? 'import_contabilita' : 'registrazione_manual',
+      }])
+    }
+  } catch {
+    /* audit best-effort on legacy path */
   }
 
   return {

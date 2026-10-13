@@ -3,6 +3,7 @@ import { calculateRegistrazioneRitenutaTotals } from './calculateRegistrazioneRi
 import { validateRegistrazioneRitenutaDraft } from './validateRegistrazioneRitenutaDraft.js'
 import { resolveRegistrazioneRitenutaDefaults } from './resolveRegistrazioneRitenutaDefaults.js'
 import { resolveRitenutaScadenza } from '../../domain/ritenute/resolveRitenutaScadenza.js'
+import { calculateRitenutaPartialMaturation } from '../../domain/ritenute/calculateRitenutaPartialMaturation.js'
 
 function firstMeaningful(...values) {
   return values.find((value) => value !== undefined && value !== null && normalizeText(value) !== '')
@@ -26,10 +27,13 @@ function resolveLinkedRitenuta(ritenute = [], partitarioData = {}, partite = [])
 
   const partitaId = selectedIds[0]
   const partita = (Array.isArray(partite) ? partite : []).find((item) => String(item?.id || '').trim() === partitaId) || null
-  const record = (Array.isArray(ritenute) ? ritenute : []).find((item) =>
+  const candidates = (Array.isArray(ritenute) ? ritenute : []).filter((item) =>
     String(item?.partitario_id || item?.partitarioId || '').trim() === partitaId &&
-    !['versata', 'annullata'].includes(normalizeText(item?.stato).toLowerCase())
-  ) || null
+    !['versata', 'annullata', 'da_versare'].includes(normalizeText(item?.stato).toLowerCase())
+  )
+  const record = candidates.find((item) => normalizeText(item?.stato).toLowerCase() === 'aperta')
+    || candidates[0]
+    || null
   const configuredAmount = partitarioData?.importiChiusura?.[partitaId] ?? partitarioData?.importoChiusura
   const importoChiusura = Number.parseFloat(String(
     configuredAmount ?? partita?.importo_residuo ?? partita?.importoResiduo ?? partita?.saldo_residuo ?? 0
@@ -139,6 +143,33 @@ export function buildRegistrazioneRitenutaDraft(input = {}, options = {}) {
     numeroDocumento: baseDocumento.numeroDocumento,
     tipoDocumento: baseDocumento.tipoDocumento,
     importoPagamento: isPagamento ? (linked.importoChiusura || currentRitenutaDraft.importoPagamento || partitarioDraft?.importoChiusura || partitarioDraft?.importoAperto || baseDocumento.totaleDocumento || baseDocumento.imponibile || 0) : '',
+  }
+
+  if (isPagamento && linked.record && linked.partita) {
+    const residuo = Math.abs(Number.parseFloat(String(
+      linked.partita.importo_residuo ?? linked.partita.importoResiduo ?? linked.partita.saldo_residuo ?? 0
+    ).replace(',', '.')) || 0)
+    const paid = Math.abs(Number.parseFloat(String(base.importoPagamento ?? 0).replace(',', '.')) || 0)
+    const split = calculateRitenutaPartialMaturation({
+      importoPagamento: paid,
+      importoResiduoPartita: residuo,
+      importoRitenuta: linkedRitenuta.importo_ritenuta ?? linkedRitenuta.ritenuta,
+      imponibileRitenuta: linkedRitenuta.imponibile_ritenuta,
+      compensoLordo: linkedRitenuta.compenso_lordo,
+      contributoCassaPrev: linkedRitenuta.contributo_cassa_prev,
+    })
+    if (split.kind === 'parziale') {
+      base.importoCompenso = split.matured.compenso_lordo
+      base.imponibile = split.matured.compenso_lordo
+      base.imponibileReddito = split.matured.compenso_lordo
+      base.baseImponibile = split.matured.imponibile_ritenuta
+      base.baseRitenuta = split.matured.imponibile_ritenuta
+      base.ritenuta = split.matured.importo_ritenuta
+      base.manualBaseOverride = true
+      base.manualRitenutaOverride = true
+      base.manualCompensoOverride = true
+      base.partialMaturation = split
+    }
   }
 
   const totals = calculateRegistrazioneRitenutaTotals(base, { mode, totaleDocumento: baseDocumento.totaleDocumento, importoPagamento: base.importoPagamento })

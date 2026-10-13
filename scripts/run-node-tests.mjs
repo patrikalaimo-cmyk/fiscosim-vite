@@ -18,6 +18,13 @@ const BANK_ROOT_TESTS = new Set([
   'riconciliazioneBankSafety.test.js',
 ])
 
+const BANK_APPLICATION_TESTS = new Set([
+  'riconciliazione/mapPartitarioRowToMatchCandidate.test.js',
+  'riconciliazione/massConfirmEligibility.test.js',
+  'learning/decisionFeedbackLab.test.js',
+  'learning/resolveStudioRuleToSocietaTargets.test.js',
+])
+
 const STAMPE_ROOT_TESTS = new Set([
   'registriIvaStampeModel.test.js',
   'motoreStampaDefinitiva.test.js',
@@ -160,7 +167,11 @@ async function resolveProfile(profile) {
     return stampeRootTests
   }
   if (profile === 'bank') {
-    return bankRootTests
+    const bankApplicationTests = contabilitaApplicationTests.filter((file) => {
+      const rel = path.relative(CONTABILITA_APPLICATION_DIR, file).replaceAll('\\', '/')
+      return BANK_APPLICATION_TESTS.has(rel)
+    })
+    return [...bankApplicationTests, ...bankRootTests]
   }
   if (profile === 'core') {
     return coreRootTests

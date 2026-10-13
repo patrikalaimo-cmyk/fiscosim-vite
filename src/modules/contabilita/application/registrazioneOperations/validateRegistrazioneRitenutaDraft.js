@@ -1,4 +1,5 @@
 import { normalizeText } from '../canonical_mapper/utils.js'
+import { calculateRitenutaPartialMaturation } from '../../domain/ritenute/calculateRitenutaPartialMaturation.js'
 import { resolveRegistrazioneRitenutaDefaults } from './resolveRegistrazioneRitenutaDefaults.js'
 
 function toAmount(value) {
@@ -65,14 +66,37 @@ export function validateRegistrazioneRitenutaDraft(draft = {}, options = {}) {
   if (mode === 'pagamento' && !partitarioDraft?.selectedPartitaId && !partitarioDraft?.selectedPartitaNumeroDocumento) warnings.push('partita collegata non selezionata per la ritenuta su pagamento')
   if (mode === 'pagamento' && importoPagamento <= 0) warnings.push('importo pagamento non disponibile')
   if (mode === 'pagamento' && !ritenutaData.linkedRitenutaRecord?.id) blockers.push('posizione ritenuta predisposta non trovata per la partita selezionata')
-  if (mode === 'pagamento' && ritenutaData.linkedPartitaRecord) {
+  if (mode === 'pagamento' && ritenutaData.linkedPartitaRecord && ritenutaData.linkedRitenutaRecord) {
     const residuo = Math.abs(toAmount(
       ritenutaData.linkedPartitaRecord.importo_residuo ??
         ritenutaData.linkedPartitaRecord.importoResiduo ??
         ritenutaData.linkedPartitaRecord.saldo_residuo
     ))
     if (residuo > 0 && Math.abs(importoPagamento - residuo) > 0.01) {
-      blockers.push('pagamento parziale ritenute non ancora supportato')
+      const openRit = toAmount(
+        ritenutaData.linkedRitenutaRecord.importo_ritenuta
+          ?? ritenutaData.linkedRitenutaRecord.ritenuta
+      )
+      const openImp = toAmount(ritenutaData.linkedRitenutaRecord.imponibile_ritenuta)
+      const openComp = toAmount(ritenutaData.linkedRitenutaRecord.compenso_lordo)
+      const split = calculateRitenutaPartialMaturation({
+        importoPagamento,
+        importoResiduoPartita: residuo,
+        importoRitenuta: openRit,
+        imponibileRitenuta: openImp,
+        compensoLordo: openComp,
+        contributoCassaPrev: toAmount(ritenutaData.linkedRitenutaRecord.contributo_cassa_prev),
+      })
+      if (split.kind === 'overpay' || split.kind === 'invalid') {
+        blockers.push('pagamento parziale ritenute non calcolabile')
+      } else if (split.kind === 'parziale') {
+        if (Math.abs(roundNumber(ritenuta - split.matured.importo_ritenuta)) > 0.01) {
+          blockers.push('ritenuta parziale incoerente con quota pagamento')
+        }
+        if (Math.abs(roundNumber(base - split.matured.imponibile_ritenuta)) > 0.01 && openImp > 0) {
+          blockers.push('base ritenuta parziale incoerente con quota pagamento')
+        }
+      }
     }
   }
   if (mode !== 'none' && !codiceTributo) blockers.push('codice tributo ritenuta mancante')

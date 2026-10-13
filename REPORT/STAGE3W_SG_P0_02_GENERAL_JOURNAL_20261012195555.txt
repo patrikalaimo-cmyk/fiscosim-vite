@@ -1,0 +1,12 @@
+P0_02_GENERAL_START Stage3V JWT general-journal persistent write
+COMMIT=d73dfc9cd9c0d951b8981f346a8c41720c5c1127
+PROVISION_EXIT=0
+STAGE3V_FIXTURES_PROVISIONED=PASS | COMPANIES=STAGE3V-A,STAGE3V-B | ENV_FILE=C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010\.env.stage3v.lab.local | PN_EMPTY=true
+PARKED_UNTRACKED=49 root=C:\Users\patri\AppData\Local\Temp\fiscosim-stage3v-park-20261012195555
+HARNESS_EXIT=0
+HARNESS=STAGE3V_PINNED_LAB_HTTP_FIXTURE_PARITY_PASS (read-only; not signed-JWT E2E)
+HARNESS=STAGE3V_PINNED_LAB_HTTP_FIXTURE_PARITY_PASS (read-only; not signed-JWT E2E)
+HARNESS={"result":"STAGE3V_REAL_SIGNED_JWT_PERSISTENT_POSTING_PASS","labOnly":true,"cleanupRequired":true,"records":[{"company":"A","requestId":"e1daa34f-297b-4cd3-9470-582395509a46","journalId":"c7d64ec9-a304-4c8b-9f94-9abceba29cfe","amount":100.25},{"company":"B","requestId":"160a689a-3563-4b7f-8833-8748c502b34f","journalId":"a56e87ed-7dfe-4919-86ef-b0da325efbe2","amount":205.1}]}
+HARNESS_PASS=true
+P0_02_GENERAL_RESULT=PASS
+P0_02_RESULT=PASS

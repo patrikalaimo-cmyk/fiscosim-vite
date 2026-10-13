@@ -1,0 +1,33 @@
+LIVE_P0_04_CLASS_F_START
+PROJECT_REF=mlydfspmrkaedsocubku
+AUTHORIZATION=operator approvo continua 2026-10-13
+BROAD_BEFORE=19
+CANDIDATES=11
+CANDIDATE adempimenti_clienti|allow_all_adempimenti_clienti
+CANDIDATE adempimenti_template|allow_all_adempimenti
+CANDIDATE deleghe_uniche|allow_all_deleghe
+CANDIDATE f24_righe|allow_all_f24_righe
+CANDIDATE f24_scadenze|allow_all_f24_scadenze
+CANDIDATE impostazioni_studio|allow_all
+CANDIDATE impostazioni_studio|allow_all_impostazioni
+CANDIDATE invii_schedulati|allow_all_invii
+CANDIDATE richieste_fatture|allow_all_richieste_fatture
+CANDIDATE ritenute_dacconto|Accesso autenticati
+CANDIDATE user_roles|Lettura autenticati
+SQL_WRITTEN=C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010\sql\security_p0\69_p0_04_class_f_LIVE_mlydfspmrkaedsocubku.sql
+PSQL BEGIN
+PSQL DO
+PSQL COMMIT
+BROAD_AFTER=8
+RLS_SMOKE_BEGIN
+RLS BEGIN
+RLS 80eb7418-4ca8-46b1-9dec-f6ce815956fd
+RLS {"sub":"80eb7418-4ca8-46b1-9dec-f6ce815956fd","role":"authenticated"}
+RLS SET
+RLS US=4
+RLS PN_RIGHE=250
+RLS F24R=0
+RLS ROLLBACK
+RLS_SMOKE_END
+RLS_SMOKE=PASS
+LIVE_P0_04_CLASS_F_RESULT=PASS

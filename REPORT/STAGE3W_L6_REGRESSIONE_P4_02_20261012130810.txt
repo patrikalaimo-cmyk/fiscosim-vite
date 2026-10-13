@@ -1,0 +1,37 @@
+P4_02_START L6 LAB regressione core pack
+PACK_ID=l6_lab_core_v1
+STEP_COUNT=7
+STEP_IDS=P0_00,P4_01,P2_06,P2_07,P3_01,P3_03,P3_07
+STEP_START=P0_00 script=scripts/security_p0/verify-sg-p0-00-loopback.mjs
+STEP_END=P0_00 status=PASS exit=0 ms=3355
+STEP_DETAIL=P0_00_RESULT=PASS
+STEP_START=P4_01 script=scripts/security_p0/run-stage3w-l5-multi-periodo.mjs
+STEP_END=P4_01 status=PASS exit=0 ms=1859
+STEP_DETAIL=P4_01_RESULT=PASS
+STEP_START=P2_06 script=scripts/security_p0/run-stage3w-ritenute-f24-control.mjs
+STEP_END=P2_06 status=PASS exit=0 ms=1655
+STEP_DETAIL=P2_06_RESULT=PASS
+STEP_START=P2_07 script=scripts/security_p0/run-stage3w-p2-07-liquidazione-definitiva-block.mjs
+STEP_END=P2_07 status=FAIL exit=1 ms=274
+STEP_DETAIL=RESULT_LINE_ABSENT
+STEP_ABORT_REQUIRED_FAIL=P2_07
+STEP_START=P3_01 script=scripts/security_p0/run-stage3w-bank-commit-lab.mjs
+STEP_END=P3_01 status=PASS exit=0 ms=1378
+STEP_DETAIL=P3_01_RESULT=PASS
+STEP_START=P3_03 script=scripts/security_p0/run-stage3w-stampe-partitari-mastrini-bilancio.mjs
+STEP_END=P3_03 status=PASS exit=0 ms=1083
+STEP_DETAIL=P3_03_RESULT=PASS
+STEP_START=P3_07 script=scripts/security_p0/run-stage3w-aging-insoluti.mjs
+STEP_END=P3_07 status=PASS exit=0 ms=1205
+STEP_DETAIL=P3_07_RESULT=PASS
+ROW=P0_00|PASS|req=true|exit=0|ms=3355
+ROW=P4_01|PASS|req=true|exit=0|ms=1859
+ROW=P2_06|PASS|req=true|exit=0|ms=1655
+ROW=P2_07|FAIL|req=true|exit=1|ms=274
+ROW=P3_01|PASS|req=true|exit=0|ms=1378
+ROW=P3_03|PASS|req=true|exit=0|ms=1083
+ROW=P3_07|PASS|req=true|exit=0|ms=1205
+FINGERPRINT=L6CORE1|P0_00:PASS;P4_01:PASS;P2_06:PASS;P2_07:FAIL;P3_01:PASS;P3_03:PASS;P3_07:PASS
+FAILED=P2_07
+MISSING=-
+P4_02_RESULT=FAIL L6_SUITE_FAIL failed=P2_07 missing=-

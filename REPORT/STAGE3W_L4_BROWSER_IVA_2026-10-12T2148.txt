@@ -1,0 +1,13 @@
+L4_IVA_START puppeteer Liquidazioni IVA / Adempimenti smoke
+UI=http://127.0.0.1:5173
+LOGIN_UI=PASS
+NAV_SECTION=["section:CONTABILITÀ"]
+NAV_PRIMA={"ok":true,"label":"Prima Nota"}
+SOCIETA_UI={"ok":true,"before":"72000000-0000-4000-8000-000000000001","value":"72000000-0000-4000-8000-000000000001","label":"SG E2E synthetic company A","options":[{"value":"72000000-0000-4000-8000-000000000001","label":"SG E2E synthetic company A"}]}
+NAV_ADEMP={"ok":true,"label":"Adempimenti"}
+IVA_UI={"hasTitle":true,"hasAnteprima":true,"hasKpi":true,"hasActions":true,"hasAdempimentiTabs":true,"hasLayout":true,"hasErrorCrash":false,"snippet":"⚪ AI standby 📋 Log pipeline (404) FiscoSim V6 Professional AI AGENT STUDIO Dashboard Clienti Import Excel Utenti Studio Impostazioni Studio Impostazioni Procedure Deleghe Uniche DOCUMENT HUB Import Contabilità Import Documenti Export Dati Fatture Massive ADE Lettura Mail Richieste Fatture ADE CONTABILITÀ Prima Nota Partitario Bilancio STRUMENTI Ge"}
+MUTATING_API_COUNT=2
+MUTATING_SAMPLE=[{"method":"POST","url":"http://127.0.0.1:5173/api/ai"},{"method":"POST","url":"http://127.0.0.1:5173/api/ai"}]
+FISCAL_WRITE_COUNT=0
+CONSOLIDATE_BTNS=[{"text":"🔒 Consolida liquidazione","disabled":false}]
+L4_IVA_RESULT=PASS

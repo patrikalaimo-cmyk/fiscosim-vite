@@ -1,0 +1,29 @@
+LIVE_P0_04_T2_START
+PROJECT_REF=mlydfspmrkaedsocubku
+DEFINER_ANON_EXECUTE_BEFORE=8
+ANON_TABLE_PRIVS_BEFORE=325
+ANON_ONLY_POLICIES_BEFORE_BEGIN
+ANON_ONLY_POLICIES_BEFORE_END
+DEFINER_TARGETS=8
+TARGET_FN apply_ai_learning_from_feedback(uuid,uuid,uuid,numeric)
+TARGET_FN consolida_periodo_iva_transazionale(uuid,date,date,text,uuid,text,jsonb)
+TARGET_FN consolidazione_stampa_definitiva(uuid,text,integer,date,date,uuid,text,text,jsonb)
+TARGET_FN precheck_stampa_definitiva(uuid,text,integer,date,date)
+TARGET_FN rpc_annulla_prima_nota_logica(uuid,uuid,text,uuid)
+TARGET_FN rpc_get_prima_nota_operation_guards(uuid,uuid,text)
+TARGET_FN rpc_storna_prima_nota_generale(uuid,uuid,text,date,uuid)
+TARGET_FN rpc_update_prima_nota_generale_controllata(uuid,uuid,jsonb,jsonb,text,uuid)
+ANON_TABLE_TARGETS=65
+SQL_WRITTEN=C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010\sql\security_p0\64_p0_04_tranche2_LIVE_mlydfspmrkaedsocubku.sql
+APPLY_SQL=START
+APPLY_SQL=DONE
+APPLY_OUT BEGIN
+APPLY_OUT DO
+APPLY_OUT DO
+APPLY_OUT COMMIT
+DEFINER_ANON_EXECUTE_AFTER=0
+ANON_TABLE_PRIVS_AFTER=0
+AUTHENTICATED_DEFINER_EXECUTE_COUNT=8
+BROAD_TRUE_POLICIES_AUTH_OR_PUBLIC_REMAINING=31
+NOTE=Broad allow_all for authenticated/public NOT dropped (would break old UI); needs tenant-scoped replacement before A100 freeze
+LIVE_P0_04_T2_RESULT=PASS

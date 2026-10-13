@@ -1,0 +1,16 @@
+﻿STAGE3W_SG_L3_HISTORY_L6_MASS_CONFIRM
+timestamp=20261012232650
+branch=feat/studio-grade-accounting-e2e-20261010
+scope=Native multi-product accounting history + Bank mass-confirm high-confidence gate
+
+UNIT_HISTORY=PASS (incl. SG-L3 native A/B product)
+UNIT_L3_L1=PASS 14/14 combined suite
+UNIT_BANK=PASS 26/26 (massConfirmEligibility + source markers)
+
+DELIVERED:
+- history index/resolve keys piva|dir|desc:* prefer contextual buckets
+- history_ambiguous conflicts on tied modes
+- massConfirmEligibility minConfidence 0.85; ambiguous/review blocked
+- RiconciliazioneBancariaView confirmSelected uses partition + LAB feedback append
+
+GATED: schema DB DecisionFeedback; browser A100 detailed upload/commit; LIVE/cutover

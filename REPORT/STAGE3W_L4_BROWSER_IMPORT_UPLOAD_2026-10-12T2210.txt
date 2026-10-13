@@ -1,0 +1,46 @@
+QA_SUPPLIER_SEED=2.10|01378570350|true
+UPDATE 1
+QA_CAUSALE_SEED=SG-ORD|docivanormale|fattura_fornitore|true
+UPDATE 1
+QA_IVA_SEED=SG-IVA22|22.00|72000000-0000-4000-8000-000000000001
+INSERT 0 1
+L4_IMPORT_UPLOAD_START puppeteer Import upload/commit probe
+UI=http://127.0.0.1:5173
+FIXTURE=C:\Users\patri\FiscoSim-StudioGrade-E2E-20261010\qa\fixtures\IT01378570350.xml
+SOCIETA=72000000-0000-4000-8000-000000000001
+LOGIN_UI=PASS
+NAV=["hub:DOCUMENT HUB","item:Import Contabilità"]
+IMPORT_SHELL={"hasImportTitle":true,"hasFileInput":true,"hasSocietaSelect":true}
+SOCIETA_UI={"ok":true,"value":"72000000-0000-4000-8000-000000000001","label":"SG E2E synthetic company A"}
+UPLOAD_FILE=PASS
+STAGING={"rows":1,"checks":1,"hasFixtureName":true,"hasAvvia":true,"hasError":false,"banner":"a registrazione in contabilità. SOCIETÀ Seleziona società SG E2E synthetic company A Carica fatture Rianalizza Vai a ▾ F"}
+COMPLETE_PROBE={"complete":1,"hasAnagrafiche":true}
+EDITOR_OPEN_btn-conto-={"ok":true,"id":"btn-conto-ic-1791843036293-1","label":"—"}
+EDITOR_PICK_btn-conto-={"ok":true,"label":"5.01Costi SG-E2E-AL1"}
+EDITOR_OPEN_btn-causale-={"ok":true,"id":"btn-causale-ic-1791843036293-1","label":"—"}
+EDITOR_PICK_btn-causale-={"ok":true,"label":"SG-ORDOperazione ordinaria SG-E2E"}
+ROW_SELECT={"ok":true,"checked":true}
+AVVIA_CLICK={"ok":true}
+AFTER_AVVIA={"hasWorkingView":true,"hasCommitBtn":true,"commitDisabled":false,"banner":"","statusBlock":"BOZZA COERENTE Prima nota IVA Partitario Suggerimenti AI PRIMA NOTA + Aggiungi riga Elimina riga selezionata Scrittura proposta CONTO DESCRIZIONE CONTO DARE AVERE NOTE AZIONI 5.01 · Costi SG-E2E-A ⌄ Costi SG-E2E-A × IVA · Imposta sul valore aggiunto ⌄ Imposta sul valore aggiunto × 2.10 · Fornitore SG-E2E-A ⌄ Fornitore SG-E2E-A × TOTALE DARE 122,00 TOTALE AVE"}
+OPEN_IVA_PICKER={"ok":true,"label":"IVA · Imposta sul valore aggiunto⌄"}
+FIX_IVA_ACCOUNT={"ok":true,"label":"2.02IVA credito SG-E2E-A"}
+AFTER_FIX_IVA={"commitDisabled":false,"statusBlock":"BOZZA COERENTE Prima nota IVA Partitario Suggerimenti AI PRIMA NOTA + Aggiungi riga Elimina riga selezionata Scrittura proposta CONTO DESCRIZIONE CONTO DARE AVERE NOTE AZIONI 5.01 · Costi SG-E2E-A ⌄ C"}
+DIALOG=confirm:Confermi la contabilizzazione REALE del documento import selezionato?
+
+Numero: QA-2026-001
+Fornitore: Fornitore QA Sprin
+COMMIT_CLICK={"ok":true}
+DIALOG=alert:Documento contabilizzato: QA-2026-001
+ID prima nota: fe421feb-e3bf-43e0-9135-d17c3b3aa5d8
+Righe PN: 0
+Movimenti IVA: 0
+P
+POST_COMMIT={"registered":false,"banner":" COERENTE Documento contabilizzato: QA-2026-001 ID prima nota: fe421feb-e3bf-43e0-9135-d17c3b3aa5d8 Righe PN: 0 Movimenti IVA: 0 Partite fornitore previste: 1 Partite fornit","busy":false}
+CONSOLE_COMMIT=["log:[DIAG_IMPORT] FASE xml_parse_end: durata=30ms parsedDocs=1 erroriParsing=0","log:[DIAG_IMPORT] === runImportWorkflow END === durataTotak=344ms importabili=1 bloccati=0 avvertimenti=0 errori=0","log:[IMPORT_REAL_COMMIT_START] [object Object]","log:[TEST_LAB_COMMIT_ROWS_NORMALIZED] index=0, conto=5.01, dareRaw=100, avereRaw=0, dareNormalized=100, avereNormalized=0","log:[TEST_LAB_COMMIT_ROWS_NORMALIZED] index=1, conto=2.02, dareRaw=22, avereRaw=0, dareNormalized=22, avereNormalized=0","log:[TEST_LAB_COMMIT_ROWS_NORMALIZED] index=2, conto=2.10, dareRaw=0, avereRaw=122, dareNormalized=0, avereNormalized=122","log:[IMPORT_REAL_COMMIT_ROWS_SOURCE]","log:[IMPORT_REAL_COMMIT_ROWS_NORMALIZED]","log:[IMPORT_REAL_COMMIT_CANONICAL_ACCOUNTING_ROWS]","log:[IMPORT_REAL_COMMIT_ACCOUNT_RESOLUTION]","log:[IMPORT_REAL_COMMIT_IVA_TECHNICAL_TYPE]","log:[IMPORT_REAL_COMMIT_STAGING_UUID_BYPASS_LAB] documentId=ic-1791843036293-1 societa=SG-E2E-A","log:[IMPORT_REAL_COMMIT_STAGING_UPDATE_PLAN]","log:[IMPORT_REAL_COMMIT_STAGING_UPDATE_RESULT]"]
+MUTATING_API_COUNT=3
+MUTATING_SAMPLE=[{"method":"POST","url":"http://127.0.0.1:5173/api/ai"},{"method":"POST","url":"http://127.0.0.1:5173/api/ai"},{"method":"POST","url":"http://127.0.0.1:5173/api/studio/fiscal-journal-post"}]
+FISCAL_WRITE_COUNT=1
+FISCAL_WRITE_SAMPLE=[{"method":"POST","url":"http://127.0.0.1:5173/api/studio/fiscal-journal-post"}]
+PROBE_WORKING_VIEW=PASS
+PROBE_COMMIT=PASS
+L4_IMPORT_UPLOAD_RESULT=PASS

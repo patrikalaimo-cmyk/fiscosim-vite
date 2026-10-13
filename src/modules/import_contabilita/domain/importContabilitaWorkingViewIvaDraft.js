@@ -246,6 +246,7 @@ export function createImportWorkingViewIvaDraftRow(source = {}, causaliIvaById =
     historicalCausaleIvaId: normalizeCausaleIvaId(defaultSuggestion?.historicalCausaleIvaId),
     causaleIvaHistoryWarning: manualRow?.causaleIvaManual ? '' : String(defaultSuggestion?.warning || ''),
     historicalSampleCount: Number(defaultSuggestion?.historicalSampleCount || 0) || 0,
+    suggestionExplanation: defaultSuggestion?.explanation || null,
     historicalDetraibilePercent: Number.isFinite(historicalDetraibilePercent) ? historicalDetraibilePercent : null,
     detraibilePercent: manualDetraibile ? Number(manualRow?.detraibilePercent) : undefined,
     detraibileManual: manualDetraibile,
@@ -279,6 +280,8 @@ export function rebuildImportWorkingViewIvaDraftRows({
   isDemoSocieta = false,
   causaliIvaById = new Map(),
   vatHistoryIndex = new Map(),
+  /** Optional SG-L1 (or test) override — same return shape as product default. */
+  resolveVatRowSuggestion = null,
   createRowId = () => `working-view-iva-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
 } = {}) {
   const map = causaliIvaById instanceof Map ? causaliIvaById : new Map()
@@ -290,6 +293,9 @@ export function rebuildImportWorkingViewIvaDraftRows({
   })
 
   const resolveDefaultCausaleIvaSuggestion = (source) => {
+    if (typeof resolveVatRowSuggestion === 'function') {
+      return resolveVatRowSuggestion(source) || {}
+    }
     const historicalSuggestion = resolveImportContabilitaVatHistorySuggestion({
       historyIndex: vatHistoryIndex,
       counterpartyAccount,
