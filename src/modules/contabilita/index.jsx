@@ -47,6 +47,7 @@ const ADEMPIMENTI_TABS = [
 const STAMPE_TABS = [
   { id: 'registri_iva', label: 'Registri IVA' },
   { id: 'partitari', label: 'Partitari' },
+  { id: 'aging', label: 'Aging / insoluti' },
   { id: 'giornale', label: 'Giornale' },
   { id: 'mastrini', label: 'Mastrini' },
   { id: 'bilancio', label: 'Bilancio' },

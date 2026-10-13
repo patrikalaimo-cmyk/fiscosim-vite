@@ -140,9 +140,9 @@ Da verificare in browser su societ? esclusivamente di test:
 10. cambio societ? attiva: nessuna contaminazione di ritenute/scadenze;
 11. coerenza degli stessi dati tra scadenzario, CU e 770;
 12. caso escluso/forfettario dove previsto: nessuna maturazione ritenuta indebita;
-13. pagamento parziale con ritenuta: verificare che il sistema **blocchi esplicitamente** il caso e non effettui scritture parziali, finch? il requisito residuo non sar? implementato.
+13. pagamento parziale con ritenuta — **LAB PASS** pro-quota residual+matured (`STAGE3W_IMPORT_PARCELLA_RITENUTA_PARTIAL_*`, SG-P2-05); form UI ancora operatore.
 
-Nota: il punto 13 ? un controllo del blocker esistente, non una dichiarazione di supporto al pagamento parziale.
+Nota: il punto 13 non è più un blocker di prodotto; resta collaudo form a fine sessione.
 
 Stato: **AUTOMATICO VERDE / MANUALE PENDENTE**.
 
@@ -201,7 +201,7 @@ La protezione CSV e il modello puro di movimenti per conto sono coperti da test 
 5. verificare Bank singolo movimento contro estratto conto intero, idempotenza e scope societario, usando solo fixture test;
 6. collaudare il futuro commit transazionale bancario e il rollback prima di qualunque scrittura reale.
 
-Residui: fascicolo print-to-PDF browser (HTML+hash già LAB), Stampe UX/demo cleanup residuale, pagamento parziale con ritenuta (blocker esplicito), collaudi form Import #11 / Manuale / IVA / Bank a fine sviluppo. Non dichiarare A100 finché la sessione operatore non è verde.
+Residui: fascicolo print-to-PDF browser (HTML+hash già LAB), Stampe UX residuale, collaudi form Import #11 / Manuale / IVA / Bank / Aging tab a fine sviluppo. Non dichiarare A100 finché la sessione operatore non è verde.
 
 
 ## Saldi intraesercizio ? ulteriore debito QA (2026-10-08)
@@ -249,7 +249,7 @@ I collaudi **browser di caso fiscale** restano pendenti dove indicato. Sul LAB S
 | Bank fiscal commit | P3-01 + L4 BANK shell | Riconciliazione UI end-to-end ancora dovuta |
 | Stampe partitari/mastrini | P3-03 | Paginazione 1000+/PDF definitiva ancora dovuta |
 | Fascicolo HTML | P3-04 | Print-to-PDF operatore ancora dovuto |
-| Aging | P3-07 | Tab UI dedicata ancora dovuta |
+| Aging | P3-07 + tab Stampe `aging` | Collaudo browser tabella/fasce ancora operatore |
 | L6 regressione ripetibile | P4-02 | Pack core, non browser |
 
 **Regola P4-05:** nessuno smoke chiude un punto se non dimostra lo stesso criterio di accettazione. Shell UI ? caso fiscale completo.

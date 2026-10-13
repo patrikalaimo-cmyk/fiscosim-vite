@@ -1289,3 +1289,8 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 
 - `l6_lab_core_v4`: aggiunti step required `P1_06` (Manuale fiscal PATH) e `P3_04` (fascicolo cliente); fingerprint `L6CORE4|…`.
 - Fascicolo LAB re-run PASS (`STAGE3W_FASCICOLO_P3_04_20261013080109.txt`, hash contenuto + HTML unico).
+
+## 2026-10-13 - Stampe Aging tab UI + debito P2-05
+
+- Tab Stampe `aging`: genera anteprima da `buildAgingInsolutiModel` (KPI fasce + tabella residui); modello già P3-07 LAB.
+- Debito ritenute #13 aggiornato: pagamento parziale pro-quota **LAB PASS** (SG-P2-05), non più blocker esplicito di prodotto.

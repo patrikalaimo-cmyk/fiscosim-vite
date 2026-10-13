@@ -163,9 +163,9 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | SG-L2 | DecisionFeedback append-only post-commit (LAB flag) Import/Manuale | L1 + **approvazione schema** | **PASS LAB** 20261012: tabella `contabile_decision_feedback` + API scoped + dual-write; LE-S01 deny cross-company |
 | SG-L3 | Chiavi contestuali controparte+categoria/descrizione (multi-prodotto) | L2 | **PASS** 20261012 LAB: history nativo desc keys + feedback consume; UNIT LE-I01 |
 | SG-L4 | Regole studio Livello B (no UUID conti alieni) | L1 | **PASS** 20261012 UNIT LE-S02 + resolve-by-code/natura; L1 fallback opzionale |
-| SG-L5 | Bank: wire partitario live + matcher su import; poi memoria match confermati; fix id `bm-*` | L2 | **PARTIAL** 20261012: live wire + `demo-bm-*` + memoria LAB local; DB memory gated |
+| SG-L5 | Bank: wire partitario live + matcher su import; poi memoria match confermati; fix id `bm-*` | L2 | **PASS** 20261013: live wire + memoria local+DB preload (`lookupBankMatchMemory` events) |
 | SG-L6 | UI spiegazione proposte + mass-confirm gated | L3/L5 | **PARTIAL** 20261012: WV explanation + mass-confirm high-confidence gate; commit reale ancora LAB/mock |
-| SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | **PARTIAL** L6CORE3 PASS; LE-S01 API deny **PASS** 20261012; metriche baseline ancora aperte |
+| SG-L7 | Regressione cross-company + metriche vs baseline + step L6 opzionale | L2–L6 | **PARTIAL** L6CORE4 PASS 20261013; LE-S01 API deny **PASS**; metriche baseline ancora aperte |
 
 **Non negoziabile:** non rompere P0–P4 PASS. Cutover Stage3W su stack isolato **attivo** 20261012 (`isFiscalJournalPersistEnabled`); legacy fallback solo con `FISCOSIM_FISCAL_JOURNAL_LEGACY_FALLBACK=true`.
 

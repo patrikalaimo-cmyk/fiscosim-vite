@@ -6,6 +6,10 @@ import {
   AGING_BUCKET_KEYS,
 } from '../src/modules/contabilita/application/stampe/buildAgingInsolutiModel.js'
 import { buildPartitariStampaModel, isStampaOperativa } from '../src/modules/contabilita/application/stampe/buildPartitariStampaModel.js'
+
+test('aging is operative stampa type for Stampe tab wiring', () => {
+  assert.equal(isStampaOperativa('aging'), true)
+})
 import { buildMovimentiPerContoModel } from '../src/modules/contabilita/application/stampe/buildMovimentiPerContoModel.js'
 
 const societaId = 'soc-p307'

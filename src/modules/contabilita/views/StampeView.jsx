@@ -10,6 +10,10 @@ import {
   isStampaOperativa,
 } from '../application/stampe/buildPartitariStampaModel.js'
 import {
+  AGING_BUCKET_KEYS,
+  buildAgingInsolutiModel,
+} from '../application/stampe/buildAgingInsolutiModel.js'
+import {
   buildFascicoloClientePeriodo,
   fascicoloHtmlToBytes,
 } from '../application/stampe/buildFascicoloClientePeriodo.js'
@@ -357,7 +361,7 @@ const GiornaleEmptyState = ({ periodoInizio, periodoFine }) => (
 
 export default function StampeView({ contTab, societaAttiva, scritture, pianoConti, causaliIva }) {
   if (!societaAttiva) return null
-  if (!['registri_iva', 'partitari', 'giornale', 'mastrini', 'bilancio', 'fascicolo', 'liquidazione_iva_periodica'].includes(contTab)) return null
+  if (!['registri_iva', 'partitari', 'aging', 'giornale', 'mastrini', 'bilancio', 'fascicolo', 'liquidazione_iva_periodica'].includes(contTab)) return null
   return (
     <StampeDetailView
       tipoStampa={contTab}
@@ -375,12 +379,13 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const [periodoFine,setPeriodoFine]=useState(new Date().toISOString().split('T')[0]);
   const [selectedConto,setSelectedConto]=useState('');
   const [registroTipo,setRegistroTipo]=useState('vendite');
-  const [partitarioTipo,setPartitarioTipo]=useState('clienti');
+  const [partitarioTipo,setPartitarioTipo]=useState('tutti');
   const [situazioneTipo,setSituazioneTipo]=useState('patrimoniale');
   const [previewHtml,setPreviewHtml]=useState('');
   const [registroModel,setRegistroModel]=useState(null);
   const [giornaleModel,setGiornaleModel]=useState(null);
   const [partitariModel,setPartitariModel]=useState(null);
+  const [agingModel,setAgingModel]=useState(null);
   const [mastriniModel,setMastriniModel]=useState(null);
   const [bilancioModel,setBilancioModel]=useState(null);
   const [fascicoloModel,setFascicoloModel]=useState(null);
@@ -420,10 +425,20 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
   const titoli={
     registri_iva:'Registri IVA',
     partitari:'Partitari Clienti/Fornitori',
+    aging:'Aging / insoluti',
     giornale:'Giornale Contabile',
     mastrini:'Mastrini',
     bilancio:'Bilancio di Verifica',
     fascicolo:'Fascicolo cliente'
+  };
+
+  const agingBucketLabel = {
+    current: 'A scadere',
+    d1_30: '1–30 gg',
+    d31_60: '31–60 gg',
+    d61_90: '61–90 gg',
+    d90_plus: 'Oltre 90 gg',
+    senza_scadenza: 'Senza scadenza',
   };
 
   const handleSort = (col) => {
@@ -544,6 +559,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     setRegistroModel(null);
     setGiornaleModel(null);
     setPartitariModel(null);
+    setAgingModel(null);
     setMastriniModel(null);
     setBilancioModel(null);
     setFascicoloModel(null);
@@ -590,6 +606,22 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
         setPartitariPage(1);
         if(model.blockers.length){
           setError(`Partitari: ${model.blockers.join(', ')}`);
+        } else if(model.warnings?.length){
+          setInfoAlert(model.warnings[0]);
+        }
+      }
+      else if(tipoStampa==='aging'){
+        const asOf = periodoFine || new Date().toISOString().split('T')[0];
+        const { data: rawRows, error: fetchError } = await contabilitaRepo.getPartitarioBySocieta(societa.id, {});
+        if(fetchError) throw fetchError;
+        const model = buildAgingInsolutiModel(rawRows || [], {
+          societaId: societa.id,
+          asOf,
+          tipo: partitarioTipo || 'tutti',
+        });
+        setAgingModel(model);
+        if(model.blockers.length){
+          setError(`Aging: ${model.blockers.join(', ')}`);
         } else if(model.warnings?.length){
           setInfoAlert(model.warnings[0]);
         }
@@ -742,6 +774,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     registri_iva: 'Registri IVA',
     giornale: 'Giornale Contabile',
     partitari: 'Partitari',
+    aging: 'Aging / insoluti',
     mastrini: 'Mastrini',
     bilancio: 'Bilancio',
     fascicolo: 'Fascicolo cliente',
@@ -752,6 +785,7 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
     registri_iva: 'Consulta e genera i registri IVA Acquisti, Vendite e Corrispettivi',
     giornale: 'Consulta e genera il Libro Giornale delle scritture contabili',
     partitari: 'Stampa schede e prospetti partitari per clienti e fornitori',
+    aging: 'Residui partitario aperti per fascia di ritardo rispetto alla data di riferimento',
     mastrini: 'Visualizza le schede di mastro per i singoli conti del piano dei conti',
     bilancio: 'Prospetti di bilancio di verifica, situazione economica e patrimoniale',
     fascicolo: 'Un unico file di fine periodo da modelli canonici (HTML stampabile / print-to-PDF)',
@@ -818,6 +852,30 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
               />
             </div>
           </div>
+
+          {tipoStampa === 'aging' && (
+            <div className="fg" style={{ minWidth: 160 }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--mu)', marginBottom: '0.3rem', fontWeight: '500' }}>Tipo soggetto</label>
+              <select
+                value={partitarioTipo}
+                onChange={(e) => setPartitarioTipo(e.target.value)}
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--bd)',
+                  borderRadius: '14px',
+                  color: 'var(--tx)',
+                  height: '42px',
+                  width: '100%',
+                  padding: '0 0.75rem',
+                }}
+              >
+                <option value="tutti">Tutti</option>
+                <option value="clienti">Clienti</option>
+                <option value="fornitori">Fornitori</option>
+                <option value="percipienti">Percipienti</option>
+              </select>
+            </div>
+          )}
 
           {tipoStampa === 'registri_iva' && (
             <div className="fg" style={{ minWidth: 150 }}>
@@ -3034,6 +3092,66 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
         );
       })()}
 
+      {tipoStampa === 'aging' && agingModel && (
+        <ContPreviewCard title={`Aging / insoluti — as of ${agingModel.asOf || periodoFine}`}>
+          <ContKpiGrid>
+            <ContKpiCard label="Partite aperte" value={String(agingModel.totali?.count ?? 0)} />
+            <ContKpiCard label="Residuo complessivo" value={`${fmt(agingModel.totali?.residuoComplessivo)} €`} />
+            <ContKpiCard label="Escluse" value={String(agingModel.partiteEscluse ?? 0)} />
+          </ContKpiGrid>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '0.75rem 0 1rem' }}>
+            {AGING_BUCKET_KEYS.map((key) => (
+              <div
+                key={key}
+                style={{
+                  padding: '0.45rem 0.7rem',
+                  borderRadius: '10px',
+                  border: '1px solid var(--bd)',
+                  background: 'var(--bg-surface)',
+                  fontSize: '0.78rem',
+                  color: 'var(--tx)',
+                }}
+              >
+                <span style={{ color: 'var(--mu)' }}>{agingBucketLabel[key] || key}: </span>
+                <strong>{fmt(agingModel.totali?.byBucket?.[key] ?? 0)}</strong>
+              </div>
+            ))}
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--mu)', borderBottom: '1px solid var(--bd)' }}>
+                  <th style={{ padding: '0.45rem' }}>Soggetto</th>
+                  <th style={{ padding: '0.45rem' }}>Doc</th>
+                  <th style={{ padding: '0.45rem' }}>Scadenza</th>
+                  <th style={{ padding: '0.45rem' }}>Fascia</th>
+                  <th style={{ padding: '0.45rem', textAlign: 'right' }}>Residuo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(agingModel.rows || []).slice(0, 200).map((row) => (
+                  <tr key={row.id} style={{ borderBottom: '1px solid var(--bd)' }}>
+                    <td style={{ padding: '0.45rem' }}>{row.subject}</td>
+                    <td style={{ padding: '0.45rem' }}>{row.doc}</td>
+                    <td style={{ padding: '0.45rem' }}>{fmtDate(row.due || row.dueAnchor)}</td>
+                    <td style={{ padding: '0.45rem' }}>{agingBucketLabel[row.bucket] || row.bucket}</td>
+                    <td style={{ padding: '0.45rem', textAlign: 'right' }}>{fmt(row.residual)}</td>
+                  </tr>
+                ))}
+                {!agingModel.rows?.length && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '1rem', color: 'var(--mu)', textAlign: 'center' }}>
+                      Nessuna partita aperta per i filtri selezionati.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <ContGridFooter text="Anteprima provvisoria da residui partitario. Coerenza con mastrini/partitari già verificata in LAB (P3-07)." type="warning" />
+        </ContPreviewCard>
+      )}
+
       {tipoStampa === 'fascicolo' && fascicoloModel && (
         <ContPreviewCard title="Fascicolo cliente — file unico di periodo">
           <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -3056,10 +3174,15 @@ function StampeDetailView({tipoStampa,societa,scritture,pianoConti,causaliIva}){
       )}
 
       {/* Spazio per card iniziale quando non è ancora stata generata la stampa per le schede operative */}
-      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !partitariModel && !mastriniModel && !bilancioModel && !fascicoloModel && !loading && !['partitari', 'mastrini', 'bilancio', 'fascicolo'].includes(tipoStampa) && (
+      {isOperativo && tipoStampa !== 'liquidazione_iva_periodica' && !registroModel && !giornaleModel && !partitariModel && !agingModel && !mastriniModel && !bilancioModel && !fascicoloModel && !loading && !['partitari', 'aging', 'mastrini', 'bilancio', 'fascicolo'].includes(tipoStampa) && (
         <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '.5rem' }}>🖨️</div>
           <div style={{ color: 'var(--mu)' }}>Seleziona il periodo e clicca "Genera Anteprima" per visualizzare il documento</div>
+        </div>
+      )}
+      {isOperativo && tipoStampa === 'aging' && !agingModel && !loading && (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center', marginTop: '1rem' }}>
+          <div style={{ color: 'var(--mu)' }}>Seleziona data fine (as-of) e tipo soggetto, poi genera l’anteprima aging.</div>
         </div>
       )}
       {isOperativo && tipoStampa === 'fascicolo' && !fascicoloModel && !loading && (
