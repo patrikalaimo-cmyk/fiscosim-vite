@@ -133,7 +133,7 @@ I freeze A100 automatici restano regressione L1 obbligatoria a ogni blocco.
 | ID | Intervento |
 |---|---|
 | SG-P4-01 | Suite L5 dataset multi-periodo sintetico — **PASS** 20261012 (fingerprint L5MP1) |
-| SG-P4-02 | L6 regressione LAB ripetibile — **PASS** 20261012 (`l6_lab_core_v3` + Import P1_01/P1_05/P3_02; fingerprint L6CORE3) |
+| SG-P4-02 | L6 regressione LAB ripetibile — **PASS** 20261013 (`l6_lab_core_v4` + P1_06 Manuale PATH + P3_04 fascicolo; fingerprint L6CORE4; `STAGE3W_L6_REGRESSIONE_P4_02_20261013080119.txt`) |
 | SG-P4-03 | Isolamento DISUSO + `accounting_entries` — **PASS** 20261012 (fingerprint `P403ISO2`; allowlist 19 + anti-reintro scan; freeze audit) |
 | SG-P4-04 | Performance baseline LAB — **PASS** 20261012 (L6 core ~12s; 500+ SLA resta debito manuale) |
 | SG-P4-05 | Debito collaudi manuali — **documentato** 20261012 (LAB≠browser; nessuna chiusura silente) |

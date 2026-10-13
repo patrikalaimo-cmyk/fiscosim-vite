@@ -201,7 +201,7 @@ La protezione CSV e il modello puro di movimenti per conto sono coperti da test 
 5. verificare Bank singolo movimento contro estratto conto intero, idempotenza e scope societario, usando solo fixture test;
 6. collaudare il futuro commit transazionale bancario e il rollback prima di qualunque scrittura reale.
 
-Restano aperti fascicolo PDF unico, modelli/UX completi, hash di contenuto, importi parziali con ritenuta, collaudo browser di Import/Manuale/IVA e Bank. Nessuno di questi ? dichiarato eseguito.
+Residui: fascicolo print-to-PDF browser (HTML+hash già LAB), Stampe UX/demo cleanup residuale, pagamento parziale con ritenuta (blocker esplicito), collaudi form Import #11 / Manuale / IVA / Bank a fine sviluppo. Non dichiarare A100 finché la sessione operatore non è verde.
 
 
 ## Saldi intraesercizio ? ulteriore debito QA (2026-10-08)

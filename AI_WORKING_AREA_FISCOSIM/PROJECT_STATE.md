@@ -4,12 +4,13 @@
 * **Fase corrente:** Sviluppo residuale A100 **senza** collaudi manuali (operatore: sessione finale). Prod fiscosim-v6 OK; LIVE P0-04 broad TRUE=0. Import storico (#4/#7) già LAB. Bank L5 match memory DB+local; Manuale PATH iva_cassa/reverse/parcella JWT PASS.
 * **Branch:** `feat/studio-grade-accounting-e2e-20261010`
 * **Deploy:** `dpl_Fov6bmt2yKiRQLCBumxiwGDLs8Yi` (SPA + `api/auth/session`)
-* **Limite sviluppo:** L6 v4 (P1_06+P3_04 in pack); Hobby API se ≤12; tenant `invii_log`/`revisioni`. Collaudi form = fine.
+* **Limite sviluppo:** L6 v4 PASS; Hobby resta session-only (≤12); `invii_log` senza `societa_id` (tenant soft = schema LIVE, serve auth). Collaudi form = fine.
 
 ## 2. Prossimo passo operativo (verso A100)
-1. Continuare sviluppo automatizzabile (Hobby API se budget Vercel, tenant soft tables, Stampe UX demo cleanup)
+1. Residui code opzionali: Stampe UX demo cleanup; Hobby read API solo se budget/esigenza prod chiara
 2. Sessione collaudi manuali **a fine sviluppo** (`FISCOSIM_MANUAL_TEST_DEBT.md` + `A100_OPERATOR_MANUAL_SESSION_GUIDE.md`)
 3. Solo dopo collaudi verdi: dichiarare A100 / Bank live
+4. Tenant `invii_log`: richiede migrazione colonna + auth LIVE — non fare senza ok esplicito
 
 ## 3. Evidenze
 * `REPORT/STAGE3W_MANUALE_FISCAL_PATH_*` (Manuale PATH iva_cassa/reverse/parcella)
