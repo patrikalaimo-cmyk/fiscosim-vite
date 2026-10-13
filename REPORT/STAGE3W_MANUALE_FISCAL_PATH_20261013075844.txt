@@ -1,0 +1,39 @@
+MANUALE_FISCAL_PATH_START
+LOGIN_JWT=PASS
+--- MANUALE_PATH_IVA_CASSA ---
+CASSA_OPEN_STATUS=201
+CASSA_OPEN_PN=a883981d-2e67-4df8-be2c-53271d6c63b2
+CASSA_VAT_OPEN=differita|220.00|vendita
+CASSA_PARTITA=7cefb49e-acd4-4d8b-82dc-69c7c69331f9|1220.00|true
+CASSA_CLAIM_OPEN=fattura_attiva|registrazione_manual
+CASSA_PAY_STATUS=201
+CASSA_PAY_PN=a23d6b9d-8ebe-4599-936d-e4cbae9236aa
+CASSA_PARTITA_AFTER=720
+CASSA_VAT_RELEASE=rilascio|90.16|409.84
+CASSA_CLAIM_PAY=pagamento|registrazione_manual
+MANUALE_PATH_IVA_CASSA=PASS
+--- MANUALE_PATH_REVERSE ---
+REV_STATUS=201
+REV_PN=fb62ed18-1875-47be-994a-41ea586f689e
+REV_PN_RIGHE=4
+REV_FORN_ROW=0.00|1000.00
+REV_VAT_TYPES=acquisto:220.00;vendita:220.00
+REV_PARTITA=fornitore|1000.00
+REV_CLAIM=fattura_passiva|registrazione_manual
+REV_LIQ_SALDO=0
+MANUALE_PATH_REVERSE=PASS
+--- MANUALE_PATH_PARCELLA ---
+PAR_OPEN_STATUS=201
+PAR_OPEN_PN=436c070e-d6aa-4d62-b24b-5fc342c3ceb7
+PAR_PN_TOTALS=1268.80|1268.80
+PAR_PARTITA_ID=8f12cf0d-45a0-4d2c-941a-444c4fb427b0
+PAR_RIT={"id":"5e0b5aaf-7ae9-4e25-9ed9-3ede11b3159d","stato":"aperta","codice_tributo":"1040","importo_ritenuta":200,"percipiente_id":"c866b8dd-a993-43ff-83ca-da3d87f5650a","percipiente_cf":"RSSMRA80A01H501U","causale_prestazione":"A"}
+PAR_CLAIM_OPEN=parcella_documento|registrazione_manual
+PAR_PAY_STATUS=201
+PAR_PAY_PN=e7f7d5e9-db3d-461d-a757-8526b3bc0dcd
+PAR_RIT_AFTER={"id":"5e0b5aaf-7ae9-4e25-9ed9-3ede11b3159d","stato":"da_versare","data_pagamento":"2026-09-20","codice_tributo":"1040","prima_nota_pagamento_id":"e7f7d5e9-db3d-461d-a757-8526b3bc0dcd","importo_ritenuta":200,"periodo_riferimento":"09/2026","anno_riferimento":2026}
+PAR_PARTITA_AFTER=0
+PAR_SCAD_AMOUNT=200
+MANUALE_PATH_PARCELLA=PASS
+MANUALE_FISCAL_PATH_RESULT=PASS
+NOTE=form_UI_collaudi_ancora_operatore

@@ -1,8 +1,10 @@
 /**
  * Read LAB DecisionFeedback bank partita confirms and boost candidate scores.
+ * Prefers an optional preloaded `events` list (local + DB merge); falls back to localStorage.
  */
 
 import { loadDecisionFeedbackEvents } from './decisionFeedbackLabStore.js'
+import { buildDecisionFeedbackEvent } from './buildDecisionFeedbackEvent.js'
 
 function text(value) {
   return String(value ?? '').trim()
@@ -17,6 +19,17 @@ function normalizeKey(value) {
   return text(value).toLowerCase()
 }
 
+function bankConfirmedPartitaEvents(rawEvents = []) {
+  return (Array.isArray(rawEvents) ? rawEvents : [])
+    .map((row) => buildDecisionFeedbackEvent({ ...row, committed: true, dryRun: false }))
+    .filter((row) => (
+      row
+      && row.sourceModule === 'riconciliazione_bancaria'
+      && row.field === 'partita'
+      && row.outcome === 'confirmed'
+    ))
+}
+
 /**
  * @returns {{ partitaIds: Set<string>, hits: object[] }}
  */
@@ -24,9 +37,12 @@ export function lookupBankMatchMemory({
   societaId = '',
   movement = {},
   storage = globalThis.localStorage,
+  events = null,
 } = {}) {
-  const events = loadDecisionFeedbackEvents(societaId, storage)
-    .filter((row) => row.sourceModule === 'riconciliazione_bancaria' && row.field === 'partita' && row.outcome === 'confirmed')
+  const sourceEvents = Array.isArray(events)
+    ? events
+    : loadDecisionFeedbackEvents(societaId, storage)
+  const confirmed = bankConfirmedPartitaEvents(sourceEvents)
 
   const counterparty = normalizeKey(movement.counterpartyName || movement.counterparty || '')
   const amount = money(movement.amount)
@@ -35,7 +51,7 @@ export function lookupBankMatchMemory({
   const hits = []
   const partitaIds = new Set()
 
-  for (const event of events) {
+  for (const event of confirmed) {
     const finalPartita = text(event.finalValue)
     if (!finalPartita) continue
     const sameCounterparty = counterparty

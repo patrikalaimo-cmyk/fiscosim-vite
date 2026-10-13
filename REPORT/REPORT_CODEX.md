@@ -1278,3 +1278,9 @@ Precondizioni per live: backup/PITR verificato, test isolati auth membro/non-mem
 - Guida sessione: `REPORT/A100_OPERATOR_MANUAL_SESSION_GUIDE.md` (io = LAB auto; tu = form/visual su società test).
 - Operatore: collaudi manuali **a fine sviluppo**; sviluppo continuo con CI/LAB verdi.
 - L4 Manuale `--mode=multi2210` PASS (2 IVA 22+10, no collapse).
+
+## 2026-10-13 - Bank L5 match memory DB + Manuale PATH iva_cassa/reverse/parcella
+
+- Bank L5: `lookupBankMatchMemory` accetta `events` precaricati; View preload merge localStorage + `fetchDecisionFeedbackEventsFromDb`; unit SG-L5 DB-only PASS.
+- Manuale PATH JWT LAB: `run-stage3w-manuale-fiscal-path-lab.mjs` — iva_cassa (differita+rilascio), reverse (doppia IVA + liq 0), parcella 1040 + maturazione — `STAGE3W_MANUALE_FISCAL_PATH_*` RESULT=PASS; source_module `registrazione_manual`.
+- Debito Manuale #7/#8/#9 aggiornato a LAB PATH (form UI ancora operatore).

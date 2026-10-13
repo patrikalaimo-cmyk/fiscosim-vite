@@ -15,6 +15,7 @@ export function runRiconciliazioneMatchForMovement({ movement = {}, partiteApert
       societaId: options.societaId,
       movement,
       storage: options.storage,
+      events: options.matchMemoryEvents,
     })
     candidates = applyBankMatchMemoryBoost(candidates, matchMemory)
   }

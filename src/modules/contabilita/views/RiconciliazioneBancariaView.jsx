@@ -36,7 +36,14 @@ import {
   partitionMassConfirmCandidates,
 } from '../application/riconciliazione/massConfirmEligibility.js'
 import { buildBankDecisionFeedbackEvents } from '../application/learning/buildBankDecisionFeedbackEvents.js'
-import { appendDecisionFeedbackEvents } from '../application/learning/decisionFeedbackLabStore.js'
+import {
+  appendDecisionFeedbackEvents,
+  loadDecisionFeedbackEvents,
+} from '../application/learning/decisionFeedbackLabStore.js'
+import {
+  fetchDecisionFeedbackEventsFromDb,
+  mergeDecisionFeedbackEventLists,
+} from '../application/learning/decisionFeedbackDbClient.js'
 import * as contabilitaRepo from '../data/contabilitaRepo.js'
 import { applyBankMovementCorrection } from '../components/riconciliazione/applyBankMovementCorrection.js'
 import { buildReconciliationStorageKey } from '../components/riconciliazione/buildReconciliationStorageKey.js'
@@ -115,6 +122,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
   const [livePartiteCandidates, setLivePartiteCandidates] = useState([])
   const [livePartiteError, setLivePartiteError] = useState('')
   const [livePartiteLoading, setLivePartiteLoading] = useState(false)
+  const [matchMemoryEvents, setMatchMemoryEvents] = useState([])
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   const [detailCollapsed, setDetailCollapsed] = useState(false)
   const [summaryCollapsed, setSummaryCollapsed] = useState({ ...DEFAULT_RECONCILIATION_SUMMARY_COLLAPSED })
@@ -225,11 +233,14 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
       setLivePartiteCandidates([])
       setLivePartiteError('')
       setLivePartiteLoading(false)
+      setMatchMemoryEvents([])
       return undefined
     }
     let cancelled = false
     setLivePartiteLoading(true)
     setLivePartiteError('')
+    const localEvents = loadDecisionFeedbackEvents(sid)
+    setMatchMemoryEvents(localEvents)
     Promise.resolve(contabilitaRepo.getPartitarioAperto(sid))
       .then((result) => {
         if (cancelled) return
@@ -248,6 +259,18 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
       .finally(() => {
         if (!cancelled) setLivePartiteLoading(false)
       })
+    void fetchDecisionFeedbackEventsFromDb({
+      societaId: sid,
+      sourceModule: 'riconciliazione_bancaria',
+      limit: 200,
+    })
+      .then((remote) => {
+        if (cancelled) return
+        setMatchMemoryEvents(mergeDecisionFeedbackEventLists(localEvents, remote))
+      })
+      .catch(() => {
+        if (!cancelled) setMatchMemoryEvents(localEvents)
+      })
     return () => {
       cancelled = true
     }
@@ -262,7 +285,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
       const decisionProposal = runRiconciliazioneMatchForMovement({
         movement: matcherMovement,
         partiteAperte: livePartiteCandidates,
-        options: { societaId },
+        options: { societaId, matchMemoryEvents },
       })
       const memoryNote = decisionProposal?.matchMemoryHits
         ? ` · memoria match LAB ${decisionProposal.matchMemoryHits}`
@@ -319,7 +342,11 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
     const decisionProposal = runRiconciliazioneMatchForMovement({
       movement: fixtureMovement,
       partiteAperte: fixtures.partiteAperte,
-      options: { societaId, applyMatchMemory: Boolean(societaId) },
+      options: {
+        societaId,
+        applyMatchMemory: Boolean(societaId),
+        matchMemoryEvents,
+      },
     })
     const fixtureCase = fixtures.expectedCases.find((item) => item.movementId === fixtureMovement.movementId) || null
     return {
@@ -341,6 +368,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
     livePartiteError,
     bankStatement,
     societaId,
+    matchMemoryEvents,
   ])
 
   const visibleSelectableIds = useMemo(
@@ -360,7 +388,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
           const proposal = runRiconciliazioneMatchForMovement({
             movement: buildMatcherMovementFromWorkingRow(movement, bankStatement),
             partiteAperte: livePartiteCandidates,
-            options: { societaId },
+            options: { societaId, matchMemoryEvents },
           })
           return evaluateMassConfirmEligibility(movement, {
             confidence: proposal?.selectedCandidate?.confidence,
@@ -376,6 +404,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
     livePartiteCandidates,
     bankStatement,
     societaId,
+    matchMemoryEvents,
   ])
   const confirmableSelectedCount = massConfirmPartition.eligible.length
   const massConfirmSkippedCount = massConfirmPartition.skipped.length
@@ -890,7 +919,7 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
             ? runRiconciliazioneMatchForMovement({
               movement: matcherMovement,
               partiteAperte: livePartiteCandidates,
-              options: { societaId },
+              options: { societaId, matchMemoryEvents },
             })
             : null
           const events = buildBankDecisionFeedbackEvents({
@@ -906,7 +935,8 @@ export default function RiconciliazioneBancariaView({ societaId = '' } = {}) {
             },
             decisionProposal: proposal,
           })
-          appendDecisionFeedbackEvents(societaId, events)
+          const stored = appendDecisionFeedbackEvents(societaId, events)
+          setMatchMemoryEvents(stored)
         }
       } catch {
         /* feedback LAB best-effort */

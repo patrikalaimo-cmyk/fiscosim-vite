@@ -40,9 +40,9 @@ Da verificare in browser su societ? esclusivamente di test:
 4. nota credito passiva e attiva: registro corretto, segno opposto e partita negativa/opposta — **LAB PATH** (Manuale + fiscal-journal-post NC attiva/passiva 3|1|1; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_nc_*`);
 5. documento multi-aliquota 22% + 10% senza collassamento delle righe IVA — **LAB PATH** (2 righe IVA aliquote 22,10; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_multi2210_*`);
 6. split payment semplice con cliente configurato PA e partitario sul netto corretto — **LAB PATH** (4 righe + partita netto 1000; form UI ancora operatore) (`STAGE3W_L4_BROWSER_MANUALE_split_*`);
-7. IVA per cassa: fattura differita e successivo rilascio su incasso/pagamento;
-8. reverse charge / autofattura / UE-extra UE: doppia annotazione ove prevista e IVA neutrale;
-9. parcella professionista con ritenuta, cassa previdenziale, spese escluse e maturazione ritenuta al pagamento;
+7. IVA per cassa: fattura differita e successivo rilascio su incasso/pagamento — **LAB PATH** (JWT `registrazione_manual` open differita + pay rilascio; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
+8. reverse charge / autofattura / UE-extra UE: doppia annotazione ove prevista e IVA neutrale — **LAB PATH** (JWT Manuale 4 PN + VAT acquisto/vendita + liq saldo 0; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
+9. parcella professionista con ritenuta, cassa previdenziale, spese escluse e maturazione ritenuta al pagamento — **LAB PATH** (JWT `parcella_documento` + pay maturazione 1040; form UI ancora operatore) (`STAGE3W_MANUALE_FISCAL_PATH_*`);
 10. partitario: apertura, chiusura, pagamento/incasso anche parziale e segni corretti sulle NC;
 11. modifica/storno su periodo aperto e verifica blocco su periodo chiuso/stampato;
 12. verifica visuale di warning/blocker del payload canonico prima del commit;

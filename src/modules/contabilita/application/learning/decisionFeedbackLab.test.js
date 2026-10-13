@@ -154,3 +154,29 @@ test('SG-L5 — bank memory boosta candidati partita già confermati', () => {
   assert.ok(boosted[0].reasons.includes('match_memory_confirmed'))
   assert.equal(boosted[1].matchMemoryHit, undefined)
 })
+
+test('SG-L5 — bank memory usa eventi precaricati DB senza localStorage', () => {
+  const dbOnly = buildBankDecisionFeedbackEvents({
+    societaId: 'soc-db',
+    decision: { selectedPartitaId: 'part-db-9' },
+    movement: {
+      movementId: 'mov-db-1',
+      amount: 500,
+      counterpartyName: 'Fornitore Bianchi',
+      direction: 'out',
+    },
+    decisionProposal: {
+      selectedCandidate: { partitaId: 'part-db-9', soggettoNome: 'Fornitore Bianchi', matchType: 'exact_amount' },
+    },
+  }).map((row) => ({ ...row, storageKind: 'lab_db' }))
+
+  const memory = lookupBankMatchMemory({
+    societaId: 'soc-db',
+    movement: { amount: 500, counterpartyName: 'Fornitore Bianchi Spa', direction: 'out' },
+    storage: memoryStorage(),
+    events: dbOnly,
+  })
+  assert.ok(memory.partitaIds.has('part-db-9'))
+  assert.equal(memory.hits.length, 1)
+  assert.equal(memory.hits[0].storageKind, 'lab_db')
+})
